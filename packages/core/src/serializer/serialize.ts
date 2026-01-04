@@ -6,19 +6,11 @@ import type { ItemMetadata, ParsedFile } from "../types.ts";
  * Timestamps are canonicalized to UTC via toISOString().
  */
 export const serializeMetadata = (m: ItemMetadata): string => {
-  const parts = [
-    m.id,
-    m.stability.raw,
-    m.difficulty.raw,
-    m.state.toString(),
-    m.learningSteps.toString(),
-  ];
-
-  if (m.lastReview !== null) {
-    parts.push(m.lastReview.toISOString());
-  }
-
-  return `<!--@ ${parts.join(" ")}-->`;
+  const lastReview = m.lastReview ? ` ${m.lastReview.toISOString()}` : "";
+  return (
+    `<!--@ ${m.id} ${m.stability.raw} ${m.difficulty.raw} ${m.state} ` +
+    `${m.learningSteps}${lastReview}-->`
+  );
 };
 
 /**
@@ -29,15 +21,14 @@ export const serializeMetadata = (m: ItemMetadata): string => {
  * - Metadata lines: canonicalized (single spaces, LF endings, UTC timestamps)
  */
 export const serializeFile = (file: ParsedFile): string => {
-  let result = file.preamble;
+  const parts: string[] = [file.preamble];
 
   for (const item of file.items) {
     for (const card of item.cards) {
-      result += serializeMetadata(card);
-      result += "\n";
+      parts.push(serializeMetadata(card), "\n");
     }
-    result += item.content;
+    parts.push(item.content);
   }
 
-  return result;
+  return parts.join("");
 };
