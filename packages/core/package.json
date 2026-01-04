@@ -1,0 +1,25 @@
+{
+  "name": "@re/core",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bench": "vitest bench",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "effect": "^3.19.14",
+    "nanoid": "^5.1.6"
+  },
+  "devDependencies": {
+    "@effect/vitest": "^0.27.0",
+    "@types/bun": "latest",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
+  }
+}

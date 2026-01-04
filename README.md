@@ -36,7 +36,7 @@ Metadata format: `<!--@ <id> <stability> <difficulty> <state> <steps> [lastRevie
 ## Installation
 
 ```bash
-bun add effect nanoid
+bun add @re/core
 ```
 
 ## Usage
@@ -48,7 +48,7 @@ import {
   serializeFile,
   createMetadata,
   State,
-} from "./src/index.ts";
+} from "@re/core";
 
 // Parse a file
 const content = await Bun.file("cards.md").text();
@@ -155,7 +155,7 @@ const State = { New: 0, Learning: 1, Review: 2, Relearning: 3 } as const;
 All parse errors are tagged for pattern matching:
 
 ```typescript
-import { ParseError, InvalidMetadataFormat, InvalidFieldValue } from "./src/index.ts";
+import { ParseError, InvalidMetadataFormat, InvalidFieldValue } from "@re/core";
 
 Effect.runSync(
   parseFile(content).pipe(
@@ -190,7 +190,12 @@ For typical review sessions (< 10k cards), full file writes on each card update 
 ## Development
 
 ```bash
-bun install
+bun install                          # Install all workspace dependencies
+bun run test                         # Run tests in all packages
+bun run typecheck                    # Type check all packages
+
+# Or run commands in a specific package
+cd packages/core
 bun run test        # Run tests
 bun run test:watch  # Watch mode
 bun run bench       # Run benchmarks
