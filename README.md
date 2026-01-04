@@ -54,9 +54,9 @@ import {
 const content = await Bun.file("cards.md").text();
 const parsed = Effect.runSync(parseFile(content));
 
-console.log(parsed.preamble);        // Content before first card
-console.log(parsed.items.length);    // Number of cards
-console.log(parsed.items[0].metadata.id);
+console.log(parsed.preamble);        // Content before first item
+console.log(parsed.items.length);    // Number of items
+console.log(parsed.items[0].cards[0].id);  // First card's ID
 console.log(parsed.items[0].content);
 
 // Modify a card's metadata after review
@@ -66,11 +66,15 @@ const updated = {
     i === 0
       ? {
           ...item,
-          metadata: {
-            ...item.metadata,
-            state: State.Review,
-            lastReview: new Date(),
-          },
+          cards: item.cards.map((card, j) =>
+            j === 0
+              ? {
+                  ...card,
+                  state: State.Review,
+                  lastReview: new Date(),
+                }
+              : card
+          ),
         }
       : item
   ),
@@ -80,9 +84,9 @@ const updated = {
 const output = serializeFile(updated);
 await Bun.write("cards.md", output);
 
-// Create a new card
-const newCard = {
-  metadata: createMetadata(),
+// Create a new item with one card
+const newItem = {
+  cards: [createMetadata()],
   content: "New question\n---\nNew answer\n",
 };
 ```
@@ -129,7 +133,7 @@ interface ParsedFile {
 }
 
 interface Item {
-  readonly metadata: ItemMetadata;
+  readonly cards: readonly ItemMetadata[];  // Multiple cards can share content
   readonly content: string;
 }
 
@@ -149,6 +153,16 @@ interface NumericField {
 
 const State = { New: 0, Learning: 1, Review: 2, Relearning: 3 } as const;
 ```
+
+Multi-card items (e.g., cloze deletions) use consecutive metadata lines:
+
+```markdown
+<!--@ card1 0 0 0 0-->
+<!--@ card2 0 0 0 0-->
+The atomic number of [carbon] is [6].
+```
+
+This parses as one item with two cards sharing the same content.
 
 ### Errors
 

@@ -1,3 +1,33 @@
+/**
+ * Benchmark results history
+ * -------------------------
+ *
+ * 2026-01-04 (multi-card support, Item.cards: ItemMetadata[])
+ * Machine: Apple M-series
+ *
+ * parseFile:
+ *   10 items:    22,497 ops/sec (0.044ms mean)
+ *   100 items:    2,914 ops/sec (0.343ms mean)
+ *   1000 items:     269 ops/sec (3.723ms mean)
+ *
+ * serializeFile:
+ *   10 items:   387,246 ops/sec (0.003ms mean)
+ *   100 items:   39,010 ops/sec (0.026ms mean)
+ *   1000 items:   3,881 ops/sec (0.258ms mean)
+ *
+ * round-trip:
+ *   10 items:   25,417 ops/sec (0.039ms mean)
+ *   100 items:   2,674 ops/sec (0.374ms mean)
+ *   1000 items:    239 ops/sec (4.182ms mean)
+ *
+ * createMetadata:
+ *   single:      8,502,603 ops/sec
+ *   batch of 100:  100,734 ops/sec
+ *
+ * build file (create 100 items + serialize):
+ *   47,213 ops/sec (0.021ms mean)
+ */
+
 import { bench, describe } from "vitest";
 import { Effect } from "effect";
 import { parseFile } from "../src/parser/index.ts";
@@ -123,7 +153,7 @@ describe("build file", () => {
     const items: Item[] = [];
     for (let i = 0; i < 100; i++) {
       items.push({
-        metadata: createMetadata(),
+        cards: [createMetadata()],
         content: `Question ${i}\n---\nAnswer ${i}\n`,
       });
     }

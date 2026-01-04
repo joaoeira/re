@@ -114,30 +114,59 @@ export const parseFile = (
     });
   }
 
+  // Group consecutive metadata line indices into runs
+  // e.g., [0, 1, 5, 6, 7, 10] → [[0, 1], [5, 6, 7], [10]]
+  const runs: number[][] = [];
+  let currentRun: number[] = [metadataLineIndices[0]!];
+
+  for (let i = 1; i < metadataLineIndices.length; i++) {
+    const current = metadataLineIndices[i]!;
+    const previous = metadataLineIndices[i - 1]!;
+
+    if (current === previous + 1) {
+      // Consecutive, add to current run
+      currentRun.push(current);
+    } else {
+      // Not consecutive, start new run
+      runs.push(currentRun);
+      currentRun = [current];
+    }
+  }
+  runs.push(currentRun); // Don't forget the last run
+
   // Extract preamble (content before first metadata line)
-  const firstMetaIdx = metadataLineIndices[0]!;
+  const firstMetaIdx = runs[0]![0]!;
   const firstMetaLine = lines[firstMetaIdx]!;
   const preamble = content.slice(0, firstMetaLine.startOffset);
 
   const itemEffects: Effect.Effect<Item, MetadataParseError>[] = [];
 
-  for (let i = 0; i < metadataLineIndices.length; i++) {
-    const metaLineIdx = metadataLineIndices[i]!;
-    const metaLine = lines[metaLineIdx]!;
-    const match = METADATA_LINE_PATTERN.exec(metaLine.content);
+  for (let runIndex = 0; runIndex < runs.length; runIndex++) {
+    const run = runs[runIndex]!;
 
-    if (!match) continue;
+    // Parse all metadata lines in this run
+    const cardEffects: Effect.Effect<ItemMetadata, MetadataParseError>[] = [];
 
-    const inner = match[1]!;
+    for (const lineIdx of run) {
+      const metaLine = lines[lineIdx]!;
+      const match = METADATA_LINE_PATTERN.exec(metaLine.content);
 
-    // Content starts after the metadata line's newline
-    const contentStartOffset = metaLine.endOffset + 1;
+      if (!match) continue;
 
-    // Content ends at the start of the next metadata line, or EOF
-    const nextMetaLineIdx = metadataLineIndices[i + 1];
+      const inner = match[1]!;
+      cardEffects.push(parseMetadataLine(inner, metaLine.lineNumber));
+    }
+
+    // Content starts after the LAST metadata line in this run
+    const lastMetaLineIdx = run[run.length - 1]!;
+    const lastMetaLine = lines[lastMetaLineIdx]!;
+    const contentStartOffset = lastMetaLine.endOffset + 1;
+
+    // Content ends at the start of the NEXT run's first metadata line, or EOF
+    const nextRun = runs[runIndex + 1];
     const contentEndOffset =
-      nextMetaLineIdx !== undefined
-        ? lines[nextMetaLineIdx]!.startOffset
+      nextRun !== undefined
+        ? lines[nextRun[0]!]!.startOffset
         : content.length;
 
     // Extract content, handling edge case where content might be empty
@@ -147,10 +176,10 @@ export const parseFile = (
         ? content.slice(contentStartOffset, contentEndOffset)
         : "";
 
-    const itemEffect = parseMetadataLine(inner, metaLine.lineNumber).pipe(
+    const itemEffect = Effect.all(cardEffects).pipe(
       Effect.map(
-        (metadata): Item => ({
-          metadata,
+        (cards): Item => ({
+          cards,
           content: itemContent,
         })
       )

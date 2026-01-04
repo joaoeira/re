@@ -70,14 +70,16 @@ describe("serializeFile", () => {
       preamble: "---\ntitle: Test\n---\n\n",
       items: [
         {
-          metadata: {
-            id: "item1" as ItemId,
-            stability: { value: 0, raw: "0" },
-            difficulty: { value: 0, raw: "0" },
-            state: 0 as State,
-            learningSteps: 0,
-            lastReview: null,
-          },
+          cards: [
+            {
+              id: "item1" as ItemId,
+              stability: { value: 0, raw: "0" },
+              difficulty: { value: 0, raw: "0" },
+              state: 0 as State,
+              learningSteps: 0,
+              lastReview: null,
+            },
+          ],
           content: "Q1\n---\nA1\n",
         },
       ],
@@ -95,14 +97,16 @@ describe("serializeFile", () => {
       preamble: "",
       items: [
         {
-          metadata: {
-            id: "item1" as ItemId,
-            stability: { value: 0, raw: "0" },
-            difficulty: { value: 0, raw: "0" },
-            state: 0 as State,
-            learningSteps: 0,
-            lastReview: null,
-          },
+          cards: [
+            {
+              id: "item1" as ItemId,
+              stability: { value: 0, raw: "0" },
+              difficulty: { value: 0, raw: "0" },
+              state: 0 as State,
+              learningSteps: 0,
+              lastReview: null,
+            },
+          ],
           content: "Content\n",
         },
       ],
@@ -117,25 +121,29 @@ describe("serializeFile", () => {
       preamble: "",
       items: [
         {
-          metadata: {
-            id: "item1" as ItemId,
-            stability: { value: 0, raw: "0" },
-            difficulty: { value: 0, raw: "0" },
-            state: 0 as State,
-            learningSteps: 0,
-            lastReview: null,
-          },
+          cards: [
+            {
+              id: "item1" as ItemId,
+              stability: { value: 0, raw: "0" },
+              difficulty: { value: 0, raw: "0" },
+              state: 0 as State,
+              learningSteps: 0,
+              lastReview: null,
+            },
+          ],
           content: "Q1\n",
         },
         {
-          metadata: {
-            id: "item2" as ItemId,
-            stability: { value: 5.2, raw: "5.2" },
-            difficulty: { value: 4.3, raw: "4.3" },
-            state: 2 as State,
-            learningSteps: 0,
-            lastReview: new Date("2025-01-04T10:30:00Z"),
-          },
+          cards: [
+            {
+              id: "item2" as ItemId,
+              stability: { value: 5.2, raw: "5.2" },
+              difficulty: { value: 4.3, raw: "4.3" },
+              state: 2 as State,
+              learningSteps: 0,
+              lastReview: new Date("2025-01-04T10:30:00Z"),
+            },
+          ],
           content: "Q2\n",
         },
       ],

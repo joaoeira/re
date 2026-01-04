@@ -31,7 +31,7 @@ export interface ItemMetadata {
 }
 
 export interface Item {
-  readonly metadata: ItemMetadata;
+  readonly cards: readonly ItemMetadata[];
   readonly content: string;
 }
 

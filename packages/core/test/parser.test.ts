@@ -16,12 +16,13 @@ Paris
       assert.strictEqual(result.items.length, 1);
 
       const item = result.items[0]!;
-      assert.strictEqual(item.metadata.id, "abc123");
-      assert.strictEqual(item.metadata.stability.value, 0);
-      assert.strictEqual(item.metadata.difficulty.value, 0);
-      assert.strictEqual(item.metadata.state, 0);
-      assert.strictEqual(item.metadata.learningSteps, 0);
-      assert.strictEqual(item.metadata.lastReview, null);
+      assert.strictEqual(item.cards.length, 1);
+      assert.strictEqual(item.cards[0]!.id, "abc123");
+      assert.strictEqual(item.cards[0]!.stability.value, 0);
+      assert.strictEqual(item.cards[0]!.difficulty.value, 0);
+      assert.strictEqual(item.cards[0]!.state, 0);
+      assert.strictEqual(item.cards[0]!.learningSteps, 0);
+      assert.strictEqual(item.cards[0]!.lastReview, null);
       assert.strictEqual(
         item.content,
         `What is the capital of France?
@@ -54,7 +55,7 @@ title: My Flashcards
 `
       );
       assert.strictEqual(result.items.length, 1);
-      assert.strictEqual(result.items[0]!.metadata.id, "abc123");
+      assert.strictEqual(result.items[0]!.cards[0]!.id, "abc123");
     })
   );
 
@@ -75,17 +76,17 @@ A2
       assert.strictEqual(result.items.length, 2);
 
       const item1 = result.items[0]!;
-      assert.strictEqual(item1.metadata.id, "item1");
-      assert.strictEqual(item1.metadata.state, 0);
-      assert.strictEqual(item1.metadata.lastReview, null);
+      assert.strictEqual(item1.cards[0]!.id, "item1");
+      assert.strictEqual(item1.cards[0]!.state, 0);
+      assert.strictEqual(item1.cards[0]!.lastReview, null);
 
       const item2 = result.items[1]!;
-      assert.strictEqual(item2.metadata.id, "item2");
-      assert.strictEqual(item2.metadata.stability.value, 5.2);
-      assert.strictEqual(item2.metadata.stability.raw, "5.2");
-      assert.strictEqual(item2.metadata.difficulty.value, 4.3);
-      assert.strictEqual(item2.metadata.state, 2);
-      assert.ok(item2.metadata.lastReview instanceof Date);
+      assert.strictEqual(item2.cards[0]!.id, "item2");
+      assert.strictEqual(item2.cards[0]!.stability.value, 5.2);
+      assert.strictEqual(item2.cards[0]!.stability.raw, "5.2");
+      assert.strictEqual(item2.cards[0]!.difficulty.value, 4.3);
+      assert.strictEqual(item2.cards[0]!.state, 2);
+      assert.ok(item2.cards[0]!.lastReview instanceof Date);
     })
   );
 
@@ -110,19 +111,22 @@ No flashcards here.
     })
   );
 
-  it.scoped("handles adjacent metadata lines (empty content)", () =>
+  it.scoped("handles consecutive metadata lines as multi-card item", () =>
     Effect.gen(function* () {
       const content = `<!--@ item1 0 0 0 0-->
 <!--@ item2 0 0 0 0-->
-Content for item2
+Content for both cards
 `;
       const result = yield* parseFile(content);
 
-      assert.strictEqual(result.items.length, 2);
-      assert.strictEqual(result.items[0]!.content, "");
+      // Consecutive metadata lines → one item with two cards
+      assert.strictEqual(result.items.length, 1);
+      assert.strictEqual(result.items[0]!.cards.length, 2);
+      assert.strictEqual(result.items[0]!.cards[0]!.id, "item1");
+      assert.strictEqual(result.items[0]!.cards[1]!.id, "item2");
       assert.strictEqual(
-        result.items[1]!.content,
-        `Content for item2
+        result.items[0]!.content,
+        `Content for both cards
 `
       );
     })
@@ -157,9 +161,9 @@ Content
 `;
       const result = yield* parseFile(content);
 
-      const metadata = result.items[0]!.metadata;
-      assert.strictEqual(metadata.stability.raw, "5.20");
-      assert.strictEqual(metadata.difficulty.raw, "4.30");
+      const card = result.items[0]!.cards[0]!;
+      assert.strictEqual(card.stability.raw, "5.20");
+      assert.strictEqual(card.difficulty.raw, "4.30");
     })
   );
 
@@ -210,7 +214,7 @@ Content
       const result = yield* parseFile(content);
 
       assert.strictEqual(result.items.length, 1);
-      assert.strictEqual(result.items[0]!.metadata.id, "abc123");
+      assert.strictEqual(result.items[0]!.cards[0]!.id, "abc123");
     })
   );
 });

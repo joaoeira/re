@@ -32,8 +32,10 @@ export const serializeFile = (file: ParsedFile): string => {
   let result = file.preamble;
 
   for (const item of file.items) {
-    result += serializeMetadata(item.metadata);
-    result += "\n";
+    for (const card of item.cards) {
+      result += serializeMetadata(card);
+      result += "\n";
+    }
     result += item.content;
   }
 
