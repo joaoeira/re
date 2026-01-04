@@ -6,6 +6,37 @@ interface DeckTreeViewProps {
   depth?: number;
 }
 
+interface AggregatedStats {
+  totalCards: number;
+  newCards: number;
+  dueCards: number;
+}
+
+function aggregateStats(nodes: DeckTreeNode[]): AggregatedStats {
+  let totalCards = 0;
+  let newCards = 0;
+  let dueCards = 0;
+
+  for (const node of nodes) {
+    if (node.type === "deck") {
+      totalCards += node.stats.totalCards;
+      newCards += node.stats.newCards;
+      dueCards += node.stats.dueCards;
+    } else {
+      const childStats = aggregateStats(node.children);
+      totalCards += childStats.totalCards;
+      newCards += childStats.newCards;
+      dueCards += childStats.dueCards;
+    }
+  }
+
+  return { totalCards, newCards, dueCards };
+}
+
+function formatStats(stats: AggregatedStats): string {
+  return `[${stats.totalCards} | ${stats.newCards} new | ${stats.dueCards} due]`;
+}
+
 function DeckLine({ stats }: { stats: DeckStats }) {
   const isEmpty = stats.isEmpty;
   const hasError = stats.parseError !== null;
@@ -31,9 +62,13 @@ function FolderNode({
   node: DeckTreeNode & { type: "folder" };
   depth: number;
 }) {
+  const stats = aggregateStats(node.children);
+
   return (
     <box flexDirection="column" paddingLeft={depth * 2}>
-      <text fg="#88AAFF">{node.name}/</text>
+      <text fg="#FFDD88" bg="#2A2A2A">
+        {node.name} {formatStats(stats)}
+      </text>
       {node.children.map((child, i) => (
         <TreeNode key={i} node={child} depth={depth + 1} />
       ))}
@@ -54,10 +89,13 @@ function TreeNode({ node, depth }: { node: DeckTreeNode; depth: number }) {
 }
 
 export function DeckTreeView({ tree, depth = 0 }: DeckTreeViewProps) {
+  const totals = aggregateStats(tree);
+
   return (
     <box flexDirection="column">
+      <text fg="#FFFFFF">All {formatStats(totals)}</text>
       {tree.map((node, i) => (
-        <TreeNode key={i} node={node} depth={depth} />
+        <TreeNode key={i} node={node} depth={depth + 1} />
       ))}
     </box>
   );

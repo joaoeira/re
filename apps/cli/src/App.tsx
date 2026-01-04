@@ -41,10 +41,7 @@ export function App() {
 
   return (
     <box padding={1} flexDirection="column">
-      <text fg="#FFFFFF">Decks</text>
-      <box marginTop={1}>
-        <DeckTreeView tree={tree} />
-      </box>
+      <DeckTreeView tree={tree} />
       <text fg="#666666" marginTop={1}>
         Press q to quit
       </text>
