@@ -1,0 +1,31 @@
+{
+  "name": "@re/cli",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "src/index.tsx",
+  "bin": {
+    "re": "src/index.tsx"
+  },
+  "scripts": {
+    "dev": "bun run src/index.tsx",
+    "test": "bun x vitest",
+    "test:watch": "bun x vitest --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@effect/platform": "^0.94.1",
+    "@effect/platform-bun": "^0.87.0",
+    "@opentui/core": "^0.1.67",
+    "@opentui/react": "^0.1.67",
+    "@re/core": "workspace:*",
+    "effect": "^3.19.14",
+    "react": "^19.1.0"
+  },
+  "devDependencies": {
+    "@effect/vitest": "^0.27.0",
+    "@types/bun": "latest",
+    "@types/react": "^19.1.8",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
+  }
+}
