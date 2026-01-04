@@ -1,11 +1,11 @@
-export { parseFile } from "./parser/index.ts";
-export { serializeFile, serializeMetadata } from "./serializer/index.ts";
+export { parseFile } from "./parser/index";
+export { serializeFile, serializeMetadata } from "./serializer/index";
 export {
   generateId,
   createMetadata,
   createMetadataWithId,
   numericField,
-} from "./create.ts";
+} from "./create";
 
 export type {
   Item,
@@ -13,18 +13,18 @@ export type {
   ParsedFile,
   NumericField,
   ItemId,
-} from "./types.ts";
-export { State } from "./types.ts";
+} from "./types";
+export { State } from "./types";
 
-export type { MetadataParseError } from "./errors.ts";
+export type { MetadataParseError } from "./errors";
 export {
   ParseError,
   InvalidMetadataFormat,
   InvalidFieldValue,
-} from "./errors.ts";
+} from "./errors";
 
-export { ItemIdSchema, isItemId } from "./schema/index.ts";
-export { StateFromString, StateSchema } from "./schema/index.ts";
-export { NumericFieldFromString, NumericFieldSchema } from "./schema/index.ts";
-export { LearningStepsFromString } from "./schema/index.ts";
-export { LastReviewFromString } from "./schema/index.ts";
+export { ItemIdSchema, isItemId } from "./schema/index";
+export { StateFromString, StateSchema } from "./schema/index";
+export { NumericFieldFromString, NumericFieldSchema } from "./schema/index";
+export { LearningStepsFromString } from "./schema/index";
+export { LastReviewFromString } from "./schema/index";

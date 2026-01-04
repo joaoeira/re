@@ -1,18 +1,18 @@
 import { Effect, Schema } from "effect";
-import type { Item, ItemMetadata, ParsedFile } from "../types.ts";
+import type { Item, ItemMetadata, ParsedFile } from "../types";
 import {
   InvalidFieldValue,
   InvalidMetadataFormat,
   type MetadataParseError,
-} from "../errors.ts";
+} from "../errors";
 import {
   ItemIdSchema,
   NumericFieldFromString,
   StateFromString,
   LearningStepsFromString,
   LastReviewFromString,
-} from "../schema/index.ts";
-import { METADATA_LINE_PATTERN } from "./patterns.ts";
+} from "../schema/index";
+import { METADATA_LINE_PATTERN } from "./patterns";
 
 const parseMetadataLine = (
   inner: string,

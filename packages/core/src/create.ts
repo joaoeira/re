@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import type { ItemId, ItemMetadata, NumericField, State } from "./types.ts";
+import type { ItemId, ItemMetadata, NumericField, State } from "./types";
 
 export const generateId = (): ItemId => nanoid() as ItemId;
 

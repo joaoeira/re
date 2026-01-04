@@ -1,1 +1,1 @@
-export { serializeFile, serializeMetadata } from "./serialize.ts";
+export { serializeFile, serializeMetadata } from "./serialize";

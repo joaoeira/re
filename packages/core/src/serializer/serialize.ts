@@ -1,4 +1,4 @@
-import type { ItemMetadata, ParsedFile } from "../types.ts";
+import type { ItemMetadata, ParsedFile } from "../types";
 
 /**
  * Serialize ItemMetadata to a metadata line string.

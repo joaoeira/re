@@ -1,5 +1,5 @@
 import { ParseResult, Schema } from "effect";
-import type { State } from "../types.ts";
+import type { State } from "../types";
 
 const STATE_PATTERN = /^[0-3]$/;
 
