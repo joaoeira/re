@@ -1,0 +1,22 @@
+{
+  "name": "re",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bench": "vitest bench",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@effect/vitest": "^0.27.0",
+    "@types/bun": "latest",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
+  },
+  "dependencies": {
+    "effect": "^3.19.14",
+    "nanoid": "^5.1.6"
+  }
+}
