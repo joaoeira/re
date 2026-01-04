@@ -1,8 +1,7 @@
 import { Context, Effect, Layer } from "effect";
-import { FileSystem } from "@effect/platform";
 import { Scheduler } from "./Scheduler";
-import { parseFile, State } from "@re/core";
-import * as nodePath from "node:path";
+import { DeckParser } from "./DeckParser";
+import { State } from "@re/core";
 
 export interface DeckStats {
   readonly path: string;
@@ -30,7 +29,7 @@ export const DeckLoader = Context.GenericTag<DeckLoader>("DeckLoader");
 export const DeckLoaderLive = Layer.effect(
   DeckLoader,
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
+    const parser = yield* DeckParser;
     const scheduler = yield* Scheduler;
 
     const loadSingleDeck = (
@@ -38,41 +37,22 @@ export const DeckLoaderLive = Layer.effect(
       now: Date
     ): Effect.Effect<DeckStats, never> =>
       Effect.gen(function* () {
-        const name = nodePath.basename(filePath, ".md");
+        const parseResult = yield* parser.parse(filePath).pipe(Effect.either);
 
-        // Try to read file
-        const contentResult = yield* fs
-          .readFileString(filePath)
-          .pipe(Effect.either);
-        if (contentResult._tag === "Left") {
-          return {
-            path: filePath,
-            name,
-            totalCards: 0,
-            newCards: 0,
-            dueCards: 0,
-            isEmpty: true,
-            parseError: "Read error",
-          };
-        }
-
-        // Try to parse
-        const parseResult = yield* parseFile(contentResult.right).pipe(
-          Effect.either
-        );
         if (parseResult._tag === "Left") {
+          const error = parseResult.left;
           return {
             path: filePath,
-            name,
+            name: filePath.split("/").pop()?.replace(".md", "") ?? "",
             totalCards: 0,
             newCards: 0,
             dueCards: 0,
             isEmpty: true,
-            parseError: `Parse error: ${parseResult.left._tag}`,
+            parseError: error.message,
           };
         }
 
-        const file = parseResult.right;
+        const { name, file } = parseResult.right;
         let totalCards = 0;
         let newCards = 0;
         let dueCards = 0;
@@ -97,7 +77,7 @@ export const DeckLoaderLive = Layer.effect(
           isEmpty: totalCards === 0,
           parseError: null,
         };
-      }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+      });
 
     return {
       loadDeck: loadSingleDeck,

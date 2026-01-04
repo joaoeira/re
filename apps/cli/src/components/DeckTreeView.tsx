@@ -1,9 +1,13 @@
+import type { SelectOption } from "@opentui/core";
+import { useMemo, useCallback } from "react";
 import type { DeckTreeNode } from "../lib/buildDeckTree";
-import type { DeckStats } from "../services/DeckLoader";
+import type { Selection } from "../services/ReviewQueue";
 
 interface DeckTreeViewProps {
   tree: DeckTreeNode[];
-  depth?: number;
+  focused?: boolean;
+  onSelect?: (selection: Selection) => void;
+  onChange?: (selection: Selection) => void;
 }
 
 interface AggregatedStats {
@@ -12,7 +16,14 @@ interface AggregatedStats {
   dueCards: number;
 }
 
-function aggregateStats(nodes: DeckTreeNode[]): AggregatedStats {
+interface FlattenedItem {
+  selection: Selection;
+  name: string;
+  description: string;
+  depth: number;
+}
+
+function aggregateStats(nodes: readonly DeckTreeNode[]): AggregatedStats {
   let totalCards = 0;
   let newCards = 0;
   let dueCards = 0;
@@ -34,69 +45,115 @@ function aggregateStats(nodes: DeckTreeNode[]): AggregatedStats {
 }
 
 function formatStats(stats: AggregatedStats): string {
-  return `[${stats.totalCards} | ${stats.newCards} new | ${stats.dueCards} due]`;
+  return `${stats.totalCards} total | ${stats.newCards} new | ${stats.dueCards} due`;
 }
 
-function DeckLine({ stats }: { stats: DeckStats }) {
-  const isEmpty = stats.isEmpty;
-  const hasError = stats.parseError !== null;
+function flattenTree(
+  nodes: readonly DeckTreeNode[],
+  depth: number = 0
+): FlattenedItem[] {
+  const items: FlattenedItem[] = [];
 
-  // Format: "deck.md [10 | 3 new | 2 due]" or dimmed if empty
-  const label = stats.parseError
-    ? `${stats.name}.md [error]`
-    : stats.isEmpty
-    ? `${stats.name}.md [empty]`
-    : `${stats.name}.md [${stats.totalCards} | ${stats.newCards} new | ${stats.dueCards} due]`;
+  for (const node of nodes) {
+    if (node.type === "folder") {
+      const stats = aggregateStats(node.children);
+      items.push({
+        selection: { type: "folder", path: node.path },
+        name: "  ".repeat(depth) + "📁 " + node.name,
+        description: formatStats(stats),
+        depth,
+      });
+      items.push(...flattenTree(node.children, depth + 1));
+    } else {
+      const { stats } = node;
+      const isEmpty = stats.isEmpty;
+      const hasError = stats.parseError !== null;
 
-  if (isEmpty || hasError) {
-    return <text fg="#666666">{label}</text>;
+      items.push({
+        selection: { type: "deck", path: stats.path },
+        name: (() => {
+          const baseText = "  ".repeat(depth) + "📄 " + stats.name;
+          const suffix = hasError ? " [error]" : isEmpty ? " [empty]" : "";
+          return baseText + suffix;
+        })(),
+        description: (() => {
+          if (hasError) return "Parse error";
+          if (isEmpty) return "No cards";
+          return formatStats({
+            totalCards: stats.totalCards,
+            newCards: stats.newCards,
+            dueCards: stats.dueCards,
+          });
+        })(),
+        depth,
+      });
+    }
   }
 
-  return <text>{label}</text>;
+  return items;
 }
 
-function FolderNode({
-  node,
-  depth,
-}: {
-  node: DeckTreeNode & { type: "folder" };
-  depth: number;
-}) {
-  const stats = aggregateStats(node.children);
-
-  return (
-    <box flexDirection="column" paddingLeft={depth * 2}>
-      <text fg="#FFDD88" bg="#2A2A2A">
-        {node.name} {formatStats(stats)}
-      </text>
-      {node.children.map((child, i) => (
-        <TreeNode key={i} node={child} depth={depth + 1} />
-      ))}
-    </box>
-  );
-}
-
-function TreeNode({ node, depth }: { node: DeckTreeNode; depth: number }) {
-  if (node.type === "folder") {
-    return <FolderNode node={node} depth={depth} />;
-  }
-
-  return (
-    <box paddingLeft={depth * 2}>
-      <DeckLine stats={node.stats} />
-    </box>
-  );
-}
-
-export function DeckTreeView({ tree, depth = 0 }: DeckTreeViewProps) {
+export function DeckTreeView({
+  tree,
+  focused = false,
+  onSelect,
+  onChange,
+}: DeckTreeViewProps) {
   const totals = aggregateStats(tree);
 
+  const options = useMemo(() => {
+    const allItem: FlattenedItem = {
+      selection: { type: "all" },
+      name: "📚 All",
+      description: formatStats(totals),
+      depth: 0,
+    };
+    const treeItems = flattenTree(tree);
+    const flatItems = [allItem, ...treeItems];
+
+    return flatItems.map((item) => ({
+      name: item.name,
+      description: item.description,
+      value: item.selection,
+    }));
+  }, [tree, totals]);
+
+  // Calculate height based on number of options (2 lines per item: name + description)
+  const selectHeight = Math.min(options.length * 2, 20);
+
+  const handleChange = useCallback(
+    (index: number, option: SelectOption | null) => {
+      if (option && onChange) {
+        onChange(option.value as Selection);
+      }
+    },
+    [onChange]
+  );
+
+  const handleSelect = useCallback(
+    (index: number, option: SelectOption | null) => {
+      if (option && onSelect) {
+        onSelect(option.value as Selection);
+      }
+    },
+    [onSelect]
+  );
+
   return (
-    <box flexDirection="column">
-      <text fg="#FFFFFF">All {formatStats(totals)}</text>
-      {tree.map((node, i) => (
-        <TreeNode key={i} node={node} depth={depth + 1} />
-      ))}
-    </box>
+    <select
+      options={options}
+      focused={focused}
+      onChange={handleChange}
+      onSelect={handleSelect}
+      wrapSelection={true}
+      showDescription={true}
+      showScrollIndicator={true}
+      width={60}
+      height={selectHeight}
+      selectedBackgroundColor="#334455"
+      selectedTextColor="#FFFFFF"
+      descriptionColor="#888888"
+      selectedDescriptionColor="#AAAAAA"
+    />
   );
 }

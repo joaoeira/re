@@ -1,9 +1,10 @@
-import { describe, it, expect } from "vitest"
-import { Effect, Layer } from "effect"
-import { FileSystem } from "@effect/platform"
-import { SystemError } from "@effect/platform/Error"
-import { DeckLoader, DeckLoaderLive } from "../../src/services/DeckLoader"
-import { SchedulerLive } from "../../src/services/Scheduler"
+import { describe, it, expect } from "vitest";
+import { Effect, Layer } from "effect";
+import { FileSystem } from "@effect/platform";
+import { SystemError } from "@effect/platform/Error";
+import { DeckLoader, DeckLoaderLive } from "../../src/services/DeckLoader";
+import { DeckParserLive } from "../../src/services/DeckParser";
+import { SchedulerLive } from "../../src/services/Scheduler";
 
 const validDeckContent = `---
 title: Test
@@ -18,14 +19,14 @@ Answer 1
 Question 2
 ---
 Answer 2
-`
+`;
 
 const MockFileSystem = FileSystem.layerNoop({
   readFileString: (path) => {
-    if (path === "/valid.md") return Effect.succeed(validDeckContent)
+    if (path === "/valid.md") return Effect.succeed(validDeckContent);
     if (path === "/empty.md")
-      return Effect.succeed("# Just a title\n\nNo cards here.")
-    if (path === "/invalid.md") return Effect.succeed("<!--@ bad metadata-->")
+      return Effect.succeed("# Just a title\n\nNo cards here.");
+    if (path === "/invalid.md") return Effect.succeed("<!--@ bad metadata-->");
     return Effect.fail(
       new SystemError({
         reason: "NotFound",
@@ -33,13 +34,15 @@ const MockFileSystem = FileSystem.layerNoop({
         method: "readFileString",
         pathOrDescriptor: path,
       })
-    )
+    );
   },
-})
+});
+
+const MockDeckParser = DeckParserLive.pipe(Layer.provide(MockFileSystem));
 
 const TestLayer = DeckLoaderLive.pipe(
-  Layer.provide(Layer.merge(MockFileSystem, SchedulerLive))
-)
+  Layer.provide(Layer.merge(MockDeckParser, SchedulerLive))
+);
 
 describe("DeckLoader", () => {
   it("loads valid deck with correct stats", async () => {

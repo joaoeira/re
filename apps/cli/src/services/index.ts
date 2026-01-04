@@ -7,14 +7,44 @@ export {
   type DiscoveryResult,
 } from "./DeckDiscovery"
 export { Scheduler, SchedulerLive } from "./Scheduler"
+export {
+  DeckParser,
+  DeckParserLive,
+  DeckReadError,
+  DeckParseError,
+  type DeckParserError,
+  type ParsedDeck,
+} from "./DeckParser"
 export { DeckLoader, DeckLoaderLive, type DeckStats } from "./DeckLoader"
 export { buildDeckTree, type DeckTreeNode } from "../lib/buildDeckTree"
+export {
+  ReviewQueueService,
+  ReviewQueueServiceLive,
+  ReviewQueueLive,
+  QueueOrderingStrategy,
+  NewFirstOrderingStrategy,
+  DueFirstOrderingStrategy,
+  type Selection,
+  type QueueItem,
+  type ReviewQueue,
+} from "./ReviewQueue"
 
 import { DeckDiscoveryLive } from "./DeckDiscovery"
 import { SchedulerLive } from "./Scheduler"
+import { DeckParserLive } from "./DeckParser"
 import { DeckLoaderLive } from "./DeckLoader"
+import { ReviewQueueLive } from "./ReviewQueue"
+
+// Base layer: FileSystem + Scheduler + DeckParser
+const BaseLive = Layer.mergeAll(
+  BunFileSystem.layer,
+  SchedulerLive,
+  DeckParserLive.pipe(Layer.provide(BunFileSystem.layer))
+)
 
 // Full application layer
-export const AppLive = Layer.merge(DeckDiscoveryLive, DeckLoaderLive).pipe(
-  Layer.provide(Layer.merge(BunFileSystem.layer, SchedulerLive))
-)
+export const AppLive = Layer.mergeAll(
+  DeckDiscoveryLive,
+  DeckLoaderLive,
+  ReviewQueueLive
+).pipe(Layer.provide(BaseLive))
