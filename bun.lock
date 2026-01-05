@@ -45,6 +45,20 @@
         "vitest": "^4.0.16",
       },
     },
+    "packages/types": {
+      "name": "@re/types",
+      "version": "0.0.1",
+      "dependencies": {
+        "@re/core": "workspace:*",
+        "effect": "^3.19.14",
+      },
+      "devDependencies": {
+        "@effect/vitest": "^0.27.0",
+        "@types/bun": "latest",
+        "typescript": "^5.9.3",
+        "vitest": "^4.0.16",
+      },
+    },
   },
   "packages": {
     "@dimforge/rapier2d-simd-compat": ["@dimforge/rapier2d-simd-compat@0.17.3", "", {}, "sha512-bijvwWz6NHsNj5e5i1vtd3dU2pDhthSaTUZSh14DUGGKJfw8eMnlWZsxwHBxB/a3AXVNDjL9abuHw1k9FGR+jg=="],
@@ -236,6 +250,8 @@
     "@re/cli": ["@re/cli@workspace:apps/cli"],
 
     "@re/core": ["@re/core@workspace:packages/core"],
+
+    "@re/types": ["@re/types@workspace:packages/types"],
 
     "@rollup/rollup-android-arm-eabi": ["@rollup/rollup-android-arm-eabi@4.54.0", "", { "os": "android", "cpu": "arm" }, "sha512-OywsdRHrFvCdvsewAInDKCNyR3laPA2mc9bRYJ6LBp5IyvF3fvXbbNR0bSzHlZVFtn6E0xw2oZlyjg4rKCVcng=="],
 

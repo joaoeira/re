@@ -28,3 +28,12 @@ export { StateFromString, StateSchema } from "./schema/index";
 export { NumericFieldFromString, NumericFieldSchema } from "./schema/index";
 export { LearningStepsFromString } from "./schema/index";
 export { LastReviewFromString } from "./schema/index";
+
+export type { CardSpec, ItemType, Grade, InferredType } from "./item-type";
+export {
+  GradeSchema,
+  ContentParseError,
+  NoMatchingTypeError,
+  manualCardSpec,
+  inferType,
+} from "./item-type";

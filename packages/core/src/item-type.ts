@@ -1,0 +1,76 @@
+import { Data, Effect, Schema } from "effect";
+
+export const GradeSchema = Schema.Literal(0, 1, 2, 3);
+export type Grade = typeof GradeSchema.Type;
+
+export class ContentParseError extends Data.TaggedError("ContentParseError")<{
+  readonly type: string;
+  readonly message: string;
+  readonly raw: string;
+}> {}
+
+export interface CardSpec<Response, GradeError = never> {
+  readonly prompt: string;
+  readonly reveal: string;
+  readonly responseSchema: Schema.Schema<Response>;
+  readonly grade: (response: Response) => Effect.Effect<Grade, GradeError>;
+}
+
+export interface ItemType<Content, Response = unknown, GradeError = never> {
+  readonly name: string;
+  readonly parse: (
+    content: string
+  ) => Effect.Effect<Content, ContentParseError>;
+  readonly cards: (
+    content: Content
+  ) => ReadonlyArray<CardSpec<Response, GradeError>>;
+}
+
+export const manualCardSpec = (
+  prompt: string,
+  reveal: string
+): CardSpec<Grade, never> => ({
+  prompt,
+  reveal,
+  responseSchema: GradeSchema,
+  grade: (response) => Effect.succeed(response),
+});
+
+export class NoMatchingTypeError extends Data.TaggedError(
+  "NoMatchingTypeError"
+)<{
+  readonly raw: string;
+  readonly triedTypes: ReadonlyArray<string>;
+}> {}
+
+export interface InferredType<Content = unknown> {
+  readonly type: ItemType<Content, unknown, unknown>;
+  readonly content: Content;
+}
+
+/** Try each type's parser in order until one succeeds. */
+export const inferType = (
+  types: ReadonlyArray<ItemType<unknown, unknown, unknown>>,
+  content: string
+): Effect.Effect<InferredType, NoMatchingTypeError> => {
+  const tryNext = (
+    index: number,
+    tried: string[]
+  ): Effect.Effect<InferredType, NoMatchingTypeError> => {
+    if (index >= types.length) {
+      return Effect.fail(
+        new NoMatchingTypeError({ raw: content, triedTypes: tried })
+      );
+    }
+
+    const type = types[index]!;
+    return type.parse(content).pipe(
+      Effect.map((parsed) => ({ type, content: parsed })),
+      Effect.catchTag("ContentParseError", () =>
+        tryNext(index + 1, [...tried, type.name])
+      )
+    );
+  };
+
+  return tryNext(0, []);
+};
