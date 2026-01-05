@@ -2,6 +2,7 @@ import type { SelectOption } from "@opentui/core";
 import { useMemo, useCallback } from "react";
 import type { DeckTreeNode } from "../lib/buildDeckTree";
 import type { Selection } from "../services/ReviewQueue";
+import { theme, glyphs } from "../theme";
 
 interface DeckTreeViewProps {
   tree: DeckTreeNode[];
@@ -21,6 +22,8 @@ interface FlattenedItem {
   name: string;
   description: string;
   depth: number;
+  type: "all" | "folder" | "deck";
+  hasIssue: boolean;
 }
 
 function aggregateStats(nodes: readonly DeckTreeNode[]): AggregatedStats {
@@ -45,7 +48,27 @@ function aggregateStats(nodes: readonly DeckTreeNode[]): AggregatedStats {
 }
 
 function formatStats(stats: AggregatedStats): string {
-  return `${stats.totalCards} total | ${stats.newCards} new | ${stats.dueCards} due`;
+  const parts: string[] = [];
+  if (stats.newCards > 0) parts.push(`${stats.newCards} new`);
+  if (stats.dueCards > 0) parts.push(`${stats.dueCards} due`);
+  parts.push(`${stats.totalCards} total`);
+  return parts.join(" · ");
+}
+
+function formatStatsCompact(stats: AggregatedStats): string {
+  if (stats.totalCards === 0) return "empty";
+  const parts: string[] = [];
+  if (stats.newCards > 0) parts.push(`${stats.newCards}n`);
+  if (stats.dueCards > 0) parts.push(`${stats.dueCards}d`);
+  if (parts.length === 0) return `${stats.totalCards}`;
+  return parts.join(" ");
+}
+
+function getTreePrefix(depth: number, isLast: boolean): string {
+  if (depth === 0) return "";
+  const indent = "  ".repeat(depth - 1);
+  const connector = isLast ? glyphs.corner : glyphs.tee;
+  return indent + connector + glyphs.horizontalBar + " ";
 }
 
 function flattenTree(
@@ -54,14 +77,19 @@ function flattenTree(
 ): FlattenedItem[] {
   const items: FlattenedItem[] = [];
 
-  for (const node of nodes) {
+  nodes.forEach((node, i) => {
+    const isLast = i === nodes.length - 1;
+    const prefix = getTreePrefix(depth, isLast);
+
     if (node.type === "folder") {
       const stats = aggregateStats(node.children);
       items.push({
         selection: { type: "folder", path: node.path },
-        name: "  ".repeat(depth) + "📁 " + node.name,
-        description: formatStats(stats),
+        name: `${prefix}${glyphs.folder} ${node.name}`,
+        description: formatStatsCompact(stats),
         depth,
+        type: "folder",
+        hasIssue: false,
       });
       items.push(...flattenTree(node.children, depth + 1));
     } else {
@@ -71,24 +99,22 @@ function flattenTree(
 
       items.push({
         selection: { type: "deck", path: stats.path },
-        name: (() => {
-          const baseText = "  ".repeat(depth) + "📄 " + stats.name;
-          const suffix = hasError ? " [error]" : isEmpty ? " [empty]" : "";
-          return baseText + suffix;
-        })(),
+        name: `${prefix}${glyphs.file} ${stats.name}`,
         description: (() => {
-          if (hasError) return "Parse error";
-          if (isEmpty) return "No cards";
-          return formatStats({
+          if (hasError) return "parse error";
+          if (isEmpty) return "empty";
+          return formatStatsCompact({
             totalCards: stats.totalCards,
             newCards: stats.newCards,
             dueCards: stats.dueCards,
           });
         })(),
         depth,
+        type: "deck",
+        hasIssue: hasError || isEmpty,
       });
     }
-  }
+  });
 
   return items;
 }
@@ -104,9 +130,11 @@ export function DeckTreeView({
   const options = useMemo(() => {
     const allItem: FlattenedItem = {
       selection: { type: "all" },
-      name: "📚 All",
+      name: `${glyphs.stack} All decks`,
       description: formatStats(totals),
       depth: 0,
+      type: "all",
+      hasIssue: false,
     };
     const treeItems = flattenTree(tree);
     const flatItems = [allItem, ...treeItems];
@@ -118,8 +146,8 @@ export function DeckTreeView({
     }));
   }, [tree, totals]);
 
-  // Calculate height based on number of options (2 lines per item: name + description)
-  const selectHeight = Math.min(options.length * 2, 20);
+  // Height: show up to 15 items, each item takes 2 lines (name + description)
+  const selectHeight = Math.min(options.length * 2, 30);
 
   const handleChange = useCallback(
     (index: number, option: SelectOption | null) => {
@@ -148,12 +176,12 @@ export function DeckTreeView({
       wrapSelection={true}
       showDescription={true}
       showScrollIndicator={true}
-      width={60}
+      width={65}
       height={selectHeight}
-      selectedBackgroundColor="#334455"
-      selectedTextColor="#FFFFFF"
-      descriptionColor="#888888"
-      selectedDescriptionColor="#AAAAAA"
+      selectedBackgroundColor={theme.backgroundSelected}
+      selectedTextColor={theme.text}
+      descriptionColor={theme.textMuted}
+      selectedDescriptionColor={theme.textMuted}
     />
   );
 }
