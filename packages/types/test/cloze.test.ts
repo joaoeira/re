@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { describe, it, assert } from "@effect/vitest";
 import { ClozeType } from "../src/cloze";
 import { ContentParseError } from "@re/core";
@@ -92,6 +92,50 @@ Line 2: {{c2::answer2}}`;
         const result = yield* ClozeType.parse(content);
 
         assert.strictEqual(result.deletions.length, 2);
+      })
+    );
+
+    it.scoped("parses cloze deletion with hint", () =>
+      Effect.gen(function* () {
+        const content = "The {{c1::Paris::capital city}} is beautiful.";
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.deletions.length, 1);
+        assert.strictEqual(result.deletions[0]!.index, 1);
+        assert.strictEqual(result.deletions[0]!.hidden, "Paris");
+        assert.ok(Option.isSome(result.deletions[0]!.hint));
+        assert.strictEqual(Option.getOrNull(result.deletions[0]!.hint), "capital city");
+      })
+    );
+
+    it.scoped("parses cloze without hint as Option.none", () =>
+      Effect.gen(function* () {
+        const content = "The {{c1::capital}} of France.";
+        const result = yield* ClozeType.parse(content);
+
+        assert.ok(Option.isNone(result.deletions[0]!.hint));
+      })
+    );
+
+    it.scoped("treats empty hint as Option.none", () =>
+      Effect.gen(function* () {
+        const content = "The {{c1::Paris::}} is beautiful.";
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.deletions[0]!.hidden, "Paris");
+        assert.ok(Option.isNone(result.deletions[0]!.hint));
+      })
+    );
+
+    it.scoped("parses mixed clozes with and without hints", () =>
+      Effect.gen(function* () {
+        const content = "{{c1::Paris::capital}} of {{c2::France}}";
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.deletions.length, 2);
+        assert.ok(Option.isSome(result.deletions[0]!.hint));
+        assert.strictEqual(Option.getOrNull(result.deletions[0]!.hint), "capital");
+        assert.ok(Option.isNone(result.deletions[1]!.hint));
       })
     );
   });
@@ -196,6 +240,60 @@ Line 2: {{c2::answer2}}`;
         assert.strictEqual(cards.length, 1);
         assert.strictEqual(cards[0]!.prompt, "The answer is [...].");
         assert.strictEqual(cards[0]!.reveal, "The answer is 42.");
+      })
+    );
+
+    it.effect("prompt shows hint instead of [...] when provided", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse(
+          "The {{c1::Paris::capital city}} is beautiful."
+        );
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "The [capital city] is beautiful.");
+        assert.strictEqual(cards[0]!.reveal, "The Paris is beautiful.");
+      })
+    );
+
+    it.effect("mixed hints and no hints in same content", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse(
+          "{{c1::Paris::capital}} of {{c2::France}}"
+        );
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 2);
+        // Card 0 (c1): shows [capital] for Paris, France visible
+        assert.strictEqual(cards[0]!.prompt, "[capital] of France");
+        // Card 1 (c2): Paris visible, shows [...] for France
+        assert.strictEqual(cards[1]!.prompt, "Paris of [...]");
+      })
+    );
+
+    it.effect("reveal strips hints and shows only hidden text", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse(
+          "The {{c1::capital::hint1}} of {{c2::France::hint2}} is Paris."
+        );
+        const cards = ClozeType.cards(content);
+
+        // Reveal should not include hints
+        assert.strictEqual(cards[0]!.reveal, "The capital of France is Paris.");
+        assert.strictEqual(cards[1]!.reveal, "The capital of France is Paris.");
+      })
+    );
+
+    it.effect("duplicate indices with hints share a single card", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse(
+          "{{c1::first::hint1}} and {{c1::second::hint2}}"
+        );
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "[hint1] and [hint2]");
+        assert.strictEqual(cards[0]!.reveal, "first and second");
       })
     );
   });

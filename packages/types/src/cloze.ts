@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
   type CardSpec,
   type Grade,
@@ -10,6 +10,7 @@ import {
 export const ClozeDeletion = Schema.Struct({
   index: Schema.Number,
   hidden: Schema.String,
+  hint: Schema.optionalWith(Schema.String, { as: "Option" }),
   start: Schema.Number,
   end: Schema.Number,
 });
@@ -23,6 +24,7 @@ export const ClozeContent = Schema.Struct({
 
 export type ClozeContent = typeof ClozeContent.Type;
 
+// Matches {{c1::hidden}} or {{c1::hidden::hint}}
 const CLOZE_PATTERN = /\{\{c(\d+)::([^}]*)\}\}/g;
 const CLOZE = "cloze";
 
@@ -31,9 +33,18 @@ const parseDeletions = (text: string): ClozeDeletion[] => {
   let match: RegExpExecArray | null;
 
   while ((match = CLOZE_PATTERN.exec(text)) !== null) {
+    const content = match[2]!;
+    // Split by :: to separate hidden text from optional hint
+    const parts = content.split("::");
+    const hidden = parts[0]!;
+    // Treat empty hints as no hint (Option.none)
+    const hintText = parts[1];
+    const hint = hintText ? Option.some(hintText) : Option.none();
+
     deletions.push({
       index: parseInt(match[1]!, 10),
-      hidden: match[2]!,
+      hidden,
+      hint,
       start: match.index,
       end: match.index + match[0].length,
     });
@@ -43,18 +54,31 @@ const parseDeletions = (text: string): ClozeDeletion[] => {
 };
 
 const getCleanText = (text: string): string =>
-  text.replace(CLOZE_PATTERN, (_, __, hidden) => hidden);
+  text.replace(CLOZE_PATTERN, (_, __, content: string) => {
+    // Extract just the hidden part, not the hint
+    const parts = content.split("::");
+    return parts[0]!;
+  });
 
 const generatePrompt = (content: ClozeContent, targetIndex: number): string =>
-  content.text.replace(CLOZE_PATTERN, (_, indexStr, hidden) => {
+  content.text.replace(CLOZE_PATTERN, (_, indexStr, rawContent: string) => {
     const index = parseInt(indexStr, 10);
-    return index === targetIndex ? "[...]" : hidden;
+    const parts = rawContent.split("::");
+    const hidden = parts[0]!;
+    const hint = parts[1];
+
+    if (index === targetIndex) {
+      return hint ? `[${hint}]` : "[...]";
+    }
+    return hidden;
   });
 
 /**
  * Canonical syntax: `The {{c1::capital}} of {{c2::France}} is Paris.`
+ * With optional hint: `The {{c1::Paris::capital city}} of France.`
  *
  * One card per unique index. Duplicate indices share a card.
+ * When a hint is provided, it displays as [hint] instead of [...].
  */
 export const ClozeType: ItemType<ClozeContent, Grade, never> = {
   name: "cloze",
