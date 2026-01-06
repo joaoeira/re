@@ -49,8 +49,8 @@ export interface InferredType<Content = unknown> {
 }
 
 /** Try each type's parser in order until one succeeds. */
-export const inferType = (
-  types: ReadonlyArray<ItemType<unknown, unknown, unknown>>,
+export const inferType = <T extends ItemType<unknown, unknown, unknown>>(
+  types: ReadonlyArray<T>,
   content: string
 ): Effect.Effect<InferredType, NoMatchingTypeError> => {
   const tryNext = (

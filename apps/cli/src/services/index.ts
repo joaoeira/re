@@ -6,7 +6,21 @@ export {
   DeckDiscoveryLive,
   type DiscoveryResult,
 } from "./DeckDiscovery"
-export { Scheduler, SchedulerLive } from "./Scheduler"
+export {
+  Scheduler,
+  SchedulerLive,
+  ScheduleError,
+  type FSRSGrade,
+  type ScheduleResult,
+  type SchedulerLog,
+  type ReviewLogEntry,
+  computeDueDate,
+  computeElapsedDays,
+  computeScheduledDays,
+  itemMetadataToFSRSCard,
+  fsrsCardToItemMetadata,
+} from "./Scheduler"
+export { DeckWriter, DeckWriterLive, DeckWriteError } from "./DeckWriter"
 export {
   DeckParser,
   DeckParserLive,

@@ -3,6 +3,7 @@ import { useState, useCallback } from "react";
 import { useDecks } from "./hooks/useDecks";
 import { DeckTreeView } from "./components/DeckTreeView";
 import { useReviewQueue } from "./hooks/useReviewQueue";
+import { ReviewSession } from "./components/ReviewSession";
 import { Loading } from "./components/Spinner";
 import {
   Header,
@@ -25,6 +26,7 @@ export function App() {
   });
   const [confirmedSelection, setConfirmedSelection] =
     useState<Selection | null>(null);
+  const [isReviewing, setIsReviewing] = useState(false);
 
   const {
     queue,
@@ -33,11 +35,23 @@ export function App() {
   } = useReviewQueue(confirmedSelection, tree, cwd);
 
   useKeyboard((key) => {
+    // Don't handle keys when in review session (it handles its own keys)
+    if (isReviewing) return;
+
     if (key.name === "q" || (key.ctrl && key.name === "c")) {
       renderer.destroy();
     }
     if (key.name === "escape" && confirmedSelection) {
       setConfirmedSelection(null);
+    }
+    // Start review when Enter is pressed on confirmed selection with cards
+    if (
+      key.name === "return" &&
+      confirmedSelection &&
+      queue &&
+      queue.items.length > 0
+    ) {
+      setIsReviewing(true);
     }
   });
 
@@ -98,6 +112,22 @@ export function App() {
         <EmptyState message="No decks found" hint={`Looking in ${cwd}`} />
         <Footer bindings={[{ keys: "q", action: "quit" }]} />
       </box>
+    );
+  }
+
+  if (isReviewing && confirmedSelection && queue) {
+    return (
+      <ReviewSession
+        queue={queue.items}
+        onComplete={() => {
+          setIsReviewing(false);
+          setConfirmedSelection(null); // Go back to deck selection
+        }}
+        onQuit={() => {
+          setIsReviewing(false);
+          setConfirmedSelection(null);
+        }}
+      />
     );
   }
 

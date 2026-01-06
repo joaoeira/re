@@ -15,6 +15,7 @@ export interface QueueItem {
   readonly item: Item;
   readonly card: ItemMetadata;
   readonly cardIndex: number; // index within item.cards (for multi-card items)
+  readonly itemIndex: number; // index within ParsedFile.items (for stable updates)
   readonly category: "new" | "due";
   readonly dueDate: Date | null;
 }
@@ -149,7 +150,12 @@ export const ReviewQueueServiceLive = Layer.effect(
           const allItems: QueueItem[] = [];
 
           for (const { path: deckPath, name: deckName, file } of parsedDecks) {
-            for (const item of file.items) {
+            for (
+              let itemIndex = 0;
+              itemIndex < file.items.length;
+              itemIndex++
+            ) {
+              const item = file.items[itemIndex]!;
               for (
                 let cardIndex = 0;
                 cardIndex < item.cards.length;
@@ -167,6 +173,7 @@ export const ReviewQueueServiceLive = Layer.effect(
                     item,
                     card,
                     cardIndex,
+                    itemIndex,
                     category: isNew ? "new" : "due",
                     dueDate: scheduler.getReviewDate(card),
                   });
