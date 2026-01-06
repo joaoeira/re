@@ -7,7 +7,7 @@ import {
   DeckWriterLive,
   DeckWriteError,
 } from "../../src/services/DeckWriter"
-import { State, numericField, generateId } from "@re/core"
+import { State, numericField } from "@re/core"
 import type { ItemMetadata, ItemId } from "@re/core"
 
 const validDeckContent = `---

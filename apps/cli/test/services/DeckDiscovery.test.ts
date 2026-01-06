@@ -3,6 +3,7 @@ import { Effect, Layer } from "effect"
 import { FileSystem } from "@effect/platform"
 import { SystemError } from "@effect/platform/Error"
 import { DeckDiscovery, DeckDiscoveryLive } from "../../src/services/DeckDiscovery"
+import { IgnoreFileService } from "../../src/services/IgnoreFileService"
 
 // Mock FileSystem using @effect/platform's layerNoop
 const MockFileSystem = FileSystem.layerNoop({
@@ -29,7 +30,18 @@ const MockFileSystem = FileSystem.layerNoop({
   },
 })
 
-const TestLayer = DeckDiscoveryLive.pipe(Layer.provide(MockFileSystem))
+// Mock IgnoreFileService that ignores nothing
+const MockIgnoreFileService = Layer.succeed(IgnoreFileService, {
+  buildIgnoreMap: () =>
+    Effect.succeed({
+      isIgnored: () => false,
+    }),
+})
+
+const TestLayer = DeckDiscoveryLive.pipe(
+  Layer.provide(MockIgnoreFileService),
+  Layer.provide(MockFileSystem)
+)
 
 describe("DeckDiscovery", () => {
   it("discovers markdown files and excludes hidden directories", async () => {

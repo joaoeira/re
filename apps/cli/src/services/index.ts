@@ -7,6 +7,13 @@ export {
   type DiscoveryResult,
 } from "./DeckDiscovery"
 export {
+  IgnoreFileService,
+  IgnoreFileServiceLive,
+  IGNORE_FILE,
+  parseIgnoreFile,
+  type IgnoreMap,
+} from "./IgnoreFileService"
+export {
   Scheduler,
   SchedulerLive,
   ScheduleError,
@@ -44,16 +51,18 @@ export {
 } from "./ReviewQueue"
 
 import { DeckDiscoveryLive } from "./DeckDiscovery"
+import { IgnoreFileServiceLive } from "./IgnoreFileService"
 import { SchedulerLive } from "./Scheduler"
 import { DeckParserLive } from "./DeckParser"
 import { DeckLoaderLive } from "./DeckLoader"
 import { ReviewQueueLive } from "./ReviewQueue"
 
-// Base layer: FileSystem + Scheduler + DeckParser
+// Base layer: FileSystem + Scheduler + DeckParser + IgnoreFileService
 const BaseLive = Layer.mergeAll(
   BunFileSystem.layer,
   SchedulerLive,
-  DeckParserLive.pipe(Layer.provide(BunFileSystem.layer))
+  DeckParserLive.pipe(Layer.provide(BunFileSystem.layer)),
+  IgnoreFileServiceLive.pipe(Layer.provide(BunFileSystem.layer))
 )
 
 // Full application layer
