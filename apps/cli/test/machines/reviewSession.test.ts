@@ -208,7 +208,7 @@ describe("reviewSessionMachine", () => {
       actor.send({ type: "UNDO" })
 
       await waitFor(actor, (state) =>
-        state.matches({ presenting: "showAnswer" })
+        state.matches({ presenting: "showPrompt" })
       )
 
       // Verify stats after undo
@@ -233,7 +233,7 @@ describe("reviewSessionMachine", () => {
       actor.send({ type: "UNDO" })
 
       await waitFor(actor, (state) =>
-        state.matches({ presenting: "showAnswer" })
+        state.matches({ presenting: "showPrompt" })
       )
 
       expect(actor.getSnapshot().context.currentIndex).toBe(0)

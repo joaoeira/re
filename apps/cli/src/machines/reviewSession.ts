@@ -318,7 +318,7 @@ export const reviewSessionMachine = setup({
           runtime: context.runtime,
         }),
         onDone: {
-          target: "presenting.showAnswer",
+          target: "presenting.showPrompt",
           actions: assign(({ context, event }) => {
             const last =
               context.reviewLogStack[context.reviewLogStack.length - 1]!
@@ -349,7 +349,7 @@ export const reviewSessionMachine = setup({
           }),
         },
         onError: {
-          target: "presenting.showAnswer",
+          target: "presenting.showPrompt",
           actions: assign({ error: "Failed to undo" }),
         },
       },
