@@ -21,9 +21,6 @@ export function App() {
   const cwd = process.cwd();
   const { loading, error, tree } = useDecks(cwd);
   const renderer = useRenderer();
-  const [currentSelection, setCurrentSelection] = useState<Selection>({
-    type: "all",
-  });
   const [confirmedSelection, setConfirmedSelection] =
     useState<Selection | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
@@ -54,10 +51,6 @@ export function App() {
       setIsReviewing(true);
     }
   });
-
-  const handleSelectionChange = useCallback((selection: Selection) => {
-    setCurrentSelection(selection);
-  }, []);
 
   const handleSelectionConfirm = useCallback((selection: Selection) => {
     setConfirmedSelection(selection);
@@ -234,7 +227,6 @@ export function App() {
       <DeckTreeView
         tree={tree}
         focused={true}
-        onChange={handleSelectionChange}
         onSelect={handleSelectionConfirm}
       />
 

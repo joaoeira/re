@@ -7,7 +7,7 @@ import { reviewSessionMachine } from "../machines/reviewSession";
 import { CardRenderer } from "./CardRenderer";
 import { GradeButtons } from "./GradeButtons";
 import { SessionSummary } from "./SessionSummary";
-import { Header, Footer, Panel, ErrorDisplay } from "./ui";
+import { Header, Footer, ErrorDisplay } from "./ui";
 import { getCardSpec } from "../lib/getCardSpec";
 import { themeColors as theme } from "../ThemeContext";
 import type { QueueItem } from "../services/ReviewQueue";
@@ -285,7 +285,7 @@ function ReviewSessionInner({
 
       {isRevealed && (
         <box marginTop={1}>
-          <GradeButtons onGrade={(grade) => send({ type: "GRADE", grade })} />
+          <GradeButtons />
         </box>
       )}
 

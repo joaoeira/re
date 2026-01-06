@@ -2,14 +2,21 @@
   "name": "re",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "test": "bun run --filter '*' test",
     "test:watch": "bun run --filter '*' test:watch",
-    "typecheck": "bun run --filter '*' typecheck"
+    "typecheck": "bun run --filter '*' typecheck",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "add": "^2.0.6",
+    "oxlint": "^1.38.0",
     "typescript": "^5.9.3"
   }
 }
