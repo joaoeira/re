@@ -1,4 +1,4 @@
-import { useReducer, useEffect, useRef } from "react";
+import { useReducer, useEffect, useRef, useState, useCallback } from "react";
 import { Effect, Fiber, Exit } from "effect";
 import {
   DeckDiscovery,
@@ -12,6 +12,7 @@ export interface UseDecksResult {
   loading: boolean;
   error: string | null;
   tree: DeckTreeNode[];
+  refresh: () => void;
 }
 
 interface DecksState {
@@ -54,10 +55,15 @@ const initialState: DecksState = {
 
 export function useDecks(rootPath: string): UseDecksResult {
   const [state, dispatch] = useReducer(decksReducer, initialState);
+  const [refreshKey, setRefreshKey] = useState(0);
   const fiberRef = useRef<Fiber.RuntimeFiber<
     { tree: DeckTreeNode[]; error: string | null },
     never
   > | null>(null);
+
+  const refresh = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,7 +108,7 @@ export function useDecks(rootPath: string): UseDecksResult {
         Effect.runFork(Fiber.interrupt(fiberRef.current));
       }
     };
-  }, [rootPath]);
+  }, [rootPath, refreshKey]);
 
-  return { loading: state.loading, error: state.error, tree: state.tree };
+  return { loading: state.loading, error: state.error, tree: state.tree, refresh };
 }

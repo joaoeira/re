@@ -19,11 +19,11 @@ import type { Selection } from "./services/ReviewQueue";
 
 export function App() {
   const cwd = process.cwd();
-  const { loading, error, tree } = useDecks(cwd);
   const renderer = useRenderer();
   const [confirmedSelection, setConfirmedSelection] =
     useState<Selection | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
+  const { loading, error, tree, refresh: refreshDecks } = useDecks(cwd);
 
   const {
     queue,
@@ -115,10 +115,12 @@ export function App() {
         onComplete={() => {
           setIsReviewing(false);
           setConfirmedSelection(null); // Go back to deck selection
+          refreshDecks();
         }}
         onQuit={() => {
           setIsReviewing(false);
           setConfirmedSelection(null);
+          refreshDecks();
         }}
       />
     );
