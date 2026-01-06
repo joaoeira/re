@@ -1,4 +1,4 @@
-import { theme } from "../theme"
+import { themeColors as theme } from "../ThemeContext"
 import type { FSRSGrade } from "../services/Scheduler"
 
 interface GradeButtonsProps {

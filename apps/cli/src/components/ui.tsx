@@ -1,4 +1,4 @@
-import { theme, glyphs, spacing } from "../theme";
+import { themeColors as theme, glyphs, spacing } from "../ThemeContext";
 import { TextAttributes, type BorderCharacters } from "@opentui/core";
 import type { ReactNode } from "react";
 

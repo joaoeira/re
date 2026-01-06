@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { theme, glyphs } from "../theme";
+import { themeColors as theme, glyphs } from "../ThemeContext";
 
 interface SpinnerProps {
   label?: string;

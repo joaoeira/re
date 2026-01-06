@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "bun run src/index.tsx",
+    "preview-theme": "bun run src/preview-theme.tsx",
     "test": "bun x vitest",
     "test:watch": "bun x vitest --watch",
     "typecheck": "tsc --noEmit"

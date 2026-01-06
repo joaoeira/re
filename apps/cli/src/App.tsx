@@ -14,7 +14,7 @@ import {
   EmptyState,
   Hint,
 } from "./components/ui";
-import { theme } from "./theme";
+import { themeColors as theme } from "./ThemeContext";
 import type { Selection } from "./services/ReviewQueue";
 
 export function App() {

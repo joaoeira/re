@@ -1,6 +1,6 @@
 import { useKeyboard } from "@opentui/react"
 import { Header, Panel, Footer } from "./ui"
-import { theme } from "../theme"
+import { themeColors as theme } from "../ThemeContext"
 
 interface SessionSummaryProps {
   stats: {
