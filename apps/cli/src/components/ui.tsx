@@ -197,9 +197,6 @@ export function Separator({ width = 40 }: SeparatorProps) {
   );
 }
 
-/**
- * Key binding hint for footer.
- */
 interface KeyBindingProps {
   keys: string;
   action: string;
@@ -214,11 +211,8 @@ export function KeyBinding({ keys, action }: KeyBindingProps) {
   );
 }
 
-/**
- * Footer with keyboard shortcuts.
- */
 interface FooterProps {
-  bindings: Array<{ keys: string; action: string }>;
+  bindings: Array<{ keys: string; action: string; hidden?: boolean }>;
 }
 
 export function Footer({ bindings }: FooterProps) {

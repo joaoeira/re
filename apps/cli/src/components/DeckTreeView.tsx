@@ -1,5 +1,6 @@
 import type { SelectOption } from "@opentui/core";
-import { useMemo, useCallback } from "react";
+import { useKeyboard } from "@opentui/react";
+import { useMemo, useCallback, useRef } from "react";
 import type { DeckTreeNode } from "../lib/buildDeckTree";
 import type { Selection } from "../services/ReviewQueue";
 import { themeColors as theme, glyphs } from "../ThemeContext";
@@ -126,6 +127,7 @@ export function DeckTreeView({
   onChange,
 }: DeckTreeViewProps) {
   const totals = aggregateStats(tree);
+  const currentIndexRef = useRef(0);
 
   const options = useMemo(() => {
     const allItem: FlattenedItem = {
@@ -151,6 +153,7 @@ export function DeckTreeView({
 
   const handleChange = useCallback(
     (index: number, option: SelectOption | null) => {
+      currentIndexRef.current = index;
       if (option && onChange) {
         onChange(option.value as Selection);
       }
@@ -166,6 +169,15 @@ export function DeckTreeView({
     },
     [onSelect]
   );
+
+  // Handle space bar to select the current item
+  useKeyboard((key) => {
+    if (!focused) return;
+    if (key.name === "space" && onSelect) {
+      const currentOption = options[currentIndexRef.current];
+      if (currentOption) onSelect(currentOption.value);
+    }
+  });
 
   return (
     <select

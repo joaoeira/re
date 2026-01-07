@@ -235,7 +235,7 @@ export function App() {
       <Footer
         bindings={[
           { keys: "j/k", action: "navigate" },
-          { keys: "enter", action: "select" },
+          { keys: "enter/space", action: "select" },
           { keys: "q", action: "quit" },
         ]}
       />
