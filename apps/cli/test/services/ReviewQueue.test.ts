@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Random, Order } from "effect";
 import { FileSystem } from "@effect/platform";
 import { SystemError } from "@effect/platform/Error";
 import {
@@ -7,7 +7,21 @@ import {
   ReviewQueueServiceLive,
   NewFirstOrderingStrategy,
   DueFirstOrderingStrategy,
+  QueueOrderingStrategyFromSpec,
+  NewFirstByDueDateSpec,
+  DueFirstByDueDateSpec,
+  NewFirstShuffledSpec,
+  NewFirstFileOrderSpec,
+  QueueOrderSpec,
+  preserveOrder,
+  sortBy,
+  shuffle,
+  chain,
+  byDueDate,
+  byFilePosition,
   type Selection,
+  type QueueItem,
+  type WithinGroupOrder,
 } from "../../src/services/ReviewQueue";
 import { DeckParserLive } from "../../src/services/DeckParser";
 import { SchedulerLive } from "../../src/services/Scheduler";
@@ -344,6 +358,260 @@ describe("ReviewQueueService", () => {
       }).pipe(Effect.provide(TestLayer), Effect.runPromise)
 
       expect(result.items.length).toBe(0)
+    })
+  })
+
+  describe("Spec-based ordering (QueueOrderingStrategyFromSpec)", () => {
+    const SpecBasedTestLayer = (specLayer: Layer.Layer<typeof QueueOrderSpec.Service>) =>
+      ReviewQueueServiceLive.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            MockDeckParser,
+            SchedulerLive,
+            QueueOrderingStrategyFromSpec.pipe(Layer.provide(specLayer))
+          )
+        )
+      )
+
+    it("NewFirstByDueDateSpec places new cards before due cards", async () => {
+      const tree = buildTestTree()
+      const selection: Selection = { type: "deck", path: "/decks/mixed.md" }
+
+      const result = await Effect.gen(function* () {
+        const service = yield* ReviewQueueService
+        return yield* service.buildQueue(selection, tree, "/decks", now)
+      }).pipe(
+        Effect.provide(SpecBasedTestLayer(NewFirstByDueDateSpec)),
+        Effect.runPromise
+      )
+
+      let seenDue = false
+      for (const item of result.items) {
+        if (item.category === "due") seenDue = true
+        if (item.category === "new" && seenDue) {
+          throw new Error("New card found after due card")
+        }
+      }
+    })
+
+    it("DueFirstByDueDateSpec places due cards before new cards", async () => {
+      const tree = buildTestTree()
+      const selection: Selection = { type: "deck", path: "/decks/mixed.md" }
+
+      const result = await Effect.gen(function* () {
+        const service = yield* ReviewQueueService
+        return yield* service.buildQueue(selection, tree, "/decks", now)
+      }).pipe(
+        Effect.provide(SpecBasedTestLayer(DueFirstByDueDateSpec)),
+        Effect.runPromise
+      )
+
+      let seenNew = false
+      for (const item of result.items) {
+        if (item.category === "new") seenNew = true
+        if (item.category === "due" && seenNew) {
+          throw new Error("Due card found after new card")
+        }
+      }
+    })
+
+    it("NewFirstShuffledSpec randomizes new card order", async () => {
+      const tree = buildTestTree()
+      const selection: Selection = { type: "deck", path: "/decks/mixed.md" }
+
+      const runOnce = () =>
+        Effect.gen(function* () {
+          const service = yield* ReviewQueueService
+          return yield* service.buildQueue(selection, tree, "/decks", now)
+        }).pipe(Effect.provide(SpecBasedTestLayer(NewFirstShuffledSpec)))
+
+      const results = await Effect.all([runOnce(), runOnce(), runOnce(), runOnce(), runOnce()]).pipe(
+        Effect.runPromise
+      )
+
+      for (const result of results) {
+        expect(result.totalNew).toBe(2)
+        expect(result.totalDue).toBe(2)
+        let seenDue = false
+        for (const item of result.items) {
+          if (item.category === "due") seenDue = true
+          if (item.category === "new" && seenDue) {
+            throw new Error("New card found after due card")
+          }
+        }
+      }
+    })
+
+    it("NewFirstFileOrderSpec sorts by file position", async () => {
+      const tree = buildTestTree()
+      const selection: Selection = { type: "deck", path: "/decks/mixed.md" }
+
+      const result = await Effect.gen(function* () {
+        const service = yield* ReviewQueueService
+        return yield* service.buildQueue(selection, tree, "/decks", now)
+      }).pipe(
+        Effect.provide(SpecBasedTestLayer(NewFirstFileOrderSpec)),
+        Effect.runPromise
+      )
+
+      const newCards = result.items.filter((i) => i.category === "new")
+      expect(newCards[0]?.card.id).toBe("card1")
+      expect(newCards[1]?.card.id).toBe("card2")
+    })
+  })
+})
+
+describe("Composable ordering primitives", () => {
+  const makeItem = (
+    id: string,
+    category: "new" | "due",
+    itemIndex: number,
+    dueDate: Date | null = null,
+    deckPath: string = "/deck.md"
+  ): QueueItem => ({
+    deckPath,
+    deckName: "deck",
+    item: { type: "qa", content: "", cards: [] } as any,
+    card: { id, state: category === "new" ? 0 : 2 } as any,
+    cardIndex: 0,
+    itemIndex,
+    category,
+    dueDate,
+  })
+
+  describe("preserveOrder", () => {
+    it("returns items in original order", async () => {
+      const items = [
+        makeItem("a", "new", 0),
+        makeItem("b", "new", 1),
+        makeItem("c", "new", 2),
+      ]
+
+      const result = await preserveOrder<QueueItem>()(items).pipe(Effect.runPromise)
+
+      expect(result.map((i) => i.card.id)).toEqual(["a", "b", "c"])
+    })
+  })
+
+  describe("sortBy", () => {
+    it("sorts by the given order", async () => {
+      const items = [
+        makeItem("c", "new", 2),
+        makeItem("a", "new", 0),
+        makeItem("b", "new", 1),
+      ]
+
+      const result = await sortBy<QueueItem>(byFilePosition)(items).pipe(Effect.runPromise)
+
+      expect(result.map((i) => i.card.id)).toEqual(["a", "b", "c"])
+    })
+
+    it("sorts by due date", async () => {
+      const items = [
+        makeItem("late", "due", 0, new Date("2025-01-10")),
+        makeItem("early", "due", 1, new Date("2025-01-01")),
+        makeItem("mid", "due", 2, new Date("2025-01-05")),
+      ]
+
+      const result = await sortBy<QueueItem>(byDueDate)(items).pipe(Effect.runPromise)
+
+      expect(result.map((i) => i.card.id)).toEqual(["early", "mid", "late"])
+    })
+  })
+
+  describe("shuffle", () => {
+    it("returns all items (possibly in different order)", async () => {
+      const items = [
+        makeItem("a", "new", 0),
+        makeItem("b", "new", 1),
+        makeItem("c", "new", 2),
+        makeItem("d", "new", 3),
+        makeItem("e", "new", 4),
+      ]
+
+      const result = await shuffle<QueueItem>()(items).pipe(Effect.runPromise)
+
+      expect(result.length).toBe(5)
+      expect(new Set(result.map((i) => i.card.id))).toEqual(new Set(["a", "b", "c", "d", "e"]))
+    })
+  })
+
+  describe("chain", () => {
+    it("applies multiple transforms in sequence", async () => {
+      const items = [
+        makeItem("c", "new", 2),
+        makeItem("a", "new", 0),
+        makeItem("b", "new", 1),
+      ]
+
+      const sortThenPreserve = chain(
+        sortBy<QueueItem>(byFilePosition),
+        preserveOrder()
+      )
+
+      const result = await sortThenPreserve(items).pipe(Effect.runPromise)
+
+      expect(result.map((i) => i.card.id)).toEqual(["a", "b", "c"])
+    })
+
+    it("allows chaining shuffle with sort for deterministic tiebreaking", async () => {
+      const items = [
+        makeItem("a", "due", 0, new Date("2025-01-01")),
+        makeItem("b", "due", 1, new Date("2025-01-01")),
+        makeItem("c", "due", 2, new Date("2025-01-05")),
+      ]
+
+      const shuffleThenSortByDue = chain(
+        shuffle<QueueItem>(),
+        sortBy(byDueDate)
+      )
+
+      const result = await shuffleThenSortByDue(items).pipe(Effect.runPromise)
+
+      expect(result[2]?.card.id).toBe("c")
+      const firstTwo = result.slice(0, 2).map((i) => i.card.id)
+      expect(new Set(firstTwo)).toEqual(new Set(["a", "b"]))
+    })
+  })
+
+  describe("custom QueueOrderSpec", () => {
+    it("allows defining custom specs with composed orderings", async () => {
+      const customSpec = Layer.succeed(QueueOrderSpec, {
+        primaryOrder: "due-first",
+        newCardOrder: shuffle(),
+        dueCardOrder: chain(shuffle(), sortBy(byDueDate)),
+      })
+
+      const items = [
+        makeItem("new1", "new", 0),
+        makeItem("due1", "due", 1, new Date("2025-01-05")),
+        makeItem("new2", "new", 2),
+        makeItem("due2", "due", 3, new Date("2025-01-01")),
+      ]
+
+      const result = await Effect.gen(function* () {
+        const strategy = yield* Effect.serviceOption(
+          QueueOrderingStrategyFromSpec.pipe(Layer.provide(customSpec))
+        )
+        return items
+      }).pipe(Effect.runPromise)
+
+      expect(result.length).toBe(4)
+    })
+  })
+
+  describe("Order.combine for complex sorting", () => {
+    it("combines multiple orders for tiebreaking", async () => {
+      const items = [
+        makeItem("b2", "new", 1, null, "/deck-b.md"),
+        makeItem("a1", "new", 0, null, "/deck-a.md"),
+        makeItem("a2", "new", 1, null, "/deck-a.md"),
+        makeItem("b1", "new", 0, null, "/deck-b.md"),
+      ]
+
+      const result = await sortBy<QueueItem>(byFilePosition)(items).pipe(Effect.runPromise)
+
+      expect(result.map((i) => i.card.id)).toEqual(["a1", "a2", "b1", "b2"])
     })
   })
 })
