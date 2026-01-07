@@ -7,6 +7,7 @@ import {
   Random,
   Chunk,
 } from "effect";
+import { Path } from "@effect/platform";
 import { type Item, type ItemMetadata, State } from "@re/core";
 import { Scheduler } from "./Scheduler";
 import { DeckParser } from "./DeckParser";
@@ -20,6 +21,7 @@ export type Selection =
 export interface QueueItem {
   readonly deckPath: string;
   readonly deckName: string;
+  readonly relativePath: string;
   readonly item: Item;
   readonly card: ItemMetadata;
   readonly cardIndex: number; // index within item.cards (for multi-card items)
@@ -223,9 +225,10 @@ export const ReviewQueueServiceLive = Layer.effect(
     const deckParser = yield* DeckParser;
     const scheduler = yield* Scheduler;
     const orderingStrategy = yield* QueueOrderingStrategy;
+    const pathService = yield* Path.Path;
 
     return {
-      buildQueue: (selection, tree, _rootPath, now) =>
+      buildQueue: (selection, tree, rootPath, now) =>
         Effect.gen(function* () {
           const deckPaths = collectDeckPaths(selection, tree);
 
@@ -234,6 +237,7 @@ export const ReviewQueueServiceLive = Layer.effect(
           const allItems: QueueItem[] = [];
 
           for (const { path: deckPath, name: deckName, file } of parsedDecks) {
+            const relativePath = pathService.relative(rootPath, deckPath);
             for (
               let itemIndex = 0;
               itemIndex < file.items.length;
@@ -254,6 +258,7 @@ export const ReviewQueueServiceLive = Layer.effect(
                   allItems.push({
                     deckPath,
                     deckName,
+                    relativePath,
                     item,
                     card,
                     cardIndex,

@@ -28,6 +28,7 @@ const makeQueueItem = (itemIndex: number, cardIndex = 0): QueueItem => {
   return {
     deckPath: "/test/deck.md",
     deckName: "Test Deck",
+    relativePath: "deck.md",
     item,
     card,
     cardIndex,

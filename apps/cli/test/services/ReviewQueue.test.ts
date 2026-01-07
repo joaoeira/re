@@ -87,13 +87,13 @@ const MockDeckParser = DeckParserLive.pipe(
 
 const TestLayer = ReviewQueueServiceLive.pipe(
   Layer.provide(
-    Layer.mergeAll(MockDeckParser, SchedulerLive, NewFirstOrderingStrategy)
+    Layer.mergeAll(MockDeckParser, SchedulerLive, NewFirstOrderingStrategy, Path.layer)
   )
 );
 
 const DueFirstTestLayer = ReviewQueueServiceLive.pipe(
   Layer.provide(
-    Layer.mergeAll(MockDeckParser, SchedulerLive, DueFirstOrderingStrategy)
+    Layer.mergeAll(MockDeckParser, SchedulerLive, DueFirstOrderingStrategy, Path.layer)
   )
 );
 
@@ -298,11 +298,28 @@ describe("ReviewQueueService", () => {
 
       expect(item.deckPath).toBe("/decks/new.md");
       expect(item.deckName).toBe("new");
+      expect(item.relativePath).toBe("new.md");
       expect(item.card.id).toBe("new123");
       expect(item.cardIndex).toBe(0);
       expect(item.category).toBe("new");
       expect(item.dueDate).toBeNull(); // New cards have no due date
       expect(item.item.content).toContain("What is 2+2?");
+    });
+
+    it("includes relative path from root", async () => {
+      const tree = buildTestTree();
+      const selection: Selection = { type: "folder", path: "/decks/folder1" };
+
+      const result = await Effect.gen(function* () {
+        const service = yield* ReviewQueueService;
+        return yield* service.buildQueue(selection, tree, "/decks", now);
+      }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+      const itemA = result.items.find((i) => i.deckPath === "/decks/folder1/a.md");
+      const itemB = result.items.find((i) => i.deckPath === "/decks/folder1/b.md");
+
+      expect(itemA?.relativePath).toBe("folder1/a.md");
+      expect(itemB?.relativePath).toBe("folder1/b.md");
     });
   });
 
@@ -371,6 +388,7 @@ describe("ReviewQueueService", () => {
           Layer.mergeAll(
             MockDeckParser,
             SchedulerLive,
+            Path.layer,
             QueueOrderingStrategyFromSpec.pipe(Layer.provide(specLayer))
           )
         )
@@ -478,6 +496,7 @@ describe("Composable ordering primitives", () => {
   ): QueueItem => ({
     deckPath,
     deckName: "deck",
+    relativePath: "deck.md",
     item: { type: "qa", content: "", cards: [] } as any,
     card: { id, state: category === "new" ? 0 : 2 } as any,
     cardIndex: 0,
