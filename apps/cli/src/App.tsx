@@ -41,9 +41,9 @@ export function App() {
     if (key.name === "escape" && confirmedSelection) {
       setConfirmedSelection(null);
     }
-    // Start review when Enter is pressed on confirmed selection with cards
+    // Start review when Enter or Space is pressed on confirmed selection with cards
     if (
-      key.name === "return" &&
+      (key.name === "return" || key.name === "space") &&
       confirmedSelection &&
       queue &&
       queue.items.length > 0
@@ -206,7 +206,7 @@ export function App() {
         <box marginTop={2}>
           <Footer
             bindings={[
-              ...(hasCards ? [{ keys: "enter", action: "start" }] : []),
+              ...(hasCards ? [{ keys: "enter/space", action: "start" }] : []),
               { keys: "esc", action: "back" },
               { keys: "q", action: "quit" },
             ]}
