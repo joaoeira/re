@@ -1,7 +1,6 @@
 import { Context, Effect, Layer, Data } from "effect";
-import { FileSystem } from "@effect/platform";
+import { FileSystem, Path } from "@effect/platform";
 import { parseFile, type ParsedFile } from "@re/core";
-import * as nodePath from "node:path";
 
 export class DeckReadError extends Data.TaggedError("DeckReadError")<{
   readonly path: string;
@@ -37,12 +36,13 @@ export const DeckParserLive = Layer.effect(
   DeckParser,
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
 
     const parseSingle = (
       deckPath: string
     ): Effect.Effect<ParsedDeck, DeckParserError> =>
       Effect.gen(function* () {
-        const name = nodePath.basename(deckPath, ".md");
+        const name = path.basename(deckPath, ".md");
 
         const content = yield* fs
           .readFileString(deckPath)

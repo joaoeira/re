@@ -1,5 +1,6 @@
 import { Layer } from "effect"
 import { BunFileSystem } from "@effect/platform-bun"
+import { Path } from "@effect/platform"
 
 export {
   DeckDiscovery,
@@ -57,16 +58,19 @@ import { DeckParserLive } from "./DeckParser"
 import { DeckLoaderLive } from "./DeckLoader"
 import { ReviewQueueLive } from "./ReviewQueue"
 
-// Base layer: FileSystem + Scheduler + DeckParser + IgnoreFileService
+const FileSystemAndPath = Layer.mergeAll(BunFileSystem.layer, Path.layer)
+
+// Base layer: FileSystem + Path + Scheduler + DeckParser + IgnoreFileService
 const BaseLive = Layer.mergeAll(
-  BunFileSystem.layer,
+  FileSystemAndPath,
   SchedulerLive,
-  DeckParserLive.pipe(Layer.provide(BunFileSystem.layer)),
-  IgnoreFileServiceLive.pipe(Layer.provide(BunFileSystem.layer))
+  DeckParserLive.pipe(Layer.provide(FileSystemAndPath)),
+  IgnoreFileServiceLive.pipe(Layer.provide(FileSystemAndPath))
 )
 
 // Full application layer
 export const AppLive = Layer.mergeAll(
+  Path.layer,
   DeckDiscoveryLive,
   DeckLoaderLive,
   ReviewQueueLive
