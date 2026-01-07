@@ -175,7 +175,7 @@ Line 2: {{c2::answer2}}`;
 
         assert.strictEqual(cards.length, 1);
         assert.strictEqual(cards[0]!.prompt, "[...] and [...]");
-        assert.strictEqual(cards[0]!.reveal, "first and second");
+        assert.strictEqual(cards[0]!.reveal, "**first** and **second**");
       })
     );
 
@@ -200,21 +200,20 @@ Line 2: {{c2::answer2}}`;
       })
     );
 
-    it.effect("reveal shows all text with markers removed", () =>
+    it.effect("reveal bolds the target cloze for each card", () =>
       Effect.gen(function* () {
         const content = yield* ClozeType.parse(
           "The {{c1::capital}} of {{c2::France}} is Paris."
         );
         const cards = ClozeType.cards(content);
 
-        // Both cards should have the same reveal
         assert.strictEqual(
           cards[0]!.reveal,
-          "The capital of France is Paris."
+          "The **capital** of France is Paris."
         );
         assert.strictEqual(
           cards[1]!.reveal,
-          "The capital of France is Paris."
+          "The capital of **France** is Paris."
         );
       })
     );
@@ -239,7 +238,7 @@ Line 2: {{c2::answer2}}`;
 
         assert.strictEqual(cards.length, 1);
         assert.strictEqual(cards[0]!.prompt, "The answer is [...].");
-        assert.strictEqual(cards[0]!.reveal, "The answer is 42.");
+        assert.strictEqual(cards[0]!.reveal, "The answer is **42**.");
       })
     );
 
@@ -252,7 +251,7 @@ Line 2: {{c2::answer2}}`;
 
         assert.strictEqual(cards.length, 1);
         assert.strictEqual(cards[0]!.prompt, "The [capital city] is beautiful.");
-        assert.strictEqual(cards[0]!.reveal, "The Paris is beautiful.");
+        assert.strictEqual(cards[0]!.reveal, "The **Paris** is beautiful.");
       })
     );
 
@@ -271,16 +270,15 @@ Line 2: {{c2::answer2}}`;
       })
     );
 
-    it.effect("reveal strips hints and shows only hidden text", () =>
+    it.effect("reveal strips hints and bolds target cloze", () =>
       Effect.gen(function* () {
         const content = yield* ClozeType.parse(
           "The {{c1::capital::hint1}} of {{c2::France::hint2}} is Paris."
         );
         const cards = ClozeType.cards(content);
 
-        // Reveal should not include hints
-        assert.strictEqual(cards[0]!.reveal, "The capital of France is Paris.");
-        assert.strictEqual(cards[1]!.reveal, "The capital of France is Paris.");
+        assert.strictEqual(cards[0]!.reveal, "The **capital** of France is Paris.");
+        assert.strictEqual(cards[1]!.reveal, "The capital of **France** is Paris.");
       })
     );
 
@@ -293,7 +291,7 @@ Line 2: {{c2::answer2}}`;
 
         assert.strictEqual(cards.length, 1);
         assert.strictEqual(cards[0]!.prompt, "[hint1] and [hint2]");
-        assert.strictEqual(cards[0]!.reveal, "first and second");
+        assert.strictEqual(cards[0]!.reveal, "**first** and **second**");
       })
     );
   });

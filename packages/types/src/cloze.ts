@@ -53,11 +53,16 @@ const parseDeletions = (text: string): ClozeDeletion[] => {
   return deletions.sort((a, b) => a.index - b.index);
 };
 
-const getCleanText = (text: string): string =>
-  text.replace(CLOZE_PATTERN, (_, __, content: string) => {
-    // Extract just the hidden part, not the hint
-    const parts = content.split("::");
-    return parts[0]!;
+const generateReveal = (content: ClozeContent, targetIndex: number): string =>
+  content.text.replace(CLOZE_PATTERN, (_, indexStr, rawContent: string) => {
+    const index = parseInt(indexStr, 10);
+    const parts = rawContent.split("::");
+    const hidden = parts[0]!;
+
+    if (index === targetIndex) {
+      return `**${hidden}**`;
+    }
+    return hidden;
   });
 
 const generatePrompt = (content: ClozeContent, targetIndex: number): string =>
@@ -103,8 +108,6 @@ export const ClozeType: ItemType<ClozeContent, Grade, never> = {
   },
 
   cards: (content: ClozeContent): ReadonlyArray<CardSpec<Grade, never>> => {
-    const reveal = getCleanText(content.text);
-
     const indices: number[] = [];
     let lastIndex: number | null = null;
     for (const deletion of content.deletions) {
@@ -115,7 +118,11 @@ export const ClozeType: ItemType<ClozeContent, Grade, never> = {
     }
 
     return indices.map((index) =>
-      manualCardSpec(generatePrompt(content, index), reveal, CLOZE)
+      manualCardSpec(
+        generatePrompt(content, index),
+        generateReveal(content, index),
+        CLOZE
+      )
     );
   },
 };
