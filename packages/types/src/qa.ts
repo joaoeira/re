@@ -68,6 +68,6 @@ export const QAType: ItemType<QAContent, Grade, never> = {
   },
 
   cards: (content: QAContent): ReadonlyArray<CardSpec<Grade, never>> => [
-    manualCardSpec(content.question, content.answer),
+    manualCardSpec(content.question, content.answer, QA),
   ],
 };

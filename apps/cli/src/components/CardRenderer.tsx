@@ -3,6 +3,7 @@ import type { QueueItem } from "../services/ReviewQueue";
 import { useTheme } from "../ThemeContext";
 import { Panel, Hint } from "./ui";
 import { RGBA } from "@opentui/core";
+import { Match } from "effect";
 
 interface CardRendererProps {
   queueItem: QueueItem;
@@ -17,17 +18,13 @@ export function CardRenderer({
 }: CardRendererProps) {
   const { colors, syntax } = useTheme();
 
-  return (
-    <box flexDirection="column" gap={1}>
-      <text fg={colors.textMuted}>
-        {queueItem.deckName} · Card {queueItem.cardIndex + 1}
-      </text>
-
+  const renderCard = Match.value(cardSpec.cardType).pipe(
+    Match.when("cloze", () => (
       <Panel>
         <box flexDirection="column">
           <code
             filetype="markdown"
-            content={cardSpec.prompt}
+            content={isRevealed ? cardSpec.reveal : cardSpec.prompt}
             syntaxStyle={syntax}
             conceal={true}
             drawUnstyledText={true}
@@ -36,22 +33,48 @@ export function CardRenderer({
           />
         </box>
       </Panel>
-
-      {isRevealed && (
-        <Panel accent>
+    )),
+    Match.orElse(() => (
+      <>
+        <Panel>
           <box flexDirection="column">
             <code
               filetype="markdown"
-              content={cardSpec.reveal}
+              content={cardSpec.prompt}
               syntaxStyle={syntax}
               conceal={true}
               drawUnstyledText={true}
               streaming={false}
-              fg={RGBA.fromHex(colors.success)}
+              fg={RGBA.fromHex(colors.text)}
             />
           </box>
         </Panel>
-      )}
+        {isRevealed && (
+          <Panel accent>
+            <box flexDirection="column">
+              <code
+                filetype="markdown"
+                content={cardSpec.reveal}
+                syntaxStyle={syntax}
+                conceal={true}
+                drawUnstyledText={true}
+                streaming={false}
+                fg={RGBA.fromHex(colors.success)}
+              />
+            </box>
+          </Panel>
+        )}
+      </>
+    ))
+  );
+
+  return (
+    <box flexDirection="column" gap={1}>
+      <text fg={colors.textMuted}>
+        {queueItem.deckName} · Card {queueItem.cardIndex + 1}
+      </text>
+
+      {renderCard}
 
       {!isRevealed && <Hint>Press space to reveal answer</Hint>}
     </box>

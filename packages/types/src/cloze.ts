@@ -115,7 +115,7 @@ export const ClozeType: ItemType<ClozeContent, Grade, never> = {
     }
 
     return indices.map((index) =>
-      manualCardSpec(generatePrompt(content, index), reveal)
+      manualCardSpec(generatePrompt(content, index), reveal, CLOZE)
     );
   },
 };
