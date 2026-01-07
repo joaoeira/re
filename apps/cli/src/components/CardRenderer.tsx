@@ -70,9 +70,7 @@ export function CardRenderer({
 
   return (
     <box flexDirection="column" gap={1}>
-      <text fg={colors.textMuted}>
-        {queueItem.deckName} · Card {queueItem.cardIndex + 1}
-      </text>
+      <text fg={colors.textMuted}>{queueItem.relativePath}</text>
 
       {renderCard}
 
