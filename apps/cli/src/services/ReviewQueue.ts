@@ -1,4 +1,12 @@
-import { Context, Effect, Layer, Array as Arr, pipe, Order } from "effect";
+import {
+  Context,
+  Effect,
+  Layer,
+  Array as Arr,
+  Order,
+  Random,
+  Chunk,
+} from "effect";
 import { type Item, type ItemMetadata, State } from "@re/core";
 import { Scheduler } from "./Scheduler";
 import { DeckParser } from "./DeckParser";
@@ -26,6 +34,54 @@ export interface ReviewQueue {
   readonly totalDue: number;
 }
 
+export type WithinGroupOrder<A> = (
+  items: readonly A[]
+) => Effect.Effect<readonly A[]>;
+
+export const preserveOrder =
+  <A>(): WithinGroupOrder<A> =>
+  (items) =>
+    Effect.succeed(items);
+
+export const sortBy =
+  <A>(order: Order.Order<A>): WithinGroupOrder<A> =>
+  (items) =>
+    Effect.succeed(Arr.sort(items, order));
+
+export const shuffle =
+  <A>(): WithinGroupOrder<A> =>
+  (items) =>
+    Effect.map(Random.shuffle(items), Chunk.toReadonlyArray);
+
+export const chain =
+  <A>(...orders: WithinGroupOrder<A>[]): WithinGroupOrder<A> =>
+  (items) =>
+    orders.reduce(
+      (acc, order) => Effect.flatMap(acc, order),
+      Effect.succeed(items) as Effect.Effect<readonly A[]>
+    );
+
+export const byDueDate: Order.Order<QueueItem> = Order.make((a, b) => {
+  if (!a.dueDate && !b.dueDate) return 0;
+  if (!a.dueDate) return 1;
+  if (!b.dueDate) return -1;
+  return Order.number(a.dueDate.getTime(), b.dueDate.getTime());
+});
+
+export const byFilePosition: Order.Order<QueueItem> = Order.combine(
+  Order.mapInput(Order.string, (q: QueueItem) => q.deckPath),
+  Order.mapInput(Order.number, (q: QueueItem) => q.itemIndex)
+);
+
+export interface QueueOrderSpec {
+  readonly primaryOrder: "new-first" | "due-first";
+  readonly newCardOrder: WithinGroupOrder<QueueItem>;
+  readonly dueCardOrder: WithinGroupOrder<QueueItem>;
+}
+
+export const QueueOrderSpec =
+  Context.GenericTag<QueueOrderSpec>("QueueOrderSpec");
+
 export interface QueueOrderingStrategy {
   readonly order: (
     items: readonly QueueItem[]
@@ -36,36 +92,64 @@ export const QueueOrderingStrategy = Context.GenericTag<QueueOrderingStrategy>(
   "QueueOrderingStrategy"
 );
 
-const byDueDate: Order.Order<QueueItem> = Order.make((a, b) => {
-  if (!a.dueDate && !b.dueDate) return 0;
-  if (!a.dueDate) return 1;
-  if (!b.dueDate) return -1;
-  return Order.number(a.dueDate.getTime(), b.dueDate.getTime());
+export const QueueOrderingStrategyFromSpec = Layer.effect(
+  QueueOrderingStrategy,
+  Effect.gen(function* () {
+    const spec = yield* QueueOrderSpec;
+
+    return {
+      order: (items) =>
+        Effect.gen(function* () {
+          const [dueItems, newItems] = Arr.partition(
+            items,
+            (i) => i.category === "new"
+          );
+
+          const orderedNew = yield* spec.newCardOrder(newItems);
+          const orderedDue = yield* spec.dueCardOrder(dueItems);
+
+          return spec.primaryOrder === "new-first"
+            ? [...orderedNew, ...orderedDue]
+            : [...orderedDue, ...orderedNew];
+        }),
+    };
+  })
+);
+
+export const NewFirstByDueDateSpec = Layer.succeed(QueueOrderSpec, {
+  primaryOrder: "new-first",
+  newCardOrder: preserveOrder<QueueItem>(),
+  dueCardOrder: sortBy(byDueDate),
 });
 
-export const NewFirstOrderingStrategy = Layer.succeed(QueueOrderingStrategy, {
-  order: (items) =>
-    Effect.succeed(
-      pipe(
-        items,
-        Arr.partition((item) => item.category === "new"),
-        ([due, newItems]) => [...newItems, ...pipe(due, Arr.sort(byDueDate))]
-      )
-    ),
+export const DueFirstByDueDateSpec = Layer.succeed(QueueOrderSpec, {
+  primaryOrder: "due-first",
+  newCardOrder: preserveOrder<QueueItem>(),
+  dueCardOrder: sortBy(byDueDate),
 });
 
-export const DueFirstOrderingStrategy = Layer.succeed(QueueOrderingStrategy, {
-  order: (items) =>
-    Effect.succeed(
-      pipe(
-        items,
-        Arr.partition((item) => item.category === "due"),
-        ([newItems, dueItems]) => [
-          ...pipe(dueItems, Arr.sort(byDueDate)),
-          ...newItems,
-        ]
-      )
-    ),
+export const NewFirstShuffledSpec = Layer.succeed(QueueOrderSpec, {
+  primaryOrder: "new-first",
+  newCardOrder: shuffle<QueueItem>(),
+  dueCardOrder: sortBy(byDueDate),
+});
+
+export const NewFirstFileOrderSpec = Layer.succeed(QueueOrderSpec, {
+  primaryOrder: "new-first",
+  newCardOrder: sortBy(byFilePosition),
+  dueCardOrder: sortBy(byDueDate),
+});
+
+export const NewFirstOrderingStrategy = QueueOrderingStrategyFromSpec.pipe(
+  Layer.provide(NewFirstByDueDateSpec)
+);
+
+export const DueFirstOrderingStrategy = QueueOrderingStrategyFromSpec.pipe(
+  Layer.provide(DueFirstByDueDateSpec)
+);
+
+export const ShuffledOrderingStrategy = Layer.succeed(QueueOrderingStrategy, {
+  order: shuffle<QueueItem>(),
 });
 
 export interface ReviewQueueService {
@@ -194,7 +278,7 @@ export const ReviewQueueServiceLive = Layer.effect(
   })
 );
 
-// Convenience layer with default (new first) ordering
+// Convenience layer with default (shuffled) ordering
 export const ReviewQueueLive = ReviewQueueServiceLive.pipe(
-  Layer.provide(NewFirstOrderingStrategy)
+  Layer.provide(ShuffledOrderingStrategy)
 );
