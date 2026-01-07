@@ -12,6 +12,7 @@ export class ContentParseError extends Data.TaggedError("ContentParseError")<{
 export interface CardSpec<Response, GradeError = never> {
   readonly prompt: string;
   readonly reveal: string;
+  readonly cardType: string;
   readonly responseSchema: Schema.Schema<Response>;
   readonly grade: (response: Response) => Effect.Effect<Grade, GradeError>;
 }
@@ -26,10 +27,12 @@ export interface ItemType<Content, Response = unknown, GradeError = never> {
 
 export const manualCardSpec = (
   prompt: string,
-  reveal: string
+  reveal: string,
+  cardType: string
 ): CardSpec<Grade, never> => ({
   prompt,
   reveal,
+  cardType,
   responseSchema: GradeSchema,
   grade: (response) => Effect.succeed(response),
 });
