@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { Effect, Layer } from "effect"
-import { FileSystem } from "@effect/platform"
+import { FileSystem, Path } from "@effect/platform"
 import { SystemError } from "@effect/platform/Error"
 import { DeckDiscovery, DeckDiscoveryLive } from "../../src/services/DeckDiscovery"
 import { IgnoreFileService } from "../../src/services/IgnoreFileService"
@@ -40,7 +40,7 @@ const MockIgnoreFileService = Layer.succeed(IgnoreFileService, {
 
 const TestLayer = DeckDiscoveryLive.pipe(
   Layer.provide(MockIgnoreFileService),
-  Layer.provide(MockFileSystem)
+  Layer.provide(Layer.mergeAll(MockFileSystem, Path.layer))
 )
 
 describe("DeckDiscovery", () => {

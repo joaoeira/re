@@ -1,6 +1,5 @@
 import { Context, Effect, Layer } from "effect";
-import { FileSystem } from "@effect/platform";
-import * as nodePath from "node:path";
+import { FileSystem, Path } from "@effect/platform";
 
 export const IGNORE_FILE = ".reignore";
 
@@ -33,6 +32,7 @@ export const IgnoreFileServiceLive = Layer.effect(
   IgnoreFileService,
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
 
     return {
       buildIgnoreMap: (rootPath, entries) =>
@@ -40,11 +40,11 @@ export const IgnoreFileServiceLive = Layer.effect(
           const ignoreMap = new Map<string, Set<string>>();
 
           const ignoreFiles = entries.filter(
-            (e) => nodePath.basename(e) === IGNORE_FILE
+            (e) => path.basename(e) === IGNORE_FILE
           );
           for (const ignoreFile of ignoreFiles) {
-            const dir = nodePath.dirname(ignoreFile);
-            const fullPath = nodePath.join(rootPath, ignoreFile);
+            const dir = path.dirname(ignoreFile);
+            const fullPath = path.join(rootPath, ignoreFile);
             const contentResult = yield* fs
               .readFileString(fullPath)
               .pipe(Effect.either);
@@ -58,8 +58,8 @@ export const IgnoreFileServiceLive = Layer.effect(
 
           return {
             isIgnored: (relativePath: string) => {
-              const dir = nodePath.dirname(relativePath);
-              const filename = nodePath.basename(relativePath);
+              const dir = path.dirname(relativePath);
+              const filename = path.basename(relativePath);
               const ignoredInDir = ignoreMap.get(dir === "." ? "" : dir);
               return ignoredInDir?.has(filename) ?? false;
             },

@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect"
 import { describe, it, assert } from "@effect/vitest"
-import { FileSystem } from "@effect/platform"
+import { FileSystem, Path } from "@effect/platform"
 import {
   IgnoreFileService,
   IgnoreFileServiceLive,
@@ -133,6 +133,7 @@ describe("IgnoreFileService", () => {
       assert.ok(!ignoreMap.isIgnored("subdir/todo.md"))
     }).pipe(
       Effect.provide(IgnoreFileServiceLive),
+      Effect.provide(Path.layer),
       Effect.provide(
         createMockFileSystem({
           "/root/.reignore": "todo.md\ndrafts.md",
@@ -152,6 +153,7 @@ describe("IgnoreFileService", () => {
       assert.ok(!ignoreMap.isIgnored("subdir/deck2.md"))
     }).pipe(
       Effect.provide(IgnoreFileServiceLive),
+      Effect.provide(Path.layer),
       Effect.provide(createMockFileSystem({}))
     )
   )
@@ -167,6 +169,7 @@ describe("IgnoreFileService", () => {
       assert.ok(!ignoreMap.isIgnored("deck1.md"))
     }).pipe(
       Effect.provide(IgnoreFileServiceLive),
+      Effect.provide(Path.layer),
       Effect.provide(createMockFileSystem({})) // No files means .reignore read will fail
     )
   )
@@ -187,6 +190,7 @@ describe("IgnoreFileService", () => {
       assert.ok(!ignoreMap.isIgnored("a/b/ignored.md"))
     }).pipe(
       Effect.provide(IgnoreFileServiceLive),
+      Effect.provide(Path.layer),
       Effect.provide(
         createMockFileSystem({
           "/root/a/b/c/.reignore": "ignored.md",

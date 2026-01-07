@@ -1,5 +1,5 @@
 import type { DeckStats } from "../services/DeckLoader"
-import * as nodePath from "node:path"
+import type { Path } from "@effect/platform"
 
 export type DeckTreeNode =
   | {
@@ -20,7 +20,8 @@ type BuildNode = {
 
 export function buildDeckTree(
   decks: DeckStats[],
-  rootPath: string
+  rootPath: string,
+  path: Path.Path
 ): DeckTreeNode[] {
   const root = new Map<
     string,
@@ -28,7 +29,7 @@ export function buildDeckTree(
   >()
 
   for (const stats of decks) {
-    const relativePath = nodePath.relative(rootPath, stats.path)
+    const relativePath = path.relative(rootPath, stats.path)
     // Use "/" for splitting - readDirectory returns normalized POSIX paths
     const parts = relativePath.split("/")
 
@@ -39,7 +40,7 @@ export function buildDeckTree(
     // Use "folder:" prefix to avoid collision with files of same name
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i]!
-      currentPath = nodePath.join(currentPath, part)
+      currentPath = path.join(currentPath, part)
       const folderKey = `folder:${part}`
 
       let folder = currentLevel.get(folderKey)

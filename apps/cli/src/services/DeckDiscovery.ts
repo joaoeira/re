@@ -1,7 +1,6 @@
 import { Context, Effect, Layer, Either } from "effect";
-import { FileSystem } from "@effect/platform";
+import { FileSystem, Path } from "@effect/platform";
 import { IgnoreFileService } from "./IgnoreFileService";
-import * as nodePath from "node:path";
 
 export interface DiscoveryResult {
   readonly paths: string[];
@@ -20,6 +19,7 @@ export const DeckDiscoveryLive = Layer.effect(
   DeckDiscovery,
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const ignoreService = yield* IgnoreFileService;
 
     return {
@@ -56,7 +56,7 @@ export const DeckDiscoveryLive = Layer.effect(
 
               return !ignoreMap.isIgnored(entry);
             })
-            .map((entry) => nodePath.join(rootPath, entry));
+            .map((entry) => path.join(rootPath, entry));
 
           return { paths, error: null };
         }),

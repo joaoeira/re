@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Effect, Layer } from "effect";
-import { FileSystem } from "@effect/platform";
+import { FileSystem, Path } from "@effect/platform";
 import { SystemError } from "@effect/platform/Error";
 import {
   DeckParser,
@@ -41,7 +41,9 @@ const MockFileSystem = FileSystem.layerNoop({
   },
 });
 
-const TestLayer = DeckParserLive.pipe(Layer.provide(MockFileSystem));
+const TestLayer = DeckParserLive.pipe(
+  Layer.provide(Layer.mergeAll(MockFileSystem, Path.layer))
+);
 
 describe("DeckParser", () => {
   describe("parse", () => {
