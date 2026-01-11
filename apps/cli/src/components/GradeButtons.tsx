@@ -4,10 +4,11 @@ const grades: {
   label: string;
   key: string;
   color: string;
+  isDefault?: boolean;
 }[] = [
   { label: "Again", key: "1", color: theme.textMuted },
   { label: "Hard", key: "2", color: theme.textMuted },
-  { label: "Good", key: "3", color: theme.textMuted },
+  { label: "Good", key: "3", color: theme.text, isDefault: true },
   { label: "Easy", key: "4", color: theme.textMuted },
 ];
 

@@ -193,7 +193,7 @@ function ReviewSessionInner({
     } else if (state.matches({ presenting: "showAnswer" })) {
       if (key.name === "1") send({ type: "GRADE", grade: 0 });
       if (key.name === "2") send({ type: "GRADE", grade: 1 });
-      if (key.name === "3") send({ type: "GRADE", grade: 2 });
+      if (key.name === "3" || key.name === "space") send({ type: "GRADE", grade: 2 });
       if (key.name === "4") send({ type: "GRADE", grade: 3 });
     }
 
