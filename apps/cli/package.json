@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "bun run src/index.tsx",
     "preview-theme": "bun run src/preview-theme.tsx",
+    "check-duplicates": "bun run src/check-duplicates.ts",
     "test": "bun x vitest",
     "test:watch": "bun x vitest --watch",
     "typecheck": "tsc --noEmit"
