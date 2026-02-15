@@ -26,6 +26,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .eslintcache
 .cache
 *.tsbuildinfo
+apps/desktop/.vite
+playwright-report
+test-results
 
 # IntelliJ based IDEs
 .idea

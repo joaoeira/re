@@ -11,6 +11,11 @@
     "test": "bun run --filter '*' test",
     "test:watch": "bun run --filter '*' test:watch",
     "typecheck": "bun run --filter '*' typecheck",
+    "desktop:dev": "bun run --filter @re/desktop dev",
+    "desktop:typecheck": "bun run --filter @re/desktop typecheck",
+    "desktop:test": "bun run --filter @re/desktop test",
+    "desktop:build": "bun run --filter @re/desktop build",
+    "desktop:package": "bun run --filter @re/desktop package",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix"
   },
