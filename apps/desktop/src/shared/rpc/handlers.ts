@@ -8,22 +8,6 @@ import { appContract } from "./contracts";
 
 const APP_NAME = "re Desktop";
 
-const toAppRpcError =
-  (code: string, fallbackMessage: string) =>
-  (reason: unknown): { code: string; message: string } => {
-    if (typeof reason === "object" && reason !== null && "message" in reason) {
-      const message = reason.message;
-      if (typeof message === "string" && message.length > 0) {
-        return { code, message };
-      }
-    }
-
-    return {
-      code,
-      message: fallbackMessage,
-    };
-  };
-
 const ScanDecksServicesLive = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
 
 export const appRpcHandlers = {
@@ -42,7 +26,6 @@ export const appRpcHandlers = {
           0,
         ),
       })),
-      Effect.mapError(toAppRpcError("PARSE_ERROR", "Failed to parse deck markdown.")),
     ),
   ScanDecks: ({ rootPath }: { rootPath: string }) =>
     scanDecks(rootPath).pipe(
@@ -51,7 +34,6 @@ export const appRpcHandlers = {
         rootPath: result.rootPath,
         decks: result.decks,
       })),
-      Effect.mapError(toAppRpcError("SCAN_ERROR", "Failed to scan decks.")),
     ),
 };
 

@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@effect/schema": "0.69.0",
     "effect": "^3.19.14",
     "nanoid": "^5.1.6"
   },

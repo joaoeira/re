@@ -21,6 +21,7 @@ export {
   ParseError,
   InvalidMetadataFormat,
   InvalidFieldValue,
+  MetadataParseErrorSchema,
 } from "./errors";
 
 export { ItemIdSchema, isItemId } from "./schema/index";

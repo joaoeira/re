@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { tmpdir } from "node:os";
 
-import { Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { appRpcHandlers } from "@shared/rpc/handlers";
@@ -39,13 +39,31 @@ Answer two
     });
   });
 
-  it("maps parse failures to typed rpc errors", async () => {
+  it("returns parser tagged errors through the domain error channel", async () => {
     const invalidMarkdown = `<!--@ bad-card 0 0 9 0-->
 Broken card content`;
 
-    await expect(
-      Effect.runPromise(appRpcHandlers.ParseDeckPreview({ markdown: invalidMarkdown })),
-    ).rejects.toThrow(/PARSE_ERROR/);
+    const exit = await Effect.runPromiseExit(
+      appRpcHandlers.ParseDeckPreview({ markdown: invalidMarkdown }),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) {
+      throw new Error("Expected ParseDeckPreview to fail.");
+    }
+
+    const failure = Cause.failureOption(exit.cause);
+    expect(failure._tag).toBe("Some");
+    if (failure._tag === "None") {
+      throw new Error("Expected a domain failure, but received a defect or interruption.");
+    }
+
+    expect(failure.value._tag).toBe("InvalidFieldValue");
+    if (failure.value._tag === "InvalidFieldValue") {
+      expect(failure.value.line).toBe(1);
+      expect(failure.value.field).toBe("metadata");
+      expect(failure.value.value).toContain("bad-card");
+    }
   });
 
   it("scans decks and returns full deck entries", async () => {

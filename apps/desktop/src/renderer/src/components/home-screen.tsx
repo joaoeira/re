@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import type { MetadataParseError } from "@re/core";
+import type { ScanDecksError } from "@re/workspace";
+import { Effect } from "effect";
+import { RpcDefectError } from "electron-effect-rpc/renderer";
 import { appMachine } from "@shared/state/appMachine";
 import { uiStore } from "@shared/state/uiStore";
 import { SilkButton } from "@shared/ui/silk-button";
@@ -44,15 +48,29 @@ type DeckScanResult = {
   }[];
 };
 
-const toErrorMessage = (reason: unknown): string => {
-  if (typeof reason === "object" && reason !== null && "message" in reason) {
-    const message = reason.message;
-    if (typeof message === "string" && message.length > 0) {
-      return message;
-    }
-  }
+const toRpcDefectMessage = (error: RpcDefectError): string =>
+  `RPC defect (${error.code}): ${error.message}`;
 
-  return "Unexpected RPC failure.";
+const toParseErrorMessage = (error: MetadataParseError): string => {
+  switch (error._tag) {
+    case "ParseError":
+      return `${error.message} (line ${error.line}, column ${error.column})`;
+    case "InvalidMetadataFormat":
+      return `Invalid metadata at line ${error.line}: ${error.reason}`;
+    case "InvalidFieldValue":
+      return `Invalid ${error.field} value "${error.value}" at line ${error.line}; expected ${error.expected}.`;
+  }
+};
+
+const toScanErrorMessage = (error: ScanDecksError): string => {
+  switch (error._tag) {
+    case "WorkspaceRootNotFound":
+      return `Workspace root not found: ${error.rootPath}`;
+    case "WorkspaceRootNotDirectory":
+      return `Workspace root is not a directory: ${error.rootPath}`;
+    case "WorkspaceRootUnreadable":
+      return `Workspace root is unreadable: ${error.message}`;
+  }
 };
 
 export function HomeScreen() {
@@ -90,13 +108,22 @@ export function HomeScreen() {
     actor.start();
     actor.send({ type: "BOOT" });
 
-    void ipc.client
-      .GetBootstrapData()
-      .then((result) => setBootstrapData(result))
-      .catch((reason: unknown) => {
-        const message = reason instanceof Error ? reason.message : String(reason);
-        setError(message);
-      });
+    void Effect.runPromise(
+      ipc.client.GetBootstrapData().pipe(
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            setBootstrapData(result);
+            setError(null);
+          }),
+        ),
+        Effect.catchTag("RpcDefectError", (rpcDefect) =>
+          Effect.sync(() => {
+            setBootstrapData(null);
+            setError(toRpcDefectMessage(rpcDefect));
+          }),
+        ),
+      ),
+    );
 
     return () => {
       actor.stop();
@@ -113,18 +140,33 @@ export function HomeScreen() {
     setIsAnalyzing(true);
     setPreviewError(null);
 
-    void ipc.client
-      .ParseDeckPreview({ markdown })
-      .then((result) => {
-        setPreview(result);
-      })
-      .catch((reason: unknown) => {
-        setPreview(null);
-        setPreviewError(toErrorMessage(reason));
-      })
-      .finally(() => {
-        setIsAnalyzing(false);
-      });
+    void Effect.runPromise(
+      ipc.client.ParseDeckPreview({ markdown }).pipe(
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            setPreview(result);
+            setPreviewError(null);
+          }),
+        ),
+        Effect.catchTag("RpcDefectError", (rpcDefect) =>
+          Effect.sync(() => {
+            setPreview(null);
+            setPreviewError(toRpcDefectMessage(rpcDefect));
+          }),
+        ),
+        Effect.catchAll((parseError) =>
+          Effect.sync(() => {
+            setPreview(null);
+            setPreviewError(toParseErrorMessage(parseError));
+          }),
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            setIsAnalyzing(false);
+          }),
+        ),
+      ),
+    );
   }, [ipc, markdown]);
 
   const runDeckScan = useCallback(() => {
@@ -136,18 +178,33 @@ export function HomeScreen() {
     setIsScanning(true);
     setScanError(null);
 
-    void ipc.client
-      .ScanDecks({ rootPath: HARD_CODED_DECK_ROOT })
-      .then((result) => {
-        setScanResult(result);
-      })
-      .catch((reason: unknown) => {
-        setScanResult(null);
-        setScanError(toErrorMessage(reason));
-      })
-      .finally(() => {
-        setIsScanning(false);
-      });
+    void Effect.runPromise(
+      ipc.client.ScanDecks({ rootPath: HARD_CODED_DECK_ROOT }).pipe(
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            setScanResult(result);
+            setScanError(null);
+          }),
+        ),
+        Effect.catchTag("RpcDefectError", (rpcDefect) =>
+          Effect.sync(() => {
+            setScanResult(null);
+            setScanError(toRpcDefectMessage(rpcDefect));
+          }),
+        ),
+        Effect.catchAll((scanError) =>
+          Effect.sync(() => {
+            setScanResult(null);
+            setScanError(toScanErrorMessage(scanError));
+          }),
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            setIsScanning(false);
+          }),
+        ),
+      ),
+    );
   }, [ipc]);
 
   return (

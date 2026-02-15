@@ -1,7 +1,7 @@
 import * as S from "@effect/schema/Schema";
 import { FileSystem, Path } from "@effect/platform";
 import type { PlatformError } from "@effect/platform/Error";
-import { Array as Arr, Data, Effect, Option, Order } from "effect";
+import { Array as Arr, Effect, Option, Order } from "effect";
 import ignore from "ignore";
 
 const ROOT_IGNORE_FILE = ".reignore";
@@ -26,29 +26,32 @@ export const ScanDecksResultSchema = S.Struct({
 
 export type ScanDecksResult = S.Schema.Type<typeof ScanDecksResultSchema>;
 
-export class WorkspaceRootNotFound extends Data.TaggedError(
-  "WorkspaceRootNotFound",
-)<{
-  readonly rootPath: string;
-}> {}
+export class WorkspaceRootNotFound extends S.TaggedError<WorkspaceRootNotFound>(
+  "@re/workspace/WorkspaceRootNotFound",
+)("WorkspaceRootNotFound", {
+  rootPath: S.String,
+}) {}
 
-export class WorkspaceRootNotDirectory extends Data.TaggedError(
-  "WorkspaceRootNotDirectory",
-)<{
-  readonly rootPath: string;
-}> {}
+export class WorkspaceRootNotDirectory extends S.TaggedError<WorkspaceRootNotDirectory>(
+  "@re/workspace/WorkspaceRootNotDirectory",
+)("WorkspaceRootNotDirectory", {
+  rootPath: S.String,
+}) {}
 
-export class WorkspaceRootUnreadable extends Data.TaggedError(
-  "WorkspaceRootUnreadable",
-)<{
-  readonly rootPath: string;
-  readonly message: string;
-}> {}
+export class WorkspaceRootUnreadable extends S.TaggedError<WorkspaceRootUnreadable>(
+  "@re/workspace/WorkspaceRootUnreadable",
+)("WorkspaceRootUnreadable", {
+  rootPath: S.String,
+  message: S.String,
+}) {}
 
-export type ScanDecksError =
-  | WorkspaceRootNotFound
-  | WorkspaceRootNotDirectory
-  | WorkspaceRootUnreadable;
+export const ScanDecksErrorSchema = S.Union(
+  WorkspaceRootNotFound,
+  WorkspaceRootNotDirectory,
+  WorkspaceRootUnreadable,
+);
+
+export type ScanDecksError = S.Schema.Type<typeof ScanDecksErrorSchema>;
 
 const isNestedTolerable = (error: PlatformError): boolean =>
   error._tag === "SystemError" &&

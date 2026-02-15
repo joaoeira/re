@@ -1,11 +1,7 @@
 import * as S from "@effect/schema/Schema";
-import { ScanDecksResultSchema } from "@re/workspace";
+import { MetadataParseErrorSchema } from "@re/core";
+import { ScanDecksErrorSchema, ScanDecksResultSchema } from "@re/workspace";
 import { defineContract, rpc } from "electron-effect-rpc/contract";
-
-export const AppRpcError = S.Struct({
-  code: S.String,
-  message: S.String,
-});
 
 export const GetBootstrapData = rpc(
   "GetBootstrapData",
@@ -15,7 +11,6 @@ export const GetBootstrapData = rpc(
     message: S.String,
     timestamp: S.String,
   }),
-  AppRpcError,
 );
 
 export const ParseDeckPreview = rpc(
@@ -27,7 +22,7 @@ export const ParseDeckPreview = rpc(
     items: S.Number,
     cards: S.Number,
   }),
-  AppRpcError,
+  MetadataParseErrorSchema,
 );
 
 export const ScanDecks = rpc(
@@ -36,7 +31,7 @@ export const ScanDecks = rpc(
     rootPath: S.String,
   }),
   ScanDecksResultSchema,
-  AppRpcError,
+  ScanDecksErrorSchema,
 );
 
 export const appContract = defineContract({
