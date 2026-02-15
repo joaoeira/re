@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { routeTree } from "../../src/renderer/src/routeTree.gen";
 
 describe("renderer integration", () => {
-  it("renders route and invokes both bootstrap and deck preview RPC methods", async () => {
+  it("renders route and invokes bootstrap, preview, and scan RPC methods", async () => {
     const invoke = vi.fn().mockImplementation(async (method: string) => {
       if (method === "GetBootstrapData") {
         return {
@@ -24,6 +24,27 @@ describe("renderer integration", () => {
           data: {
             items: 2,
             cards: 2,
+          },
+        };
+      }
+
+      if (method === "ScanDecks") {
+        return {
+          type: "success",
+          data: {
+            rootPath: "/Users/joaoeira/Documents/deck",
+            decks: [
+              {
+                absolutePath: "/Users/joaoeira/Documents/deck/nested/child.md",
+                relativePath: "nested/child.md",
+                name: "child",
+              },
+              {
+                absolutePath: "/Users/joaoeira/Documents/deck/root.md",
+                relativePath: "root.md",
+                name: "root",
+              },
+            ],
           },
         };
       }
@@ -52,13 +73,22 @@ describe("renderer integration", () => {
     render(<RouterProvider router={router} />);
 
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("GetBootstrapData", {}));
+
     fireEvent.click(screen.getByRole("button", { name: "Analyze" }));
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("ParseDeckPreview", expect.objectContaining({ markdown: expect.any(String) })),
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Scan Decks" }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("ScanDecks", {
+        rootPath: "/Users/joaoeira/Documents/deck",
+      }),
+    );
+
     expect(screen.getByText("Desktop App Shell")).toBeTruthy();
     expect(screen.getByText("Items:")).toBeTruthy();
     expect(screen.getByText("Cards:")).toBeTruthy();
+    expect(screen.getByText("Total Decks:")).toBeTruthy();
   });
 });

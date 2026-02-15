@@ -1,5 +1,7 @@
 export {
   scanDecks,
+  DeckEntrySchema,
+  ScanDecksResultSchema,
   WorkspaceRootNotFound,
   WorkspaceRootNotDirectory,
   WorkspaceRootUnreadable,

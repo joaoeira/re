@@ -1,4 +1,5 @@
 import * as S from "@effect/schema/Schema";
+import { ScanDecksResultSchema } from "@re/workspace";
 import { defineContract, rpc } from "electron-effect-rpc/contract";
 
 export const AppRpcError = S.Struct({
@@ -29,7 +30,16 @@ export const ParseDeckPreview = rpc(
   AppRpcError,
 );
 
+export const ScanDecks = rpc(
+  "ScanDecks",
+  S.Struct({
+    rootPath: S.String,
+  }),
+  ScanDecksResultSchema,
+  AppRpcError,
+);
+
 export const appContract = defineContract({
-  methods: [GetBootstrapData, ParseDeckPreview] as const,
+  methods: [GetBootstrapData, ParseDeckPreview, ScanDecks] as const,
   events: [] as const,
 });

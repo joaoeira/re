@@ -22,6 +22,8 @@ What is the capital of France?
 Paris
 `;
 
+const HARD_CODED_DECK_ROOT = "/Users/joaoeira/Documents/deck";
+
 type BootstrapData = {
   appName: string;
   message: string;
@@ -31,6 +33,15 @@ type BootstrapData = {
 type DeckPreview = {
   items: number;
   cards: number;
+};
+
+type DeckScanResult = {
+  rootPath: string;
+  decks: readonly {
+    absolutePath: string;
+    relativePath: string;
+    name: string;
+  }[];
 };
 
 const toErrorMessage = (reason: unknown): string => {
@@ -52,6 +63,9 @@ export function HomeScreen() {
   const [preview, setPreview] = useState<DeckPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [scanResult, setScanResult] = useState<DeckScanResult | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
   const actor = useMemo(() => createActor(appMachine), []);
   const ipc = useMemo(() => {
     if (!window.desktopApi) {
@@ -99,8 +113,6 @@ export function HomeScreen() {
     setIsAnalyzing(true);
     setPreviewError(null);
 
-
-
     void ipc.client
       .ParseDeckPreview({ markdown })
       .then((result) => {
@@ -114,6 +126,29 @@ export function HomeScreen() {
         setIsAnalyzing(false);
       });
   }, [ipc, markdown]);
+
+  const runDeckScan = useCallback(() => {
+    if (!ipc) {
+      setScanError("Desktop IPC bridge is unavailable.");
+      return;
+    }
+
+    setIsScanning(true);
+    setScanError(null);
+
+    void ipc.client
+      .ScanDecks({ rootPath: HARD_CODED_DECK_ROOT })
+      .then((result) => {
+        setScanResult(result);
+      })
+      .catch((reason: unknown) => {
+        setScanResult(null);
+        setScanError(toErrorMessage(reason));
+      })
+      .finally(() => {
+        setIsScanning(false);
+      });
+  }, [ipc]);
 
   return (
     <section className="space-y-6">
@@ -199,6 +234,44 @@ export function HomeScreen() {
           ) : null}
 
           {previewError ? <p className="mt-3 text-sm text-destructive">{previewError}</p> : null}
+        </div>
+
+        <div className="rounded-lg border border-border bg-background p-4 lg:col-span-2">
+          <h2 className="text-sm font-semibold uppercase text-muted-foreground">
+            Deck Scan (@re/workspace)
+          </h2>
+
+          <p className="mt-2 text-xs text-muted-foreground">Root: {HARD_CODED_DECK_ROOT}</p>
+
+          <div className="mt-3 flex items-center gap-3">
+            <SilkButton onClick={runDeckScan} disabled={isScanning || !ipc}>
+              {isScanning ? "Scanning..." : "Scan Decks"}
+            </SilkButton>
+            <p className="text-xs text-muted-foreground">
+              Calls main-process workspace scanner through typed IPC.
+            </p>
+          </div>
+
+          {scanResult ? (
+            <div className="mt-3 rounded-md border border-border/70 bg-muted/30 p-3 text-sm">
+              <p>
+                <span className="font-medium">Resolved Root:</span> {scanResult.rootPath}
+              </p>
+              <p>
+                <span className="font-medium">Total Decks:</span> {scanResult.decks.length}
+              </p>
+              {scanResult.decks.length > 0 ? (
+                <p className="mt-2 font-mono text-xs text-muted-foreground">
+                  {scanResult.decks
+                    .slice(0, 6)
+                    .map((deck) => `${deck.name} (${deck.relativePath})`)
+                    .join(", ")}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {scanError ? <p className="mt-3 text-sm text-destructive">{scanError}</p> : null}
         </div>
       </div>
     </section>

@@ -42,8 +42,11 @@
       "name": "@re/desktop",
       "version": "0.0.0",
       "dependencies": {
+        "@effect/platform": "^0.94.1",
+        "@effect/platform-node-shared": "^0.57.0",
         "@effect/schema": "0.69.0",
         "@re/core": "workspace:*",
+        "@re/workspace": "workspace:*",
         "@silk-hq/components": "0.9.12",
         "@tanstack/react-router": "1.131.35",
         "@xstate/store": "3.9.2",
@@ -114,6 +117,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@effect/platform": "^0.94.1",
+        "@effect/schema": "0.69.0",
         "effect": "^3.19.14",
         "ignore": "^5.3.2",
       },

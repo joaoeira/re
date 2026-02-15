@@ -20,8 +20,11 @@
     "package": "electron-forge make"
   },
   "dependencies": {
+    "@effect/platform": "^0.94.1",
+    "@effect/platform-node-shared": "^0.57.0",
     "@effect/schema": "0.69.0",
     "@re/core": "workspace:*",
+    "@re/workspace": "workspace:*",
     "@silk-hq/components": "0.9.12",
     "@tanstack/react-router": "1.131.35",
     "@xstate/store": "3.9.2",

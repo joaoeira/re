@@ -1,3 +1,4 @@
+import * as S from "@effect/schema/Schema";
 import { FileSystem, Path } from "@effect/platform";
 import type { PlatformError } from "@effect/platform/Error";
 import { Array as Arr, Data, Effect, Option, Order } from "effect";
@@ -10,16 +11,20 @@ export interface ScanDecksOptions {
   readonly extraIgnorePatterns?: readonly string[];
 }
 
-export interface DeckEntry {
-  readonly absolutePath: string;
-  readonly relativePath: string;
-  readonly name: string;
-}
+export const DeckEntrySchema = S.Struct({
+  absolutePath: S.String,
+  relativePath: S.String,
+  name: S.String,
+});
 
-export interface ScanDecksResult {
-  readonly rootPath: string;
-  readonly decks: readonly DeckEntry[];
-}
+export type DeckEntry = S.Schema.Type<typeof DeckEntrySchema>;
+
+export const ScanDecksResultSchema = S.Struct({
+  rootPath: S.String,
+  decks: S.Array(DeckEntrySchema),
+});
+
+export type ScanDecksResult = S.Schema.Type<typeof ScanDecksResultSchema>;
 
 export class WorkspaceRootNotFound extends Data.TaggedError(
   "WorkspaceRootNotFound",
@@ -73,6 +78,22 @@ const mapNestedFatalError = (
     rootPath,
     message: `${operation} failed for ${absolutePath}: ${error.message}`,
   });
+
+const hasCauseCode = (
+  error: PlatformError,
+  code: string,
+): boolean => {
+  if (error._tag !== "SystemError") {
+    return false;
+  }
+
+  const cause = error.cause;
+  if (typeof cause !== "object" || cause === null || !("code" in cause)) {
+    return false;
+  }
+
+  return (cause as { readonly code?: unknown }).code === code;
+};
 
 const hasHiddenSegment = (relativePath: string): boolean =>
   relativePath
@@ -185,6 +206,10 @@ const isSymlinkBestEffort = (
     Effect.as(Option.some(true)),
     Effect.catchTag("SystemError", (error) => {
       if (error.reason === "BadResource" || error.reason === "InvalidData") {
+        return Effect.succeed(Option.some(false));
+      }
+
+      if (error.reason === "Unknown" && hasCauseCode(error, "EINVAL")) {
         return Effect.succeed(Option.some(false));
       }
 
