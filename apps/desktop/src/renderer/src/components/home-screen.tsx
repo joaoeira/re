@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { MetadataParseError } from "@re/core";
 import type { ScanDecksError } from "@re/workspace";
+import type { SettingsError } from "@shared/settings";
 import { Effect } from "effect";
 import { RpcDefectError } from "electron-effect-rpc/renderer";
 import { appMachine } from "@shared/state/appMachine";
@@ -25,8 +26,6 @@ What is the capital of France?
 ---
 Paris
 `;
-
-const HARD_CODED_DECK_ROOT = "/Users/joaoeira/Documents/deck";
 
 type BootstrapData = {
   appName: string;
@@ -73,11 +72,34 @@ const toScanErrorMessage = (error: ScanDecksError): string => {
   }
 };
 
+const toSettingsErrorMessage = (error: SettingsError): string => {
+  switch (error._tag) {
+    case "SettingsReadFailed":
+      return `Unable to read settings at ${error.path}: ${error.message}`;
+    case "SettingsDecodeFailed":
+      return `Settings file is invalid at ${error.path}: ${error.message}`;
+    case "SettingsWriteFailed":
+      return `Unable to write settings at ${error.path}: ${error.message}`;
+    case "WorkspaceRootNotFound":
+      return `Workspace root not found: ${error.rootPath}`;
+    case "WorkspaceRootNotDirectory":
+      return `Workspace root is not a directory: ${error.rootPath}`;
+    case "WorkspaceRootUnreadable":
+      return `Workspace root is unreadable: ${error.message}`;
+  }
+};
+
 export function HomeScreen() {
   const [bootstrapData, setBootstrapData] = useState<BootstrapData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [counter, setCounter] = useState(uiStore.getSnapshot().context.counter);
   const [markdown, setMarkdown] = useState(DEFAULT_DECK_MARKDOWN);
+  const [workspaceRootPath, setWorkspaceRootPath] = useState<string | null>(null);
+  const [workspaceRootInput, setWorkspaceRootInput] = useState("");
+  const [settingsReadError, setSettingsReadError] = useState<string | null>(null);
+  const [settingsActionError, setSettingsActionError] = useState<string | null>(null);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(false);
+  const [isSavingRootPath, setIsSavingRootPath] = useState(false);
   const [preview, setPreview] = useState<DeckPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -107,6 +129,7 @@ export function HomeScreen() {
 
     actor.start();
     actor.send({ type: "BOOT" });
+    setIsLoadingSettings(true);
 
     void Effect.runPromise(
       ipc.client.GetBootstrapData().pipe(
@@ -120,6 +143,38 @@ export function HomeScreen() {
           Effect.sync(() => {
             setBootstrapData(null);
             setError(toRpcDefectMessage(rpcDefect));
+          }),
+        ),
+      ),
+    );
+
+    void Effect.runPromise(
+      ipc.client.GetSettings().pipe(
+        Effect.tap((settings) =>
+          Effect.sync(() => {
+            setWorkspaceRootPath(settings.workspace.rootPath);
+            setWorkspaceRootInput(settings.workspace.rootPath ?? "");
+            setSettingsReadError(null);
+            setSettingsActionError(null);
+          }),
+        ),
+        Effect.catchTag("RpcDefectError", (rpcDefect) =>
+          Effect.sync(() => {
+            setWorkspaceRootPath(null);
+            setWorkspaceRootInput("");
+            setSettingsReadError(toRpcDefectMessage(rpcDefect));
+          }),
+        ),
+        Effect.catchAll((settingsError) =>
+          Effect.sync(() => {
+            setWorkspaceRootPath(null);
+            setWorkspaceRootInput("");
+            setSettingsReadError(toSettingsErrorMessage(settingsError));
+          }),
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            setIsLoadingSettings(false);
           }),
         ),
       ),
@@ -169,9 +224,84 @@ export function HomeScreen() {
     );
   }, [ipc, markdown]);
 
+  const persistWorkspaceRootPath = useCallback(
+    (rootPath: string | null) => {
+      if (!ipc) {
+        setSettingsActionError("Desktop IPC bridge is unavailable.");
+        return;
+      }
+
+      if (settingsReadError) {
+        setSettingsActionError(
+          "Settings storage is unavailable. Resolve the settings file issue before writing.",
+        );
+        return;
+      }
+
+      setIsSavingRootPath(true);
+      setSettingsActionError(null);
+
+      void Effect.runPromise(
+        ipc.client.SetWorkspaceRootPath({ rootPath }).pipe(
+          Effect.tap((settings) =>
+            Effect.sync(() => {
+              setWorkspaceRootPath(settings.workspace.rootPath);
+              setWorkspaceRootInput(settings.workspace.rootPath ?? "");
+              setSettingsActionError(null);
+            }),
+          ),
+          Effect.catchTag("RpcDefectError", (rpcDefect) =>
+            Effect.sync(() => {
+              setSettingsActionError(toRpcDefectMessage(rpcDefect));
+            }),
+          ),
+          Effect.catchAll((settingsError) =>
+            Effect.sync(() => {
+              setSettingsActionError(toSettingsErrorMessage(settingsError));
+            }),
+          ),
+          Effect.ensuring(
+            Effect.sync(() => {
+              setIsSavingRootPath(false);
+            }),
+          ),
+        ),
+      );
+    },
+    [ipc, settingsReadError],
+  );
+
+  const saveWorkspaceRootPath = useCallback(() => {
+    const nextRootPath = workspaceRootInput.trim();
+    if (nextRootPath === "") {
+      setSettingsActionError(
+        "Workspace root path cannot be empty. Use Clear Root Path to unset it.",
+      );
+      return;
+    }
+
+    persistWorkspaceRootPath(nextRootPath);
+  }, [persistWorkspaceRootPath, workspaceRootInput]);
+
+  const clearWorkspaceRootPath = useCallback(() => {
+    persistWorkspaceRootPath(null);
+  }, [persistWorkspaceRootPath]);
+
   const runDeckScan = useCallback(() => {
     if (!ipc) {
       setScanError("Desktop IPC bridge is unavailable.");
+      return;
+    }
+
+    if (settingsReadError) {
+      setScanError(
+        "Settings could not be loaded. Resolve the settings file issue before scanning decks.",
+      );
+      return;
+    }
+
+    if (!workspaceRootPath) {
+      setScanError("Set a workspace root path before scanning decks.");
       return;
     }
 
@@ -179,7 +309,7 @@ export function HomeScreen() {
     setScanError(null);
 
     void Effect.runPromise(
-      ipc.client.ScanDecks({ rootPath: HARD_CODED_DECK_ROOT }).pipe(
+      ipc.client.ScanDecks({ rootPath: workspaceRootPath }).pipe(
         Effect.tap((result) =>
           Effect.sync(() => {
             setScanResult(result);
@@ -205,7 +335,7 @@ export function HomeScreen() {
         ),
       ),
     );
-  }, [ipc]);
+  }, [ipc, settingsReadError, workspaceRootPath]);
 
   return (
     <section className="space-y-6">
@@ -260,6 +390,50 @@ export function HomeScreen() {
 
         <div className="rounded-lg border border-border bg-background p-4 lg:col-span-2">
           <h2 className="text-sm font-semibold uppercase text-muted-foreground">
+            Workspace Settings
+          </h2>
+
+          <p className="mt-2 text-xs text-muted-foreground">
+            {isLoadingSettings
+              ? "Loading workspace settings..."
+              : `Current root: ${workspaceRootPath ?? "(unset)"}`}
+          </p>
+
+          <input
+            className="mt-3 w-full rounded-md border border-input bg-background p-2 font-mono text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="/absolute/path/to/workspace"
+            value={workspaceRootInput}
+            onChange={(event) => setWorkspaceRootInput(event.target.value)}
+            disabled={isLoadingSettings || Boolean(settingsReadError)}
+          />
+
+          <div className="mt-3 flex items-center gap-2">
+            <SilkButton
+              onClick={saveWorkspaceRootPath}
+              disabled={isSavingRootPath || isLoadingSettings || !ipc || Boolean(settingsReadError)}
+            >
+              {isSavingRootPath ? "Saving..." : "Save Root Path"}
+            </SilkButton>
+            <SilkButton
+              className="bg-secondary text-secondary-foreground"
+              onClick={clearWorkspaceRootPath}
+              disabled={isSavingRootPath || isLoadingSettings || !ipc || Boolean(settingsReadError)}
+            >
+              Clear Root Path
+            </SilkButton>
+          </div>
+
+          {settingsReadError ? (
+            <p className="mt-3 text-sm text-destructive">{settingsReadError}</p>
+          ) : null}
+
+          {settingsActionError ? (
+            <p className="mt-2 text-sm text-destructive">{settingsActionError}</p>
+          ) : null}
+        </div>
+
+        <div className="rounded-lg border border-border bg-background p-4 lg:col-span-2">
+          <h2 className="text-sm font-semibold uppercase text-muted-foreground">
             Deck Preview (@re/core)
           </h2>
 
@@ -298,10 +472,20 @@ export function HomeScreen() {
             Deck Scan (@re/workspace)
           </h2>
 
-          <p className="mt-2 text-xs text-muted-foreground">Root: {HARD_CODED_DECK_ROOT}</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Root: {workspaceRootPath ?? "(unset)"}
+          </p>
 
           <div className="mt-3 flex items-center gap-3">
-            <SilkButton onClick={runDeckScan} disabled={isScanning || !ipc}>
+            <SilkButton
+              onClick={runDeckScan}
+              disabled={
+                isScanning ||
+                !ipc ||
+                Boolean(settingsReadError) ||
+                workspaceRootPath === null
+              }
+            >
               {isScanning ? "Scanning..." : "Scan Decks"}
             </SilkButton>
             <p className="text-xs text-muted-foreground">

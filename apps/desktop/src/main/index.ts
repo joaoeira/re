@@ -2,9 +2,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { app, BrowserWindow, ipcMain } from "electron";
+import { Effect } from "effect";
 import * as Runtime from "effect/Runtime";
 
-import { appRpcHandlers } from "@shared/rpc/handlers";
+import { NodeServicesLive } from "@main/effect/node-services";
+import { createAppRpcHandlers } from "@main/rpc/handlers";
+import { makeSettingsRepository } from "@main/settings/repository";
 import { appIpc } from "@shared/rpc/ipc";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -77,9 +80,16 @@ app.whenReady().then(() => {
   log("app ready");
   mainWindow = createMainWindow();
 
+  const settingsFilePath = path.join(app.getPath("userData"), "settings.json");
+  const settingsRepository = Effect.runSync(
+    makeSettingsRepository({ settingsFilePath }).pipe(
+      Effect.provide(NodeServicesLive),
+    ),
+  );
+
   ipcHandle = appIpc.main({
     ipcMain,
-    handlers: appRpcHandlers,
+    handlers: createAppRpcHandlers(settingsRepository),
     runtime: Runtime.defaultRuntime,
     getWindow: () => mainWindow,
   });

@@ -1,23 +1,24 @@
-import * as NodeFileSystem from "@effect/platform-node-shared/NodeFileSystem";
-import * as NodePath from "@effect/platform-node-shared/NodePath";
 import { parseFile } from "@re/core";
 import { scanDecks } from "@re/workspace";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
+import type { Implementations } from "electron-effect-rpc/types";
 
-import { appContract } from "./contracts";
+import { NodeServicesLive } from "@main/effect/node-services";
+import type { SettingsRepository } from "@main/settings/repository";
+import type { AppContract } from "@shared/rpc/contracts";
 
 const APP_NAME = "re Desktop";
 
-const ScanDecksServicesLive = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
-
-export const appRpcHandlers = {
+export const createAppRpcHandlers = (
+  settingsRepository: SettingsRepository,
+): Implementations<AppContract> => ({
   GetBootstrapData: () =>
     Effect.succeed({
       appName: APP_NAME,
       message: "Renderer connected to main through typed Effect RPC",
       timestamp: new Date().toISOString(),
     }),
-  ParseDeckPreview: ({ markdown }: { markdown: string }) =>
+  ParseDeckPreview: ({ markdown }) =>
     parseFile(markdown).pipe(
       Effect.map((parsed) => ({
         items: parsed.items.length,
@@ -27,14 +28,15 @@ export const appRpcHandlers = {
         ),
       })),
     ),
-  ScanDecks: ({ rootPath }: { rootPath: string }) =>
+  ScanDecks: ({ rootPath }) =>
     scanDecks(rootPath).pipe(
-      Effect.provide(ScanDecksServicesLive),
+      Effect.provide(NodeServicesLive),
       Effect.map((result) => ({
         rootPath: result.rootPath,
         decks: result.decks,
       })),
     ),
-};
-
-export type AppContract = typeof appContract;
+  GetSettings: () => settingsRepository.getSettings(),
+  SetWorkspaceRootPath: (input) =>
+    settingsRepository.setWorkspaceRootPath(input),
+});

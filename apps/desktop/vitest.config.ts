@@ -9,6 +9,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src/renderer/src"),
+      "@main": path.resolve(__dirname, "src/main"),
+      "@preload": path.resolve(__dirname, "src/preload"),
       "@shared": path.resolve(__dirname, "src/shared"),
       electron: path.resolve(__dirname, "test/mocks/electron.ts"),
       react: path.resolve(__dirname, "../../node_modules/react"),
