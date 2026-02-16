@@ -1,15 +1,15 @@
-import * as S from "@effect/schema/Schema";
+import { Schema } from "@effect/schema";
 
-export const WorkspaceSettingsSchema = S.Struct({
-  rootPath: S.Union(S.String.pipe(S.nonEmptyString()), S.Null),
+export const WorkspaceSettingsSchema = Schema.Struct({
+  rootPath: Schema.Union(Schema.String.pipe(Schema.nonEmptyString()), Schema.Null),
 });
 
-export const SettingsSchemaV1 = S.Struct({
-  settingsVersion: S.Literal(1),
+export const SettingsSchemaV1 = Schema.Struct({
+  settingsVersion: Schema.Literal(1),
   workspace: WorkspaceSettingsSchema,
 });
 
-export type Settings = S.Schema.Type<typeof SettingsSchemaV1>;
+export type Settings = typeof SettingsSchemaV1.Type;
 
 export const DEFAULT_SETTINGS: Settings = {
   settingsVersion: 1,
@@ -18,10 +18,8 @@ export const DEFAULT_SETTINGS: Settings = {
   },
 };
 
-export const SetWorkspaceRootPathInputSchema = S.Struct({
-  rootPath: S.Union(S.String.pipe(S.nonEmptyString()), S.Null),
+export const SetWorkspaceRootPathInputSchema = Schema.Struct({
+  rootPath: Schema.Union(Schema.String.pipe(Schema.nonEmptyString()), Schema.Null),
 });
 
-export type SetWorkspaceRootPathInput = S.Schema.Type<
-  typeof SetWorkspaceRootPathInputSchema
->;
+export type SetWorkspaceRootPathInput = typeof SetWorkspaceRootPathInputSchema.Type;

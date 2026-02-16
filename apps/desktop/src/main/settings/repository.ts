@@ -1,7 +1,7 @@
 import { FileSystem, Path } from "@effect/platform";
 import type { PlatformError } from "@effect/platform/Error";
+import { Schema } from "@effect/schema";
 import { Effect, Option } from "effect";
-import * as S from "@effect/schema/Schema";
 
 import {
   DEFAULT_SETTINGS,
@@ -97,9 +97,9 @@ export const makeSettingsRepository = ({
     const semaphore = yield* Effect.makeSemaphore(1);
 
     const settingsDirectory = pathService.dirname(settingsFilePath);
-    const settingsCodec = S.parseJson(SettingsSchemaV1, { space: 2 });
-    const decodeSettings = S.decodeUnknown(settingsCodec);
-    const encodeSettings = S.encode(settingsCodec);
+    const settingsCodec = Schema.parseJson(SettingsSchemaV1, { space: 2 });
+    const decodeSettings = Schema.decodeUnknown(settingsCodec);
+    const encodeSettings = Schema.encode(settingsCodec);
 
     const loadSettings = (): Effect.Effect<
       Settings,

@@ -1,36 +1,36 @@
-import * as S from "@effect/schema/Schema";
+import { Schema } from "@effect/schema";
 
-export class ParseError extends S.TaggedError<ParseError>("@re/core/ParseError")(
+export class ParseError extends Schema.TaggedError<ParseError>("@re/core/ParseError")(
   "ParseError",
   {
-    line: S.Number,
-    column: S.Number,
-    message: S.String,
-    source: S.String,
+    line: Schema.Number,
+    column: Schema.Number,
+    message: Schema.String,
+    source: Schema.String,
   },
 ) {}
 
-export class InvalidMetadataFormat extends S.TaggedError<InvalidMetadataFormat>(
+export class InvalidMetadataFormat extends Schema.TaggedError<InvalidMetadataFormat>(
   "@re/core/InvalidMetadataFormat",
 )("InvalidMetadataFormat", {
-  line: S.Number,
-  raw: S.String,
-  reason: S.String,
+  line: Schema.Number,
+  raw: Schema.String,
+  reason: Schema.String,
 }) {}
 
-export class InvalidFieldValue extends S.TaggedError<InvalidFieldValue>(
+export class InvalidFieldValue extends Schema.TaggedError<InvalidFieldValue>(
   "@re/core/InvalidFieldValue",
 )("InvalidFieldValue", {
-  line: S.Number,
-  field: S.String,
-  value: S.String,
-  expected: S.String,
+  line: Schema.Number,
+  field: Schema.String,
+  value: Schema.String,
+  expected: Schema.String,
 }) {}
 
-export const MetadataParseErrorSchema = S.Union(
+export const MetadataParseErrorSchema = Schema.Union(
   ParseError,
   InvalidMetadataFormat,
   InvalidFieldValue,
 );
 
-export type MetadataParseError = S.Schema.Type<typeof MetadataParseErrorSchema>;
+export type MetadataParseError = typeof MetadataParseErrorSchema.Type;

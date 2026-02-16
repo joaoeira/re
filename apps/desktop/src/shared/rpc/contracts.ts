@@ -1,4 +1,4 @@
-import * as S from "@effect/schema/Schema";
+import { Schema } from "@effect/schema";
 import { MetadataParseErrorSchema } from "@re/core";
 import { ScanDecksErrorSchema, ScanDecksResultSchema } from "@re/workspace";
 import { defineContract, rpc } from "electron-effect-rpc/contract";
@@ -10,30 +10,30 @@ import {
 
 export const GetBootstrapData = rpc(
   "GetBootstrapData",
-  S.Struct({}),
-  S.Struct({
-    appName: S.String,
-    message: S.String,
-    timestamp: S.String,
+  Schema.Struct({}),
+  Schema.Struct({
+    appName: Schema.String,
+    message: Schema.String,
+    timestamp: Schema.String,
   }),
 );
 
 export const ParseDeckPreview = rpc(
   "ParseDeckPreview",
-  S.Struct({
-    markdown: S.String,
+  Schema.Struct({
+    markdown: Schema.String,
   }),
-  S.Struct({
-    items: S.Number,
-    cards: S.Number,
+  Schema.Struct({
+    items: Schema.Number,
+    cards: Schema.Number,
   }),
   MetadataParseErrorSchema,
 );
 
 export const ScanDecks = rpc(
   "ScanDecks",
-  S.Struct({
-    rootPath: S.String,
+  Schema.Struct({
+    rootPath: Schema.String,
   }),
   ScanDecksResultSchema,
   ScanDecksErrorSchema,
@@ -41,7 +41,7 @@ export const ScanDecks = rpc(
 
 export const GetSettings = rpc(
   "GetSettings",
-  S.Struct({}),
+  Schema.Struct({}),
   SettingsSchemaV1,
   SettingsErrorSchema,
 );

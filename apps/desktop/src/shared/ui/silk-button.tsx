@@ -1,16 +1,16 @@
-import * as React from "react";
+import { forwardRef, type ComponentPropsWithoutRef, type ComponentType } from "react";
 import * as Silk from "@silk-hq/components";
 
 import { cn } from "../lib/utils";
 
-type NativeButtonProps = React.ComponentPropsWithoutRef<"button">;
+type NativeButtonProps = ComponentPropsWithoutRef<"button">;
 
-export const SilkButton = React.forwardRef<HTMLButtonElement, NativeButtonProps>(
+export const SilkButton = forwardRef<HTMLButtonElement, NativeButtonProps>(
   ({ className, ...props }, ref) => {
     const Candidate = (Silk as Record<string, unknown>).Button;
 
     if (typeof Candidate === "function") {
-      const SilkButtonComponent = Candidate as React.ComponentType<NativeButtonProps>;
+      const SilkButtonComponent = Candidate as ComponentType<NativeButtonProps>;
       return <SilkButtonComponent className={className} {...props} />;
     }
 

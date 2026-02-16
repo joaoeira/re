@@ -1,46 +1,46 @@
-import * as S from "@effect/schema/Schema";
+import { Schema } from "@effect/schema";
 
-export class SettingsReadFailed extends S.TaggedError<SettingsReadFailed>(
+export class SettingsReadFailed extends Schema.TaggedError<SettingsReadFailed>(
   "@re/desktop/settings/SettingsReadFailed",
 )("SettingsReadFailed", {
-  path: S.String,
-  message: S.String,
+  path: Schema.String,
+  message: Schema.String,
 }) {}
 
-export class SettingsDecodeFailed extends S.TaggedError<SettingsDecodeFailed>(
+export class SettingsDecodeFailed extends Schema.TaggedError<SettingsDecodeFailed>(
   "@re/desktop/settings/SettingsDecodeFailed",
 )("SettingsDecodeFailed", {
-  path: S.String,
-  message: S.String,
+  path: Schema.String,
+  message: Schema.String,
 }) {}
 
-export class SettingsWriteFailed extends S.TaggedError<SettingsWriteFailed>(
+export class SettingsWriteFailed extends Schema.TaggedError<SettingsWriteFailed>(
   "@re/desktop/settings/SettingsWriteFailed",
 )("SettingsWriteFailed", {
-  path: S.String,
-  message: S.String,
+  path: Schema.String,
+  message: Schema.String,
 }) {}
 
-export class WorkspaceRootNotFound extends S.TaggedError<WorkspaceRootNotFound>(
+export class WorkspaceRootNotFound extends Schema.TaggedError<WorkspaceRootNotFound>(
   "@re/desktop/settings/WorkspaceRootNotFound",
 )("WorkspaceRootNotFound", {
-  rootPath: S.String,
+  rootPath: Schema.String,
 }) {}
 
-export class WorkspaceRootNotDirectory extends S.TaggedError<WorkspaceRootNotDirectory>(
+export class WorkspaceRootNotDirectory extends Schema.TaggedError<WorkspaceRootNotDirectory>(
   "@re/desktop/settings/WorkspaceRootNotDirectory",
 )("WorkspaceRootNotDirectory", {
-  rootPath: S.String,
+  rootPath: Schema.String,
 }) {}
 
-export class WorkspaceRootUnreadable extends S.TaggedError<WorkspaceRootUnreadable>(
+export class WorkspaceRootUnreadable extends Schema.TaggedError<WorkspaceRootUnreadable>(
   "@re/desktop/settings/WorkspaceRootUnreadable",
 )("WorkspaceRootUnreadable", {
-  rootPath: S.String,
-  message: S.String,
+  rootPath: Schema.String,
+  message: Schema.String,
 }) {}
 
-export const SettingsErrorSchema = S.Union(
+export const SettingsErrorSchema = Schema.Union(
   SettingsReadFailed,
   SettingsDecodeFailed,
   SettingsWriteFailed,
@@ -49,4 +49,4 @@ export const SettingsErrorSchema = S.Union(
   WorkspaceRootUnreadable,
 );
 
-export type SettingsError = S.Schema.Type<typeof SettingsErrorSchema>;
+export type SettingsError = typeof SettingsErrorSchema.Type;
