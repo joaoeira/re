@@ -50,9 +50,7 @@ export const createMockFileSystemLayer = (
       Effect.gen(function* () {
         const forced = config.readDirectoryErrors?.[targetPath];
         if (forced) {
-          return yield* Effect.fail(
-            makeSystemError(forced, "readDirectory", targetPath),
-          );
+          return yield* Effect.fail(makeSystemError(forced, "readDirectory", targetPath));
         }
 
         const entries = config.directories[targetPath];
@@ -61,23 +59,17 @@ export const createMockFileSystemLayer = (
         }
 
         if (config.entryTypes[targetPath]) {
-          return yield* Effect.fail(
-            makeSystemError("BadResource", "readDirectory", targetPath),
-          );
+          return yield* Effect.fail(makeSystemError("BadResource", "readDirectory", targetPath));
         }
 
-        return yield* Effect.fail(
-          makeSystemError("NotFound", "readDirectory", targetPath),
-        );
+        return yield* Effect.fail(makeSystemError("NotFound", "readDirectory", targetPath));
       }),
 
     readFileString: (targetPath) =>
       Effect.gen(function* () {
         const forced = config.readFileErrors?.[targetPath];
         if (forced) {
-          return yield* Effect.fail(
-            makeSystemError(forced, "readFileString", targetPath),
-          );
+          return yield* Effect.fail(makeSystemError(forced, "readFileString", targetPath));
         }
 
         const content = config.fileContents?.[targetPath];
@@ -86,23 +78,17 @@ export const createMockFileSystemLayer = (
         }
 
         if (config.entryTypes[targetPath]) {
-          return yield* Effect.fail(
-            makeSystemError("BadResource", "readFileString", targetPath),
-          );
+          return yield* Effect.fail(makeSystemError("BadResource", "readFileString", targetPath));
         }
 
-        return yield* Effect.fail(
-          makeSystemError("NotFound", "readFileString", targetPath),
-        );
+        return yield* Effect.fail(makeSystemError("NotFound", "readFileString", targetPath));
       }),
 
     readLink: (targetPath) =>
       Effect.gen(function* () {
         const forced = config.readLinkErrors?.[targetPath];
         if (forced) {
-          return yield* Effect.fail(
-            makeSystemError(forced, "readLink", targetPath),
-          );
+          return yield* Effect.fail(makeSystemError(forced, "readLink", targetPath));
         }
 
         const target = config.symlinkTargets?.[targetPath];
@@ -111,14 +97,10 @@ export const createMockFileSystemLayer = (
         }
 
         if (config.entryTypes[targetPath]) {
-          return yield* Effect.fail(
-            makeSystemError("BadResource", "readLink", targetPath),
-          );
+          return yield* Effect.fail(makeSystemError("BadResource", "readLink", targetPath));
         }
 
-        return yield* Effect.fail(
-          makeSystemError("NotFound", "readLink", targetPath),
-        );
+        return yield* Effect.fail(makeSystemError("NotFound", "readLink", targetPath));
       }),
 
     stat: (targetPath) =>
@@ -130,9 +112,7 @@ export const createMockFileSystemLayer = (
 
         const type = config.entryTypes[targetPath];
         if (!type) {
-          return yield* Effect.fail(
-            makeSystemError("NotFound", "stat", targetPath),
-          );
+          return yield* Effect.fail(makeSystemError("NotFound", "stat", targetPath));
         }
 
         return makeFileInfo(type);

@@ -13,7 +13,7 @@ describe("inferType", () => {
       const result = yield* inferType(types, content);
 
       assert.strictEqual(result.type.name, "cloze");
-    })
+    }),
   );
 
   it.scoped("falls through to QA when cloze doesn't match", () =>
@@ -22,7 +22,7 @@ describe("inferType", () => {
       const result = yield* inferType(types, content);
 
       assert.strictEqual(result.type.name, "qa");
-    })
+    }),
   );
 
   it.scoped("returns parsed content", () =>
@@ -34,7 +34,7 @@ describe("inferType", () => {
         question: "Question?",
         answer: "Answer",
       });
-    })
+    }),
   );
 
   it.scoped("fails when no type matches", () =>
@@ -44,7 +44,7 @@ describe("inferType", () => {
 
       assert.ok(error instanceof NoMatchingTypeError);
       assert.deepStrictEqual(error.triedTypes, ["cloze", "qa"]);
-    })
+    }),
   );
 
   it.scoped("respects type order (first match wins)", () =>
@@ -55,7 +55,7 @@ describe("inferType", () => {
       const result = yield* inferType(types, content);
 
       assert.strictEqual(result.type.name, "cloze");
-    })
+    }),
   );
 
   it.scoped("works with reversed order", () =>
@@ -66,7 +66,7 @@ describe("inferType", () => {
       const result = yield* inferType(reversedTypes, content);
 
       assert.strictEqual(result.type.name, "qa");
-    })
+    }),
   );
 
   it.scoped("cards can be derived from inferred result", () =>
@@ -78,6 +78,6 @@ describe("inferType", () => {
       assert.strictEqual(cards.length, 1);
       assert.strictEqual(cards[0]!.prompt, "Q?");
       assert.strictEqual(cards[0]!.reveal, "A");
-    })
+    }),
   );
 });

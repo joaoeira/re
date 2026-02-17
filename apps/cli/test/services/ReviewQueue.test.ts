@@ -76,25 +76,25 @@ const MockFileSystem = FileSystem.layerNoop({
         module: "FileSystem",
         method: "readFileString",
         pathOrDescriptor: path,
-      })
+      }),
     );
   },
 });
 
 const MockDeckParser = DeckParserLive.pipe(
-  Layer.provide(Layer.mergeAll(MockFileSystem, Path.layer))
+  Layer.provide(Layer.mergeAll(MockFileSystem, Path.layer)),
 );
 
 const TestLayer = ReviewQueueServiceLive.pipe(
   Layer.provide(
-    Layer.mergeAll(MockDeckParser, SchedulerLive, NewFirstOrderingStrategy, Path.layer)
-  )
+    Layer.mergeAll(MockDeckParser, SchedulerLive, NewFirstOrderingStrategy, Path.layer),
+  ),
 );
 
 const DueFirstTestLayer = ReviewQueueServiceLive.pipe(
   Layer.provide(
-    Layer.mergeAll(MockDeckParser, SchedulerLive, DueFirstOrderingStrategy, Path.layer)
-  )
+    Layer.mergeAll(MockDeckParser, SchedulerLive, DueFirstOrderingStrategy, Path.layer),
+  ),
 );
 
 // Helper to build a simple tree structure for testing
@@ -380,18 +380,16 @@ describe("ReviewQueueService", () => {
   });
 
   describe("Spec-based ordering (QueueOrderingStrategyFromSpec)", () => {
-    const SpecBasedTestLayer = (
-      specLayer: Layer.Layer<typeof QueueOrderSpec.Service>
-    ) =>
+    const SpecBasedTestLayer = (specLayer: Layer.Layer<typeof QueueOrderSpec.Service>) =>
       ReviewQueueServiceLive.pipe(
         Layer.provide(
           Layer.mergeAll(
             MockDeckParser,
             SchedulerLive,
             Path.layer,
-            QueueOrderingStrategyFromSpec.pipe(Layer.provide(specLayer))
-          )
-        )
+            QueueOrderingStrategyFromSpec.pipe(Layer.provide(specLayer)),
+          ),
+        ),
       );
 
     it("NewFirstByDueDateSpec places new cards before due cards", async () => {
@@ -401,10 +399,7 @@ describe("ReviewQueueService", () => {
       const result = await Effect.gen(function* () {
         const service = yield* ReviewQueueService;
         return yield* service.buildQueue(selection, tree, "/decks", now);
-      }).pipe(
-        Effect.provide(SpecBasedTestLayer(NewFirstByDueDateSpec)),
-        Effect.runPromise
-      );
+      }).pipe(Effect.provide(SpecBasedTestLayer(NewFirstByDueDateSpec)), Effect.runPromise);
 
       let seenDue = false;
       for (const item of result.items) {
@@ -422,10 +417,7 @@ describe("ReviewQueueService", () => {
       const result = await Effect.gen(function* () {
         const service = yield* ReviewQueueService;
         return yield* service.buildQueue(selection, tree, "/decks", now);
-      }).pipe(
-        Effect.provide(SpecBasedTestLayer(DueFirstByDueDateSpec)),
-        Effect.runPromise
-      );
+      }).pipe(Effect.provide(SpecBasedTestLayer(DueFirstByDueDateSpec)), Effect.runPromise);
 
       let seenNew = false;
       for (const item of result.items) {
@@ -474,10 +466,7 @@ describe("ReviewQueueService", () => {
       const result = await Effect.gen(function* () {
         const service = yield* ReviewQueueService;
         return yield* service.buildQueue(selection, tree, "/decks", now);
-      }).pipe(
-        Effect.provide(SpecBasedTestLayer(NewFirstFileOrderSpec)),
-        Effect.runPromise
-      );
+      }).pipe(Effect.provide(SpecBasedTestLayer(NewFirstFileOrderSpec)), Effect.runPromise);
 
       const newCards = result.items.filter((i) => i.category === "new");
       expect(newCards[0]?.card.id).toBe("card1");
@@ -492,7 +481,7 @@ describe("Composable ordering primitives", () => {
     category: "new" | "due",
     itemIndex: number,
     dueDate: Date | null = null,
-    deckPath: string = "/deck.md"
+    deckPath: string = "/deck.md",
   ): QueueItem => ({
     deckPath,
     deckName: "deck",
@@ -507,15 +496,9 @@ describe("Composable ordering primitives", () => {
 
   describe("preserveOrder", () => {
     it("returns items in original order", async () => {
-      const items = [
-        makeItem("a", "new", 0),
-        makeItem("b", "new", 1),
-        makeItem("c", "new", 2),
-      ];
+      const items = [makeItem("a", "new", 0), makeItem("b", "new", 1), makeItem("c", "new", 2)];
 
-      const result = await preserveOrder<QueueItem>()(items).pipe(
-        Effect.runPromise
-      );
+      const result = await preserveOrder<QueueItem>()(items).pipe(Effect.runPromise);
 
       expect(result.map((i) => i.card.id)).toEqual(["a", "b", "c"]);
     });
@@ -523,15 +506,9 @@ describe("Composable ordering primitives", () => {
 
   describe("sortBy", () => {
     it("sorts by the given order", async () => {
-      const items = [
-        makeItem("c", "new", 2),
-        makeItem("a", "new", 0),
-        makeItem("b", "new", 1),
-      ];
+      const items = [makeItem("c", "new", 2), makeItem("a", "new", 0), makeItem("b", "new", 1)];
 
-      const result = await sortBy<QueueItem>(byFilePosition)(items).pipe(
-        Effect.runPromise
-      );
+      const result = await sortBy<QueueItem>(byFilePosition)(items).pipe(Effect.runPromise);
 
       expect(result.map((i) => i.card.id)).toEqual(["a", "b", "c"]);
     });
@@ -543,9 +520,7 @@ describe("Composable ordering primitives", () => {
         makeItem("mid", "due", 2, new Date("2025-01-05")),
       ];
 
-      const result = await sortBy<QueueItem>(byDueDate)(items).pipe(
-        Effect.runPromise
-      );
+      const result = await sortBy<QueueItem>(byDueDate)(items).pipe(Effect.runPromise);
 
       expect(result.map((i) => i.card.id)).toEqual(["early", "mid", "late"]);
     });
@@ -564,24 +539,15 @@ describe("Composable ordering primitives", () => {
       const result = await shuffle<QueueItem>()(items).pipe(Effect.runPromise);
 
       expect(result.length).toBe(5);
-      expect(new Set(result.map((i) => i.card.id))).toEqual(
-        new Set(["a", "b", "c", "d", "e"])
-      );
+      expect(new Set(result.map((i) => i.card.id))).toEqual(new Set(["a", "b", "c", "d", "e"]));
     });
   });
 
   describe("chain", () => {
     it("applies multiple transforms in sequence", async () => {
-      const items = [
-        makeItem("c", "new", 2),
-        makeItem("a", "new", 0),
-        makeItem("b", "new", 1),
-      ];
+      const items = [makeItem("c", "new", 2), makeItem("a", "new", 0), makeItem("b", "new", 1)];
 
-      const sortThenPreserve = chain(
-        sortBy<QueueItem>(byFilePosition),
-        preserveOrder()
-      );
+      const sortThenPreserve = chain(sortBy<QueueItem>(byFilePosition), preserveOrder());
 
       const result = await sortThenPreserve(items).pipe(Effect.runPromise);
 
@@ -595,10 +561,7 @@ describe("Composable ordering primitives", () => {
         makeItem("c", "due", 2, new Date("2025-01-05")),
       ];
 
-      const shuffleThenSortByDue = chain(
-        shuffle<QueueItem>(),
-        sortBy(byDueDate)
-      );
+      const shuffleThenSortByDue = chain(shuffle<QueueItem>(), sortBy(byDueDate));
 
       const result = await shuffleThenSortByDue(items).pipe(Effect.runPromise);
 
@@ -626,14 +589,9 @@ describe("Composable ordering primitives", () => {
       expect(orderedDue[0]?.card.id).toBe("due2");
       expect(orderedDue[1]?.card.id).toBe("due1");
 
-      const orderedNew = await shuffle<QueueItem>()(newItems).pipe(
-        Effect.runPromise
-      );
+      const orderedNew = await shuffle<QueueItem>()(newItems).pipe(Effect.runPromise);
       expect(orderedNew.length).toBe(2);
-      expect(new Set(orderedNew.map((i) => i.card.id))).toEqual(
-        new Set(["new1", "new2"])
-      );
+      expect(new Set(orderedNew.map((i) => i.card.id))).toEqual(new Set(["new1", "new2"]));
     });
   });
-
 });

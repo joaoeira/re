@@ -11,11 +11,7 @@ interface CardRendererProps {
   isRevealed: boolean;
 }
 
-export function CardRenderer({
-  queueItem,
-  cardSpec,
-  isRevealed,
-}: CardRendererProps) {
+export function CardRenderer({ queueItem, cardSpec, isRevealed }: CardRendererProps) {
   const { colors, syntax } = useTheme();
 
   const renderCard = Match.value(cardSpec.cardType).pipe(
@@ -65,7 +61,7 @@ export function CardRenderer({
           </Panel>
         )}
       </>
-    ))
+    )),
   );
 
   return (

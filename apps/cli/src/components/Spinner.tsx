@@ -26,10 +26,7 @@ export function Spinner({ label, style = "dots" }: SpinnerProps) {
   );
 }
 
-function getSpinnerFrame(
-  style: "dots" | "pulse" | "wave",
-  frame: number
-): string {
+function getSpinnerFrame(style: "dots" | "pulse" | "wave", frame: number): string {
   switch (style) {
     case "dots": {
       const patterns = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];

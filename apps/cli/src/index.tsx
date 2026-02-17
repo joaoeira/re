@@ -8,5 +8,5 @@ const renderer = await createCliRenderer();
 createRoot(renderer).render(
   <ThemeProvider>
     <App />
-  </ThemeProvider>
+  </ThemeProvider>,
 );

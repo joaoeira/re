@@ -160,11 +160,7 @@ Answer
 
       expect(result.rootPath).toBe(rootPath);
       expect(result.decks).toHaveLength(3);
-      expect(result.decks.map((deck) => deck.status)).toEqual([
-        "ok",
-        "read_error",
-        "parse_error",
-      ]);
+      expect(result.decks.map((deck) => deck.status)).toEqual(["ok", "read_error", "parse_error"]);
 
       const okDeck = result.decks.find((deck) => deck.name === "1-ok");
       expect(okDeck).toBeDefined();
@@ -291,16 +287,12 @@ Answer
       };
       const handlers = await createHandlers(settingsFilePath, spyWatcher);
 
-      await Effect.runPromise(
-        handlers.SetWorkspaceRootPath({ rootPath: workspacePath }),
-      );
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath: workspacePath }));
 
       expect(spyWatcher.start).toHaveBeenCalledWith(workspacePath);
       expect(spyWatcher.stop).not.toHaveBeenCalled();
 
-      await Effect.runPromise(
-        handlers.SetWorkspaceRootPath({ rootPath: null }),
-      );
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath: null }));
 
       expect(spyWatcher.stop).toHaveBeenCalled();
     } finally {

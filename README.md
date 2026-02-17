@@ -12,13 +12,15 @@ title: My Flashcards
 ---
 
 <!--@ abc123 5.2 4.3 2 0 2025-01-04T10:30:00.000Z-->
-What is the capital of France?
----
+
+## What is the capital of France?
+
 Paris
 
 <!--@ def456 0 0 0 0-->
-What is 2 + 2?
----
+
+## What is 2 + 2?
+
 4
 ```
 
@@ -43,20 +45,15 @@ bun add @re/core
 
 ```typescript
 import { Effect } from "effect";
-import {
-  parseFile,
-  serializeFile,
-  createMetadata,
-  State,
-} from "@re/core";
+import { parseFile, serializeFile, createMetadata, State } from "@re/core";
 
 // Parse a file
 const content = await Bun.file("cards.md").text();
 const parsed = Effect.runSync(parseFile(content));
 
-console.log(parsed.preamble);        // Content before first item
-console.log(parsed.items.length);    // Number of items
-console.log(parsed.items[0].cards[0].id);  // First card's ID
+console.log(parsed.preamble); // Content before first item
+console.log(parsed.items.length); // Number of items
+console.log(parsed.items[0].cards[0].id); // First card's ID
 console.log(parsed.items[0].content);
 
 // Modify a card's metadata after review
@@ -73,10 +70,10 @@ const updated = {
                   state: State.Review,
                   lastReview: new Date(),
                 }
-              : card
+              : card,
           ),
         }
-      : item
+      : item,
   ),
 };
 
@@ -100,6 +97,7 @@ parseFile(content: string): Effect<ParsedFile, MetadataParseError>
 ```
 
 Returns `ParsedFile` with:
+
 - `preamble`: Content before first card (preserved byte-perfect)
 - `items`: Array of `Item` (metadata + content)
 
@@ -111,6 +109,7 @@ serializeMetadata(metadata: ItemMetadata): string
 ```
 
 Round-trip guarantees:
+
 - Preamble and content: byte-perfect
 - Metadata: canonicalized (single spaces, LF endings, UTC timestamps)
 - Numeric precision preserved via `NumericField.raw`
@@ -133,7 +132,7 @@ interface ParsedFile {
 }
 
 interface Item {
-  readonly cards: readonly ItemMetadata[];  // Multiple cards can share content
+  readonly cards: readonly ItemMetadata[]; // Multiple cards can share content
   readonly content: string;
 }
 
@@ -147,8 +146,8 @@ interface ItemMetadata {
 }
 
 interface NumericField {
-  readonly value: number;  // For computation
-  readonly raw: string;    // For serialization (preserves "5.20")
+  readonly value: number; // For computation
+  readonly raw: string; // For serialization (preserves "5.20")
 }
 
 const State = { New: 0, Learning: 1, Review: 2, Relearning: 3 } as const;
@@ -159,6 +158,7 @@ Multi-card items (e.g., cloze deletions) use consecutive metadata lines:
 ```markdown
 <!--@ card1 0 0 0 0-->
 <!--@ card2 0 0 0 0-->
+
 The atomic number of [carbon] is [6].
 ```
 
@@ -176,14 +176,15 @@ Effect.runSync(
     Effect.catchTags({
       InvalidMetadataFormat: (e) => console.error(`Line ${e.line}: ${e.reason}`),
       InvalidFieldValue: (e) => console.error(`Line ${e.line}: ${e.field} = ${e.value}`),
-    })
-  )
+    }),
+  ),
 );
 ```
 
 ## Validation
 
 Strict validation on parse:
+
 - Numeric fields: non-negative, no scientific notation, no Infinity
 - State: must be 0-3
 - Timestamps: ISO 8601 with timezone required (Z or ±HH:MM)

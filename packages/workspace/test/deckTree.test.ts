@@ -1,17 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  buildDeckTree,
-  flattenDeckTree,
-  type DeckTreeGroup,
-  type DeckTreeLeaf,
-} from "../src";
+import { buildDeckTree, flattenDeckTree, type DeckTreeGroup, type DeckTreeLeaf } from "../src";
 import type { DeckSnapshot, DeckStateCounts } from "../src/snapshotWorkspace";
 
-const okSnapshot = (
-  relativePath: string,
-  counts?: Partial<DeckStateCounts>,
-): DeckSnapshot => {
+const okSnapshot = (relativePath: string, counts?: Partial<DeckStateCounts>): DeckSnapshot => {
   const stateCounts = {
     new: 0,
     learning: 0,
@@ -25,10 +17,7 @@ const okSnapshot = (
     relativePath,
     name: relativePath.split("/").pop()!.replace(/\.md$/i, ""),
     totalCards:
-      stateCounts.new +
-      stateCounts.learning +
-      stateCounts.review +
-      stateCounts.relearning,
+      stateCounts.new + stateCounts.learning + stateCounts.review + stateCounts.relearning,
     stateCounts,
   };
 };
@@ -135,9 +124,7 @@ describe("buildDeckTree", () => {
   });
 
   it("aggregates counts through all ancestor groups", () => {
-    const tree = buildDeckTree([
-      okSnapshot("a/b/deep.md", { new: 10 }),
-    ]);
+    const tree = buildDeckTree([okSnapshot("a/b/deep.md", { new: 10 })]);
 
     const groupA = tree[0] as DeckTreeGroup;
     expect(groupA.totalCards).toBe(10);
@@ -162,10 +149,7 @@ describe("buildDeckTree", () => {
   });
 
   it("sorts groups before leaves at the same level", () => {
-    const tree = buildDeckTree([
-      okSnapshot("root-deck.md"),
-      okSnapshot("folder/nested.md"),
-    ]);
+    const tree = buildDeckTree([okSnapshot("root-deck.md"), okSnapshot("folder/nested.md")]);
 
     expect(tree[0]!.kind).toBe("group");
     expect(tree[0]!.name).toBe("folder");
@@ -188,10 +172,7 @@ describe("buildDeckTree", () => {
   });
 
   it("handles a group with only error children", () => {
-    const tree = buildDeckTree([
-      errorSnapshot("broken/a.md"),
-      errorSnapshot("broken/b.md"),
-    ]);
+    const tree = buildDeckTree([errorSnapshot("broken/a.md"), errorSnapshot("broken/b.md")]);
 
     const group = tree[0] as DeckTreeGroup;
     expect(group.totalCards).toBe(0);
@@ -231,11 +212,7 @@ describe("flattenDeckTree", () => {
   it("skips children of collapsed groups but keeps the group row", () => {
     const rows = flattenDeckTree(tree, { algorithms: true } as Record<string, true>);
 
-    expect(rows.map((r) => r.key)).toEqual([
-      "algorithms",
-      "japanese",
-      "japanese/vocab.md",
-    ]);
+    expect(rows.map((r) => r.key)).toEqual(["algorithms", "japanese", "japanese/vocab.md"]);
   });
 
   it("collapses a nested group while keeping its parent expanded", () => {

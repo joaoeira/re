@@ -42,12 +42,10 @@ const generateFile = (itemCount: number): string => {
     const hasReview = i % 2 === 0;
     const metadata = hasReview
       ? `<!--@ item${i} ${(i * 0.5).toFixed(1)} ${(i * 0.3).toFixed(
-          1
+          1,
         )} 2 0 2025-01-04T10:30:00.000Z-->`
       : `<!--@ item${i} 0 0 0 0-->`;
-    content += `${metadata}\nQuestion ${i}: What is ${i} + ${i}?\n---\nAnswer: ${
-      i * 2
-    }\n\n`;
+    content += `${metadata}\nQuestion ${i}: What is ${i} + ${i}?\n---\nAnswer: ${i * 2}\n\n`;
   }
   return content;
 };
@@ -67,27 +65,27 @@ Effect.runSync(
     Effect.tap((f) =>
       Effect.sync(() => {
         parsedSmall = f;
-      })
-    )
-  )
+      }),
+    ),
+  ),
 );
 Effect.runSync(
   parseFile(mediumFile).pipe(
     Effect.tap((f) =>
       Effect.sync(() => {
         parsedMedium = f;
-      })
-    )
-  )
+      }),
+    ),
+  ),
 );
 Effect.runSync(
   parseFile(largeFile).pipe(
     Effect.tap((f) =>
       Effect.sync(() => {
         parsedLarge = f;
-      })
-    )
-  )
+      }),
+    ),
+  ),
 );
 
 describe("parseFile", () => {

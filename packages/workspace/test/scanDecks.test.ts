@@ -7,30 +7,27 @@ import {
   WorkspaceRootNotFound,
   WorkspaceRootUnreadable,
 } from "../src";
-import {
-  createMockFileSystemLayer,
-  type MockFileSystemConfig,
-} from "./mock-file-system";
+import { createMockFileSystemLayer, type MockFileSystemConfig } from "./mock-file-system";
 
 const runScan = (
   rootPath: string,
   config: MockFileSystemConfig,
-  options?: Parameters<typeof scanDecks>[1]
+  options?: Parameters<typeof scanDecks>[1],
 ) =>
   scanDecks(rootPath, options).pipe(
     Effect.provide(Layer.merge(createMockFileSystemLayer(config), Path.layer)),
-    Effect.runPromise
+    Effect.runPromise,
   );
 
 const runScanEither = (
   rootPath: string,
   config: MockFileSystemConfig,
-  options?: Parameters<typeof scanDecks>[1]
+  options?: Parameters<typeof scanDecks>[1],
 ) =>
   scanDecks(rootPath, options).pipe(
     Effect.either,
     Effect.provide(Layer.merge(createMockFileSystemLayer(config), Path.layer)),
-    Effect.runPromise
+    Effect.runPromise,
   );
 
 describe("scanDecks", () => {
@@ -105,11 +102,7 @@ describe("scanDecks", () => {
       "nested/beta.md",
       "zeta.md",
     ]);
-    expect(result.decks.map((deck) => deck.name)).toEqual([
-      "alpha",
-      "beta",
-      "zeta",
-    ]);
+    expect(result.decks.map((deck) => deck.name)).toEqual(["alpha", "beta", "zeta"]);
   });
 
   it("excludes hidden files and directories by default", async () => {
@@ -150,7 +143,7 @@ describe("scanDecks", () => {
           "/root/nested": [".private.md"],
         },
       },
-      { includeHidden: true }
+      { includeHidden: true },
     );
 
     expect(result.decks.map((deck) => deck.relativePath)).toEqual([
@@ -172,13 +165,7 @@ describe("scanDecks", () => {
         "/root/kept.md": "File",
       },
       directories: {
-        "/root": [
-          ".reignore",
-          "ignored.md",
-          "drafts",
-          "temp-file.tmp.md",
-          "kept.md",
-        ],
+        "/root": [".reignore", "ignored.md", "drafts", "temp-file.tmp.md", "kept.md"],
         "/root/drafts": ["first.md"],
       },
       fileContents: {
@@ -205,7 +192,7 @@ describe("scanDecks", () => {
       },
       {
         extraIgnorePatterns: ["*.md", "!keep.md"],
-      }
+      },
     );
 
     expect(result.decks.map((deck) => deck.relativePath)).toEqual(["keep.md"]);
@@ -249,10 +236,7 @@ describe("scanDecks", () => {
       },
     });
 
-    expect(result.decks.map((deck) => deck.relativePath)).toEqual([
-      "blocked-file.md",
-      "good.md",
-    ]);
+    expect(result.decks.map((deck) => deck.relativePath)).toEqual(["blocked-file.md", "good.md"]);
   });
 
   it("fails on unexpected nested directory errors", async () => {

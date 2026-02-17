@@ -19,16 +19,14 @@ export interface CardSpec<Response, GradeError = never> {
 
 export interface ItemType<Content, Response = unknown, GradeError = never> {
   readonly name: string;
-  readonly parse: (
-    content: string
-  ) => Effect.Effect<Content, ContentParseError>;
+  readonly parse: (content: string) => Effect.Effect<Content, ContentParseError>;
   cards(content: Content): ReadonlyArray<CardSpec<Response, GradeError>>;
 }
 
 export const manualCardSpec = (
   prompt: string,
   reveal: string,
-  cardType: string
+  cardType: string,
 ): CardSpec<Grade, never> => ({
   prompt,
   reveal,
@@ -37,9 +35,7 @@ export const manualCardSpec = (
   grade: (response) => Effect.succeed(response),
 });
 
-export class NoMatchingTypeError extends Data.TaggedError(
-  "NoMatchingTypeError"
-)<{
+export class NoMatchingTypeError extends Data.TaggedError("NoMatchingTypeError")<{
   readonly raw: string;
   readonly triedTypes: ReadonlyArray<string>;
 }> {}
@@ -52,24 +48,20 @@ export interface InferredType {
 /** Try each type's parser in order until one succeeds. */
 export const inferType = (
   types: ReadonlyArray<ItemType<any, any, any>>,
-  content: string
+  content: string,
 ): Effect.Effect<InferredType, NoMatchingTypeError> => {
   const tryNext = (
     index: number,
-    tried: string[]
+    tried: string[],
   ): Effect.Effect<InferredType, NoMatchingTypeError> => {
     if (index >= types.length) {
-      return Effect.fail(
-        new NoMatchingTypeError({ raw: content, triedTypes: tried })
-      );
+      return Effect.fail(new NoMatchingTypeError({ raw: content, triedTypes: tried }));
     }
 
     const type = types[index]!;
     return type.parse(content).pipe(
       Effect.map((parsed) => ({ type, content: parsed })),
-      Effect.catchTag("ContentParseError", () =>
-        tryNext(index + 1, [...tried, type.name])
-      )
+      Effect.catchTag("ContentParseError", () => tryNext(index + 1, [...tried, type.name])),
     );
   };
 

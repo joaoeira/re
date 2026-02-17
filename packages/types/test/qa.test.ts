@@ -14,7 +14,7 @@ Paris`;
 
         assert.strictEqual(result.question, "What is the capital of France?");
         assert.strictEqual(result.answer, "Paris");
-      })
+      }),
     );
 
     it.scoped("trims whitespace from question and answer", () =>
@@ -26,7 +26,7 @@ Paris`;
 
         assert.strictEqual(result.question, "What is 2+2?");
         assert.strictEqual(result.answer, "4");
-      })
+      }),
     );
 
     it.scoped("handles multi-line question and answer", () =>
@@ -39,12 +39,9 @@ Yellow
 Blue`;
         const result = yield* QAType.parse(content);
 
-        assert.strictEqual(
-          result.question,
-          "What are the primary colors?\nList all three."
-        );
+        assert.strictEqual(result.question, "What are the primary colors?\nList all three.");
         assert.strictEqual(result.answer, "Red\nYellow\nBlue");
-      })
+      }),
     );
 
     it.scoped("fails when separator is missing", () =>
@@ -56,7 +53,7 @@ Paris`;
         assert.ok(error instanceof ContentParseError);
         assert.strictEqual(error.type, "qa");
         assert.ok(error.message.includes("separator"));
-      })
+      }),
     );
 
     it.scoped("fails when question is empty", () =>
@@ -69,7 +66,7 @@ Paris`;
         assert.ok(error instanceof ContentParseError);
         assert.strictEqual(error.type, "qa");
         assert.ok(error.message.includes("Question"));
-      })
+      }),
     );
 
     it.scoped("fails when answer is empty", () =>
@@ -82,7 +79,7 @@ Paris`;
         assert.ok(error instanceof ContentParseError);
         assert.strictEqual(error.type, "qa");
         assert.ok(error.message.includes("Answer"));
-      })
+      }),
     );
 
     it.scoped("handles separator with surrounding content", () =>
@@ -95,7 +92,7 @@ It's a horizontal rule`;
 
         assert.strictEqual(result.question, "What does --- mean?");
         assert.strictEqual(result.answer, "It's a horizontal rule");
-      })
+      }),
     );
   });
 
@@ -106,7 +103,7 @@ It's a horizontal rule`;
         const cards = QAType.cards(content);
 
         assert.strictEqual(cards.length, 1);
-      })
+      }),
     );
 
     it.effect("card has correct prompt and reveal", () =>
@@ -116,7 +113,7 @@ It's a horizontal rule`;
 
         assert.strictEqual(cards[0]!.prompt, "What is 2+2?");
         assert.strictEqual(cards[0]!.reveal, "4");
-      })
+      }),
     );
 
     it.effect("card grade function returns response unchanged", () =>
@@ -134,7 +131,7 @@ It's a horizontal rule`;
         assert.strictEqual(grade1, 1);
         assert.strictEqual(grade2, 2);
         assert.strictEqual(grade3, 3);
-      })
+      }),
     );
   });
 });

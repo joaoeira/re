@@ -1,19 +1,15 @@
-import { Layer } from "effect"
-import { BunFileSystem } from "@effect/platform-bun"
-import { Path } from "@effect/platform"
+import { Layer } from "effect";
+import { BunFileSystem } from "@effect/platform-bun";
+import { Path } from "@effect/platform";
 
-export {
-  DeckDiscovery,
-  DeckDiscoveryLive,
-  type DiscoveryResult,
-} from "./DeckDiscovery"
+export { DeckDiscovery, DeckDiscoveryLive, type DiscoveryResult } from "./DeckDiscovery";
 export {
   IgnoreFileService,
   IgnoreFileServiceLive,
   IGNORE_FILE,
   parseIgnoreFile,
   type IgnoreMap,
-} from "./IgnoreFileService"
+} from "./IgnoreFileService";
 export {
   Scheduler,
   SchedulerLive,
@@ -27,8 +23,8 @@ export {
   computeScheduledDays,
   itemMetadataToFSRSCard,
   fsrsCardToItemMetadata,
-} from "./Scheduler"
-export { DeckWriter, DeckWriterLive, DeckWriteError } from "./DeckWriter"
+} from "./Scheduler";
+export { DeckWriter, DeckWriterLive, DeckWriteError } from "./DeckWriter";
 export {
   DeckParser,
   DeckParserLive,
@@ -36,9 +32,9 @@ export {
   DeckParseError,
   type DeckParserError,
   type ParsedDeck,
-} from "./DeckParser"
-export { DeckLoader, DeckLoaderLive, type DeckStats } from "./DeckLoader"
-export { buildDeckTree, type DeckTreeNode } from "../lib/buildDeckTree"
+} from "./DeckParser";
+export { DeckLoader, DeckLoaderLive, type DeckStats } from "./DeckLoader";
+export { buildDeckTree, type DeckTreeNode } from "../lib/buildDeckTree";
 export {
   ReviewQueueService,
   ReviewQueueServiceLive,
@@ -49,29 +45,29 @@ export {
   type Selection,
   type QueueItem,
   type ReviewQueue,
-} from "./ReviewQueue"
+} from "./ReviewQueue";
 
-import { DeckDiscoveryLive } from "./DeckDiscovery"
-import { IgnoreFileServiceLive } from "./IgnoreFileService"
-import { SchedulerLive } from "./Scheduler"
-import { DeckParserLive } from "./DeckParser"
-import { DeckLoaderLive } from "./DeckLoader"
-import { ReviewQueueLive } from "./ReviewQueue"
+import { DeckDiscoveryLive } from "./DeckDiscovery";
+import { IgnoreFileServiceLive } from "./IgnoreFileService";
+import { SchedulerLive } from "./Scheduler";
+import { DeckParserLive } from "./DeckParser";
+import { DeckLoaderLive } from "./DeckLoader";
+import { ReviewQueueLive } from "./ReviewQueue";
 
-const FileSystemAndPath = Layer.mergeAll(BunFileSystem.layer, Path.layer)
+const FileSystemAndPath = Layer.mergeAll(BunFileSystem.layer, Path.layer);
 
 // Base layer: FileSystem + Path + Scheduler + DeckParser + IgnoreFileService
 const BaseLive = Layer.mergeAll(
   FileSystemAndPath,
   SchedulerLive,
   DeckParserLive.pipe(Layer.provide(FileSystemAndPath)),
-  IgnoreFileServiceLive.pipe(Layer.provide(FileSystemAndPath))
-)
+  IgnoreFileServiceLive.pipe(Layer.provide(FileSystemAndPath)),
+);
 
 // Full application layer
 export const AppLive = Layer.mergeAll(
   Path.layer,
   DeckDiscoveryLive,
   DeckLoaderLive,
-  ReviewQueueLive
-).pipe(Layer.provide(BaseLive))
+  ReviewQueueLive,
+).pipe(Layer.provide(BaseLive));

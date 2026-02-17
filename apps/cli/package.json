@@ -1,11 +1,11 @@
 {
   "name": "@re/cli",
   "version": "0.0.1",
-  "type": "module",
-  "main": "src/index.tsx",
   "bin": {
     "re": "src/index.tsx"
   },
+  "type": "module",
+  "main": "src/index.tsx",
   "scripts": {
     "dev": "bun run src/index.tsx",
     "preview-theme": "bun run src/preview-theme.tsx",

@@ -72,10 +72,7 @@ function getTreePrefix(depth: number, isLast: boolean): string {
   return indent + connector + glyphs.horizontalBar + " ";
 }
 
-function flattenTree(
-  nodes: readonly DeckTreeNode[],
-  depth: number = 0
-): FlattenedItem[] {
+function flattenTree(nodes: readonly DeckTreeNode[], depth: number = 0): FlattenedItem[] {
   const items: FlattenedItem[] = [];
 
   nodes.forEach((node, i) => {
@@ -120,12 +117,7 @@ function flattenTree(
   return items;
 }
 
-export function DeckTreeView({
-  tree,
-  focused = false,
-  onSelect,
-  onChange,
-}: DeckTreeViewProps) {
+export function DeckTreeView({ tree, focused = false, onSelect, onChange }: DeckTreeViewProps) {
   const totals = aggregateStats(tree);
   const currentIndexRef = useRef(0);
 
@@ -158,7 +150,7 @@ export function DeckTreeView({
         onChange(option.value as Selection);
       }
     },
-    [onChange]
+    [onChange],
   );
 
   const handleSelect = useCallback(
@@ -167,7 +159,7 @@ export function DeckTreeView({
         onSelect(option.value as Selection);
       }
     },
-    [onSelect]
+    [onSelect],
   );
 
   // Handle space bar to select the current item

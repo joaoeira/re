@@ -37,7 +37,7 @@ export const QAType: ItemType<QAContent, Grade, never> = {
           type: QA,
           message: "Missing '---' separator between question and answer",
           raw: content,
-        })
+        }),
       );
     }
 
@@ -50,7 +50,7 @@ export const QAType: ItemType<QAContent, Grade, never> = {
           type: QA,
           message: "Question cannot be empty",
           raw: content,
-        })
+        }),
       );
     }
 
@@ -60,7 +60,7 @@ export const QAType: ItemType<QAContent, Grade, never> = {
           type: QA,
           message: "Answer cannot be empty",
           raw: content,
-        })
+        }),
       );
     }
 

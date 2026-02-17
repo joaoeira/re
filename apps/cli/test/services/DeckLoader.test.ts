@@ -24,8 +24,7 @@ Answer 2
 const MockFileSystem = FileSystem.layerNoop({
   readFileString: (path) => {
     if (path === "/valid.md") return Effect.succeed(validDeckContent);
-    if (path === "/empty.md")
-      return Effect.succeed("# Just a title\n\nNo cards here.");
+    if (path === "/empty.md") return Effect.succeed("# Just a title\n\nNo cards here.");
     if (path === "/invalid.md") return Effect.succeed("<!--@ bad metadata-->");
     return Effect.fail(
       new SystemError({
@@ -33,63 +32,61 @@ const MockFileSystem = FileSystem.layerNoop({
         module: "FileSystem",
         method: "readFileString",
         pathOrDescriptor: path,
-      })
+      }),
     );
   },
 });
 
 const MockDeckParser = DeckParserLive.pipe(
-  Layer.provide(Layer.mergeAll(MockFileSystem, Path.layer))
+  Layer.provide(Layer.mergeAll(MockFileSystem, Path.layer)),
 );
 
-const TestLayer = DeckLoaderLive.pipe(
-  Layer.provide(Layer.merge(MockDeckParser, SchedulerLive))
-);
+const TestLayer = DeckLoaderLive.pipe(Layer.provide(Layer.merge(MockDeckParser, SchedulerLive)));
 
 describe("DeckLoader", () => {
   it("loads valid deck with correct stats", async () => {
-    const now = new Date("2025-01-10T00:00:00Z")
+    const now = new Date("2025-01-10T00:00:00Z");
 
     const result = await Effect.gen(function* () {
-      const loader = yield* DeckLoader
-      return yield* loader.loadDeck("/valid.md", now)
-    }).pipe(Effect.provide(TestLayer), Effect.runPromise)
+      const loader = yield* DeckLoader;
+      return yield* loader.loadDeck("/valid.md", now);
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
-    expect(result.name).toBe("valid")
-    expect(result.totalCards).toBe(2)
-    expect(result.newCards).toBe(1) // def456 has state 0
-    expect(result.dueCards).toBe(1) // abc123 is due (9 days > 5 day stability)
-    expect(result.parseError).toBeNull()
-  })
+    expect(result.name).toBe("valid");
+    expect(result.totalCards).toBe(2);
+    expect(result.newCards).toBe(1); // def456 has state 0
+    expect(result.dueCards).toBe(1); // abc123 is due (9 days > 5 day stability)
+    expect(result.parseError).toBeNull();
+  });
 
   it("handles empty files", async () => {
     const result = await Effect.gen(function* () {
-      const loader = yield* DeckLoader
-      return yield* loader.loadDeck("/empty.md", new Date())
-    }).pipe(Effect.provide(TestLayer), Effect.runPromise)
+      const loader = yield* DeckLoader;
+      return yield* loader.loadDeck("/empty.md", new Date());
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
-    expect(result.isEmpty).toBe(true)
-    expect(result.totalCards).toBe(0)
-    expect(result.parseError).toBeNull()
-  })
+    expect(result.isEmpty).toBe(true);
+    expect(result.totalCards).toBe(0);
+    expect(result.parseError).toBeNull();
+  });
 
   it("handles parse errors gracefully", async () => {
     const result = await Effect.gen(function* () {
-      const loader = yield* DeckLoader
-      return yield* loader.loadDeck("/invalid.md", new Date())
-    }).pipe(Effect.provide(TestLayer), Effect.runPromise)
+      const loader = yield* DeckLoader;
+      return yield* loader.loadDeck("/invalid.md", new Date());
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
-    expect(result.isEmpty).toBe(true)
-    expect(result.parseError).toContain("Parse error")
-  })
+    expect(result.isEmpty).toBe(true);
+    expect(result.parseError).toContain("Parse error");
+  });
 
   it("handles read errors gracefully", async () => {
     const result = await Effect.gen(function* () {
-      const loader = yield* DeckLoader
-      return yield* loader.loadDeck("/missing.md", new Date())
-    }).pipe(Effect.provide(TestLayer), Effect.runPromise)
+      const loader = yield* DeckLoader;
+      return yield* loader.loadDeck("/missing.md", new Date());
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
-    expect(result.isEmpty).toBe(true)
-    expect(result.parseError).toContain("Read error")
-  })
-})
+    expect(result.isEmpty).toBe(true);
+    expect(result.parseError).toContain("Read error");
+  });
+});

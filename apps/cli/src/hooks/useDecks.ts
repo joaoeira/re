@@ -1,13 +1,7 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from "react";
 import { Effect, Fiber, Exit } from "effect";
 import { Path } from "@effect/platform";
-import {
-  DeckDiscovery,
-  DeckLoader,
-  AppLive,
-  buildDeckTree,
-  type DeckTreeNode,
-} from "../services";
+import { DeckDiscovery, DeckLoader, AppLive, buildDeckTree, type DeckTreeNode } from "../services";
 
 export interface UseDecksResult {
   loading: boolean;

@@ -178,5 +178,5 @@ const renderer = await createCliRenderer();
 createRoot(renderer).render(
   <ThemeProvider>
     <ThemePreview />
-  </ThemeProvider>
+  </ThemeProvider>,
 );

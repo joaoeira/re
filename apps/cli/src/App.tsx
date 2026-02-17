@@ -5,23 +5,14 @@ import { DeckTreeView } from "./components/DeckTreeView";
 import { useReviewQueue } from "./hooks/useReviewQueue";
 import { ReviewSession } from "./components/ReviewSession";
 import { Loading } from "./components/Spinner";
-import {
-  Header,
-  Panel,
-  StatsRow,
-  Footer,
-  ErrorDisplay,
-  EmptyState,
-  Hint,
-} from "./components/ui";
+import { Header, Panel, StatsRow, Footer, ErrorDisplay, EmptyState, Hint } from "./components/ui";
 import { themeColors as theme } from "./ThemeContext";
 import type { Selection } from "./services/ReviewQueue";
 
 export function App() {
   const cwd = process.cwd();
   const renderer = useRenderer();
-  const [confirmedSelection, setConfirmedSelection] =
-    useState<Selection | null>(null);
+  const [confirmedSelection, setConfirmedSelection] = useState<Selection | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
   const { loading, error, tree, refresh: refreshDecks } = useDecks(cwd);
 
@@ -58,18 +49,9 @@ export function App() {
 
   if (loading) {
     return (
-      <box
-        flexDirection="column"
-        paddingLeft={2}
-        paddingRight={2}
-        paddingTop={1}
-        paddingBottom={1}
-      >
+      <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
         <Header title="re" subtitle="spaced repetition" />
-        <Loading
-          message="Discovering decks..."
-          hint="Scanning for markdown files"
-        />
+        <Loading message="Discovering decks..." hint="Scanning for markdown files" />
       </box>
     );
   }
@@ -131,9 +113,9 @@ export function App() {
       confirmedSelection.type === "all"
         ? "All decks"
         : confirmedSelection.type === "folder"
-        ? confirmedSelection.path.split("/").pop() || confirmedSelection.path
-        : confirmedSelection.path.split("/").pop()?.replace(/\.md$/, "") ||
-          confirmedSelection.path;
+          ? confirmedSelection.path.split("/").pop() || confirmedSelection.path
+          : confirmedSelection.path.split("/").pop()?.replace(/\.md$/, "") ||
+            confirmedSelection.path;
 
     if (queueLoading) {
       return (
@@ -176,13 +158,7 @@ export function App() {
     const hasCards = totalCards > 0;
 
     return (
-      <box
-        flexDirection="column"
-        paddingLeft={2}
-        paddingRight={2}
-        paddingTop={1}
-        paddingBottom={1}
-      >
+      <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
         <Header title="re" subtitle={selectionLabel} />
 
         <Panel accent>
@@ -217,20 +193,10 @@ export function App() {
   }
 
   return (
-    <box
-      flexDirection="column"
-      paddingLeft={2}
-      paddingRight={2}
-      paddingTop={1}
-      paddingBottom={1}
-    >
+    <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
       <Header title="re" subtitle="select what to review" />
 
-      <DeckTreeView
-        tree={tree}
-        focused={true}
-        onSelect={handleSelectionConfirm}
-      />
+      <DeckTreeView tree={tree} focused={true} onSelect={handleSelectionConfirm} />
 
       <Footer
         bindings={[

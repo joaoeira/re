@@ -14,14 +14,8 @@ export interface DeckStats {
 }
 
 export interface DeckLoader {
-  readonly loadDeck: (
-    filePath: string,
-    now: Date
-  ) => Effect.Effect<DeckStats, never>;
-  readonly loadAllDecks: (
-    paths: string[],
-    now: Date
-  ) => Effect.Effect<DeckStats[], never>;
+  readonly loadDeck: (filePath: string, now: Date) => Effect.Effect<DeckStats, never>;
+  readonly loadAllDecks: (paths: string[], now: Date) => Effect.Effect<DeckStats[], never>;
 }
 
 export const DeckLoader = Context.GenericTag<DeckLoader>("DeckLoader");
@@ -32,10 +26,7 @@ export const DeckLoaderLive = Layer.effect(
     const parser = yield* DeckParser;
     const scheduler = yield* Scheduler;
 
-    const loadSingleDeck = (
-      filePath: string,
-      now: Date
-    ): Effect.Effect<DeckStats, never> =>
+    const loadSingleDeck = (filePath: string, now: Date): Effect.Effect<DeckStats, never> =>
       Effect.gen(function* () {
         const parseResult = yield* parser.parse(filePath).pipe(Effect.either);
 
@@ -84,8 +75,8 @@ export const DeckLoaderLive = Layer.effect(
       loadAllDecks: (paths, now) =>
         Effect.all(
           paths.map((p) => loadSingleDeck(p, now)),
-          { concurrency: "unbounded" }
+          { concurrency: "unbounded" },
         ),
     };
-  })
+  }),
 );

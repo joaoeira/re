@@ -8,9 +8,7 @@ export interface DiscoveryResult {
 }
 
 export interface DeckDiscovery {
-  readonly discoverDecks: (
-    rootPath: string
-  ) => Effect.Effect<DiscoveryResult, never>;
+  readonly discoverDecks: (rootPath: string) => Effect.Effect<DiscoveryResult, never>;
 }
 
 export const DeckDiscovery = Context.GenericTag<DeckDiscovery>("DeckDiscovery");
@@ -37,10 +35,7 @@ export const DeckDiscoveryLive = Layer.effect(
           }
 
           const entries = entriesResult.right;
-          const ignoreMap = yield* ignoreService.buildIgnoreMap(
-            rootPath,
-            entries
-          );
+          const ignoreMap = yield* ignoreService.buildIgnoreMap(rootPath, entries);
 
           // Filter for .md files, excluding:
           // 1. Those in hidden directories
@@ -61,5 +56,5 @@ export const DeckDiscoveryLive = Layer.effect(
           return { paths, error: null };
         }),
     };
-  })
+  }),
 );

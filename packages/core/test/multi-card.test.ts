@@ -17,11 +17,8 @@ The atomic number of [carbon] is [6].
         assert.strictEqual(result.items[0]!.cards.length, 2);
         assert.strictEqual(result.items[0]!.cards[0]!.id, "card1");
         assert.strictEqual(result.items[0]!.cards[1]!.id, "card2");
-        assert.strictEqual(
-          result.items[0]!.content,
-          "The atomic number of [carbon] is [6].\n"
-        );
-      })
+        assert.strictEqual(result.items[0]!.content, "The atomic number of [carbon] is [6].\n");
+      }),
     );
 
     it.scoped("parses three consecutive metadata lines as one item with three cards", () =>
@@ -38,7 +35,7 @@ The atomic number of [carbon] is [6].
         assert.strictEqual(result.items[0]!.cards[0]!.id, "card1");
         assert.strictEqual(result.items[0]!.cards[1]!.id, "card2");
         assert.strictEqual(result.items[0]!.cards[2]!.id, "card3");
-      })
+      }),
     );
 
     it.scoped("blank line between metadata lines breaks grouping", () =>
@@ -57,7 +54,7 @@ Content for card2
         assert.strictEqual(result.items[1]!.cards.length, 1);
         assert.strictEqual(result.items[1]!.cards[0]!.id, "card2");
         assert.strictEqual(result.items[1]!.content, "Content for card2\n");
-      })
+      }),
     );
 
     it.scoped("single metadata line creates item with one card (backwards compatible)", () =>
@@ -72,7 +69,7 @@ Paris
         assert.strictEqual(result.items.length, 1);
         assert.strictEqual(result.items[0]!.cards.length, 1);
         assert.strictEqual(result.items[0]!.cards[0]!.id, "abc123");
-      })
+      }),
     );
 
     it.scoped("mixed single and multi-card items", () =>
@@ -101,15 +98,12 @@ A2
         assert.strictEqual(result.items[1]!.cards.length, 2);
         assert.strictEqual(result.items[1]!.cards[0]!.id, "multi1");
         assert.strictEqual(result.items[1]!.cards[1]!.id, "multi2");
-        assert.strictEqual(
-          result.items[1]!.content,
-          "The [sun] rises in the [east].\n"
-        );
+        assert.strictEqual(result.items[1]!.content, "The [sun] rises in the [east].\n");
 
         // Third item: single card
         assert.strictEqual(result.items[2]!.cards.length, 1);
         assert.strictEqual(result.items[2]!.cards[0]!.id, "single2");
-      })
+      }),
     );
 
     it.scoped("preserves individual card metadata in multi-card item", () =>
@@ -134,7 +128,7 @@ Shared content
         assert.strictEqual(item.cards[1]!.difficulty.value, 4.3);
         assert.strictEqual(item.cards[1]!.state, 2);
         assert.ok(item.cards[1]!.lastReview instanceof Date);
-      })
+      }),
     );
 
     it.scoped("multi-card item with preamble", () =>
@@ -155,11 +149,11 @@ The atomic number of [carbon] is [6].
 title: Chemistry Notes
 ---
 
-`
+`,
         );
         assert.strictEqual(result.items.length, 1);
         assert.strictEqual(result.items[0]!.cards.length, 2);
-      })
+      }),
     );
 
     it.scoped("multiple multi-card items in sequence", () =>
@@ -177,7 +171,7 @@ Second cloze: [x], [y], and [z]
         assert.strictEqual(result.items.length, 2);
         assert.strictEqual(result.items[0]!.cards.length, 2);
         assert.strictEqual(result.items[1]!.cards.length, 3);
-      })
+      }),
     );
 
     it.scoped("multi-card item at EOF with empty content", () =>
@@ -191,7 +185,7 @@ Second cloze: [x], [y], and [z]
         assert.strictEqual(result.items[0]!.cards[0]!.id, "card1");
         assert.strictEqual(result.items[0]!.cards[1]!.id, "card2");
         assert.strictEqual(result.items[0]!.content, "");
-      })
+      }),
     );
 
     it.scoped("multi-card item followed by single-card item (no blank line between)", () =>
@@ -210,7 +204,7 @@ Regular flashcard
         assert.strictEqual(result.items[0]!.content, "Shared cloze content\n");
         assert.strictEqual(result.items[1]!.cards.length, 1);
         assert.strictEqual(result.items[1]!.cards[0]!.id, "single");
-      })
+      }),
     );
 
     it.scoped("handles CRLF in metadata lines", () =>
@@ -223,7 +217,7 @@ Regular flashcard
         assert.strictEqual(result.items[0]!.cards.length, 2);
         assert.strictEqual(result.items[0]!.cards[0]!.id, "card1");
         assert.strictEqual(result.items[0]!.cards[1]!.id, "card2");
-      })
+      }),
     );
   });
 
@@ -238,7 +232,7 @@ The atomic number of [carbon] is [6].
         const serialized = serializeFile(parsed);
 
         assert.strictEqual(serialized, original);
-      })
+      }),
     );
 
     it.scoped("serializes mixed single and multi-card items", () =>
@@ -253,7 +247,7 @@ Cloze card
         const serialized = serializeFile(parsed);
 
         assert.strictEqual(serialized, original);
-      })
+      }),
     );
 
     it.scoped("preserves card order in multi-card items", () =>
@@ -273,7 +267,7 @@ Content
         assert.strictEqual(reparsed.items[0]!.cards[0]!.id, "first");
         assert.strictEqual(reparsed.items[0]!.cards[1]!.id, "second");
         assert.strictEqual(reparsed.items[0]!.cards[2]!.id, "third");
-      })
+      }),
     );
   });
 
@@ -288,7 +282,7 @@ The atomic number of [carbon] is [6].
         const serialized = serializeFile(parsed);
 
         assert.strictEqual(serialized, original);
-      })
+      }),
     );
 
     it.scoped("round-trips complex file with preamble, single, and multi-card items", () =>
@@ -324,18 +318,17 @@ What is the speed of light?
         const serialized = serializeFile(parsed);
 
         assert.strictEqual(serialized, original);
-      })
+      }),
     );
 
     it.scoped("round-trips preserving CRLF in multi-card content", () =>
       Effect.gen(function* () {
-        const original =
-          "<!--@ card1 0 0 0 0-->\n<!--@ card2 0 0 0 0-->\nLine1\r\nLine2\r\n";
+        const original = "<!--@ card1 0 0 0 0-->\n<!--@ card2 0 0 0 0-->\nLine1\r\nLine2\r\n";
         const parsed = yield* parseFile(original);
         const serialized = serializeFile(parsed);
 
         assert.strictEqual(serialized, original);
-      })
+      }),
     );
   });
 
@@ -348,7 +341,7 @@ Content
 `;
         const error = yield* parseFile(content).pipe(Effect.flip);
         assert.ok(error._tag === "InvalidFieldValue");
-      })
+      }),
     );
 
     it.scoped("fails if any card in multi-card item has invalid state", () =>
@@ -359,7 +352,7 @@ Content
 `;
         const error = yield* parseFile(content).pipe(Effect.flip);
         assert.ok(error._tag === "InvalidFieldValue");
-      })
+      }),
     );
   });
 });

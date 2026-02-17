@@ -62,9 +62,7 @@ const sortNodes = (nodes: DeckTreeNode[]): void => {
   }
 };
 
-export const buildDeckTree = (
-  snapshots: readonly DeckSnapshot[],
-): DeckTreeNode[] => {
+export const buildDeckTree = (snapshots: readonly DeckSnapshot[]): DeckTreeNode[] => {
   const groups = new Map<string, MutableGroup>();
   const rootChildren: DeckTreeNode[] = [];
 

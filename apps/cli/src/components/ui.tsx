@@ -59,11 +59,7 @@ export function Panel({ children, accent = false, padded = true }: PanelProps) {
     <box
       flexDirection="column"
       border={accent ? ["left"] : undefined}
-      customBorderChars={
-        accent
-          ? { ...EmptyBorder, vertical: glyphs.verticalBarHeavy }
-          : undefined
-      }
+      customBorderChars={accent ? { ...EmptyBorder, vertical: glyphs.verticalBarHeavy } : undefined}
       borderColor={accent ? theme.primary : undefined}
       paddingLeft={padded ? spacing.sm : 0}
       paddingTop={padded ? 1 : 0}
@@ -108,12 +104,7 @@ interface StatsRowProps {
   compact?: boolean;
 }
 
-export function StatsRow({
-  total,
-  newCards,
-  dueCards,
-  compact = false,
-}: StatsRowProps) {
+export function StatsRow({ total, newCards, dueCards, compact = false }: StatsRowProps) {
   if (compact) {
     return (
       <box flexDirection="row" gap={2}>
@@ -192,9 +183,7 @@ interface SeparatorProps {
 }
 
 export function Separator({ width = 40 }: SeparatorProps) {
-  return (
-    <text fg={theme.borderSubtle}>{glyphs.horizontalBar.repeat(width)}</text>
-  );
+  return <text fg={theme.borderSubtle}>{glyphs.horizontalBar.repeat(width)}</text>;
 }
 
 interface KeyBindingProps {
@@ -217,13 +206,7 @@ interface FooterProps {
 
 export function Footer({ bindings }: FooterProps) {
   return (
-    <box
-      flexDirection="row"
-      gap={3}
-      marginTop={1}
-      paddingLeft={1}
-      paddingRight={1}
-    >
+    <box flexDirection="row" gap={3} marginTop={1} paddingLeft={1} paddingRight={1}>
       {bindings.map((b, i) => (
         <KeyBinding key={i} keys={b.keys} action={b.action} />
       ))}

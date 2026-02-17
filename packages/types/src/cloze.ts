@@ -97,7 +97,7 @@ export const ClozeType: ItemType<ClozeContent, Grade, never> = {
           type: CLOZE,
           message: "No cloze deletions found (expected {{c1::...}} syntax)",
           raw: content,
-        })
+        }),
       );
     }
 
@@ -118,11 +118,7 @@ export const ClozeType: ItemType<ClozeContent, Grade, never> = {
     }
 
     return indices.map((index) =>
-      manualCardSpec(
-        generatePrompt(content, index),
-        generateReveal(content, index),
-        CLOZE
-      )
+      manualCardSpec(generatePrompt(content, index), generateReveal(content, index), CLOZE),
     );
   },
 };

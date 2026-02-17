@@ -1,10 +1,6 @@
 import { Effect, Schema } from "effect";
 import type { Item, ItemMetadata, ParsedFile } from "../types";
-import {
-  InvalidFieldValue,
-  InvalidMetadataFormat,
-  type MetadataParseError,
-} from "../errors";
+import { InvalidFieldValue, InvalidMetadataFormat, type MetadataParseError } from "../errors";
 import {
   ItemIdSchema,
   NumericFieldFromString,
@@ -16,7 +12,7 @@ import { METADATA_LINE_PATTERN } from "./patterns";
 
 const parseMetadataLine = (
   inner: string,
-  lineNumber: number
+  lineNumber: number,
 ): Effect.Effect<ItemMetadata, MetadataParseError> => {
   const tokens = inner.trim().split(/\s+/);
 
@@ -26,18 +22,11 @@ const parseMetadataLine = (
         line: lineNumber,
         raw: inner,
         reason: `Expected 5-6 fields, got ${tokens.length}`,
-      })
+      }),
     );
   }
 
-  const [
-    idRaw,
-    stabilityRaw,
-    difficultyRaw,
-    stateRaw,
-    stepsRaw,
-    lastReviewRaw,
-  ] = tokens;
+  const [idRaw, stabilityRaw, difficultyRaw, stateRaw, stepsRaw, lastReviewRaw] = tokens;
 
   return Effect.all({
     id: Schema.decodeUnknown(ItemIdSchema)(idRaw!),
@@ -58,7 +47,7 @@ const parseMetadataLine = (
         value: inner,
         expected: message,
       });
-    })
+    }),
   );
 };
 
@@ -78,9 +67,7 @@ interface LineInfo {
  *
  * Metadata lines are canonicalized on serialization (single spaces, LF endings, UTC timestamps).
  */
-export const parseFile = (
-  content: string
-): Effect.Effect<ParsedFile, MetadataParseError> => {
+export const parseFile = (content: string): Effect.Effect<ParsedFile, MetadataParseError> => {
   // Split into lines, preserving info about offsets
   const lines: LineInfo[] = [];
   let offset = 0;
@@ -165,9 +152,7 @@ export const parseFile = (
     // Content ends at the start of the NEXT run's first metadata line, or EOF
     const nextRun = runs[runIndex + 1];
     const contentEndOffset =
-      nextRun !== undefined
-        ? lines[nextRun[0]!]!.startOffset
-        : content.length;
+      nextRun !== undefined ? lines[nextRun[0]!]!.startOffset : content.length;
 
     // Extract content, handling edge case where content might be empty
     // or where file ends without trailing newline
@@ -181,8 +166,8 @@ export const parseFile = (
         (cards): Item => ({
           cards,
           content: itemContent,
-        })
-      )
+        }),
+      ),
     );
 
     itemEffects.push(itemEffect);
@@ -192,6 +177,6 @@ export const parseFile = (
     Effect.map((items) => ({
       preamble,
       items,
-    }))
+    })),
   );
 };

@@ -28,9 +28,9 @@ Paris
         `What is the capital of France?
 ---
 Paris
-`
+`,
       );
-    })
+    }),
   );
 
   it.scoped("parses a file with preamble", () =>
@@ -52,11 +52,11 @@ What is 2+2?
 title: My Flashcards
 ---
 
-`
+`,
       );
       assert.strictEqual(result.items.length, 1);
       assert.strictEqual(result.items[0]!.cards[0]!.id, "abc123");
-    })
+    }),
   );
 
   it.scoped("parses a file with multiple items", () =>
@@ -87,7 +87,7 @@ A2
       assert.strictEqual(item2.cards[0]!.difficulty.value, 4.3);
       assert.strictEqual(item2.cards[0]!.state, 2);
       assert.ok(item2.cards[0]!.lastReview instanceof Date);
-    })
+    }),
   );
 
   it.scoped("parses file with no items (preamble only)", () =>
@@ -99,7 +99,7 @@ No flashcards here.
 
       assert.strictEqual(result.preamble, content);
       assert.strictEqual(result.items.length, 0);
-    })
+    }),
   );
 
   it.scoped("handles empty file", () =>
@@ -108,7 +108,7 @@ No flashcards here.
 
       assert.strictEqual(result.preamble, "");
       assert.strictEqual(result.items.length, 0);
-    })
+    }),
   );
 
   it.scoped("handles consecutive metadata lines as multi-card item", () =>
@@ -127,9 +127,9 @@ Content for both cards
       assert.strictEqual(
         result.items[0]!.content,
         `Content for both cards
-`
+`,
       );
-    })
+    }),
   );
 
   it.scoped("preserves CRLF in content", () =>
@@ -138,7 +138,7 @@ Content for both cards
       const result = yield* parseFile(content);
 
       assert.strictEqual(result.items[0]!.content, "Line1\r\nLine2\r\n");
-    })
+    }),
   );
 
   it.scoped("handles file without trailing newline", () =>
@@ -147,11 +147,8 @@ Content for both cards
 Content without trailing newline`;
       const result = yield* parseFile(content);
 
-      assert.strictEqual(
-        result.items[0]!.content,
-        "Content without trailing newline"
-      );
-    })
+      assert.strictEqual(result.items[0]!.content, "Content without trailing newline");
+    }),
   );
 
   it.scoped("preserves numeric precision", () =>
@@ -164,7 +161,7 @@ Content
       const card = result.items[0]!.cards[0]!;
       assert.strictEqual(card.stability.raw, "5.20");
       assert.strictEqual(card.difficulty.raw, "4.30");
-    })
+    }),
   );
 
   it.scoped("fails on invalid field count", () =>
@@ -174,7 +171,7 @@ Content
 `;
       const error = yield* parseFile(content).pipe(Effect.flip);
       assert.ok(error._tag === "InvalidMetadataFormat");
-    })
+    }),
   );
 
   it.scoped("fails on invalid numeric value", () =>
@@ -184,7 +181,7 @@ Content
 `;
       const error = yield* parseFile(content).pipe(Effect.flip);
       assert.ok(error._tag === "InvalidFieldValue");
-    })
+    }),
   );
 
   it.scoped("fails on invalid state", () =>
@@ -194,7 +191,7 @@ Content
 `;
       const error = yield* parseFile(content).pipe(Effect.flip);
       assert.ok(error._tag === "InvalidFieldValue");
-    })
+    }),
   );
 
   it.scoped("fails on timestamp without timezone", () =>
@@ -204,7 +201,7 @@ Content
 `;
       const error = yield* parseFile(content).pipe(Effect.flip);
       assert.ok(error._tag === "InvalidFieldValue");
-    })
+    }),
   );
 
   it.scoped("handles CRLF metadata lines", () =>
@@ -215,6 +212,6 @@ Content
 
       assert.strictEqual(result.items.length, 1);
       assert.strictEqual(result.items[0]!.cards[0]!.id, "abc123");
-    })
+    }),
   );
 });

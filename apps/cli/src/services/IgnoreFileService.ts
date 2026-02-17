@@ -21,12 +21,11 @@ export interface IgnoreMap {
 export interface IgnoreFileService {
   readonly buildIgnoreMap: (
     rootPath: string,
-    entries: readonly string[]
+    entries: readonly string[],
   ) => Effect.Effect<IgnoreMap, never>;
 }
 
-export const IgnoreFileService =
-  Context.GenericTag<IgnoreFileService>("IgnoreFileService");
+export const IgnoreFileService = Context.GenericTag<IgnoreFileService>("IgnoreFileService");
 
 export const IgnoreFileServiceLive = Layer.effect(
   IgnoreFileService,
@@ -39,20 +38,13 @@ export const IgnoreFileServiceLive = Layer.effect(
         Effect.gen(function* () {
           const ignoreMap = new Map<string, Set<string>>();
 
-          const ignoreFiles = entries.filter(
-            (e) => path.basename(e) === IGNORE_FILE
-          );
+          const ignoreFiles = entries.filter((e) => path.basename(e) === IGNORE_FILE);
           for (const ignoreFile of ignoreFiles) {
             const dir = path.dirname(ignoreFile);
             const fullPath = path.join(rootPath, ignoreFile);
-            const contentResult = yield* fs
-              .readFileString(fullPath)
-              .pipe(Effect.either);
+            const contentResult = yield* fs.readFileString(fullPath).pipe(Effect.either);
             if (contentResult._tag === "Right") {
-              ignoreMap.set(
-                dir === "." ? "" : dir,
-                parseIgnoreFile(contentResult.right)
-              );
+              ignoreMap.set(dir === "." ? "" : dir, parseIgnoreFile(contentResult.right));
             }
           }
 
@@ -66,5 +58,5 @@ export const IgnoreFileServiceLive = Layer.effect(
           };
         }),
     };
-  })
+  }),
 );

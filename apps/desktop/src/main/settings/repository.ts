@@ -31,37 +31,25 @@ export interface MakeSettingsRepositoryOptions {
 const asMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
-const toReadFailed = (
-  settingsFilePath: string,
-  message: string,
-): SettingsReadFailed =>
+const toReadFailed = (settingsFilePath: string, message: string): SettingsReadFailed =>
   new SettingsReadFailed({
     path: settingsFilePath,
     message,
   });
 
-const toDecodeFailed = (
-  settingsFilePath: string,
-  message: string,
-): SettingsDecodeFailed =>
+const toDecodeFailed = (settingsFilePath: string, message: string): SettingsDecodeFailed =>
   new SettingsDecodeFailed({
     path: settingsFilePath,
     message,
   });
 
-const toWriteFailed = (
-  settingsFilePath: string,
-  message: string,
-): SettingsWriteFailed =>
+const toWriteFailed = (settingsFilePath: string, message: string): SettingsWriteFailed =>
   new SettingsWriteFailed({
     path: settingsFilePath,
     message,
   });
 
-const toWorkspaceUnreadable = (
-  rootPath: string,
-  message: string,
-): WorkspaceRootUnreadable =>
+const toWorkspaceUnreadable = (rootPath: string, message: string): WorkspaceRootUnreadable =>
   new WorkspaceRootUnreadable({
     rootPath,
     message,
@@ -81,8 +69,7 @@ const mapWorkspaceRootStatError = (
 const mapWorkspaceRootReadError = (
   rootPath: string,
   error: PlatformError,
-): WorkspaceRootUnreadable =>
-  toWorkspaceUnreadable(rootPath, error.message);
+): WorkspaceRootUnreadable => toWorkspaceUnreadable(rootPath, error.message);
 
 export const makeSettingsRepository = ({
   settingsFilePath,
@@ -101,34 +88,26 @@ export const makeSettingsRepository = ({
     const decodeSettings = Schema.decodeUnknown(settingsCodec);
     const encodeSettings = Schema.encode(settingsCodec);
 
-    const loadSettings = (): Effect.Effect<
-      Settings,
-      SettingsReadFailed | SettingsDecodeFailed
-    > =>
+    const loadSettings = (): Effect.Effect<Settings, SettingsReadFailed | SettingsDecodeFailed> =>
       Effect.gen(function* () {
-        const rawSettings = yield* fileSystem
-          .readFileString(settingsFilePath, "utf8")
-          .pipe(
-            Effect.map(Option.some),
-            Effect.catchTag("SystemError", (error) =>
-              error.reason === "NotFound"
-                ? Effect.succeed(Option.none())
-                : Effect.fail(
-                    toReadFailed(
-                      settingsFilePath,
-                      `Unable to read settings file: ${error.message}`,
-                    ),
-                  ),
-            ),
-            Effect.catchTag("BadArgument", (error) =>
-              Effect.fail(
-                toReadFailed(
-                  settingsFilePath,
-                  `Invalid settings path or read arguments: ${error.message}`,
+        const rawSettings = yield* fileSystem.readFileString(settingsFilePath, "utf8").pipe(
+          Effect.map(Option.some),
+          Effect.catchTag("SystemError", (error) =>
+            error.reason === "NotFound"
+              ? Effect.succeed(Option.none())
+              : Effect.fail(
+                  toReadFailed(settingsFilePath, `Unable to read settings file: ${error.message}`),
                 ),
+          ),
+          Effect.catchTag("BadArgument", (error) =>
+            Effect.fail(
+              toReadFailed(
+                settingsFilePath,
+                `Invalid settings path or read arguments: ${error.message}`,
               ),
             ),
-          );
+          ),
+        );
 
         if (Option.isNone(rawSettings)) {
           return DEFAULT_SETTINGS;
@@ -144,9 +123,7 @@ export const makeSettingsRepository = ({
         );
       });
 
-    const persistSettings = (
-      settings: Settings,
-    ): Effect.Effect<void, SettingsWriteFailed> =>
+    const persistSettings = (settings: Settings): Effect.Effect<void, SettingsWriteFailed> =>
       Effect.gen(function* () {
         const serialized = yield* encodeSettings(settings).pipe(
           Effect.mapError((error) =>
@@ -159,13 +136,8 @@ export const makeSettingsRepository = ({
 
         const tempFilePath = `${settingsFilePath}.${Date.now()}.tmp`;
 
-        const mapWritePlatformError = (
-          error: PlatformError,
-        ): SettingsWriteFailed =>
-          toWriteFailed(
-            settingsFilePath,
-            `Unable to persist settings file: ${error.message}`,
-          );
+        const mapWritePlatformError = (error: PlatformError): SettingsWriteFailed =>
+          toWriteFailed(settingsFilePath, `Unable to persist settings file: ${error.message}`);
 
         const writeAndCommit = Effect.gen(function* () {
           yield* fileSystem
@@ -214,11 +186,7 @@ export const makeSettingsRepository = ({
 
         const stat = yield* fileSystem
           .stat(normalizedRootPath)
-          .pipe(
-            Effect.mapError((error) =>
-              mapWorkspaceRootStatError(normalizedRootPath, error),
-            ),
-          );
+          .pipe(Effect.mapError((error) => mapWorkspaceRootStatError(normalizedRootPath, error)));
 
         if (stat.type !== "Directory") {
           return yield* new WorkspaceRootNotDirectory({
@@ -226,11 +194,9 @@ export const makeSettingsRepository = ({
           });
         }
 
-        yield* fileSystem.readDirectory(normalizedRootPath).pipe(
-          Effect.mapError((error) =>
-            mapWorkspaceRootReadError(normalizedRootPath, error),
-          ),
-        );
+        yield* fileSystem
+          .readDirectory(normalizedRootPath)
+          .pipe(Effect.mapError((error) => mapWorkspaceRootReadError(normalizedRootPath, error)));
 
         return normalizedRootPath;
       });

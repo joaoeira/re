@@ -84,9 +84,7 @@ app.whenReady().then(() => {
 
   const settingsFilePath = path.join(app.getPath("userData"), "settings.json");
   const settingsRepository = Effect.runSync(
-    makeSettingsRepository({ settingsFilePath }).pipe(
-      Effect.provide(NodeServicesLive),
-    ),
+    makeSettingsRepository({ settingsFilePath }).pipe(Effect.provide(NodeServicesLive)),
   );
 
   const watcherProxy: WorkspaceWatcher = {
@@ -110,13 +108,15 @@ app.whenReady().then(() => {
 
   ipcHandle.start();
 
-  Effect.runPromise(settingsRepository.getSettings()).then((settings) => {
-    if (settings.workspace.rootPath) {
-      watcher?.start(settings.workspace.rootPath);
-    }
-  }).catch((error: unknown) => {
-    log("failed to read settings for initial watcher start", error);
-  });
+  Effect.runPromise(settingsRepository.getSettings())
+    .then((settings) => {
+      if (settings.workspace.rootPath) {
+        watcher?.start(settings.workspace.rootPath);
+      }
+    })
+    .catch((error: unknown) => {
+      log("failed to read settings for initial watcher start", error);
+    });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -23,13 +23,11 @@ interface ReviewSessionProps {
 }
 
 const ReviewSessionLayer = Layer.mergeAll(SchedulerLive, DeckWriterLive).pipe(
-  Layer.provide(BunFileSystem.layer)
+  Layer.provide(BunFileSystem.layer),
 );
 
 function useReviewSessionRuntime() {
-  const [runtime, setRuntime] = useState<Runtime.Runtime<
-    Scheduler | DeckWriter
-  > | null>(null);
+  const [runtime, setRuntime] = useState<Runtime.Runtime<Scheduler | DeckWriter> | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const closeRef = useRef<Effect.Effect<void> | null>(null);
 
@@ -39,9 +37,7 @@ function useReviewSessionRuntime() {
     // Layer.toRuntime requires a Scope, so we create and manage one manually
     const program = Effect.gen(function* () {
       const scope = yield* Scope.make();
-      const runtime = yield* Layer.toRuntime(ReviewSessionLayer).pipe(
-        Scope.extend(scope)
-      );
+      const runtime = yield* Layer.toRuntime(ReviewSessionLayer).pipe(Scope.extend(scope));
       const close = Scope.close(scope, Exit.void);
       return { runtime, close };
     });
@@ -72,11 +68,7 @@ function useReviewSessionRuntime() {
   return { runtime, runtimeError };
 }
 
-export function ReviewSession({
-  queue,
-  onComplete,
-  onQuit,
-}: ReviewSessionProps) {
+export function ReviewSession({ queue, onComplete, onQuit }: ReviewSessionProps) {
   const { runtime, runtimeError } = useReviewSessionRuntime();
 
   useKeyboard((key) => {
@@ -89,17 +81,9 @@ export function ReviewSession({
 
   if (runtimeError) {
     return (
-      <box
-        flexDirection="column"
-        paddingLeft={2}
-        paddingRight={2}
-        paddingTop={1}
-      >
+      <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingTop={1}>
         <Header title="Review" />
-        <ErrorDisplay
-          title="Failed to initialize review session"
-          message={runtimeError}
-        />
+        <ErrorDisplay title="Failed to initialize review session" message={runtimeError} />
         <Footer bindings={[{ keys: "q", action: "quit" }]} />
       </box>
     );
@@ -107,12 +91,7 @@ export function ReviewSession({
 
   if (!runtime) {
     return (
-      <box
-        flexDirection="column"
-        paddingLeft={2}
-        paddingRight={2}
-        paddingTop={1}
-      >
+      <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingTop={1}>
         <Header title="Review" />
         <Loading message="Initializing..." />
       </box>
@@ -120,12 +99,7 @@ export function ReviewSession({
   }
 
   return (
-    <ReviewSessionInner
-      queue={queue}
-      runtime={runtime}
-      onComplete={onComplete}
-      onQuit={onQuit}
-    />
+    <ReviewSessionInner queue={queue} runtime={runtime} onComplete={onComplete} onQuit={onQuit} />
   );
 }
 
@@ -220,26 +194,15 @@ function ReviewSessionInner({
 
   if (cardError) {
     return (
-      <box
-        flexDirection="column"
-        paddingLeft={2}
-        paddingRight={2}
-        paddingTop={1}
-      >
-        <Header
-          title="Review"
-          subtitle={`${currentIndex + 1}/${queue.length}`}
-        />
+      <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingTop={1}>
+        <Header title="Review" subtitle={`${currentIndex + 1}/${queue.length}`} />
         <ErrorDisplay
           title="Card parse error"
-          message={`${cardError}\n\nDeck: ${
-            currentItem?.deckName ?? "unknown"
-          }`}
+          message={`${cardError}\n\nDeck: ${currentItem?.deckName ?? "unknown"}`}
         />
         <box marginTop={1}>
           <text fg={theme.textMuted}>
-            This card will be skipped. You can review it after fixing the
-            content.
+            This card will be skipped. You can review it after fixing the content.
           </text>
         </box>
         <Footer
@@ -254,12 +217,7 @@ function ReviewSessionInner({
 
   if (!currentItem || !cardSpec) {
     return (
-      <box
-        flexDirection="column"
-        paddingLeft={2}
-        paddingRight={2}
-        paddingTop={1}
-      >
+      <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingTop={1}>
         <Header title="Review" />
         <Loading message="Loading card..." />
       </box>
@@ -273,15 +231,9 @@ function ReviewSessionInner({
     <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingTop={1}>
       <Header title="Review" subtitle={progress} />
 
-      {state.context.error && (
-        <ErrorDisplay title="Error" message={state.context.error} />
-      )}
+      {state.context.error && <ErrorDisplay title="Error" message={state.context.error} />}
 
-      <CardRenderer
-        queueItem={currentItem}
-        cardSpec={cardSpec}
-        isRevealed={isRevealed}
-      />
+      <CardRenderer queueItem={currentItem} cardSpec={cardSpec} isRevealed={isRevealed} />
 
       {isRevealed && (
         <box marginTop={1}>
@@ -292,9 +244,7 @@ function ReviewSessionInner({
       <box marginTop={2}>
         <Footer
           bindings={[
-            ...(state.context.reviewLogStack.length > 0
-              ? [{ keys: "u", action: "undo" }]
-              : []),
+            ...(state.context.reviewLogStack.length > 0 ? [{ keys: "u", action: "undo" }] : []),
             { keys: "q", action: "quit" },
           ]}
         />

@@ -1,12 +1,4 @@
-import {
-  Context,
-  Effect,
-  Layer,
-  Array as Arr,
-  Order,
-  Random,
-  Chunk,
-} from "effect";
+import { Context, Effect, Layer, Array as Arr, Order, Random, Chunk } from "effect";
 import { Path } from "@effect/platform";
 import { type Item, type ItemMetadata, State } from "@re/core";
 import { Scheduler } from "./Scheduler";
@@ -36,9 +28,7 @@ export interface ReviewQueue {
   readonly totalDue: number;
 }
 
-export type WithinGroupOrder<A> = (
-  items: readonly A[]
-) => Effect.Effect<readonly A[]>;
+export type WithinGroupOrder<A> = (items: readonly A[]) => Effect.Effect<readonly A[]>;
 
 export const preserveOrder =
   <A>(): WithinGroupOrder<A> =>
@@ -60,7 +50,7 @@ export const chain =
   (items) =>
     orders.reduce(
       (acc, order) => Effect.flatMap(acc, order),
-      Effect.succeed(items) as Effect.Effect<readonly A[]>
+      Effect.succeed(items) as Effect.Effect<readonly A[]>,
     );
 
 export const byDueDate: Order.Order<QueueItem> = Order.make((a, b) => {
@@ -72,7 +62,7 @@ export const byDueDate: Order.Order<QueueItem> = Order.make((a, b) => {
 
 export const byFilePosition: Order.Order<QueueItem> = Order.combine(
   Order.mapInput(Order.string, (q: QueueItem) => q.deckPath),
-  Order.mapInput(Order.number, (q: QueueItem) => q.itemIndex)
+  Order.mapInput(Order.number, (q: QueueItem) => q.itemIndex),
 );
 
 export interface QueueOrderSpec {
@@ -81,18 +71,14 @@ export interface QueueOrderSpec {
   readonly dueCardOrder: WithinGroupOrder<QueueItem>;
 }
 
-export const QueueOrderSpec =
-  Context.GenericTag<QueueOrderSpec>("QueueOrderSpec");
+export const QueueOrderSpec = Context.GenericTag<QueueOrderSpec>("QueueOrderSpec");
 
 export interface QueueOrderingStrategy {
-  readonly order: (
-    items: readonly QueueItem[]
-  ) => Effect.Effect<readonly QueueItem[]>;
+  readonly order: (items: readonly QueueItem[]) => Effect.Effect<readonly QueueItem[]>;
 }
 
-export const QueueOrderingStrategy = Context.GenericTag<QueueOrderingStrategy>(
-  "QueueOrderingStrategy"
-);
+export const QueueOrderingStrategy =
+  Context.GenericTag<QueueOrderingStrategy>("QueueOrderingStrategy");
 
 export const QueueOrderingStrategyFromSpec = Layer.effect(
   QueueOrderingStrategy,
@@ -102,10 +88,7 @@ export const QueueOrderingStrategyFromSpec = Layer.effect(
     return {
       order: (items) =>
         Effect.gen(function* () {
-          const [dueItems, newItems] = Arr.partition(
-            items,
-            (i) => i.category === "new"
-          );
+          const [dueItems, newItems] = Arr.partition(items, (i) => i.category === "new");
 
           const orderedNew = yield* spec.newCardOrder(newItems);
           const orderedDue = yield* spec.dueCardOrder(dueItems);
@@ -115,7 +98,7 @@ export const QueueOrderingStrategyFromSpec = Layer.effect(
             : [...orderedDue, ...orderedNew];
         }),
     };
-  })
+  }),
 );
 
 export const NewFirstByDueDateSpec = Layer.succeed(QueueOrderSpec, {
@@ -143,11 +126,11 @@ export const NewFirstFileOrderSpec = Layer.succeed(QueueOrderSpec, {
 });
 
 export const NewFirstOrderingStrategy = QueueOrderingStrategyFromSpec.pipe(
-  Layer.provide(NewFirstByDueDateSpec)
+  Layer.provide(NewFirstByDueDateSpec),
 );
 
 export const DueFirstOrderingStrategy = QueueOrderingStrategyFromSpec.pipe(
-  Layer.provide(DueFirstByDueDateSpec)
+  Layer.provide(DueFirstByDueDateSpec),
 );
 
 export const ShuffledOrderingStrategy = Layer.succeed(QueueOrderingStrategy, {
@@ -159,17 +142,13 @@ export interface ReviewQueueService {
     selection: Selection,
     tree: readonly DeckTreeNode[],
     rootPath: string,
-    now: Date
+    now: Date,
   ) => Effect.Effect<ReviewQueue>;
 }
 
-export const ReviewQueueService =
-  Context.GenericTag<ReviewQueueService>("ReviewQueueService");
+export const ReviewQueueService = Context.GenericTag<ReviewQueueService>("ReviewQueueService");
 
-const collectDeckPaths = (
-  selection: Selection,
-  tree: readonly DeckTreeNode[]
-): string[] => {
+const collectDeckPaths = (selection: Selection, tree: readonly DeckTreeNode[]): string[] => {
   const paths: string[] = [];
 
   const collectFromNode = (node: DeckTreeNode): void => {
@@ -182,10 +161,7 @@ const collectDeckPaths = (
     }
   };
 
-  const findAndCollect = (
-    nodes: readonly DeckTreeNode[],
-    targetPath: string
-  ): boolean => {
+  const findAndCollect = (nodes: readonly DeckTreeNode[], targetPath: string): boolean => {
     for (const node of nodes) {
       if (node.type === "folder" && node.path === targetPath) {
         collectFromNode(node);
@@ -238,17 +214,9 @@ export const ReviewQueueServiceLive = Layer.effect(
 
           for (const { path: deckPath, name: deckName, file } of parsedDecks) {
             const relativePath = pathService.relative(rootPath, deckPath);
-            for (
-              let itemIndex = 0;
-              itemIndex < file.items.length;
-              itemIndex++
-            ) {
+            for (let itemIndex = 0; itemIndex < file.items.length; itemIndex++) {
               const item = file.items[itemIndex]!;
-              for (
-                let cardIndex = 0;
-                cardIndex < item.cards.length;
-                cardIndex++
-              ) {
+              for (let cardIndex = 0; cardIndex < item.cards.length; cardIndex++) {
                 const card = item.cards[cardIndex]!;
                 const isNew = card.state === State.New;
                 const isDue = !isNew && scheduler.isDue(card, now);
@@ -280,10 +248,8 @@ export const ReviewQueueServiceLive = Layer.effect(
           };
         }),
     };
-  })
+  }),
 );
 
 // Convenience layer with default (shuffled) ordering
-export const ReviewQueueLive = ReviewQueueServiceLive.pipe(
-  Layer.provide(ShuffledOrderingStrategy)
-);
+export const ReviewQueueLive = ReviewQueueServiceLive.pipe(Layer.provide(ShuffledOrderingStrategy));

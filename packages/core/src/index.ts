@@ -1,19 +1,8 @@
 export { parseFile } from "./parser/index";
 export { serializeFile, serializeMetadata } from "./serializer/index";
-export {
-  generateId,
-  createMetadata,
-  createMetadataWithId,
-  numericField,
-} from "./create";
+export { generateId, createMetadata, createMetadataWithId, numericField } from "./create";
 
-export type {
-  Item,
-  ItemMetadata,
-  ParsedFile,
-  NumericField,
-  ItemId,
-} from "./types";
+export type { Item, ItemMetadata, ParsedFile, NumericField, ItemId } from "./types";
 export { State } from "./types";
 
 export type { MetadataParseError } from "./errors";

@@ -24,20 +24,12 @@ export const createAppRpcHandlers = (
     parseFile(markdown).pipe(
       Effect.map((parsed) => ({
         items: parsed.items.length,
-        cards: parsed.items.reduce(
-          (total, item) => total + item.cards.length,
-          0,
-        ),
+        cards: parsed.items.reduce((total, item) => total + item.cards.length, 0),
       })),
     ),
-  ScanDecks: ({ rootPath }) =>
-    scanDecks(rootPath).pipe(
-      Effect.provide(NodeServicesLive),
-    ),
+  ScanDecks: ({ rootPath }) => scanDecks(rootPath).pipe(Effect.provide(NodeServicesLive)),
   GetWorkspaceSnapshot: ({ rootPath, options }) =>
-    snapshotWorkspace(rootPath, options).pipe(
-      Effect.provide(NodeServicesLive),
-    ),
+    snapshotWorkspace(rootPath, options).pipe(Effect.provide(NodeServicesLive)),
   GetSettings: () => settingsRepository.getSettings(),
   SetWorkspaceRootPath: (input) =>
     settingsRepository.setWorkspaceRootPath(input).pipe(

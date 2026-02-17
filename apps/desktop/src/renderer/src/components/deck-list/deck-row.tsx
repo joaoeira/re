@@ -1,11 +1,6 @@
 import { AlertCircle, ChevronDown, ChevronRight, FileText, Folder } from "lucide-react";
 import { cn } from "@shared/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DeckTreeNode } from "@re/workspace";
 import { DeckStateBadges } from "./deck-state-badges";
 
@@ -73,9 +68,7 @@ export function DeckRow({ node, depth, isCollapsed, onToggle, onClick }: DeckRow
       ) : isError ? (
         <TooltipProvider>
           <Tooltip>
-            <TooltipTrigger
-              render={<span className="flex shrink-0" />}
-            >
+            <TooltipTrigger render={<span className="flex shrink-0" />}>
               <AlertCircle size={16} className="text-destructive" />
             </TooltipTrigger>
             <TooltipContent>
@@ -91,12 +84,7 @@ export function DeckRow({ node, depth, isCollapsed, onToggle, onClick }: DeckRow
         <FileText size={16} className="shrink-0 text-muted-foreground" />
       )}
 
-      <span
-        className={cn(
-          "min-w-0 truncate text-sm text-foreground",
-          isGroup && "font-medium",
-        )}
-      >
+      <span className={cn("min-w-0 truncate text-sm text-foreground", isGroup && "font-medium")}>
         {node.name}
       </span>
 
@@ -114,7 +102,9 @@ export function DeckRow({ node, depth, isCollapsed, onToggle, onClick }: DeckRow
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger
-              render={<span className="ml-1 flex shrink-0 items-center gap-0.5 text-xs text-destructive" />}
+              render={
+                <span className="ml-1 flex shrink-0 items-center gap-0.5 text-xs text-destructive" />
+              }
             >
               <AlertCircle size={12} />
               {node.errorCount}

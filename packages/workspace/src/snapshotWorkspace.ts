@@ -81,10 +81,7 @@ const emptyDeckStateCounts = (): MutableDeckStateCounts => ({
   relearning: 0,
 });
 
-const incrementDeckStateCount = (
-  stateCounts: MutableDeckStateCounts,
-  state: State,
-): void => {
+const incrementDeckStateCount = (stateCounts: MutableDeckStateCounts, state: State): void => {
   const key = STATE_TO_COUNT_KEY[state];
   stateCounts[key] += 1;
 };
@@ -116,8 +113,7 @@ const summarizeParsedDeck = (
   };
 };
 
-const toReadErrorMessage = (error: { readonly message: string }): string =>
-  error.message;
+const toReadErrorMessage = (error: { readonly message: string }): string => error.message;
 
 export const formatMetadataParseError = (error: MetadataParseError): string => {
   switch (error._tag) {

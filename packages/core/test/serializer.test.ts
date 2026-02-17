@@ -28,10 +28,7 @@ describe("serializeMetadata", () => {
     };
 
     const result = serializeMetadata(metadata);
-    assert.strictEqual(
-      result,
-      "<!--@ abc123 5.20 4.30 2 0 2025-01-04T10:30:00.000Z-->"
-    );
+    assert.strictEqual(result, "<!--@ abc123 5.20 4.30 2 0 2025-01-04T10:30:00.000Z-->");
   });
 
   it("preserves numeric precision from raw", () => {
@@ -86,10 +83,7 @@ describe("serializeFile", () => {
     };
 
     const result = serializeFile(file);
-    assert.strictEqual(
-      result,
-      "---\ntitle: Test\n---\n\n<!--@ item1 0 0 0 0-->\nQ1\n---\nA1\n"
-    );
+    assert.strictEqual(result, "---\ntitle: Test\n---\n\n<!--@ item1 0 0 0 0-->\nQ1\n---\nA1\n");
   });
 
   it("serializes file without preamble", () => {
@@ -151,9 +145,7 @@ describe("serializeFile", () => {
 
     const result = serializeFile(file);
     assert.ok(result.includes("<!--@ item1 0 0 0 0-->"));
-    assert.ok(
-      result.includes("<!--@ item2 5.2 4.3 2 0 2025-01-04T10:30:00.000Z-->")
-    );
+    assert.ok(result.includes("<!--@ item2 5.2 4.3 2 0 2025-01-04T10:30:00.000Z-->"));
   });
 
   it("handles empty items array", () => {

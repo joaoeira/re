@@ -10,8 +10,7 @@ import { createWorkspaceWatcher } from "@main/watcher/workspace-watcher";
 
 const runtime = Runtime.defaultRuntime;
 
-const wait = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 const SETTLE_MS = 800;
 
@@ -72,9 +71,7 @@ describe("workspace watcher", () => {
 
       await fs.writeFile(path.join(rootPath, "deck.md"), "# deck", "utf8");
 
-      await Effect.runPromise(
-        Deferred.await(publishedMd).pipe(Effect.timeout("5 seconds")),
-      );
+      await Effect.runPromise(Deferred.await(publishedMd).pipe(Effect.timeout("5 seconds")));
 
       expect(publishCount).toBe(1);
 
@@ -107,9 +104,7 @@ describe("workspace watcher", () => {
         await fs.writeFile(path.join(rootPath, `deck-${i}.md`), `# deck ${i}`, "utf8");
       }
 
-      await Effect.runPromise(
-        Deferred.await(firstPublish).pipe(Effect.timeout("5 seconds")),
-      );
+      await Effect.runPromise(Deferred.await(firstPublish).pipe(Effect.timeout("5 seconds")));
 
       await wait(SETTLE_MS);
 

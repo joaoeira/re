@@ -36,18 +36,14 @@ const makeWatchEffect = (
 
     const snapshotAndPublish = snapshotWorkspace(rootPath, SNAPSHOT_OPTIONS).pipe(
       Effect.flatMap(publish),
-      Effect.catchAll((error) =>
-        Effect.logWarning("Workspace re-snapshot failed", { error }),
-      ),
+      Effect.catchAll((error) => Effect.logWarning("Workspace re-snapshot failed", { error })),
     );
 
     yield* fs.watch(rootPath, { recursive: true }).pipe(
       Stream.filter((event) => isRelevantChange(event.path, pathService)),
       Stream.debounce(DEBOUNCE_DURATION),
       Stream.runForEach(() => snapshotAndPublish),
-      Effect.catchAll((error) =>
-        Effect.logWarning("Workspace watcher stream ended", { error }),
-      ),
+      Effect.catchAll((error) => Effect.logWarning("Workspace watcher stream ended", { error })),
     );
   });
 
@@ -63,9 +59,7 @@ export const createWorkspaceWatcher = (deps: WorkspaceWatcherDeps): WorkspaceWat
 
   const start = (rootPath: string): void => {
     stop();
-    const effect = makeWatchEffect(rootPath, deps.publish).pipe(
-      Effect.provide(NodeServicesLive),
-    );
+    const effect = makeWatchEffect(rootPath, deps.publish).pipe(Effect.provide(NodeServicesLive));
     fiber = Runtime.runFork(deps.runtime)(effect);
   };
 

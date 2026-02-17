@@ -1,42 +1,32 @@
-import { useKeyboard } from "@opentui/react"
-import { Header, Panel, Footer } from "./ui"
-import { themeColors as theme } from "../ThemeContext"
+import { useKeyboard } from "@opentui/react";
+import { Header, Panel, Footer } from "./ui";
+import { themeColors as theme } from "../ThemeContext";
 
 interface SessionSummaryProps {
   stats: {
-    reviewed: number
-    again: number
-    hard: number
-    good: number
-    easy: number
-  }
-  canUndo: boolean
-  onUndo: () => void
-  onDone: () => void
+    reviewed: number;
+    again: number;
+    hard: number;
+    good: number;
+    easy: number;
+  };
+  canUndo: boolean;
+  onUndo: () => void;
+  onDone: () => void;
 }
 
-export function SessionSummary({
-  stats,
-  canUndo,
-  onUndo,
-  onDone,
-}: SessionSummaryProps) {
+export function SessionSummary({ stats, canUndo, onUndo, onDone }: SessionSummaryProps) {
   useKeyboard((key) => {
     if (key.name === "return" || key.name === "q") {
-      onDone()
+      onDone();
     }
     if (key.name === "u" && canUndo) {
-      onUndo()
+      onUndo();
     }
-  })
+  });
 
   return (
-    <box
-      flexDirection="column"
-      paddingLeft={2}
-      paddingRight={2}
-      paddingTop={1}
-    >
+    <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingTop={1}>
       <Header title="Session Complete" />
 
       <Panel accent>
@@ -63,5 +53,5 @@ export function SessionSummary({
         />
       </box>
     </box>
-  )
+  );
 }

@@ -48,42 +48,33 @@ const isValidCalendarDate = (s: string, d: Date): boolean => {
  * Rejects invalid calendar dates (e.g., Feb 30) that JS would normalize.
  * Encodes back to UTC via toISOString().
  */
-export const LastReviewFromString: Schema.Schema<Date, string> =
-  Schema.transformOrFail(Schema.String, Schema.DateFromSelf, {
+export const LastReviewFromString: Schema.Schema<Date, string> = Schema.transformOrFail(
+  Schema.String,
+  Schema.DateFromSelf,
+  {
     strict: true,
     decode: (s, _options, ast) => {
       if (!ISO_TIMESTAMP_PATTERN.test(s)) {
         return ParseResult.fail(
-          new ParseResult.Type(
-            ast,
-            s,
-            `Timestamp must include timezone (Z or ±HH:MM): "${s}"`
-          )
+          new ParseResult.Type(ast, s, `Timestamp must include timezone (Z or ±HH:MM): "${s}"`),
         );
       }
       const d = new Date(s);
       if (isNaN(d.getTime())) {
-        return ParseResult.fail(
-          new ParseResult.Type(ast, s, `Invalid ISO timestamp: "${s}"`)
-        );
+        return ParseResult.fail(new ParseResult.Type(ast, s, `Invalid ISO timestamp: "${s}"`));
       }
       if (!isValidCalendarDate(s, d)) {
         return ParseResult.fail(
-          new ParseResult.Type(
-            ast,
-            s,
-            `Invalid calendar date (normalization detected): "${s}"`
-          )
+          new ParseResult.Type(ast, s, `Invalid calendar date (normalization detected): "${s}"`),
         );
       }
       return ParseResult.succeed(d);
     },
     encode: (d, _options, ast) => {
       if (isNaN(d.getTime())) {
-        return ParseResult.fail(
-          new ParseResult.Type(ast, d, "Cannot encode invalid Date")
-        );
+        return ParseResult.fail(new ParseResult.Type(ast, d, "Cannot encode invalid Date"));
       }
       return ParseResult.succeed(d.toISOString());
     },
-  });
+  },
+);

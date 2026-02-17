@@ -51,9 +51,7 @@ describe("settings repository", () => {
       await fs.mkdir(workspacePath, { recursive: true });
 
       const repository = await makeRepository(settingsFilePath);
-      await Effect.runPromise(
-        repository.setWorkspaceRootPath({ rootPath: workspacePath }),
-      );
+      await Effect.runPromise(repository.setWorkspaceRootPath({ rootPath: workspacePath }));
 
       const rawSettings = await fs.readFile(settingsFilePath, "utf8");
       const parsedSettings = JSON.parse(rawSettings) as {
@@ -98,12 +96,8 @@ describe("settings repository", () => {
       await fs.mkdir(workspacePath, { recursive: true });
       const repository = await makeRepository(settingsFilePath);
 
-      await Effect.runPromise(
-        repository.setWorkspaceRootPath({ rootPath: workspacePath }),
-      );
-      const cleared = await Effect.runPromise(
-        repository.setWorkspaceRootPath({ rootPath: null }),
-      );
+      await Effect.runPromise(repository.setWorkspaceRootPath({ rootPath: workspacePath }));
+      const cleared = await Effect.runPromise(repository.setWorkspaceRootPath({ rootPath: null }));
 
       expect(cleared.workspace.rootPath).toBeNull();
       const persisted = await Effect.runPromise(repository.getSettings());
@@ -235,26 +229,18 @@ describe("settings repository", () => {
 
     const failingFileSystem = FileSystem.layerNoop({
       readFileString: () =>
-        Effect.fail(
-          makeSystemError("NotFound", "readFileString", settingsFilePath),
-        ),
+        Effect.fail(makeSystemError("NotFound", "readFileString", settingsFilePath)),
       makeDirectory: () => Effect.void,
-      open: () =>
-        Effect.fail(
-          makeSystemError("PermissionDenied", "open", settingsFilePath),
-        ),
+      open: () => Effect.fail(makeSystemError("PermissionDenied", "open", settingsFilePath)),
       remove: () => Effect.void,
     });
 
-    const repository = await makeSettingsRepository({ settingsFilePath })
-      .pipe(
-        Effect.provide(Layer.merge(failingFileSystem, Path.layer)),
-        Effect.runPromise,
-      );
-
-    const exit = await Effect.runPromiseExit(
-      repository.setWorkspaceRootPath({ rootPath: null }),
+    const repository = await makeSettingsRepository({ settingsFilePath }).pipe(
+      Effect.provide(Layer.merge(failingFileSystem, Path.layer)),
+      Effect.runPromise,
     );
+
+    const exit = await Effect.runPromiseExit(repository.setWorkspaceRootPath({ rootPath: null }));
 
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {

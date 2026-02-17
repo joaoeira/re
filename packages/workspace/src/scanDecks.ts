@@ -57,10 +57,7 @@ const isNestedTolerable = (error: PlatformError): boolean =>
   error._tag === "SystemError" &&
   (error.reason === "PermissionDenied" || error.reason === "NotFound");
 
-const mapRootError = (
-  rootPath: string,
-  error: PlatformError,
-): ScanDecksError => {
+const mapRootError = (rootPath: string, error: PlatformError): ScanDecksError => {
   if (error._tag === "SystemError" && error.reason === "NotFound") {
     return new WorkspaceRootNotFound({ rootPath });
   }
@@ -82,10 +79,7 @@ const mapNestedFatalError = (
     message: `${operation} failed for ${absolutePath}: ${error.message}`,
   });
 
-const hasCauseCode = (
-  error: PlatformError,
-  code: string,
-): boolean => {
+const hasCauseCode = (error: PlatformError, code: string): boolean => {
   if (error._tag !== "SystemError") {
     return false;
   }
@@ -99,13 +93,9 @@ const hasCauseCode = (
 };
 
 const hasHiddenSegment = (relativePath: string): boolean =>
-  relativePath
-    .split("/")
-    .some((segment) => segment.length > 0 && segment.startsWith("."));
+  relativePath.split("/").some((segment) => segment.length > 0 && segment.startsWith("."));
 
-const normalizeIgnorePatterns = (
-  patterns: readonly string[],
-): readonly string[] =>
+const normalizeIgnorePatterns = (patterns: readonly string[]): readonly string[] =>
   Arr.filterMap(patterns, (pattern) => {
     const normalized = pattern.trim();
     if (normalized === "" || normalized.startsWith("#")) {
@@ -115,10 +105,7 @@ const normalizeIgnorePatterns = (
     return Option.some(normalized);
   });
 
-const appendPatterns = (
-  matcher: ReturnType<typeof ignore>,
-  patterns: readonly string[],
-): void => {
+const appendPatterns = (matcher: ReturnType<typeof ignore>, patterns: readonly string[]): void => {
   for (const pattern of normalizeIgnorePatterns(patterns)) {
     try {
       matcher.add(pattern);
@@ -173,9 +160,7 @@ const readDirectoryBestEffort = (
         return Effect.succeed(Option.none());
       }
 
-      return Effect.fail(
-        mapNestedFatalError(rootPath, absolutePath, "readDirectory", error),
-      );
+      return Effect.fail(mapNestedFatalError(rootPath, absolutePath, "readDirectory", error));
     }),
   );
 
@@ -183,10 +168,7 @@ const statBestEffort = (
   rootPath: string,
   absolutePath: string,
   fileSystem: FileSystem.FileSystem,
-): Effect.Effect<
-  Option.Option<FileSystem.File.Info>,
-  WorkspaceRootUnreadable
-> =>
+): Effect.Effect<Option.Option<FileSystem.File.Info>, WorkspaceRootUnreadable> =>
   fileSystem.stat(absolutePath).pipe(
     Effect.map(Option.some),
     Effect.catchAll((error) => {
@@ -194,9 +176,7 @@ const statBestEffort = (
         return Effect.succeed(Option.none());
       }
 
-      return Effect.fail(
-        mapNestedFatalError(rootPath, absolutePath, "stat", error),
-      );
+      return Effect.fail(mapNestedFatalError(rootPath, absolutePath, "stat", error));
     }),
   );
 
@@ -220,14 +200,10 @@ const isSymlinkBestEffort = (
         return Effect.succeed(Option.none());
       }
 
-      return Effect.fail(
-        mapNestedFatalError(rootPath, absolutePath, "readLink", error),
-      );
+      return Effect.fail(mapNestedFatalError(rootPath, absolutePath, "readLink", error));
     }),
     Effect.catchTag("BadArgument", (error) =>
-      Effect.fail(
-        mapNestedFatalError(rootPath, absolutePath, "readLink", error),
-      ),
+      Effect.fail(mapNestedFatalError(rootPath, absolutePath, "readLink", error)),
     ),
   );
 
@@ -239,11 +215,7 @@ const normalizeOptions = (options?: ScanDecksOptions) => ({
 export const scanDecks = (
   rootPath: string,
   options?: ScanDecksOptions,
-): Effect.Effect<
-  ScanDecksResult,
-  ScanDecksError,
-  FileSystem.FileSystem | Path.Path
-> =>
+): Effect.Effect<ScanDecksResult, ScanDecksError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const pathService = yield* Path.Path;
@@ -252,9 +224,7 @@ export const scanDecks = (
 
     const rootStat = yield* fileSystem
       .stat(normalizedRootPath)
-      .pipe(
-        Effect.mapError((error) => mapRootError(normalizedRootPath, error)),
-      );
+      .pipe(Effect.mapError((error) => mapRootError(normalizedRootPath, error)));
 
     if (rootStat.type !== "Directory") {
       return yield* new WorkspaceRootNotDirectory({
@@ -264,9 +234,7 @@ export const scanDecks = (
 
     yield* fileSystem
       .readDirectory(normalizedRootPath)
-      .pipe(
-        Effect.mapError((error) => mapRootError(normalizedRootPath, error)),
-      );
+      .pipe(Effect.mapError((error) => mapRootError(normalizedRootPath, error)));
 
     const resolved = normalizeOptions(options);
     const matcher = ignore();
@@ -298,10 +266,7 @@ export const scanDecks = (
 
       for (const entryName of directoryEntries.value) {
         const absolutePath = pathService.join(currentDirectory, entryName);
-        const relativePath = pathService.relative(
-          normalizedRootPath,
-          absolutePath,
-        );
+        const relativePath = pathService.relative(normalizedRootPath, absolutePath);
 
         if (!resolved.includeHidden && hasHiddenSegment(relativePath)) {
           continue;
@@ -317,11 +282,7 @@ export const scanDecks = (
           continue;
         }
 
-        const info = yield* statBestEffort(
-          normalizedRootPath,
-          absolutePath,
-          fileSystem,
-        );
+        const info = yield* statBestEffort(normalizedRootPath, absolutePath, fileSystem);
 
         if (Option.isNone(info)) {
           continue;
@@ -340,10 +301,7 @@ export const scanDecks = (
           continue;
         }
 
-        if (
-          matcher.ignores(relativePath) ||
-          pathService.extname(relativePath) !== ".md"
-        ) {
+        if (matcher.ignores(relativePath) || pathService.extname(relativePath) !== ".md") {
           continue;
         }
 

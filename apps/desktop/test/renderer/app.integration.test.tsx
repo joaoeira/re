@@ -61,12 +61,14 @@ describe("renderer integration", () => {
     });
 
     const eventHandlers = new Map<string, (payload: unknown) => void>();
-    const subscribe = vi.fn().mockImplementation(
-      (name: string, handler: (payload: unknown) => void) => {
+    const subscribe = vi
+      .fn()
+      .mockImplementation((name: string, handler: (payload: unknown) => void) => {
         eventHandlers.set(name, handler);
-        return () => { eventHandlers.delete(name); };
-      },
-    );
+        return () => {
+          eventHandlers.delete(name);
+        };
+      });
 
     Object.defineProperty(window, "desktopApi", {
       configurable: true,
@@ -84,7 +86,6 @@ describe("renderer integration", () => {
       }),
     );
 
-    await waitFor(() => expect(screen.getByText("Decks")).toBeTruthy());
     expect(screen.getByText("ok")).toBeTruthy();
     expect(screen.getByText("read")).toBeTruthy();
     expect(screen.getByText("parse")).toBeTruthy();
@@ -125,12 +126,14 @@ describe("renderer integration", () => {
     });
 
     const eventHandlers = new Map<string, (payload: unknown) => void>();
-    const subscribe = vi.fn().mockImplementation(
-      (name: string, handler: (payload: unknown) => void) => {
+    const subscribe = vi
+      .fn()
+      .mockImplementation((name: string, handler: (payload: unknown) => void) => {
         eventHandlers.set(name, handler);
-        return () => { eventHandlers.delete(name); };
-      },
-    );
+        return () => {
+          eventHandlers.delete(name);
+        };
+      });
 
     Object.defineProperty(window, "desktopApi", {
       configurable: true,
@@ -202,12 +205,10 @@ describe("renderer integration", () => {
     render(<RouterProvider router={router} />);
 
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("GetSettings", {}));
-    await waitFor(() =>
-      expect(screen.getByText(/Settings file is invalid/)).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(/Settings file is invalid/)).toBeTruthy());
 
-    expect(
-      invoke.mock.calls.some(([method]: [string]) => method === "GetWorkspaceSnapshot"),
-    ).toBe(false);
+    expect(invoke.mock.calls.some(([method]: [string]) => method === "GetWorkspaceSnapshot")).toBe(
+      false,
+    );
   });
 });

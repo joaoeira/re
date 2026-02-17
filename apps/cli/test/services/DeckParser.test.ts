@@ -27,8 +27,7 @@ Answer 2
 const MockFileSystem = FileSystem.layerNoop({
   readFileString: (path) => {
     if (path === "/valid.md") return Effect.succeed(validDeckContent);
-    if (path === "/empty.md")
-      return Effect.succeed("# Just a title\n\nNo cards here.");
+    if (path === "/empty.md") return Effect.succeed("# Just a title\n\nNo cards here.");
     if (path === "/invalid.md") return Effect.succeed("<!--@ bad metadata-->");
     return Effect.fail(
       new SystemError({
@@ -36,14 +35,12 @@ const MockFileSystem = FileSystem.layerNoop({
         module: "FileSystem",
         method: "readFileString",
         pathOrDescriptor: path,
-      })
+      }),
     );
   },
 });
 
-const TestLayer = DeckParserLive.pipe(
-  Layer.provide(Layer.mergeAll(MockFileSystem, Path.layer))
-);
+const TestLayer = DeckParserLive.pipe(Layer.provide(Layer.mergeAll(MockFileSystem, Path.layer)));
 
 describe("DeckParser", () => {
   describe("parse", () => {
@@ -90,11 +87,7 @@ describe("DeckParser", () => {
     it("parses multiple decks, filtering out failures", async () => {
       const result = await Effect.gen(function* () {
         const parser = yield* DeckParser;
-        return yield* parser.parseAll([
-          "/valid.md",
-          "/missing.md",
-          "/invalid.md",
-        ]);
+        return yield* parser.parseAll(["/valid.md", "/missing.md", "/invalid.md"]);
       }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
       // Only valid.md should be returned

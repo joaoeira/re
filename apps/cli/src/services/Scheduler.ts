@@ -1,9 +1,4 @@
-import {
-  fsrs,
-  createEmptyCard,
-  type Card,
-  type Grade as FSRSGradeType,
-} from "ts-fsrs";
+import { fsrs, createEmptyCard, type Card, type Grade as FSRSGradeType } from "ts-fsrs";
 import { Context, Effect, Layer, Data } from "effect";
 import { type ItemMetadata, type NumericField, State } from "@re/core";
 
@@ -12,8 +7,7 @@ const RELEARNING_STEPS = [10] as const;
 
 export type FSRSGrade = 0 | 1 | 2 | 3;
 
-const gradeToRating = (grade: FSRSGrade): FSRSGradeType =>
-  (grade + 1) as FSRSGradeType;
+const gradeToRating = (grade: FSRSGrade): FSRSGradeType => (grade + 1) as FSRSGradeType;
 
 export interface SchedulerLog {
   readonly rating: FSRSGrade;
@@ -67,8 +61,7 @@ export const computeDueDate = (card: ItemMetadata): Date | null => {
   }
 
   if (card.state === State.Relearning) {
-    const stepMinutes =
-      RELEARNING_STEPS[card.learningSteps] ?? RELEARNING_STEPS[0];
+    const stepMinutes = RELEARNING_STEPS[card.learningSteps] ?? RELEARNING_STEPS[0];
     return new Date(card.lastReview.getTime() + stepMinutes * 60 * 1000);
   }
 
@@ -130,7 +123,7 @@ const makeNumericField = (value: number): NumericField => ({
 export const fsrsCardToItemMetadata = (
   original: ItemMetadata,
   fsrsCard: Card,
-  reviewDate: Date
+  reviewDate: Date,
 ): ItemMetadata => ({
   id: original.id,
   stability: makeNumericField(fsrsCard.stability),
@@ -146,7 +139,7 @@ export interface Scheduler {
   readonly scheduleReview: (
     card: ItemMetadata,
     grade: FSRSGrade,
-    now: Date
+    now: Date,
   ) => Effect.Effect<ScheduleResult, ScheduleError>;
 }
 

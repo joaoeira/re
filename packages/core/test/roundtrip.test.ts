@@ -15,7 +15,7 @@ Paris
       const serialized = serializeFile(parsed);
 
       assert.strictEqual(serialized, original);
-    })
+    }),
   );
 
   it.scoped("preserves preamble byte-perfect", () =>
@@ -36,7 +36,7 @@ A1
       const serialized = serializeFile(parsed);
 
       assert.strictEqual(serialized, original);
-    })
+    }),
   );
 
   it.scoped("preserves numeric precision", () =>
@@ -48,7 +48,7 @@ Content
       const serialized = serializeFile(parsed);
 
       assert.strictEqual(serialized, original);
-    })
+    }),
   );
 
   it.scoped("canonicalizes timestamps to UTC", () =>
@@ -65,7 +65,7 @@ Content
       const serialized = serializeFile(parsed);
 
       assert.strictEqual(serialized, expected);
-    })
+    }),
   );
 
   it.scoped("preserves multiple items", () =>
@@ -87,7 +87,7 @@ A3
       const serialized = serializeFile(parsed);
 
       assert.strictEqual(serialized, original);
-    })
+    }),
   );
 
   it.scoped("preserves CRLF in content", () =>
@@ -97,7 +97,7 @@ A3
       const serialized = serializeFile(parsed);
 
       assert.strictEqual(serialized, original);
-    })
+    }),
   );
 
   it.scoped("preserves content without trailing newline", () =>
@@ -108,7 +108,7 @@ Content without trailing newline`;
       const serialized = serializeFile(parsed);
 
       assert.strictEqual(serialized, original);
-    })
+    }),
   );
 
   it.scoped("preserves empty content between items", () =>
@@ -121,7 +121,7 @@ Content
       const serialized = serializeFile(parsed);
 
       assert.strictEqual(serialized, original);
-    })
+    }),
   );
 
   it.scoped("preserves horizontal rules in content", () =>
@@ -137,7 +137,7 @@ More content
       const serialized = serializeFile(parsed);
 
       assert.strictEqual(serialized, original);
-    })
+    }),
   );
 
   it.scoped("preserves code fences in content", () =>
@@ -159,7 +159,7 @@ It adds two numbers.
       const serialized = serializeFile(parsed);
 
       assert.strictEqual(serialized, original);
-    })
+    }),
   );
 
   it.scoped("preserves preamble-only files", () =>
@@ -172,6 +172,6 @@ Just text.
       const serialized = serializeFile(parsed);
 
       assert.strictEqual(serialized, original);
-    })
+    }),
   );
 });

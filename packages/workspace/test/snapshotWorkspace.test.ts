@@ -3,16 +3,9 @@ import { ParseError } from "@re/core";
 import { Effect, Either, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 
-import {
-  snapshotWorkspace,
-  WorkspaceRootNotDirectory,
-  WorkspaceRootNotFound,
-} from "../src";
+import { snapshotWorkspace, WorkspaceRootNotDirectory, WorkspaceRootNotFound } from "../src";
 import { formatMetadataParseError } from "../src/snapshotWorkspace";
-import {
-  createMockFileSystemLayer,
-  type MockFileSystemConfig,
-} from "./mock-file-system";
+import { createMockFileSystemLayer, type MockFileSystemConfig } from "./mock-file-system";
 
 const runSnapshot = (
   rootPath: string,
@@ -35,10 +28,7 @@ const runSnapshotEither = (
     Effect.runPromise,
   );
 
-const makeCard = (
-  id: string,
-  state: 0 | 1 | 2 | 3 = 0,
-): string => `<!--@ ${id} 0 0 ${state} 0-->
+const makeCard = (id: string, state: 0 | 1 | 2 | 3 = 0): string => `<!--@ ${id} 0 0 ${state} 0-->
 Question
 ---
 Answer
@@ -260,9 +250,7 @@ Bad format card`,
     const bad = result.decks[0]!;
     expect(bad.status).toBe("parse_error");
     if (bad.status === "parse_error") {
-      expect(bad.message).toContain(
-        "Invalid metadata at line 1: Expected 5-6 fields, got 4",
-      );
+      expect(bad.message).toContain("Invalid metadata at line 1: Expected 5-6 fields, got 4");
     }
   });
 
@@ -287,18 +275,16 @@ Bad format card`,
     };
 
     const withoutHidden = await runSnapshot("/root", config);
-    expect(withoutHidden.decks.map((deck) => deck.relativePath)).toEqual([
-      "keep.md",
-      "skip.md",
-    ]);
+    expect(withoutHidden.decks.map((deck) => deck.relativePath)).toEqual(["keep.md", "skip.md"]);
 
     const withHiddenAndIgnores = await runSnapshot("/root", config, {
       includeHidden: true,
       extraIgnorePatterns: ["*.md", "!keep.md", "!.hidden/secret.md"],
     });
-    expect(
-      withHiddenAndIgnores.decks.map((deck) => deck.relativePath),
-    ).toEqual([".hidden/secret.md", "keep.md"]);
+    expect(withHiddenAndIgnores.decks.map((deck) => deck.relativePath)).toEqual([
+      ".hidden/secret.md",
+      "keep.md",
+    ]);
   });
 
   it("does not expose per-card arrays in snapshot output", async () => {

@@ -46,8 +46,7 @@ const toSettingsErrorMessage = (error: SettingsError): string => {
 };
 
 export function HomeScreen() {
-  const [snapshotResult, setSnapshotResult] =
-    useState<SnapshotWorkspaceResult | null>(null);
+  const [snapshotResult, setSnapshotResult] = useState<SnapshotWorkspaceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -100,14 +99,11 @@ export function HomeScreen() {
       return;
     }
 
-    const unsubscribeSnapshot = ipc.events.subscribe(
-      WorkspaceSnapshotChanged,
-      (snapshot) => {
-        setSnapshotResult(snapshot);
-        setError(null);
-        setIsLoading(false);
-      },
-    );
+    const unsubscribeSnapshot = ipc.events.subscribe(WorkspaceSnapshotChanged, (snapshot) => {
+      setSnapshotResult(snapshot);
+      setError(null);
+      setIsLoading(false);
+    });
 
     void Effect.runPromise(
       ipc.client.GetSettings().pipe(
@@ -146,16 +142,12 @@ export function HomeScreen() {
 
   if (isLoading) {
     return (
-      <div className="py-12 text-center text-sm text-muted-foreground">
-        Loading workspace...
-      </div>
+      <div className="py-12 text-center text-sm text-muted-foreground">Loading workspace...</div>
     );
   }
 
   if (error) {
-    return (
-      <div className="py-12 text-center text-sm text-destructive">{error}</div>
-    );
+    return <div className="py-12 text-center text-sm text-destructive">{error}</div>;
   }
 
   if (!snapshotResult) {

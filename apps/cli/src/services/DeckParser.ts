@@ -21,13 +21,9 @@ export interface ParsedDeck {
 }
 
 export interface DeckParser {
-  readonly parse: (
-    deckPath: string
-  ) => Effect.Effect<ParsedDeck, DeckParserError>;
+  readonly parse: (deckPath: string) => Effect.Effect<ParsedDeck, DeckParserError>;
 
-  readonly parseAll: (
-    deckPaths: readonly string[]
-  ) => Effect.Effect<ParsedDeck[], never>;
+  readonly parseAll: (deckPaths: readonly string[]) => Effect.Effect<ParsedDeck[], never>;
 }
 
 export const DeckParser = Context.GenericTag<DeckParser>("DeckParser");
@@ -38,18 +34,14 @@ export const DeckParserLive = Layer.effect(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
 
-    const parseSingle = (
-      deckPath: string
-    ): Effect.Effect<ParsedDeck, DeckParserError> =>
+    const parseSingle = (deckPath: string): Effect.Effect<ParsedDeck, DeckParserError> =>
       Effect.gen(function* () {
         const name = path.basename(deckPath, ".md");
 
         const content = yield* fs
           .readFileString(deckPath)
           .pipe(
-            Effect.mapError(
-              () => new DeckReadError({ path: deckPath, message: "Read error" })
-            )
+            Effect.mapError(() => new DeckReadError({ path: deckPath, message: "Read error" })),
           );
 
         const file = yield* parseFile(content).pipe(
@@ -58,8 +50,8 @@ export const DeckParserLive = Layer.effect(
               new DeckParseError({
                 path: deckPath,
                 message: `Parse error: ${e._tag}`,
-              })
-          )
+              }),
+          ),
         );
 
         return { path: deckPath, name, file };
@@ -71,12 +63,10 @@ export const DeckParserLive = Layer.effect(
       parseAll: (deckPaths) =>
         Effect.all(
           deckPaths.map((p) => parseSingle(p).pipe(Effect.either)),
-          { concurrency: "unbounded" }
+          { concurrency: "unbounded" },
         ).pipe(
-          Effect.map((results) =>
-            results.filter((r) => r._tag === "Right").map((r) => r.right)
-          )
+          Effect.map((results) => results.filter((r) => r._tag === "Right").map((r) => r.right)),
         ),
     };
-  })
+  }),
 );

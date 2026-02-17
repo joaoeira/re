@@ -4,4 +4,4 @@
  *
  * Captures the content between <!--@ and -->
  */
-export const METADATA_LINE_PATTERN = /^<!--@ (.+)-->\r?$/
+export const METADATA_LINE_PATTERN = /^<!--@ (.+)-->\r?$/;
