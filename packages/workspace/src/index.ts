@@ -26,3 +26,12 @@ export {
   type SnapshotWorkspaceResult,
   type SnapshotWorkspaceError,
 } from "./snapshotWorkspace";
+
+export {
+  buildDeckTree,
+  flattenDeckTree,
+  type DeckTreeLeaf,
+  type DeckTreeGroup,
+  type DeckTreeNode,
+  type FlatDeckRow,
+} from "./deckTree";
