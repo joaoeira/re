@@ -5,12 +5,14 @@ import type { Implementations } from "electron-effect-rpc/types";
 
 import { NodeServicesLive } from "@main/effect/node-services";
 import type { SettingsRepository } from "@main/settings/repository";
+import type { WorkspaceWatcher } from "@main/watcher/workspace-watcher";
 import type { AppContract } from "@shared/rpc/contracts";
 
 const APP_NAME = "re Desktop";
 
 export const createAppRpcHandlers = (
   settingsRepository: SettingsRepository,
+  watcher: WorkspaceWatcher,
 ): Implementations<AppContract> => ({
   GetBootstrapData: () =>
     Effect.succeed({
@@ -38,5 +40,15 @@ export const createAppRpcHandlers = (
     ),
   GetSettings: () => settingsRepository.getSettings(),
   SetWorkspaceRootPath: (input) =>
-    settingsRepository.setWorkspaceRootPath(input),
+    settingsRepository.setWorkspaceRootPath(input).pipe(
+      Effect.tap((settings) =>
+        Effect.sync(() => {
+          if (settings.workspace.rootPath) {
+            watcher.start(settings.workspace.rootPath);
+          } else {
+            watcher.stop();
+          }
+        }),
+      ),
+    ),
 });

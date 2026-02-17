@@ -7,6 +7,8 @@ import { Effect, Runtime } from "effect";
 import { NodeServicesLive } from "@main/effect/node-services";
 import { createAppRpcHandlers } from "@main/rpc/handlers";
 import { makeSettingsRepository } from "@main/settings/repository";
+import { createWorkspaceWatcher, type WorkspaceWatcher } from "@main/watcher/workspace-watcher";
+import { WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
 import { appIpc } from "@shared/rpc/ipc";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -16,6 +18,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
 let ipcHandle: ReturnType<typeof appIpc.main> | null = null;
+let watcher: WorkspaceWatcher | null = null;
 
 const log = (...args: Array<unknown>): void => {
   console.log("[desktop/main]", ...args);
@@ -86,14 +89,34 @@ app.whenReady().then(() => {
     ),
   );
 
+  const watcherProxy: WorkspaceWatcher = {
+    start: (rootPath) => watcher?.start(rootPath),
+    stop: () => watcher?.stop(),
+  };
+
+  const runtime = Runtime.defaultRuntime;
+
   ipcHandle = appIpc.main({
     ipcMain,
-    handlers: createAppRpcHandlers(settingsRepository),
-    runtime: Runtime.defaultRuntime,
+    handlers: createAppRpcHandlers(settingsRepository, watcherProxy),
+    runtime,
     getWindow: () => mainWindow,
   });
 
+  watcher = createWorkspaceWatcher({
+    publish: (snapshot) => ipcHandle!.publish(WorkspaceSnapshotChanged, snapshot),
+    runtime,
+  });
+
   ipcHandle.start();
+
+  Effect.runPromise(settingsRepository.getSettings()).then((settings) => {
+    if (settings.workspace.rootPath) {
+      watcher?.start(settings.workspace.rootPath);
+    }
+  }).catch((error: unknown) => {
+    log("failed to read settings for initial watcher start", error);
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -103,6 +126,10 @@ app.whenReady().then(() => {
 });
 
 app.on("before-quit", () => {
+  if (watcher) {
+    watcher.stop();
+    watcher = null;
+  }
   if (ipcHandle) {
     ipcHandle.dispose();
     ipcHandle = null;

@@ -6,7 +6,7 @@ import {
   SnapshotWorkspaceErrorSchema,
   SnapshotWorkspaceResultSchema,
 } from "@re/workspace";
-import { defineContract, rpc } from "electron-effect-rpc/contract";
+import { defineContract, event, rpc } from "electron-effect-rpc/contract";
 import {
   SettingsErrorSchema,
   SettingsSchemaV1,
@@ -71,6 +71,11 @@ export const SetWorkspaceRootPath = rpc(
   SettingsErrorSchema,
 );
 
+export const WorkspaceSnapshotChanged = event(
+  "WorkspaceSnapshotChanged",
+  SnapshotWorkspaceResultSchema,
+);
+
 export const appContract = defineContract({
   methods: [
     GetBootstrapData,
@@ -80,7 +85,7 @@ export const appContract = defineContract({
     GetSettings,
     SetWorkspaceRootPath,
   ] as const,
-  events: [] as const,
+  events: [WorkspaceSnapshotChanged] as const,
 });
 
 export type AppContract = typeof appContract;

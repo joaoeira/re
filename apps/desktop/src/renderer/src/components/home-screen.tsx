@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MetadataParseError } from "@re/core";
 import type { ScanDecksError, SnapshotWorkspaceResult } from "@re/workspace";
 import type { SettingsError } from "@shared/settings";
+import { WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
 import { Effect } from "effect";
 import { RpcDefectError } from "electron-effect-rpc/renderer";
 import { appMachine } from "@shared/state/appMachine";
@@ -173,6 +174,15 @@ export function HomeScreen() {
       setCounter(snapshot.context.counter);
     });
 
+    const unsubscribeSnapshot = ipc.events.subscribe(
+      WorkspaceSnapshotChanged,
+      (snapshot) => {
+        setSnapshotResult(snapshot);
+        setSnapshotError(null);
+        setIsLoadingSnapshot(false);
+      },
+    );
+
     actor.start();
     actor.send({ type: "BOOT" });
     setIsLoadingSettings(true);
@@ -242,6 +252,7 @@ export function HomeScreen() {
     return () => {
       actor.stop();
       subscription.unsubscribe();
+      unsubscribeSnapshot();
     };
   }, [actor, ipc, loadWorkspaceSnapshot]);
 

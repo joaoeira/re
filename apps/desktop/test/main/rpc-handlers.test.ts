@@ -3,12 +3,13 @@ import * as path from "node:path";
 import { tmpdir } from "node:os";
 
 import { Cause, Effect, Exit } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { NodeServicesLive } from "@main/effect/node-services";
 import { createAppRpcHandlers } from "@main/rpc/handlers";
 import { makeSettingsRepository } from "@main/settings/repository";
 import type { SettingsRepository } from "@main/settings/repository";
+import type { WorkspaceWatcher } from "@main/watcher/workspace-watcher";
 import { WorkspaceRootNotFound as SnapshotWorkspaceRootNotFound } from "@re/workspace";
 import {
   DEFAULT_SETTINGS,
@@ -26,12 +27,17 @@ const stubSettingsRepository: SettingsRepository = {
     }),
 };
 
-const handlers = createAppRpcHandlers(stubSettingsRepository);
+const stubWatcher: WorkspaceWatcher = {
+  start: () => {},
+  stop: () => {},
+};
 
-const createHandlers = async (settingsFilePath: string) =>
+const handlers = createAppRpcHandlers(stubSettingsRepository, stubWatcher);
+
+const createHandlers = async (settingsFilePath: string, watcher?: WorkspaceWatcher) =>
   Effect.gen(function* () {
     const repository = yield* makeSettingsRepository({ settingsFilePath });
-    return createAppRpcHandlers(repository);
+    return createAppRpcHandlers(repository, watcher ?? stubWatcher);
   }).pipe(Effect.provide(NodeServicesLive), Effect.runPromise);
 
 describe("main rpc handlers", () => {
@@ -266,6 +272,37 @@ Answer
       if (failure._tag === "Some") {
         expect(failure.value).toBeInstanceOf(SettingsWorkspaceRootNotFound);
       }
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("starts watcher on SetWorkspaceRootPath success and stops on null", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-watcher-"));
+    const workspacePath = path.join(rootPath, "workspace");
+    const settingsFilePath = path.join(rootPath, "settings.json");
+
+    try {
+      await fs.mkdir(workspacePath, { recursive: true });
+
+      const spyWatcher: WorkspaceWatcher = {
+        start: vi.fn(),
+        stop: vi.fn(),
+      };
+      const handlers = await createHandlers(settingsFilePath, spyWatcher);
+
+      await Effect.runPromise(
+        handlers.SetWorkspaceRootPath({ rootPath: workspacePath }),
+      );
+
+      expect(spyWatcher.start).toHaveBeenCalledWith(workspacePath);
+      expect(spyWatcher.stop).not.toHaveBeenCalled();
+
+      await Effect.runPromise(
+        handlers.SetWorkspaceRootPath({ rootPath: null }),
+      );
+
+      expect(spyWatcher.stop).toHaveBeenCalled();
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
     }

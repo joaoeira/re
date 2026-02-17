@@ -122,7 +122,13 @@ describe("renderer integration", () => {
         ),
       ).toBeTruthy();
 
-    const subscribe = vi.fn().mockReturnValue(() => undefined);
+    const eventHandlers = new Map<string, (payload: unknown) => void>();
+    const subscribe = vi.fn().mockImplementation(
+      (name: string, handler: (payload: unknown) => void) => {
+        eventHandlers.set(name, handler);
+        return () => { eventHandlers.delete(name); };
+      },
+    );
 
     Object.defineProperty(window, "desktopApi", {
       configurable: true,
@@ -195,6 +201,119 @@ describe("renderer integration", () => {
     expect(screen.getByText("Desktop App Shell")).toBeTruthy();
     expect(screen.getByText("Items:")).toBeTruthy();
     expect(screen.getByText("Cards:")).toBeTruthy();
+  });
+
+  it("updates snapshot when WorkspaceSnapshotChanged event is pushed", async () => {
+    const invoke = vi.fn().mockImplementation(async (method: string) => {
+      if (method === "GetBootstrapData") {
+        return {
+          type: "success",
+          data: {
+            appName: "re Desktop",
+            message: "Renderer connected to main through typed Effect RPC",
+            timestamp: "2026-02-15T00:00:00.000Z",
+          },
+        };
+      }
+
+      if (method === "GetSettings") {
+        return {
+          type: "success",
+          data: {
+            settingsVersion: 1,
+            workspace: { rootPath: "/workspace" },
+          },
+        };
+      }
+
+      if (method === "GetWorkspaceSnapshot") {
+        return {
+          type: "success",
+          data: {
+            rootPath: "/workspace",
+            decks: [
+              {
+                absolutePath: "/workspace/deck.md",
+                relativePath: "deck.md",
+                name: "deck",
+                status: "ok" as const,
+                totalCards: 1,
+                stateCounts: { new: 1, learning: 0, review: 0, relearning: 0 },
+              },
+            ],
+          },
+        };
+      }
+
+      if (method === "ParseDeckPreview") {
+        return { type: "success", data: { items: 0, cards: 0 } };
+      }
+
+      return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+    });
+
+    const eventHandlers = new Map<string, (payload: unknown) => void>();
+    const subscribe = vi.fn().mockImplementation(
+      (name: string, handler: (payload: unknown) => void) => {
+        eventHandlers.set(name, handler);
+        return () => { eventHandlers.delete(name); };
+      },
+    );
+
+    Object.defineProperty(window, "desktopApi", {
+      configurable: true,
+      value: { invoke, subscribe },
+    });
+
+    const router = createRouter({
+      routeTree,
+      history: createHashHistory(),
+    });
+
+    const expectSummaryRow = (text: string) =>
+      expect(
+        screen.getByText((_, element) =>
+          element?.textContent?.replace(/\s+/g, " ").trim() === text,
+        ),
+      ).toBeTruthy();
+
+    render(<RouterProvider router={router} />);
+
+    await waitFor(() => expectSummaryRow("Total Decks: 1"));
+    expectSummaryRow("Cards (OK decks): 1");
+    expectSummaryRow("New: 1");
+
+    const handler = eventHandlers.get("WorkspaceSnapshotChanged");
+    expect(handler).toBeDefined();
+
+    handler!({
+      rootPath: "/workspace",
+      decks: [
+        {
+          absolutePath: "/workspace/deck.md",
+          relativePath: "deck.md",
+          name: "deck",
+          status: "ok",
+          totalCards: 5,
+          stateCounts: { new: 2, learning: 1, review: 1, relearning: 1 },
+        },
+        {
+          absolutePath: "/workspace/new-deck.md",
+          relativePath: "new-deck.md",
+          name: "new-deck",
+          status: "ok",
+          totalCards: 3,
+          stateCounts: { new: 3, learning: 0, review: 0, relearning: 0 },
+        },
+      ],
+    });
+
+    await waitFor(() => expectSummaryRow("Total Decks: 2"));
+    expectSummaryRow("Cards (OK decks): 8");
+    expectSummaryRow("New: 5");
+    expectSummaryRow("Learning: 1");
+    expectSummaryRow("Review: 1");
+    expectSummaryRow("Relearning: 1");
   });
 
   it("shows settings read error and disables settings-dependent actions", async () => {
