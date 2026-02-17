@@ -1,5 +1,5 @@
 import { parseFile } from "@re/core";
-import { scanDecks } from "@re/workspace";
+import { scanDecks, snapshotWorkspace } from "@re/workspace";
 import { Effect } from "effect";
 import type { Implementations } from "electron-effect-rpc/types";
 
@@ -31,10 +31,10 @@ export const createAppRpcHandlers = (
   ScanDecks: ({ rootPath }) =>
     scanDecks(rootPath).pipe(
       Effect.provide(NodeServicesLive),
-      Effect.map((result) => ({
-        rootPath: result.rootPath,
-        decks: result.decks,
-      })),
+    ),
+  GetWorkspaceSnapshot: ({ rootPath, options }) =>
+    snapshotWorkspace(rootPath, options).pipe(
+      Effect.provide(NodeServicesLive),
     ),
   GetSettings: () => settingsRepository.getSettings(),
   SetWorkspaceRootPath: (input) =>

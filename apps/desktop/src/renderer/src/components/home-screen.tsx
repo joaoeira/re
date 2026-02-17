@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { MetadataParseError } from "@re/core";
-import type { ScanDecksError } from "@re/workspace";
+import type { ScanDecksError, SnapshotWorkspaceResult } from "@re/workspace";
 import type { SettingsError } from "@shared/settings";
 import { Effect } from "effect";
 import { RpcDefectError } from "electron-effect-rpc/renderer";
@@ -38,13 +38,12 @@ type DeckPreview = {
   cards: number;
 };
 
-type DeckScanResult = {
-  rootPath: string;
-  decks: readonly {
-    absolutePath: string;
-    relativePath: string;
-    name: string;
-  }[];
+const DEFAULT_SNAPSHOT_OPTIONS = {
+  includeHidden: false,
+  extraIgnorePatterns: [],
+} satisfies {
+  includeHidden: boolean;
+  extraIgnorePatterns: readonly string[];
 };
 
 const toRpcDefectMessage = (error: RpcDefectError): string =>
@@ -103,9 +102,9 @@ export function HomeScreen() {
   const [preview, setPreview] = useState<DeckPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [scanResult, setScanResult] = useState<DeckScanResult | null>(null);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [isScanning, setIsScanning] = useState(false);
+  const [snapshotResult, setSnapshotResult] = useState<SnapshotWorkspaceResult | null>(null);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false);
   const actor = useMemo(() => createActor(appMachine), []);
   const ipc = useMemo(() => {
     if (!window.desktopApi) {
@@ -114,6 +113,53 @@ export function HomeScreen() {
 
     return createIpc(window.desktopApi);
   }, []);
+
+  const loadWorkspaceSnapshot = useCallback(
+    (rootPath: string) => {
+      if (!ipc) {
+        setSnapshotResult(null);
+        setSnapshotError("Desktop IPC bridge is unavailable.");
+        setIsLoadingSnapshot(false);
+        return;
+      }
+
+      setIsLoadingSnapshot(true);
+      setSnapshotResult(null);
+      setSnapshotError(null);
+
+      void Effect.runPromise(
+        ipc.client.GetWorkspaceSnapshot({
+          rootPath,
+          options: DEFAULT_SNAPSHOT_OPTIONS,
+        }).pipe(
+          Effect.tap((result) =>
+            Effect.sync(() => {
+              setSnapshotResult(result);
+              setSnapshotError(null);
+            }),
+          ),
+          Effect.catchTag("RpcDefectError", (rpcDefect) =>
+            Effect.sync(() => {
+              setSnapshotResult(null);
+              setSnapshotError(toRpcDefectMessage(rpcDefect));
+            }),
+          ),
+          Effect.catchAll((workspaceError) =>
+            Effect.sync(() => {
+              setSnapshotResult(null);
+              setSnapshotError(toScanErrorMessage(workspaceError));
+            }),
+          ),
+          Effect.ensuring(
+            Effect.sync(() => {
+              setIsLoadingSnapshot(false);
+            }),
+          ),
+        ),
+      );
+    },
+    [ipc],
+  );
 
   useEffect(() => {
     if (!ipc) {
@@ -156,6 +202,13 @@ export function HomeScreen() {
             setWorkspaceRootInput(settings.workspace.rootPath ?? "");
             setSettingsReadError(null);
             setSettingsActionError(null);
+            if (settings.workspace.rootPath) {
+              loadWorkspaceSnapshot(settings.workspace.rootPath);
+            } else {
+              setSnapshotResult(null);
+              setSnapshotError(null);
+              setIsLoadingSnapshot(false);
+            }
           }),
         ),
         Effect.catchTag("RpcDefectError", (rpcDefect) =>
@@ -163,6 +216,9 @@ export function HomeScreen() {
             setWorkspaceRootPath(null);
             setWorkspaceRootInput("");
             setSettingsReadError(toRpcDefectMessage(rpcDefect));
+            setSnapshotResult(null);
+            setSnapshotError(null);
+            setIsLoadingSnapshot(false);
           }),
         ),
         Effect.catchAll((settingsError) =>
@@ -170,6 +226,9 @@ export function HomeScreen() {
             setWorkspaceRootPath(null);
             setWorkspaceRootInput("");
             setSettingsReadError(toSettingsErrorMessage(settingsError));
+            setSnapshotResult(null);
+            setSnapshotError(null);
+            setIsLoadingSnapshot(false);
           }),
         ),
         Effect.ensuring(
@@ -184,7 +243,7 @@ export function HomeScreen() {
       actor.stop();
       subscription.unsubscribe();
     };
-  }, [actor, ipc]);
+  }, [actor, ipc, loadWorkspaceSnapshot]);
 
   const analyzeDeck = useCallback(() => {
     if (!ipc) {
@@ -248,6 +307,13 @@ export function HomeScreen() {
               setWorkspaceRootPath(settings.workspace.rootPath);
               setWorkspaceRootInput(settings.workspace.rootPath ?? "");
               setSettingsActionError(null);
+              if (settings.workspace.rootPath) {
+                loadWorkspaceSnapshot(settings.workspace.rootPath);
+              } else {
+                setSnapshotResult(null);
+                setSnapshotError(null);
+                setIsLoadingSnapshot(false);
+              }
             }),
           ),
           Effect.catchTag("RpcDefectError", (rpcDefect) =>
@@ -268,7 +334,7 @@ export function HomeScreen() {
         ),
       );
     },
-    [ipc, settingsReadError],
+    [ipc, loadWorkspaceSnapshot, settingsReadError],
   );
 
   const saveWorkspaceRootPath = useCallback(() => {
@@ -287,55 +353,52 @@ export function HomeScreen() {
     persistWorkspaceRootPath(null);
   }, [persistWorkspaceRootPath]);
 
-  const runDeckScan = useCallback(() => {
-    if (!ipc) {
-      setScanError("Desktop IPC bridge is unavailable.");
-      return;
+  const workspaceSnapshotSummary = useMemo(() => {
+    if (!snapshotResult) {
+      return null;
     }
 
-    if (settingsReadError) {
-      setScanError(
-        "Settings could not be loaded. Resolve the settings file issue before scanning decks.",
-      );
-      return;
+    let okDecks = 0;
+    let readErrorDecks = 0;
+    let parseErrorDecks = 0;
+    let totalCards = 0;
+    let newCards = 0;
+    let learningCards = 0;
+    let reviewCards = 0;
+    let relearningCards = 0;
+
+    for (const deck of snapshotResult.decks) {
+      switch (deck.status) {
+        case "ok":
+          okDecks += 1;
+          totalCards += deck.totalCards;
+          newCards += deck.stateCounts.new;
+          learningCards += deck.stateCounts.learning;
+          reviewCards += deck.stateCounts.review;
+          relearningCards += deck.stateCounts.relearning;
+          break;
+        case "read_error":
+          readErrorDecks += 1;
+          break;
+        case "parse_error":
+          parseErrorDecks += 1;
+          break;
+      }
     }
 
-    if (!workspaceRootPath) {
-      setScanError("Set a workspace root path before scanning decks.");
-      return;
-    }
-
-    setIsScanning(true);
-    setScanError(null);
-
-    void Effect.runPromise(
-      ipc.client.ScanDecks({ rootPath: workspaceRootPath }).pipe(
-        Effect.tap((result) =>
-          Effect.sync(() => {
-            setScanResult(result);
-            setScanError(null);
-          }),
-        ),
-        Effect.catchTag("RpcDefectError", (rpcDefect) =>
-          Effect.sync(() => {
-            setScanResult(null);
-            setScanError(toRpcDefectMessage(rpcDefect));
-          }),
-        ),
-        Effect.catchAll((scanError) =>
-          Effect.sync(() => {
-            setScanResult(null);
-            setScanError(toScanErrorMessage(scanError));
-          }),
-        ),
-        Effect.ensuring(
-          Effect.sync(() => {
-            setIsScanning(false);
-          }),
-        ),
-      ),
-    );
-  }, [ipc, settingsReadError, workspaceRootPath]);
+    return {
+      rootPath: snapshotResult.rootPath,
+      totalDecks: snapshotResult.decks.length,
+      okDecks,
+      readErrorDecks,
+      parseErrorDecks,
+      totalCards,
+      newCards,
+      learningCards,
+      reviewCards,
+      relearningCards,
+    };
+  }, [snapshotResult]);
 
   return (
     <section className="space-y-6">
@@ -469,50 +532,53 @@ export function HomeScreen() {
 
         <div className="rounded-lg border border-border bg-background p-4 lg:col-span-2">
           <h2 className="text-sm font-semibold uppercase text-muted-foreground">
-            Deck Scan (@re/workspace)
+            Workspace Snapshot (@re/workspace)
           </h2>
 
           <p className="mt-2 text-xs text-muted-foreground">
             Root: {workspaceRootPath ?? "(unset)"}
           </p>
 
-          <div className="mt-3 flex items-center gap-3">
-            <SilkButton
-              onClick={runDeckScan}
-              disabled={
-                isScanning ||
-                !ipc ||
-                Boolean(settingsReadError) ||
-                workspaceRootPath === null
-              }
-            >
-              {isScanning ? "Scanning..." : "Scan Decks"}
-            </SilkButton>
-            <p className="text-xs text-muted-foreground">
-              Calls main-process workspace scanner through typed IPC.
-            </p>
-          </div>
+          {isLoadingSnapshot ? (
+            <p className="mt-3 text-sm text-muted-foreground">Loading workspace snapshot...</p>
+          ) : null}
 
-          {scanResult ? (
+          {workspaceSnapshotSummary ? (
             <div className="mt-3 rounded-md border border-border/70 bg-muted/30 p-3 text-sm">
               <p>
-                <span className="font-medium">Resolved Root:</span> {scanResult.rootPath}
+                <span className="font-medium">Resolved Root:</span> {workspaceSnapshotSummary.rootPath}
               </p>
               <p>
-                <span className="font-medium">Total Decks:</span> {scanResult.decks.length}
+                <span className="font-medium">Total Decks:</span> {workspaceSnapshotSummary.totalDecks}
               </p>
-              {scanResult.decks.length > 0 ? (
-                <p className="mt-2 font-mono text-xs text-muted-foreground">
-                  {scanResult.decks
-                    .slice(0, 6)
-                    .map((deck) => `${deck.name} (${deck.relativePath})`)
-                    .join(", ")}
-                </p>
-              ) : null}
+              <p>
+                <span className="font-medium">OK Decks:</span> {workspaceSnapshotSummary.okDecks}
+              </p>
+              <p>
+                <span className="font-medium">Read Errors:</span> {workspaceSnapshotSummary.readErrorDecks}
+              </p>
+              <p>
+                <span className="font-medium">Parse Errors:</span> {workspaceSnapshotSummary.parseErrorDecks}
+              </p>
+              <p className="mt-2">
+                <span className="font-medium">Cards (OK decks):</span> {workspaceSnapshotSummary.totalCards}
+              </p>
+              <p>
+                <span className="font-medium">New:</span> {workspaceSnapshotSummary.newCards}
+              </p>
+              <p>
+                <span className="font-medium">Learning:</span> {workspaceSnapshotSummary.learningCards}
+              </p>
+              <p>
+                <span className="font-medium">Review:</span> {workspaceSnapshotSummary.reviewCards}
+              </p>
+              <p>
+                <span className="font-medium">Relearning:</span> {workspaceSnapshotSummary.relearningCards}
+              </p>
             </div>
           ) : null}
 
-          {scanError ? <p className="mt-3 text-sm text-destructive">{scanError}</p> : null}
+          {snapshotError ? <p className="mt-3 text-sm text-destructive">{snapshotError}</p> : null}
         </div>
       </div>
     </section>

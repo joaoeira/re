@@ -9,7 +9,11 @@ import { NodeServicesLive } from "@main/effect/node-services";
 import { createAppRpcHandlers } from "@main/rpc/handlers";
 import { makeSettingsRepository } from "@main/settings/repository";
 import type { SettingsRepository } from "@main/settings/repository";
-import { DEFAULT_SETTINGS, WorkspaceRootNotFound } from "@shared/settings";
+import { WorkspaceRootNotFound as SnapshotWorkspaceRootNotFound } from "@re/workspace";
+import {
+  DEFAULT_SETTINGS,
+  WorkspaceRootNotFound as SettingsWorkspaceRootNotFound,
+} from "@shared/settings";
 
 const stubSettingsRepository: SettingsRepository = {
   getSettings: () => Effect.succeed(DEFAULT_SETTINGS),
@@ -118,6 +122,93 @@ Broken card content`;
     }
   });
 
+  it("returns workspace snapshot with mixed deck statuses", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-snapshot-"));
+    const okDeckPath = path.join(rootPath, "1-ok.md");
+    const readErrorDeckPath = path.join(rootPath, "2-read-error.md");
+    const parseErrorDeckPath = path.join(rootPath, "3-parse-error.md");
+
+    try {
+      await fs.writeFile(
+        okDeckPath,
+        `<!--@ card-a 0 0 0 0-->
+Question
+---
+Answer
+`,
+        "utf8",
+      );
+      await fs.writeFile(readErrorDeckPath, "# unreadable", "utf8");
+      await fs.writeFile(parseErrorDeckPath, "<!--@ bad 0 0 9 0-->", "utf8");
+      await fs.chmod(readErrorDeckPath, 0o000);
+
+      const result = await Effect.runPromise(
+        handlers.GetWorkspaceSnapshot({
+          rootPath,
+          options: {
+            includeHidden: false,
+            extraIgnorePatterns: [],
+          },
+        }),
+      );
+
+      expect(result.rootPath).toBe(rootPath);
+      expect(result.decks).toHaveLength(3);
+      expect(result.decks.map((deck) => deck.status)).toEqual([
+        "ok",
+        "read_error",
+        "parse_error",
+      ]);
+
+      const okDeck = result.decks.find((deck) => deck.name === "1-ok");
+      expect(okDeck).toBeDefined();
+      if (okDeck?.status === "ok") {
+        expect(okDeck.totalCards).toBe(1);
+        expect(okDeck.stateCounts).toEqual({
+          new: 1,
+          learning: 0,
+          review: 0,
+          relearning: 0,
+        });
+      } else {
+        throw new Error("Expected 1-ok deck to succeed.");
+      }
+    } finally {
+      await fs.chmod(readErrorDeckPath, 0o644).catch(() => undefined);
+      await fs.rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("returns typed root errors for workspace snapshot", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-snapshot-error-"));
+    const nonexistentRoot = path.join(rootPath, "missing");
+
+    try {
+      const exit = await Effect.runPromiseExit(
+        handlers.GetWorkspaceSnapshot({
+          rootPath: nonexistentRoot,
+          options: {
+            includeHidden: false,
+            extraIgnorePatterns: [],
+          },
+        }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected GetWorkspaceSnapshot to fail.");
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value).toBeInstanceOf(SnapshotWorkspaceRootNotFound);
+      }
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
   it("returns default settings when settings file is missing", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-settings-"));
     const settingsFilePath = path.join(rootPath, "settings.json");
@@ -173,7 +264,7 @@ Broken card content`;
       const failure = Cause.failureOption(exit.cause);
       expect(failure._tag).toBe("Some");
       if (failure._tag === "Some") {
-        expect(failure.value).toBeInstanceOf(WorkspaceRootNotFound);
+        expect(failure.value).toBeInstanceOf(SettingsWorkspaceRootNotFound);
       }
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });

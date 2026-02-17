@@ -1,6 +1,11 @@
 import { Schema } from "@effect/schema";
 import { MetadataParseErrorSchema } from "@re/core";
-import { ScanDecksErrorSchema, ScanDecksResultSchema } from "@re/workspace";
+import {
+  ScanDecksErrorSchema,
+  ScanDecksResultSchema,
+  SnapshotWorkspaceErrorSchema,
+  SnapshotWorkspaceResultSchema,
+} from "@re/workspace";
 import { defineContract, rpc } from "electron-effect-rpc/contract";
 import {
   SettingsErrorSchema,
@@ -39,6 +44,19 @@ export const ScanDecks = rpc(
   ScanDecksErrorSchema,
 );
 
+export const GetWorkspaceSnapshot = rpc(
+  "GetWorkspaceSnapshot",
+  Schema.Struct({
+    rootPath: Schema.String,
+    options: Schema.Struct({
+      includeHidden: Schema.Boolean,
+      extraIgnorePatterns: Schema.Array(Schema.String),
+    }),
+  }),
+  SnapshotWorkspaceResultSchema,
+  SnapshotWorkspaceErrorSchema,
+);
+
 export const GetSettings = rpc(
   "GetSettings",
   Schema.Struct({}),
@@ -58,6 +76,7 @@ export const appContract = defineContract({
     GetBootstrapData,
     ParseDeckPreview,
     ScanDecks,
+    GetWorkspaceSnapshot,
     GetSettings,
     SetWorkspaceRootPath,
   ] as const,

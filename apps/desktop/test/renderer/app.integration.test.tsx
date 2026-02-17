@@ -9,7 +9,40 @@ describe("renderer integration", () => {
     cleanup();
   });
 
-  it("loads settings, scans with workspace root, and supports save/clear root actions", async () => {
+  it("loads and refreshes workspace snapshots after settings/root updates", async () => {
+    const makeSnapshot = (rootPath: string) => ({
+      rootPath,
+      decks: [
+        {
+          absolutePath: `${rootPath}/ok.md`,
+          relativePath: "ok.md",
+          name: "ok",
+          status: "ok" as const,
+          totalCards: 3,
+          stateCounts: {
+            new: 1,
+            learning: 1,
+            review: 1,
+            relearning: 0,
+          },
+        },
+        {
+          absolutePath: `${rootPath}/read.md`,
+          relativePath: "read.md",
+          name: "read",
+          status: "read_error" as const,
+          message: "Permission denied",
+        },
+        {
+          absolutePath: `${rootPath}/parse.md`,
+          relativePath: "parse.md",
+          name: "parse",
+          status: "parse_error" as const,
+          message: "Invalid metadata at line 1: malformed",
+        },
+      ],
+    });
+
     const invoke = vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
       if (method === "GetBootstrapData") {
         return {
@@ -31,6 +64,19 @@ describe("renderer integration", () => {
               rootPath: "/Users/joaoeira/Documents/deck",
             },
           },
+        };
+      }
+
+      if (method === "GetWorkspaceSnapshot") {
+        const rootPath = (
+          payload as {
+            rootPath: string;
+          }
+        ).rootPath;
+
+        return {
+          type: "success",
+          data: makeSnapshot(rootPath),
         };
       }
 
@@ -60,31 +106,6 @@ describe("renderer integration", () => {
         };
       }
 
-      if (method === "ScanDecks") {
-        return {
-          type: "success",
-          data: {
-            rootPath: (
-              payload as {
-                rootPath: string;
-              }
-            ).rootPath,
-            decks: [
-              {
-                absolutePath: "/Users/joaoeira/Documents/deck/nested/child.md",
-                relativePath: "nested/child.md",
-                name: "child",
-              },
-              {
-                absolutePath: "/Users/joaoeira/Documents/deck/root.md",
-                relativePath: "root.md",
-                name: "root",
-              },
-            ],
-          },
-        };
-      }
-
       return {
         type: "failure",
         error: {
@@ -93,6 +114,13 @@ describe("renderer integration", () => {
         },
       };
     });
+
+    const expectSummaryRow = (text: string) =>
+      expect(
+        screen.getByText((_, element) =>
+          element?.textContent?.replace(/\s+/g, " ").trim() === text,
+        ),
+      ).toBeTruthy();
 
     const subscribe = vi.fn().mockReturnValue(() => undefined);
 
@@ -110,18 +138,31 @@ describe("renderer integration", () => {
 
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("GetBootstrapData", {}));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("GetSettings", {}));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("GetWorkspaceSnapshot", {
+        rootPath: "/Users/joaoeira/Documents/deck",
+        options: {
+          includeHidden: false,
+          extraIgnorePatterns: [],
+        },
+      }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Analyze" }));
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("ParseDeckPreview", expect.objectContaining({ markdown: expect.any(String) })),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Scan Decks" }));
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("ScanDecks", {
-        rootPath: "/Users/joaoeira/Documents/deck",
-      }),
-    );
+    expect(screen.queryByRole("button", { name: "Scan Decks" })).toBeNull();
+    await waitFor(() => expectSummaryRow("Total Decks: 3"));
+    expectSummaryRow("OK Decks: 1");
+    expectSummaryRow("Read Errors: 1");
+    expectSummaryRow("Parse Errors: 1");
+    expectSummaryRow("Cards (OK decks): 3");
+    expectSummaryRow("New: 1");
+    expectSummaryRow("Learning: 1");
+    expectSummaryRow("Review: 1");
+    expectSummaryRow("Relearning: 0");
 
     fireEvent.change(screen.getByPlaceholderText("/absolute/path/to/workspace"), {
       target: { value: "/Users/joaoeira/Documents/deck/new-root" },
@@ -132,6 +173,15 @@ describe("renderer integration", () => {
         rootPath: "/Users/joaoeira/Documents/deck/new-root",
       }),
     );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("GetWorkspaceSnapshot", {
+        rootPath: "/Users/joaoeira/Documents/deck/new-root",
+        options: {
+          includeHidden: false,
+          extraIgnorePatterns: [],
+        },
+      }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Clear Root Path" }));
     await waitFor(() =>
@@ -139,17 +189,12 @@ describe("renderer integration", () => {
         rootPath: null,
       }),
     );
-
-    await waitFor(() =>
-      expect(
-        (screen.getByRole("button", { name: "Scan Decks" }) as HTMLButtonElement).disabled,
-      ).toBe(true),
-    );
+    await waitFor(() => expect(screen.getByText("Root: (unset)")).toBeTruthy());
+    expect(screen.queryByText(/Resolved Root:/)).toBeNull();
 
     expect(screen.getByText("Desktop App Shell")).toBeTruthy();
     expect(screen.getByText("Items:")).toBeTruthy();
     expect(screen.getByText("Cards:")).toBeTruthy();
-    expect(screen.getByText("Total Decks:")).toBeTruthy();
   });
 
   it("shows settings read error and disables settings-dependent actions", async () => {
@@ -224,10 +269,10 @@ describe("renderer integration", () => {
       (screen.getByRole("button", { name: "Clear Root Path" }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(
-      (screen.getByRole("button", { name: "Scan Decks" }) as HTMLButtonElement).disabled,
-    ).toBe(true);
-    expect(
       (screen.getByRole("button", { name: "Analyze" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+    expect(
+      invoke.mock.calls.some(([method]) => method === "GetWorkspaceSnapshot"),
     ).toBe(false);
   });
 });
