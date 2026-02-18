@@ -2,12 +2,12 @@ import {
   ReviewDuePolicy,
   ReviewQueueBuilder,
   ReviewQueueBuilderLive,
+  Scheduler,
   ShuffledOrderingStrategy,
   type ReviewQueue as WorkspaceReviewQueue,
 } from "@re/workspace";
 import { Context, Effect, Layer, Option } from "effect";
 
-import { Scheduler } from "./Scheduler";
 import type { DeckTreeNode } from "../lib/buildDeckTree";
 
 export type Selection =

@@ -3,8 +3,7 @@ import { Effect, Layer } from "effect";
 import { FileSystem, Path } from "@effect/platform";
 import { SystemError } from "@effect/platform/Error";
 import { DeckLoader, DeckLoaderLive } from "../../src/services/DeckLoader";
-import { DeckManagerLive } from "@re/workspace";
-import { SchedulerLive } from "../../src/services/Scheduler";
+import { DeckManagerLive, SchedulerLive } from "@re/workspace";
 
 const validDeckContent = `---
 title: Test

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Effect } from "effect";
-import { Scheduler, SchedulerLive } from "../../src/services/Scheduler";
+import { Scheduler, SchedulerLive } from "@re/workspace";
 import { State, numericField, generateId } from "@re/core";
 import type { ItemMetadata, ItemId } from "@re/core";
 
@@ -11,6 +11,7 @@ const makeCard = (state: number, stability: number, lastReview: Date | null): It
   state: state as 0 | 1 | 2 | 3,
   learningSteps: 0,
   lastReview,
+  due: null,
 });
 
 describe("Scheduler", () => {

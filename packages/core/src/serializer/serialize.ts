@@ -16,6 +16,9 @@ export const serializeMetadata = (m: ItemMetadata): string => {
 
   if (m.lastReview !== null) {
     parts.push(m.lastReview.toISOString());
+    if (m.due !== null) {
+      parts.push(m.due.toISOString());
+    }
   }
 
   return `<!--@ ${parts.join(" ")}-->`;

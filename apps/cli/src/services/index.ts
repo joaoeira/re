@@ -9,13 +9,13 @@ export {
   type FSRSGrade,
   type ScheduleResult,
   type SchedulerLog,
-  type ReviewLogEntry,
   computeDueDate,
   computeElapsedDays,
   computeScheduledDays,
   itemMetadataToFSRSCard,
   fsrsCardToItemMetadata,
-} from "./Scheduler";
+} from "@re/workspace";
+export { type ReviewLogEntry } from "./ReviewLogEntry";
 export { DeckManager, DeckManagerLive } from "@re/workspace";
 export {
   QueueOrderingStrategy,
@@ -34,7 +34,7 @@ export {
 } from "./ReviewQueue";
 
 import { DeckManagerLive } from "@re/workspace";
-import { SchedulerLive } from "./Scheduler";
+import { SchedulerLive } from "@re/workspace";
 import { DeckLoaderLive } from "./DeckLoader";
 import { ReviewQueueLive } from "./ReviewQueue";
 
@@ -46,8 +46,6 @@ const BaseLive = Layer.mergeAll(
   DeckManagerLive.pipe(Layer.provide(FileSystemAndPath)),
 );
 
-export const AppLive = Layer.mergeAll(
-  FileSystemAndPath,
-  DeckLoaderLive,
-  ReviewQueueLive,
-).pipe(Layer.provide(BaseLive));
+export const AppLive = Layer.mergeAll(FileSystemAndPath, DeckLoaderLive, ReviewQueueLive).pipe(
+  Layer.provide(BaseLive),
+);

@@ -23,6 +23,7 @@ Paris
       assert.strictEqual(item.cards[0]!.state, 0);
       assert.strictEqual(item.cards[0]!.learningSteps, 0);
       assert.strictEqual(item.cards[0]!.lastReview, null);
+      assert.strictEqual(item.cards[0]!.due, null);
       assert.strictEqual(
         item.content,
         `What is the capital of France?
@@ -79,6 +80,7 @@ A2
       assert.strictEqual(item1.cards[0]!.id, "item1");
       assert.strictEqual(item1.cards[0]!.state, 0);
       assert.strictEqual(item1.cards[0]!.lastReview, null);
+      assert.strictEqual(item1.cards[0]!.due, null);
 
       const item2 = result.items[1]!;
       assert.strictEqual(item2.cards[0]!.id, "item2");
@@ -87,6 +89,23 @@ A2
       assert.strictEqual(item2.cards[0]!.difficulty.value, 4.3);
       assert.strictEqual(item2.cards[0]!.state, 2);
       assert.ok(item2.cards[0]!.lastReview instanceof Date);
+      assert.strictEqual(item2.cards[0]!.due, null);
+    }),
+  );
+
+  it.scoped("parses reviewed card with explicit due timestamp", () =>
+    Effect.gen(function* () {
+      const content = `<!--@ item2 5.2 4.3 2 0 2025-01-04T10:30:00Z 2025-01-09T10:30:00Z-->
+Q2
+---
+A2
+`;
+      const result = yield* parseFile(content);
+      const card = result.items[0]!.cards[0]!;
+      assert.ok(card.lastReview instanceof Date);
+      assert.ok(card.due instanceof Date);
+      assert.strictEqual(card.lastReview?.toISOString(), "2025-01-04T10:30:00.000Z");
+      assert.strictEqual(card.due?.toISOString(), "2025-01-09T10:30:00.000Z");
     }),
   );
 
@@ -197,6 +216,16 @@ Content
   it.scoped("fails on timestamp without timezone", () =>
     Effect.gen(function* () {
       const content = `<!--@ abc123 0 0 0 0 2025-01-04T10:30:00-->
+Content
+`;
+      const error = yield* parseFile(content).pipe(Effect.flip);
+      assert.ok(error._tag === "InvalidFieldValue");
+    }),
+  );
+
+  it.scoped("fails on due timestamp without timezone", () =>
+    Effect.gen(function* () {
+      const content = `<!--@ abc123 0 0 2 0 2025-01-04T10:30:00Z 2025-01-06T10:30:00-->
 Content
 `;
       const error = yield* parseFile(content).pipe(Effect.flip);

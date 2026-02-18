@@ -16,7 +16,8 @@
     "@effect/schema": "0.69.0",
     "@re/core": "workspace:*",
     "effect": "^3.19.14",
-    "ignore": "^5.3.2"
+    "ignore": "^5.3.2",
+    "ts-fsrs": "^5.2.3"
   },
   "devDependencies": {
     "@effect/vitest": "^0.27.0",

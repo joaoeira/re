@@ -30,8 +30,9 @@ import {
   DeckManager,
   DeckManagerLive,
   ReviewDuePolicy,
+  Scheduler,
+  SchedulerLive,
 } from "@re/workspace";
-import { Scheduler, SchedulerLive } from "../../src/services/Scheduler";
 import type { DeckTreeNode } from "../../src/services";
 
 // New card (state=0)
@@ -617,6 +618,7 @@ describe("SchedulerDuePolicyLive", () => {
     state,
     learningSteps,
     lastReview,
+    due: null,
   });
 
   it("matches Scheduler due semantics across card states", async () => {
@@ -657,10 +659,7 @@ describe("SchedulerDuePolicyLive", () => {
       SchedulerDuePolicyLive.pipe(Layer.provide(SchedulerLive)),
     );
 
-    await program.pipe(
-      Effect.provide(testLayer),
-      Effect.runPromise,
-    );
+    await program.pipe(Effect.provide(testLayer), Effect.runPromise);
   });
 });
 
@@ -675,7 +674,9 @@ describe("ReviewQueue default strategy", () => {
       return yield* service.buildQueue(selection, tree, "/decks", now);
     }).pipe(
       Effect.provide(
-        ReviewQueueLive.pipe(Layer.provide(Layer.mergeAll(MockDeckManager, SchedulerLive, Path.layer))),
+        ReviewQueueLive.pipe(
+          Layer.provide(Layer.mergeAll(MockDeckManager, SchedulerLive, Path.layer)),
+        ),
       ),
     );
 
@@ -685,7 +686,10 @@ describe("ReviewQueue default strategy", () => {
 });
 
 describe("ReviewQueue parity harness", () => {
-  const collectDeckPathsLegacy = (selection: Selection, tree: readonly DeckTreeNode[]): string[] => {
+  const collectDeckPathsLegacy = (
+    selection: Selection,
+    tree: readonly DeckTreeNode[],
+  ): string[] => {
     const paths: string[] = [];
 
     const collectFromNode = (node: DeckTreeNode): void => {
@@ -794,7 +798,11 @@ describe("ReviewQueue parity harness", () => {
       };
     });
 
-  const normalizeQueue = (queue: { items: readonly QueueItem[]; totalNew: number; totalDue: number }) => ({
+  const normalizeQueue = (queue: {
+    items: readonly QueueItem[];
+    totalNew: number;
+    totalDue: number;
+  }) => ({
     totalNew: queue.totalNew,
     totalDue: queue.totalDue,
     items: queue.items.map((item) => ({
@@ -820,7 +828,9 @@ describe("ReviewQueue parity harness", () => {
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
     const legacyQueue = await buildLegacyQueue(selection, tree, "/decks", now).pipe(
-      Effect.provide(Layer.mergeAll(MockDeckManager, SchedulerLive, NewFirstOrderingStrategy, Path.layer)),
+      Effect.provide(
+        Layer.mergeAll(MockDeckManager, SchedulerLive, NewFirstOrderingStrategy, Path.layer),
+      ),
       Effect.runPromise,
     );
 

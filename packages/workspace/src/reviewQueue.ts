@@ -1,15 +1,6 @@
 import { Path } from "@effect/platform";
 import { type Item, type ItemMetadata, State } from "@re/core";
-import {
-  Array as Arr,
-  Chunk,
-  Context,
-  Effect,
-  Layer,
-  Option,
-  Order,
-  Random,
-} from "effect";
+import { Array as Arr, Chunk, Context, Effect, Layer, Option, Order, Random } from "effect";
 
 import { DeckManager } from "./DeckManager";
 
@@ -74,9 +65,7 @@ export interface QueueOrderSpec {
   readonly dueCardOrder: WithinGroupOrder<QueueItem>;
 }
 
-export const QueueOrderSpec = Context.GenericTag<QueueOrderSpec>(
-  "@re/workspace/QueueOrderSpec",
-);
+export const QueueOrderSpec = Context.GenericTag<QueueOrderSpec>("@re/workspace/QueueOrderSpec");
 
 export interface QueueOrderingStrategy {
   readonly order: (items: readonly QueueItem[]) => Effect.Effect<readonly QueueItem[]>;
@@ -147,9 +136,7 @@ export interface ReviewDuePolicy {
   readonly dueDateIfDue: (card: ItemMetadata, now: Date) => Option.Option<Date>;
 }
 
-export const ReviewDuePolicy = Context.GenericTag<ReviewDuePolicy>(
-  "@re/workspace/ReviewDuePolicy",
-);
+export const ReviewDuePolicy = Context.GenericTag<ReviewDuePolicy>("@re/workspace/ReviewDuePolicy");
 
 export interface ReviewQueueBuilder {
   /**

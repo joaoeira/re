@@ -25,7 +25,6 @@
     "@xstate/react": "^6.0.0",
     "effect": "^3.19.14",
     "react": "^19.1.0",
-    "ts-fsrs": "^5.2.3",
     "xstate": "^5.25.0"
   },
   "devDependencies": {

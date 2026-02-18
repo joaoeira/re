@@ -29,7 +29,6 @@
         "@xstate/react": "^6.0.0",
         "effect": "^3.19.14",
         "react": "^19.1.0",
-        "ts-fsrs": "^5.2.3",
         "xstate": "^5.25.0",
       },
       "devDependencies": {
@@ -130,6 +129,7 @@
         "@re/core": "workspace:*",
         "effect": "^3.19.14",
         "ignore": "^5.3.2",
+        "ts-fsrs": "^5.2.3",
       },
       "devDependencies": {
         "@effect/vitest": "^0.27.0",

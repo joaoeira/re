@@ -207,8 +207,6 @@ describe("renderer integration", () => {
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("GetSettings", {}));
     await waitFor(() => expect(screen.getByText(/Settings file is invalid/)).toBeTruthy());
 
-    expect(invoke.mock.calls.some(([method]: [string]) => method === "GetWorkspaceSnapshot")).toBe(
-      false,
-    );
+    expect(invoke.mock.calls.some(([method]) => method === "GetWorkspaceSnapshot")).toBe(false);
   });
 });

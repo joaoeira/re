@@ -28,6 +28,7 @@ export interface ItemMetadata {
   readonly state: State;
   readonly learningSteps: number;
   readonly lastReview: Date | null;
+  readonly due: Date | null;
 }
 
 export interface Item {

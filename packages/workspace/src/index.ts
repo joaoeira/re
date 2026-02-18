@@ -73,3 +73,17 @@ export {
   type ReviewQueue,
   type WithinGroupOrder,
 } from "./reviewQueue";
+
+export {
+  Scheduler,
+  SchedulerLive,
+  ScheduleError,
+  type FSRSGrade,
+  type ScheduleResult,
+  type SchedulerLog,
+  computeDueDate,
+  computeElapsedDays,
+  computeScheduledDays,
+  itemMetadataToFSRSCard,
+  fsrsCardToItemMetadata,
+} from "./scheduler";

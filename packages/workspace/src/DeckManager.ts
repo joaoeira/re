@@ -12,18 +12,20 @@ import { Context, Effect, Layer } from "effect";
 
 import { formatMetadataParseError } from "./snapshotWorkspace";
 
-export class DeckNotFound extends Schema.TaggedError<DeckNotFound>(
-  "@re/workspace/DeckNotFound",
-)("DeckNotFound", {
-  deckPath: Schema.String,
-}) {}
+export class DeckNotFound extends Schema.TaggedError<DeckNotFound>("@re/workspace/DeckNotFound")(
+  "DeckNotFound",
+  {
+    deckPath: Schema.String,
+  },
+) {}
 
-export class DeckReadError extends Schema.TaggedError<DeckReadError>(
-  "@re/workspace/DeckReadError",
-)("DeckReadError", {
-  deckPath: Schema.String,
-  message: Schema.String,
-}) {}
+export class DeckReadError extends Schema.TaggedError<DeckReadError>("@re/workspace/DeckReadError")(
+  "DeckReadError",
+  {
+    deckPath: Schema.String,
+    message: Schema.String,
+  },
+) {}
 
 export class DeckParseError extends Schema.TaggedError<DeckParseError>(
   "@re/workspace/DeckParseError",
@@ -39,12 +41,13 @@ export class DeckWriteError extends Schema.TaggedError<DeckWriteError>(
   message: Schema.String,
 }) {}
 
-export class CardNotFound extends Schema.TaggedError<CardNotFound>(
-  "@re/workspace/CardNotFound",
-)("CardNotFound", {
-  deckPath: Schema.String,
-  cardId: Schema.String,
-}) {}
+export class CardNotFound extends Schema.TaggedError<CardNotFound>("@re/workspace/CardNotFound")(
+  "CardNotFound",
+  {
+    deckPath: Schema.String,
+    cardId: Schema.String,
+  },
+) {}
 
 export class ItemValidationError extends Schema.TaggedError<ItemValidationError>(
   "@re/workspace/ItemValidationError",
@@ -103,7 +106,8 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
           Effect.flatMap((content) =>
             parseFile(content).pipe(
               Effect.mapError(
-                (error) => new DeckParseError({ deckPath, message: formatMetadataParseError(error) }),
+                (error) =>
+                  new DeckParseError({ deckPath, message: formatMetadataParseError(error) }),
               ),
             ),
           ),
@@ -125,7 +129,10 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
         return Effect.fail(new CardNotFound({ deckPath, cardId }));
       };
 
-      const atomicWrite = (deckPath: string, content: string): Effect.Effect<void, DeckWriteError> => {
+      const atomicWrite = (
+        deckPath: string,
+        content: string,
+      ): Effect.Effect<void, DeckWriteError> => {
         const tmpPath = `${deckPath}.tmp`;
         return fs.writeFileString(tmpPath, content).pipe(
           Effect.flatMap(() => fs.rename(tmpPath, deckPath)),

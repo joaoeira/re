@@ -1,7 +1,6 @@
 import { Context, Effect, Layer } from "effect";
 import { Path } from "@effect/platform";
-import { DeckManager } from "@re/workspace";
-import { Scheduler } from "./Scheduler";
+import { DeckManager, Scheduler } from "@re/workspace";
 import { State } from "@re/core";
 
 export interface DeckStats {

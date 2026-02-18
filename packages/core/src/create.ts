@@ -26,6 +26,7 @@ export const createMetadata = (): ItemMetadata => ({
   state: 0 as State,
   learningSteps: 0,
   lastReview: null,
+  due: null,
 });
 
 /**
@@ -38,4 +39,5 @@ export const createMetadataWithId = (id: ItemId): ItemMetadata => ({
   state: 0 as State,
   learningSteps: 0,
   lastReview: null,
+  due: null,
 });

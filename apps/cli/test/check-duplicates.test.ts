@@ -14,6 +14,7 @@ const makeCard = (id: string) => ({
   state: 0 as const,
   learningSteps: 0,
   lastReview: null,
+  due: null,
 });
 
 const makeDeck = (
@@ -58,9 +59,7 @@ describe("check-duplicates", () => {
     });
 
     it("extracts locations from multiple items in a deck", () => {
-      const decks = [
-        makeDeck("/deck1.md", [{ cardIds: ["a"] }, { cardIds: ["b"] }]),
-      ];
+      const decks = [makeDeck("/deck1.md", [{ cardIds: ["a"] }, { cardIds: ["b"] }])];
 
       const result = extractCardLocations(decks);
 

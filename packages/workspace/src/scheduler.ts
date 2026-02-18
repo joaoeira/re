@@ -1,6 +1,6 @@
 import { fsrs, createEmptyCard, type Card, type Grade as FSRSGradeType } from "ts-fsrs";
-import { Context, Effect, Layer, Data } from "effect";
-import { type ItemMetadata, type NumericField, State } from "@re/core";
+import { Context, Data, Effect, Layer } from "effect";
+import { State, numericField, type ItemMetadata } from "@re/core";
 
 const LEARNING_STEPS = [1, 10] as const;
 const RELEARNING_STEPS = [10] as const;
@@ -26,30 +26,25 @@ export interface ScheduleResult {
   readonly schedulerLog: SchedulerLog;
 }
 
-export interface ReviewLogEntry extends SchedulerLog {
-  readonly queueIndex: number;
-  readonly deckPath: string;
-  readonly cardId: string;
-}
-
 export class ScheduleError extends Data.TaggedError("ScheduleError")<{
   readonly message: string;
   readonly cardId: string;
 }> {}
 
 /**
- * Compute due date based on card state:
- * - Review cards: lastReview + stability (days)
- * - Learning cards: lastReview + LEARNING_STEPS[learningSteps] (minutes)
- * - Relearning cards: lastReview + RELEARNING_STEPS[learningSteps] (minutes)
+ * Compute due date based on card state.
+ * Uses stored metadata due when available, otherwise falls back to legacy reconstruction.
  */
 export const computeDueDate = (card: ItemMetadata): Date | null => {
+  if (card.due !== null) {
+    return card.due;
+  }
+
   if (card.state === State.New || !card.lastReview) {
     return null;
   }
 
   if (card.state === State.Review) {
-    // Stability-based interval in days
     const intervalMs = card.stability.value * 24 * 60 * 60 * 1000;
     return new Date(card.lastReview.getTime() + intervalMs);
   }
@@ -73,11 +68,8 @@ export const computeDueDate = (card: ItemMetadata): Date | null => {
  */
 export const computeScheduledDays = (card: ItemMetadata): number => {
   if (card.state === State.Review) {
-    // For review cards, stability represents the scheduled interval
     return card.stability.value;
   }
-  // For learning/relearning, intervals are sub-day (minutes)
-  // scheduled_days is 0 for intraday cards
   return 0;
 };
 
@@ -100,24 +92,27 @@ export const itemMetadataToFSRSCard = (card: ItemMetadata, now: Date): Card => {
   const elapsed_days = computeElapsedDays(card, now);
   const scheduled_days = computeScheduledDays(card);
 
-  return {
+  const base = {
     due,
     stability: card.stability.value,
     difficulty: card.difficulty.value,
     elapsed_days,
     scheduled_days,
     learning_steps: card.learningSteps,
-    reps: 0, // Not tracked in file format
-    lapses: 0, // Not tracked in file format
+    reps: 0,
+    lapses: 0,
     state: card.state,
-    last_review: card.lastReview ?? undefined,
   };
-};
 
-const makeNumericField = (value: number): NumericField => ({
-  value,
-  raw: value.toString(),
-});
+  if (card.lastReview) {
+    return {
+      ...base,
+      last_review: card.lastReview,
+    };
+  }
+
+  return base;
+};
 
 export const fsrsCardToItemMetadata = (
   original: ItemMetadata,
@@ -125,11 +120,12 @@ export const fsrsCardToItemMetadata = (
   reviewDate: Date,
 ): ItemMetadata => ({
   id: original.id,
-  stability: makeNumericField(fsrsCard.stability),
-  difficulty: makeNumericField(fsrsCard.difficulty),
+  stability: numericField(fsrsCard.stability),
+  difficulty: numericField(fsrsCard.difficulty),
   state: fsrsCard.state as State,
   learningSteps: fsrsCard.learning_steps,
   lastReview: reviewDate,
+  due: fsrsCard.due,
 });
 
 export interface Scheduler {
@@ -142,11 +138,10 @@ export interface Scheduler {
   ) => Effect.Effect<ScheduleResult, ScheduleError>;
 }
 
-export const Scheduler = Context.GenericTag<Scheduler>("Scheduler");
+export const Scheduler = Context.GenericTag<Scheduler>("@re/workspace/Scheduler");
 
 export const SchedulerLive = Layer.succeed(Scheduler, {
   isDue: (card, now) => {
-    // New cards are not "due" - they're "new"
     if (card.state === State.New) return false;
     if (!card.lastReview) return false;
 
@@ -156,14 +151,12 @@ export const SchedulerLive = Layer.succeed(Scheduler, {
 
   getReviewDate: (card) => computeDueDate(card),
 
-  // Use Effect.try to properly handle exceptions as typed errors
   scheduleReview: (card, grade, now) =>
     Effect.try({
       try: () => {
-        const f = fsrs(); // Uses enable_short_term: true by default
+        const f = fsrs();
         const fsrsCard = itemMetadataToFSRSCard(card, now);
         const rating = gradeToRating(grade);
-
         const { card: nextCard, log } = f.next(fsrsCard, now, rating);
 
         return {
@@ -171,7 +164,7 @@ export const SchedulerLive = Layer.succeed(Scheduler, {
           schedulerLog: {
             rating: grade,
             previousState: card.state,
-            previousCard: card, // For undo
+            previousCard: card,
             due: log.due,
             stability: log.stability,
             difficulty: log.difficulty,

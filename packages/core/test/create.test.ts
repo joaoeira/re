@@ -47,6 +47,7 @@ describe("createMetadata", () => {
     assert.strictEqual(metadata.state, 0);
     assert.strictEqual(metadata.learningSteps, 0);
     assert.strictEqual(metadata.lastReview, null);
+    assert.strictEqual(metadata.due, null);
   });
 
   it("generates unique IDs", () => {
@@ -66,5 +67,6 @@ describe("createMetadataWithId", () => {
     assert.strictEqual(metadata.state, 0);
     assert.strictEqual(metadata.learningSteps, 0);
     assert.strictEqual(metadata.lastReview, null);
+    assert.strictEqual(metadata.due, null);
   });
 });

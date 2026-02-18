@@ -11,13 +11,14 @@ describe("serializeMetadata", () => {
       state: 0 as State,
       learningSteps: 0,
       lastReview: null,
+      due: null,
     };
 
     const result = serializeMetadata(metadata);
     assert.strictEqual(result, "<!--@ abc123 0 0 0 0-->");
   });
 
-  it("serializes reviewed item metadata", () => {
+  it("serializes legacy reviewed item metadata without due", () => {
     const metadata: ItemMetadata = {
       id: "abc123" as ItemId,
       stability: { value: 5.2, raw: "5.20" },
@@ -25,10 +26,29 @@ describe("serializeMetadata", () => {
       state: 2 as State,
       learningSteps: 0,
       lastReview: new Date("2025-01-04T10:30:00Z"),
+      due: null,
     };
 
     const result = serializeMetadata(metadata);
     assert.strictEqual(result, "<!--@ abc123 5.20 4.30 2 0 2025-01-04T10:30:00.000Z-->");
+  });
+
+  it("serializes reviewed item metadata with due", () => {
+    const metadata: ItemMetadata = {
+      id: "abc123" as ItemId,
+      stability: { value: 5.2, raw: "5.20" },
+      difficulty: { value: 4.3, raw: "4.30" },
+      state: 2 as State,
+      learningSteps: 0,
+      lastReview: new Date("2025-01-04T10:30:00Z"),
+      due: new Date("2025-01-06T10:30:00Z"),
+    };
+
+    const result = serializeMetadata(metadata);
+    assert.strictEqual(
+      result,
+      "<!--@ abc123 5.20 4.30 2 0 2025-01-04T10:30:00.000Z 2025-01-06T10:30:00.000Z-->",
+    );
   });
 
   it("preserves numeric precision from raw", () => {
@@ -39,6 +59,7 @@ describe("serializeMetadata", () => {
       state: 2 as State,
       learningSteps: 0,
       lastReview: null,
+      due: null,
     };
 
     const result = serializeMetadata(metadata);
@@ -54,10 +75,11 @@ describe("serializeMetadata", () => {
       state: 2 as State,
       learningSteps: 0,
       lastReview: new Date("2025-01-04T12:30:00+02:00"), // 10:30 UTC
+      due: new Date("2025-01-05T12:30:00+02:00"), // 10:30 UTC
     };
 
     const result = serializeMetadata(metadata);
-    assert.ok(result.includes("2025-01-04T10:30:00.000Z"));
+    assert.ok(result.includes("2025-01-04T10:30:00.000Z 2025-01-05T10:30:00.000Z"));
   });
 });
 
@@ -75,6 +97,7 @@ describe("serializeFile", () => {
               state: 0 as State,
               learningSteps: 0,
               lastReview: null,
+              due: null,
             },
           ],
           content: "Q1\n---\nA1\n",
@@ -99,6 +122,7 @@ describe("serializeFile", () => {
               state: 0 as State,
               learningSteps: 0,
               lastReview: null,
+              due: null,
             },
           ],
           content: "Content\n",
@@ -123,6 +147,7 @@ describe("serializeFile", () => {
               state: 0 as State,
               learningSteps: 0,
               lastReview: null,
+              due: null,
             },
           ],
           content: "Q1\n",
@@ -136,6 +161,7 @@ describe("serializeFile", () => {
               state: 2 as State,
               learningSteps: 0,
               lastReview: new Date("2025-01-04T10:30:00Z"),
+              due: new Date("2025-01-10T10:30:00Z"),
             },
           ],
           content: "Q2\n",
@@ -145,7 +171,11 @@ describe("serializeFile", () => {
 
     const result = serializeFile(file);
     assert.ok(result.includes("<!--@ item1 0 0 0 0-->"));
-    assert.ok(result.includes("<!--@ item2 5.2 4.3 2 0 2025-01-04T10:30:00.000Z-->"));
+    assert.ok(
+      result.includes(
+        "<!--@ item2 5.2 4.3 2 0 2025-01-04T10:30:00.000Z 2025-01-10T10:30:00.000Z-->",
+      ),
+    );
   });
 
   it("handles empty items array", () => {

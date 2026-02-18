@@ -250,7 +250,7 @@ Bad format card`,
     const bad = result.decks[0]!;
     expect(bad.status).toBe("parse_error");
     if (bad.status === "parse_error") {
-      expect(bad.message).toContain("Invalid metadata at line 1: Expected 5-6 fields, got 4");
+      expect(bad.message).toContain("Invalid metadata at line 1: Expected 5-7 fields, got 4");
     }
   });
 

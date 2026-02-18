@@ -374,10 +374,10 @@ describe("Composable ordering primitives", () => {
       makeItem("c", "due", 2, new Date("2025-01-05")),
     ];
 
-    const result = await chain(shuffle<QueueItem>(), sortBy(byDueDate))(items).pipe(
-      Effect.withRandom(Random.make("seed")),
-      Effect.runPromise,
-    );
+    const result = await chain(
+      shuffle<QueueItem>(),
+      sortBy(byDueDate),
+    )(items).pipe(Effect.withRandom(Random.make("seed")), Effect.runPromise);
 
     expect(result[2]?.card.id).toBe("c");
     expect(new Set(result.slice(0, 2).map((item) => item.card.id))).toEqual(new Set(["a", "b"]));

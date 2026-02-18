@@ -1,5 +1,11 @@
 import { Path } from "@effect/platform";
-import { createMetadataWithId, numericField, type Item, type ItemId, type ItemType } from "@re/core";
+import {
+  createMetadataWithId,
+  numericField,
+  type Item,
+  type ItemId,
+  type ItemType,
+} from "@re/core";
 import { ContentParseError } from "@re/core";
 import { Effect, Either, Layer } from "effect";
 import { describe, expect, it } from "vitest";
@@ -16,12 +22,9 @@ import {
 } from "../src";
 import { createMockFileSystem, type MockFileSystemConfig } from "./mock-file-system";
 
-const makeCard = (id: string, state: 0 | 1 | 2 | 3 = 0): string =>
-  `<!--@ ${id} 0 0 ${state} 0-->`;
+const makeCard = (id: string, state: 0 | 1 | 2 | 3 = 0): string => `<!--@ ${id} 0 0 ${state} 0-->`;
 
-
-const singleCardItem = (id: string, content: string): string =>
-  `${makeCard(id)}\n${content}`;
+const singleCardItem = (id: string, content: string): string => `${makeCard(id)}\n${content}`;
 
 const meta = (id: string) => createMetadataWithId(id as ItemId);
 
@@ -30,11 +33,21 @@ const twoSidedType: ItemType<{ front: string; back: string }> = {
   parse: (content) => {
     const parts = content.split("---\n");
     if (parts.length < 2) {
-      return Effect.fail(new ContentParseError({ type: "two-sided", message: "Missing separator", raw: content }));
+      return Effect.fail(
+        new ContentParseError({ type: "two-sided", message: "Missing separator", raw: content }),
+      );
     }
     return Effect.succeed({ front: parts[0]!, back: parts[1]! });
   },
-  cards: () => [{ prompt: "", reveal: "", cardType: "basic", responseSchema: {} as any, grade: () => Effect.succeed(0 as any) }],
+  cards: () => [
+    {
+      prompt: "",
+      reveal: "",
+      cardType: "basic",
+      responseSchema: {} as any,
+      grade: () => Effect.succeed(0 as any),
+    },
+  ],
 };
 
 const twoCardType: ItemType<{ front: string; back: string }> = {
@@ -42,13 +55,27 @@ const twoCardType: ItemType<{ front: string; back: string }> = {
   parse: (content) => {
     const parts = content.split("---\n");
     if (parts.length < 2) {
-      return Effect.fail(new ContentParseError({ type: "two-card", message: "Missing separator", raw: content }));
+      return Effect.fail(
+        new ContentParseError({ type: "two-card", message: "Missing separator", raw: content }),
+      );
     }
     return Effect.succeed({ front: parts[0]!, back: parts[1]! });
   },
   cards: () => [
-    { prompt: "", reveal: "", cardType: "forward", responseSchema: {} as any, grade: () => Effect.succeed(0 as any) },
-    { prompt: "", reveal: "", cardType: "reverse", responseSchema: {} as any, grade: () => Effect.succeed(0 as any) },
+    {
+      prompt: "",
+      reveal: "",
+      cardType: "forward",
+      responseSchema: {} as any,
+      grade: () => Effect.succeed(0 as any),
+    },
+    {
+      prompt: "",
+      reveal: "",
+      cardType: "reverse",
+      responseSchema: {} as any,
+      grade: () => Effect.succeed(0 as any),
+    },
   ],
 };
 
@@ -117,9 +144,8 @@ describe("DeckManager.readDeck", () => {
   });
 
   it("fails with DeckNotFound when file doesn't exist", async () => {
-    const { promise } = runEither(
-      { entryTypes: {}, directories: {} },
-      (m) => m.readDeck("/missing.md"),
+    const { promise } = runEither({ entryTypes: {}, directories: {} }, (m) =>
+      m.readDeck("/missing.md"),
     );
     const result = await promise;
 
@@ -195,6 +221,28 @@ describe("DeckManager.updateCardMetadata", () => {
     expect(store["/deck.md"]).toContain("<!--@ card-b 0 0 0 0-->");
   });
 
+  it("serializes due when present on updated metadata", async () => {
+    const config: MockFileSystemConfig = {
+      entryTypes: {},
+      directories: {},
+      fileContents: { "/deck.md": deckContent },
+    };
+    const { promise, store } = runSuccess(config, (m) => {
+      const updated = {
+        ...meta("card-a"),
+        state: 2 as const,
+        lastReview: new Date("2025-01-01T00:00:00.000Z"),
+        due: new Date("2025-01-08T00:00:00.000Z"),
+      };
+      return m.updateCardMetadata("/deck.md", "card-a", updated);
+    });
+
+    await promise;
+    expect(store["/deck.md"]).toContain(
+      "<!--@ card-a 0 0 2 0 2025-01-01T00:00:00.000Z 2025-01-08T00:00:00.000Z-->",
+    );
+  });
+
   it("preserves preamble and content byte-perfect", async () => {
     const config: MockFileSystemConfig = {
       entryTypes: {},
@@ -249,9 +297,8 @@ describe("DeckManager.updateCardMetadata", () => {
   });
 
   it("fails with DeckNotFound when file doesn't exist", async () => {
-    const { promise } = runEither(
-      { entryTypes: {}, directories: {} },
-      (m) => m.updateCardMetadata("/missing.md", "x", meta("x")),
+    const { promise } = runEither({ entryTypes: {}, directories: {} }, (m) =>
+      m.updateCardMetadata("/missing.md", "x", meta("x")),
     );
     const result = await promise;
 
@@ -293,7 +340,13 @@ describe("DeckManager.replaceItem", () => {
         directories: {},
         fileContents: { "/deck.md": deckContent },
       },
-      (m) => m.replaceItem("/deck.md", "nope", { cards: [meta("nope")], content: "x\n---\ny\n" }, twoSidedType),
+      (m) =>
+        m.replaceItem(
+          "/deck.md",
+          "nope",
+          { cards: [meta("nope")], content: "x\n---\ny\n" },
+          twoSidedType,
+        ),
     );
     const result = await promise;
 
@@ -423,9 +476,7 @@ describe("DeckManager.appendItem", () => {
       fileContents: { "/deck.md": "# Title\n" },
     };
     const newItem: Item = { cards: [meta("a")], content: "Q\n---\nA\n" };
-    const { promise } = runEither(config, (m) =>
-      m.appendItem("/deck.md", newItem, twoCardType),
-    );
+    const { promise } = runEither(config, (m) => m.appendItem("/deck.md", newItem, twoCardType));
     const result = await promise;
 
     expect(Either.isLeft(result)).toBe(true);
@@ -447,9 +498,7 @@ describe("DeckManager.removeItem", () => {
       directories: {},
       fileContents: { "/deck.md": content },
     };
-    const { promise, store } = runSuccess(config, (m) =>
-      m.removeItem("/deck.md", "b"),
-    );
+    const { promise, store } = runSuccess(config, (m) => m.removeItem("/deck.md", "b"));
 
     await promise;
     const written = store["/deck.md"]!;
@@ -466,9 +515,7 @@ describe("DeckManager.removeItem", () => {
       directories: {},
       fileContents: { "/deck.md": content },
     };
-    const { promise, store } = runSuccess(config, (m) =>
-      m.removeItem("/deck.md", "only"),
-    );
+    const { promise, store } = runSuccess(config, (m) => m.removeItem("/deck.md", "only"));
 
     await promise;
     expect(store["/deck.md"]).toBe("# Title\n");
