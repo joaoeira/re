@@ -11,6 +11,7 @@ import {
   type Selection,
 } from "../../src/services/ReviewQueue";
 import {
+  type DeckTreeNode,
   NewFirstOrderingStrategy,
   DueFirstOrderingStrategy,
   QueueOrderingStrategy,
@@ -27,13 +28,13 @@ import {
   byDueDate,
   byFilePosition,
   type QueueItem,
+  buildDeckTree,
   DeckManager,
   DeckManagerLive,
   ReviewDuePolicy,
   Scheduler,
   SchedulerLive,
 } from "@re/workspace";
-import type { DeckTreeNode } from "../../src/services";
 
 // New card (state=0)
 const newCardContent = `<!--@ new123 0 0 0 0-->
@@ -71,11 +72,14 @@ Due card 2 (more overdue)
 Answer 4
 `;
 
+const brokenContent = "<!--@ bad metadata-->";
+
 const MockFileSystem = FileSystem.layerNoop({
   readFileString: (path) => {
     if (path === "/decks/new.md") return Effect.succeed(newCardContent);
     if (path === "/decks/due.md") return Effect.succeed(dueCardContent);
     if (path === "/decks/mixed.md") return Effect.succeed(mixedContent);
+    if (path === "/decks/broken.md") return Effect.succeed(brokenContent);
     if (path === "/decks/empty.md") return Effect.succeed("# No cards");
     if (path === "/decks/folder1/a.md") return Effect.succeed(newCardContent);
     if (path === "/decks/folder1/b.md") return Effect.succeed(dueCardContent);
@@ -107,75 +111,61 @@ const DueFirstTestLayer = ReviewQueueServiceLive.pipe(
 );
 
 // Helper to build a simple tree structure for testing
-const buildTestTree = (): DeckTreeNode[] => [
-  {
-    type: "deck",
-    stats: {
-      path: "/decks/new.md",
+const buildTestTree = (): DeckTreeNode[] =>
+  buildDeckTree([
+    {
+      status: "ok",
+      absolutePath: "/decks/new.md",
+      relativePath: "new.md",
       name: "new",
       totalCards: 1,
-      newCards: 1,
       dueCards: 0,
-      isEmpty: false,
-      parseError: null,
+      stateCounts: { new: 1, learning: 0, review: 0, relearning: 0 },
     },
-  },
-  {
-    type: "deck",
-    stats: {
-      path: "/decks/due.md",
+    {
+      status: "ok",
+      absolutePath: "/decks/due.md",
+      relativePath: "due.md",
       name: "due",
       totalCards: 1,
-      newCards: 0,
       dueCards: 1,
-      isEmpty: false,
-      parseError: null,
+      stateCounts: { new: 0, learning: 0, review: 1, relearning: 0 },
     },
-  },
-  {
-    type: "deck",
-    stats: {
-      path: "/decks/mixed.md",
+    {
+      status: "ok",
+      absolutePath: "/decks/mixed.md",
+      relativePath: "mixed.md",
       name: "mixed",
       totalCards: 4,
-      newCards: 2,
       dueCards: 2,
-      isEmpty: false,
-      parseError: null,
+      stateCounts: { new: 2, learning: 0, review: 2, relearning: 0 },
     },
-  },
-  {
-    type: "folder",
-    name: "folder1",
-    path: "/decks/folder1",
-    children: [
-      {
-        type: "deck",
-        stats: {
-          path: "/decks/folder1/a.md",
-          name: "a",
-          totalCards: 1,
-          newCards: 1,
-          dueCards: 0,
-          isEmpty: false,
-          parseError: null,
-        },
-      },
-      {
-        type: "deck",
-        stats: {
-          path: "/decks/folder1/b.md",
-          name: "b",
-          totalCards: 1,
-          newCards: 0,
-          dueCards: 1,
-          isEmpty: false,
-          parseError: null,
-        },
-      },
-    ],
-  },
-];
+    {
+      status: "ok",
+      absolutePath: "/decks/folder1/a.md",
+      relativePath: "folder1/a.md",
+      name: "a",
+      totalCards: 1,
+      dueCards: 0,
+      stateCounts: { new: 1, learning: 0, review: 0, relearning: 0 },
+    },
+    {
+      status: "ok",
+      absolutePath: "/decks/folder1/b.md",
+      relativePath: "folder1/b.md",
+      name: "b",
+      totalCards: 1,
+      dueCards: 1,
+      stateCounts: { new: 0, learning: 0, review: 1, relearning: 0 },
+    },
+    {
+      status: "parse_error",
+      absolutePath: "/decks/broken.md",
+      relativePath: "broken.md",
+      name: "broken",
+      message: "Invalid metadata at line 1",
+    },
+  ]);
 
 describe("ReviewQueueService", () => {
   const now = new Date("2025-01-10T00:00:00Z"); // Cards due after Jan 1 + stability days
@@ -199,7 +189,7 @@ describe("ReviewQueueService", () => {
 
     it("builds queue for single deck selection", async () => {
       const tree = buildTestTree();
-      const selection: Selection = { type: "deck", path: "/decks/mixed.md" };
+      const selection: Selection = { type: "deck", path: "mixed.md" };
 
       const result = await Effect.gen(function* () {
         const service = yield* ReviewQueueService;
@@ -213,7 +203,7 @@ describe("ReviewQueueService", () => {
 
     it("builds queue for folder selection", async () => {
       const tree = buildTestTree();
-      const selection: Selection = { type: "folder", path: "/decks/folder1" };
+      const selection: Selection = { type: "folder", path: "folder1" };
 
       const result = await Effect.gen(function* () {
         const service = yield* ReviewQueueService;
@@ -230,7 +220,7 @@ describe("ReviewQueueService", () => {
   describe("Ordering strategies", () => {
     it("NewFirstOrdering places new cards before due cards", async () => {
       const tree = buildTestTree();
-      const selection: Selection = { type: "deck", path: "/decks/mixed.md" };
+      const selection: Selection = { type: "deck", path: "mixed.md" };
 
       const result = await Effect.gen(function* () {
         const service = yield* ReviewQueueService;
@@ -253,7 +243,7 @@ describe("ReviewQueueService", () => {
 
     it("DueFirstOrdering places due cards before new cards", async () => {
       const tree = buildTestTree();
-      const selection: Selection = { type: "deck", path: "/decks/mixed.md" };
+      const selection: Selection = { type: "deck", path: "mixed.md" };
 
       const result = await Effect.gen(function* () {
         const service = yield* ReviewQueueService;
@@ -272,7 +262,7 @@ describe("ReviewQueueService", () => {
 
     it("sorts due cards by due date (earliest first)", async () => {
       const tree = buildTestTree();
-      const selection: Selection = { type: "deck", path: "/decks/mixed.md" };
+      const selection: Selection = { type: "deck", path: "mixed.md" };
 
       const result = await Effect.gen(function* () {
         const service = yield* ReviewQueueService;
@@ -295,7 +285,7 @@ describe("ReviewQueueService", () => {
   describe("QueueItem structure", () => {
     it("includes all required fields", async () => {
       const tree = buildTestTree();
-      const selection: Selection = { type: "deck", path: "/decks/new.md" };
+      const selection: Selection = { type: "deck", path: "new.md" };
 
       const result = await Effect.gen(function* () {
         const service = yield* ReviewQueueService;
@@ -317,7 +307,7 @@ describe("ReviewQueueService", () => {
 
     it("includes relative path from root", async () => {
       const tree = buildTestTree();
-      const selection: Selection = { type: "folder", path: "/decks/folder1" };
+      const selection: Selection = { type: "folder", path: "folder1" };
 
       const result = await Effect.gen(function* () {
         const service = yield* ReviewQueueService;
@@ -347,20 +337,17 @@ describe("ReviewQueueService", () => {
     });
 
     it("handles non-existent deck path gracefully", async () => {
-      const tree: DeckTreeNode[] = [
+      const tree = buildDeckTree([
         {
-          type: "deck",
-          stats: {
-            path: "/decks/nonexistent.md",
-            name: "nonexistent",
-            totalCards: 1,
-            newCards: 1,
-            dueCards: 0,
-            isEmpty: false,
-            parseError: null,
-          },
+          status: "ok" as const,
+          absolutePath: "/decks/nonexistent.md",
+          relativePath: "nonexistent.md",
+          name: "nonexistent",
+          totalCards: 1,
+          dueCards: 0,
+          stateCounts: { new: 1, learning: 0, review: 0, relearning: 0 },
         },
-      ];
+      ]);
       const selection: Selection = { type: "all" };
 
       const result = await Effect.gen(function* () {
@@ -376,7 +363,7 @@ describe("ReviewQueueService", () => {
       const tree = buildTestTree();
       const selection: Selection = {
         type: "deck",
-        path: "/decks/nonexistent.md",
+        path: "nonexistent.md",
       };
 
       const result = await Effect.gen(function* () {
@@ -385,6 +372,20 @@ describe("ReviewQueueService", () => {
       }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
       expect(result.items.length).toBe(0);
+    });
+
+    it("soft-skips error snapshot leaves during queue construction", async () => {
+      const tree = buildTestTree();
+      const selection: Selection = { type: "all" };
+
+      const result = await Effect.gen(function* () {
+        const service = yield* ReviewQueueService;
+        return yield* service.buildQueue(selection, tree, "/decks", now);
+      }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+      expect(result.totalNew).toBe(4);
+      expect(result.totalDue).toBe(4);
+      expect(result.items.some((item) => item.deckPath === "/decks/broken.md")).toBe(false);
     });
   });
 
@@ -403,7 +404,7 @@ describe("ReviewQueueService", () => {
 
     it("NewFirstByDueDateSpec places new cards before due cards", async () => {
       const tree = buildTestTree();
-      const selection: Selection = { type: "deck", path: "/decks/mixed.md" };
+      const selection: Selection = { type: "deck", path: "mixed.md" };
 
       const result = await Effect.gen(function* () {
         const service = yield* ReviewQueueService;
@@ -421,7 +422,7 @@ describe("ReviewQueueService", () => {
 
     it("DueFirstByDueDateSpec places due cards before new cards", async () => {
       const tree = buildTestTree();
-      const selection: Selection = { type: "deck", path: "/decks/mixed.md" };
+      const selection: Selection = { type: "deck", path: "mixed.md" };
 
       const result = await Effect.gen(function* () {
         const service = yield* ReviewQueueService;
@@ -439,7 +440,7 @@ describe("ReviewQueueService", () => {
 
     it("NewFirstShuffledSpec randomizes new card order", async () => {
       const tree = buildTestTree();
-      const selection: Selection = { type: "deck", path: "/decks/mixed.md" };
+      const selection: Selection = { type: "deck", path: "mixed.md" };
 
       const runOnce = () =>
         Effect.gen(function* () {
@@ -470,7 +471,7 @@ describe("ReviewQueueService", () => {
 
     it("NewFirstFileOrderSpec sorts by file position", async () => {
       const tree = buildTestTree();
-      const selection: Selection = { type: "deck", path: "/decks/mixed.md" };
+      const selection: Selection = { type: "deck", path: "mixed.md" };
 
       const result = await Effect.gen(function* () {
         const service = yield* ReviewQueueService;
@@ -674,7 +675,7 @@ describe("SchedulerDuePolicyLive", () => {
 describe("ReviewQueue default strategy", () => {
   it("ReviewQueueLive uses shuffled ordering by default", async () => {
     const tree = buildTestTree();
-    const selection: Selection = { type: "deck", path: "/decks/mixed.md" };
+    const selection: Selection = { type: "deck", path: "mixed.md" };
     const now = new Date("2025-01-10T00:00:00Z");
 
     const program = Effect.gen(function* () {
@@ -693,17 +694,17 @@ describe("ReviewQueue default strategy", () => {
   });
 });
 
-describe("ReviewQueue parity harness", () => {
-  const collectDeckPathsLegacy = (
+describe("ReviewQueue integration harness", () => {
+  const collectDeckPathsBaseline = (
     selection: Selection,
     tree: readonly DeckTreeNode[],
   ): string[] => {
     const paths: string[] = [];
 
     const collectFromNode = (node: DeckTreeNode): void => {
-      if (node.type === "deck") {
-        paths.push(node.stats.path);
-      } else {
+      if (node.kind === "leaf") {
+        paths.push(node.snapshot.absolutePath);
+      } else if (node.kind === "group") {
         for (const child of node.children) {
           collectFromNode(child);
         }
@@ -712,15 +713,15 @@ describe("ReviewQueue parity harness", () => {
 
     const findAndCollect = (nodes: readonly DeckTreeNode[], targetPath: string): boolean => {
       for (const node of nodes) {
-        if (node.type === "folder" && node.path === targetPath) {
+        if (node.kind === "group" && node.relativePath === targetPath) {
           collectFromNode(node);
           return true;
         }
-        if (node.type === "deck" && node.stats.path === targetPath) {
-          paths.push(node.stats.path);
+        if (node.kind === "leaf" && node.relativePath === targetPath) {
+          paths.push(node.snapshot.absolutePath);
           return true;
         }
-        if (node.type === "folder") {
+        if (node.kind === "group") {
           if (findAndCollect(node.children, targetPath)) return true;
         }
       }
@@ -756,7 +757,7 @@ describe("ReviewQueue parity harness", () => {
       const orderingStrategy = yield* QueueOrderingStrategy;
       const pathService = yield* Path.Path;
 
-      const deckPaths = collectDeckPathsLegacy(selection, tree);
+      const deckPaths = collectDeckPathsBaseline(selection, tree);
       const results = yield* Effect.all(
         deckPaths.map((p) => deckManager.readDeck(p).pipe(Effect.either)),
         { concurrency: "unbounded" },
@@ -825,7 +826,7 @@ describe("ReviewQueue parity harness", () => {
     })),
   });
 
-  it("matches legacy queue output for the same selection", async () => {
+  it("matches baseline queue output for the same selection", async () => {
     const tree = buildTestTree();
     const selection: Selection = { type: "all" };
     const now = new Date("2025-01-10T00:00:00Z");

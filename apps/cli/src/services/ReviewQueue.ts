@@ -1,4 +1,5 @@
 import {
+  type DeckTreeNode,
   ReviewDuePolicy,
   ReviewQueueBuilder,
   ReviewQueueBuilderLive,
@@ -7,8 +8,6 @@ import {
   type ReviewQueue as WorkspaceReviewQueue,
 } from "@re/workspace";
 import { Context, Effect, Layer, Option } from "effect";
-
-import type { DeckTreeNode } from "../lib/buildDeckTree";
 
 export type Selection =
   | { readonly type: "all" }
@@ -30,9 +29,9 @@ const collectDeckPaths = (selection: Selection, tree: readonly DeckTreeNode[]): 
   const paths: string[] = [];
 
   const collectFromNode = (node: DeckTreeNode): void => {
-    if (node.type === "deck") {
-      paths.push(node.stats.path);
-    } else {
+    if (node.kind === "leaf") {
+      paths.push(node.snapshot.absolutePath);
+    } else if (node.kind === "group") {
       for (const child of node.children) {
         collectFromNode(child);
       }
@@ -41,15 +40,15 @@ const collectDeckPaths = (selection: Selection, tree: readonly DeckTreeNode[]): 
 
   const findAndCollect = (nodes: readonly DeckTreeNode[], targetPath: string): boolean => {
     for (const node of nodes) {
-      if (node.type === "folder" && node.path === targetPath) {
+      if (node.kind === "group" && node.relativePath === targetPath) {
         collectFromNode(node);
         return true;
       }
-      if (node.type === "deck" && node.stats.path === targetPath) {
-        paths.push(node.stats.path);
+      if (node.kind === "leaf" && node.relativePath === targetPath) {
+        paths.push(node.snapshot.absolutePath);
         return true;
       }
-      if (node.type === "folder") {
+      if (node.kind === "group") {
         if (findAndCollect(node.children, targetPath)) return true;
       }
     }

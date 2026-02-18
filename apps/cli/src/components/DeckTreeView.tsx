@@ -1,7 +1,7 @@
 import type { SelectOption } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useMemo, useCallback, useRef } from "react";
-import type { DeckTreeNode } from "../lib/buildDeckTree";
+import type { DeckTreeNode } from "@re/workspace";
 import type { Selection } from "../services";
 import { themeColors as theme, glyphs } from "../ThemeContext";
 
@@ -28,24 +28,17 @@ interface FlattenedItem {
 }
 
 function aggregateStats(nodes: readonly DeckTreeNode[]): AggregatedStats {
-  let totalCards = 0;
-  let newCards = 0;
-  let dueCards = 0;
-
-  for (const node of nodes) {
-    if (node.type === "deck") {
-      totalCards += node.stats.totalCards;
-      newCards += node.stats.newCards;
-      dueCards += node.stats.dueCards;
-    } else {
-      const childStats = aggregateStats(node.children);
-      totalCards += childStats.totalCards;
-      newCards += childStats.newCards;
-      dueCards += childStats.dueCards;
-    }
-  }
-
-  return { totalCards, newCards, dueCards };
+  return nodes.reduce(
+    (acc, node) => {
+      const stats = statsForNode(node);
+      return {
+        totalCards: acc.totalCards + stats.totalCards,
+        newCards: acc.newCards + stats.newCards,
+        dueCards: acc.dueCards + stats.dueCards,
+      };
+    },
+    { totalCards: 0, newCards: 0, dueCards: 0 },
+  );
 }
 
 function formatStats(stats: AggregatedStats): string {
@@ -72,6 +65,26 @@ function getTreePrefix(depth: number, isLast: boolean): string {
   return indent + connector + glyphs.horizontalBar + " ";
 }
 
+function statsForNode(node: DeckTreeNode): AggregatedStats {
+  if (node.kind === "group") {
+    return {
+      totalCards: node.totalCards,
+      newCards: node.stateCounts.new,
+      dueCards: node.dueCards,
+    };
+  }
+
+  if (node.snapshot.status !== "ok") {
+    return { totalCards: 0, newCards: 0, dueCards: 0 };
+  }
+
+  return {
+    totalCards: node.snapshot.totalCards,
+    newCards: node.snapshot.stateCounts.new,
+    dueCards: node.snapshot.dueCards,
+  };
+}
+
 function flattenTree(nodes: readonly DeckTreeNode[], depth: number = 0): FlattenedItem[] {
   const items: FlattenedItem[] = [];
 
@@ -79,37 +92,39 @@ function flattenTree(nodes: readonly DeckTreeNode[], depth: number = 0): Flatten
     const isLast = i === nodes.length - 1;
     const prefix = getTreePrefix(depth, isLast);
 
-    if (node.type === "folder") {
-      const stats = aggregateStats(node.children);
+    if (node.kind === "group") {
+      const stats = statsForNode(node);
       items.push({
-        selection: { type: "folder", path: node.path },
+        selection: { type: "folder", path: node.relativePath },
         name: `${prefix}${glyphs.folder} ${node.name}`,
         description: formatStatsCompact(stats),
         depth,
         type: "folder",
-        hasIssue: false,
+        hasIssue: node.errorCount > 0,
       });
       items.push(...flattenTree(node.children, depth + 1));
     } else {
-      const { stats } = node;
-      const isEmpty = stats.isEmpty;
-      const hasError = stats.parseError !== null;
+      const hasError = node.snapshot.status !== "ok";
+      const stats = statsForNode(node);
+      const isEmpty = !hasError && stats.totalCards === 0;
+      const errorDescription =
+        node.snapshot.status === "read_error"
+          ? "read error"
+          : node.snapshot.status === "parse_error"
+            ? "parse error"
+            : "";
 
       items.push({
-        selection: { type: "deck", path: stats.path },
-        name: `${prefix}${glyphs.file} ${stats.name}`,
+        selection: { type: "deck", path: node.relativePath },
+        name: `${prefix}${glyphs.file} ${node.name}`,
         description: (() => {
-          if (hasError) return "parse error";
+          if (hasError) return errorDescription;
           if (isEmpty) return "empty";
-          return formatStatsCompact({
-            totalCards: stats.totalCards,
-            newCards: stats.newCards,
-            dueCards: stats.dueCards,
-          });
+          return formatStatsCompact(stats);
         })(),
         depth,
         type: "deck",
-        hasIssue: hasError || isEmpty,
+        hasIssue: hasError,
       });
     }
   });
@@ -118,7 +133,7 @@ function flattenTree(nodes: readonly DeckTreeNode[], depth: number = 0): Flatten
 }
 
 export function DeckTreeView({ tree, focused = false, onSelect, onChange }: DeckTreeViewProps) {
-  const totals = aggregateStats(tree);
+  const totals = useMemo(() => aggregateStats(tree), [tree]);
   const currentIndexRef = useRef(0);
 
   const options = useMemo(() => {

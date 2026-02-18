@@ -17,6 +17,7 @@ export {
 } from "@re/workspace";
 export { type ReviewLogEntry } from "./ReviewLogEntry";
 export { DeckManager, DeckManagerLive } from "@re/workspace";
+export { buildDeckTree, type DeckTreeNode } from "@re/workspace";
 export {
   QueueOrderingStrategy,
   NewFirstOrderingStrategy,
@@ -24,8 +25,6 @@ export {
   type QueueItem,
   type ReviewQueue,
 } from "@re/workspace";
-export { DeckLoader, DeckLoaderLive, type DeckStats } from "./DeckLoader";
-export { buildDeckTree, type DeckTreeNode } from "../lib/buildDeckTree";
 export {
   ReviewQueueService,
   ReviewQueueServiceLive,
@@ -34,18 +33,16 @@ export {
 } from "./ReviewQueue";
 
 import { DeckManagerLive } from "@re/workspace";
-import { SchedulerLive } from "@re/workspace";
-import { DeckLoaderLive } from "./DeckLoader";
 import { ReviewQueueLive } from "./ReviewQueue";
 
 const FileSystemAndPath = Layer.mergeAll(BunFileSystem.layer, Path.layer);
 
 const BaseLive = Layer.mergeAll(
   FileSystemAndPath,
-  SchedulerLive,
   DeckManagerLive.pipe(Layer.provide(FileSystemAndPath)),
 );
 
-export const AppLive = Layer.mergeAll(FileSystemAndPath, DeckLoaderLive, ReviewQueueLive).pipe(
-  Layer.provide(BaseLive),
+export const AppLive = Layer.mergeAll(
+  FileSystemAndPath,
+  ReviewQueueLive.pipe(Layer.provide(BaseLive)),
 );
