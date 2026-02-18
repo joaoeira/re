@@ -69,6 +69,7 @@
     "oxc/number-arg-out-of-range": "warn",
     "oxc/only-used-in-recursion": "warn",
     "oxc/uninvoked-array-callback": "warn",
+    "typescript/no-explicit-any": "error",
     "typescript/await-thenable": "warn",
     "typescript/no-array-delete": "warn",
     "typescript/no-base-to-string": "warn",
@@ -140,5 +141,5 @@
     "builtin": true
   },
   "globals": {},
-  "ignorePatterns": []
+  "ignorePatterns": ["**/routeTree.gen.ts"]
 }

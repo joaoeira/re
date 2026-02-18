@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { Effect, Layer, Option, Random } from "effect";
 import { FileSystem, Path } from "@effect/platform";
 import { SystemError } from "@effect/platform/Error";
-import { State, numericField, type ItemMetadata } from "@re/core";
+import { State, numericField, type ItemId, type ItemMetadata } from "@re/core";
 import {
   ReviewQueueService,
   ReviewQueueServiceLive,
@@ -495,8 +495,16 @@ describe("Composable ordering primitives", () => {
     deckPath,
     deckName: "deck",
     relativePath: "deck.md",
-    item: { type: "qa", content: "", cards: [] } as any,
-    card: { id, state: category === "new" ? 0 : 2 } as any,
+    item: { content: "", cards: [] },
+    card: {
+      id: id as ItemId,
+      stability: numericField(0),
+      difficulty: numericField(0),
+      state: category === "new" ? State.New : State.Review,
+      learningSteps: 0,
+      lastReview: null,
+      due: null,
+    },
     cardIndex: 0,
     filePosition,
     category,
@@ -612,7 +620,7 @@ describe("SchedulerDuePolicyLive", () => {
     learningSteps: number,
     lastReview: Date | null,
   ): ItemMetadata => ({
-    id: `card-${state}-${stability}-${learningSteps}` as any,
+    id: `card-${state}-${stability}-${learningSteps}` as ItemId,
     stability: numericField(stability),
     difficulty: numericField(5),
     state,

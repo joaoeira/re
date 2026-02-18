@@ -3,9 +3,8 @@ import { Schema } from "@effect/schema";
 import {
   parseFile,
   serializeFile,
-  type ContentParseError,
   type ItemMetadata,
-  type ItemType,
+  type UntypedItemType,
   type ParsedFile,
 } from "@re/core";
 import { Context, Effect, Layer } from "effect";
@@ -72,13 +71,13 @@ export interface DeckManager {
     deckPath: string,
     cardId: string,
     newItem: { readonly cards: readonly ItemMetadata[]; readonly content: string },
-    itemType: ItemType<any, any, any>,
+    itemType: UntypedItemType,
   ) => Effect.Effect<void, WriteError | CardNotFound | ItemValidationError>;
 
   readonly appendItem: (
     deckPath: string,
     item: { readonly cards: readonly ItemMetadata[]; readonly content: string },
-    itemType: ItemType<any, any, any>,
+    itemType: UntypedItemType,
   ) => Effect.Effect<void, WriteError | ItemValidationError>;
 
   readonly removeItem: (
@@ -149,10 +148,10 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
 
       const validateItemCardCount = (
         item: { readonly cards: readonly ItemMetadata[]; readonly content: string },
-        itemType: ItemType<any, any, any>,
+        itemType: UntypedItemType,
         deckPath: string,
       ): Effect.Effect<void, ItemValidationError> =>
-        (itemType.parse(item.content) as Effect.Effect<unknown, ContentParseError>).pipe(
+        itemType.parse(item.content).pipe(
           Effect.mapError(
             (error) =>
               new ItemValidationError({

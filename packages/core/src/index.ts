@@ -19,7 +19,14 @@ export { NumericFieldFromString, NumericFieldSchema } from "./schema/index";
 export { LearningStepsFromString } from "./schema/index";
 export { LastReviewFromString } from "./schema/index";
 
-export type { CardSpec, ItemType, Grade, InferredType } from "./item-type";
+export type {
+  CardSpec,
+  ItemType,
+  UntypedCardSpec,
+  UntypedItemType,
+  Grade,
+  InferredType,
+} from "./item-type";
 export {
   GradeSchema,
   ContentParseError,

@@ -1,4 +1,4 @@
-import type { CardSpec, Grade } from "@re/core";
+import type { UntypedCardSpec } from "@re/core";
 import type { QueueItem } from "@re/workspace";
 import { useTheme } from "../ThemeContext";
 import { Panel, Hint } from "./ui";
@@ -7,7 +7,7 @@ import { Match } from "effect";
 
 interface CardRendererProps {
   queueItem: QueueItem;
-  cardSpec: CardSpec<Grade>;
+  cardSpec: UntypedCardSpec;
   isRevealed: boolean;
 }
 

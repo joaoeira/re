@@ -23,6 +23,18 @@ export interface ItemType<Content, Response = unknown, GradeError = never> {
   cards(content: Content): ReadonlyArray<CardSpec<Response, GradeError>>;
 }
 
+export interface UntypedCardSpec {
+  readonly prompt: string;
+  readonly reveal: string;
+  readonly cardType: string;
+}
+
+export interface UntypedItemType {
+  readonly name: string;
+  readonly parse: (content: string) => Effect.Effect<unknown, ContentParseError>;
+  cards(content: unknown): ReadonlyArray<UntypedCardSpec>;
+}
+
 export const manualCardSpec = (
   prompt: string,
   reveal: string,
@@ -41,13 +53,13 @@ export class NoMatchingTypeError extends Data.TaggedError("NoMatchingTypeError")
 }> {}
 
 export interface InferredType {
-  readonly type: ItemType<any, any, any>;
+  readonly type: UntypedItemType;
   readonly content: unknown;
 }
 
 /** Try each type's parser in order until one succeeds. */
 export const inferType = (
-  types: ReadonlyArray<ItemType<any, any, any>>,
+  types: ReadonlyArray<UntypedItemType>,
   content: string,
 ): Effect.Effect<InferredType, NoMatchingTypeError> => {
   const tryNext = (

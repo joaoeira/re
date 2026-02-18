@@ -1,9 +1,9 @@
 import { Effect } from "effect";
-import { inferType, type CardSpec, type Grade, type ItemType } from "@re/core";
+import { inferType, type UntypedCardSpec, type UntypedItemType } from "@re/core";
 import { QAType, ClozeType } from "@re/types";
 import type { QueueItem } from "@re/workspace";
 
-const itemTypes = [QAType, ClozeType] as ReadonlyArray<ItemType<unknown, unknown, unknown>>;
+const itemTypes: ReadonlyArray<UntypedItemType> = [QAType, ClozeType];
 
 export class CardSpecError extends Error {
   constructor(message: string) {
@@ -12,7 +12,7 @@ export class CardSpecError extends Error {
   }
 }
 
-export const getCardSpec = (queueItem: QueueItem): Effect.Effect<CardSpec<Grade>, CardSpecError> =>
+export const getCardSpec = (queueItem: QueueItem): Effect.Effect<UntypedCardSpec, CardSpecError> =>
   Effect.gen(function* () {
     const result = yield* inferType(itemTypes, queueItem.item.content).pipe(
       Effect.mapError((e) => new CardSpecError(`Failed to parse item: ${e._tag}: ${e.message}`)),
@@ -29,5 +29,5 @@ export const getCardSpec = (queueItem: QueueItem): Effect.Effect<CardSpec<Grade>
       );
     }
 
-    return cardSpec as CardSpec<Grade>;
+    return cardSpec;
   });

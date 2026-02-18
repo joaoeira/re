@@ -1,6 +1,6 @@
 import { FileSystem, Path } from "@effect/platform";
 import { SystemError } from "@effect/platform/Error";
-import { State } from "@re/core";
+import { State, numericField, type ItemId } from "@re/core";
 import { Effect, Layer, Option, Random } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -324,8 +324,16 @@ describe("Composable ordering primitives", () => {
     deckPath,
     deckName: "deck",
     relativePath: "deck.md",
-    item: { type: "qa", content: "", cards: [] } as any,
-    card: { id, state: category === "new" ? 0 : 2 } as any,
+    item: { content: "", cards: [] },
+    card: {
+      id: id as ItemId,
+      stability: numericField(0),
+      difficulty: numericField(0),
+      state: category === "new" ? State.New : State.Review,
+      learningSteps: 0,
+      lastReview: null,
+      due: null,
+    },
     cardIndex: 0,
     filePosition,
     category,

@@ -2,12 +2,13 @@ import { Path } from "@effect/platform";
 import {
   createMetadataWithId,
   numericField,
+  type Grade,
   type Item,
   type ItemId,
   type ItemType,
 } from "@re/core";
 import { ContentParseError } from "@re/core";
-import { Effect, Either, Layer } from "effect";
+import { Effect, Either, Layer, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -44,8 +45,8 @@ const twoSidedType: ItemType<{ front: string; back: string }> = {
       prompt: "",
       reveal: "",
       cardType: "basic",
-      responseSchema: {} as any,
-      grade: () => Effect.succeed(0 as any),
+      responseSchema: Schema.asSchema(Schema.Unknown),
+      grade: () => Effect.succeed(0 as Grade),
     },
   ],
 };
@@ -66,15 +67,15 @@ const twoCardType: ItemType<{ front: string; back: string }> = {
       prompt: "",
       reveal: "",
       cardType: "forward",
-      responseSchema: {} as any,
-      grade: () => Effect.succeed(0 as any),
+      responseSchema: Schema.asSchema(Schema.Unknown),
+      grade: () => Effect.succeed(0 as Grade),
     },
     {
       prompt: "",
       reveal: "",
       cardType: "reverse",
-      responseSchema: {} as any,
-      grade: () => Effect.succeed(0 as any),
+      responseSchema: Schema.asSchema(Schema.Unknown),
+      grade: () => Effect.succeed(0 as Grade),
     },
   ],
 };
@@ -88,7 +89,7 @@ const buildLayer = (config: MockFileSystemConfig) => {
 
 const run = <A>(
   config: MockFileSystemConfig,
-  fn: (manager: DeckManager) => Effect.Effect<A, any>,
+  fn: (manager: DeckManager) => Effect.Effect<A, unknown>,
 ) => {
   const { layer } = buildLayer(config);
   return Effect.gen(function* () {
@@ -113,7 +114,7 @@ const runEither = <A, E>(
 
 const runSuccess = <A>(
   config: MockFileSystemConfig,
-  fn: (manager: DeckManager) => Effect.Effect<A, any>,
+  fn: (manager: DeckManager) => Effect.Effect<A, unknown>,
 ) => {
   const { layer, store } = buildLayer(config);
   return {
