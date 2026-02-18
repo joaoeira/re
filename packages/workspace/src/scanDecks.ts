@@ -313,9 +313,7 @@ export const scanDecks = (
       }
     }
 
-    const sortedDecks = Arr.sortBy(
-      Order.mapInput(Order.string, (deck: DeckEntry) => deck.relativePath),
-    )(decks);
+    const sortedDecks = Arr.sortWith(decks, (deck) => deck.relativePath, Order.string);
 
     return {
       rootPath: normalizedRootPath,
