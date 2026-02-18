@@ -35,3 +35,16 @@ export {
   type DeckTreeNode,
   type FlatDeckRow,
 } from "./deckTree";
+
+export {
+  DeckManager,
+  DeckManagerLive,
+  DeckNotFound,
+  DeckReadError,
+  DeckParseError,
+  DeckWriteError,
+  CardNotFound,
+  ItemValidationError,
+  type ReadError,
+  type WriteError,
+} from "./DeckManager";

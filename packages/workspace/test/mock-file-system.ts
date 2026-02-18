@@ -11,6 +11,8 @@ export interface MockFileSystemConfig {
   readonly statErrors?: Record<string, SystemErrorReason>;
   readonly readFileErrors?: Record<string, SystemErrorReason>;
   readonly readLinkErrors?: Record<string, SystemErrorReason>;
+  readonly writeFileErrors?: Record<string, SystemErrorReason>;
+  readonly renameErrors?: Record<string, SystemErrorReason>;
 }
 
 export const makeSystemError = (
@@ -42,10 +44,15 @@ const makeFileInfo = (type: FileSystem.File.Type): FileSystem.File.Info => ({
   blocks: Option.none(),
 });
 
-export const createMockFileSystemLayer = (
-  config: MockFileSystemConfig,
-): Layer.Layer<FileSystem.FileSystem> =>
-  FileSystem.layerNoop({
+export interface MockFileSystem {
+  readonly layer: Layer.Layer<FileSystem.FileSystem>;
+  readonly store: Record<string, string>;
+}
+
+export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSystem => {
+  const store: Record<string, string> = { ...config.fileContents };
+
+  const layer = FileSystem.layerNoop({
     readDirectory: (targetPath) =>
       Effect.gen(function* () {
         const forced = config.readDirectoryErrors?.[targetPath];
@@ -72,7 +79,7 @@ export const createMockFileSystemLayer = (
           return yield* Effect.fail(makeSystemError(forced, "readFileString", targetPath));
         }
 
-        const content = config.fileContents?.[targetPath];
+        const content = store[targetPath];
         if (content !== undefined) {
           return content;
         }
@@ -82,6 +89,37 @@ export const createMockFileSystemLayer = (
         }
 
         return yield* Effect.fail(makeSystemError("NotFound", "readFileString", targetPath));
+      }),
+
+    writeFileString: (targetPath, data) =>
+      Effect.gen(function* () {
+        const forced = config.writeFileErrors?.[targetPath];
+        if (forced) {
+          return yield* Effect.fail(makeSystemError(forced, "writeFileString", targetPath));
+        }
+
+        store[targetPath] = data;
+      }),
+
+    rename: (oldPath, newPath) =>
+      Effect.gen(function* () {
+        const forced = config.renameErrors?.[oldPath];
+        if (forced) {
+          return yield* Effect.fail(makeSystemError(forced, "rename", oldPath));
+        }
+
+        const content = store[oldPath];
+        if (content === undefined) {
+          return yield* Effect.fail(makeSystemError("NotFound", "rename", oldPath));
+        }
+
+        store[newPath] = content;
+        delete store[oldPath];
+      }),
+
+    remove: (targetPath) =>
+      Effect.gen(function* () {
+        delete store[targetPath];
       }),
 
     readLink: (targetPath) =>
@@ -118,3 +156,10 @@ export const createMockFileSystemLayer = (
         return makeFileInfo(type);
       }),
   });
+
+  return { layer, store };
+};
+
+export const createMockFileSystemLayer = (
+  config: MockFileSystemConfig,
+): Layer.Layer<FileSystem.FileSystem> => createMockFileSystem(config).layer;
