@@ -2,14 +2,6 @@ import { Layer } from "effect";
 import { BunFileSystem } from "@effect/platform-bun";
 import { Path } from "@effect/platform";
 
-export { DeckDiscovery, DeckDiscoveryLive, type DiscoveryResult } from "./DeckDiscovery";
-export {
-  IgnoreFileService,
-  IgnoreFileServiceLive,
-  IGNORE_FILE,
-  parseIgnoreFile,
-  type IgnoreMap,
-} from "./IgnoreFileService";
 export {
   Scheduler,
   SchedulerLive,
@@ -42,8 +34,6 @@ export {
 } from "./ReviewQueue";
 
 import { DeckManagerLive } from "@re/workspace";
-import { DeckDiscoveryLive } from "./DeckDiscovery";
-import { IgnoreFileServiceLive } from "./IgnoreFileService";
 import { SchedulerLive } from "./Scheduler";
 import { DeckLoaderLive } from "./DeckLoader";
 import { ReviewQueueLive } from "./ReviewQueue";
@@ -54,12 +44,10 @@ const BaseLive = Layer.mergeAll(
   FileSystemAndPath,
   SchedulerLive,
   DeckManagerLive.pipe(Layer.provide(FileSystemAndPath)),
-  IgnoreFileServiceLive.pipe(Layer.provide(FileSystemAndPath)),
 );
 
 export const AppLive = Layer.mergeAll(
-  Path.layer,
-  DeckDiscoveryLive,
+  FileSystemAndPath,
   DeckLoaderLive,
   ReviewQueueLive,
 ).pipe(Layer.provide(BaseLive));

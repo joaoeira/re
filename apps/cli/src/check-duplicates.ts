@@ -3,8 +3,7 @@ import { Effect, Layer, Array, Record, pipe } from "effect";
 import { BunFileSystem } from "@effect/platform-bun";
 import { Path } from "@effect/platform";
 import type { ParsedFile } from "@re/core";
-import { DeckManager, DeckManagerLive } from "@re/workspace";
-import { DeckDiscovery, DeckDiscoveryLive, IgnoreFileServiceLive } from "./services";
+import { DeckManager, DeckManagerLive, scanDecks } from "@re/workspace";
 
 export interface CardLocation {
   readonly filePath: string;
@@ -59,24 +58,27 @@ export const formatDuplicates = (duplicates: DuplicateMap): string => {
 };
 
 const program = Effect.gen(function* () {
-  const discovery = yield* DeckDiscovery;
   const deckManager = yield* DeckManager;
 
   const rootPath = process.cwd();
-  const result = yield* discovery.discoverDecks(rootPath);
-
-  if (result.error) {
-    console.error(result.error);
+  const scanResult = yield* scanDecks(rootPath).pipe(Effect.either);
+  if (scanResult._tag === "Left") {
+    const message =
+      "message" in scanResult.left && typeof scanResult.left.message === "string"
+        ? scanResult.left.message
+        : scanResult.left._tag;
+    console.error(message);
     process.exit(1);
   }
+  const deckPaths = scanResult.right.decks.map((deck) => deck.absolutePath);
 
-  if (result.paths.length === 0) {
+  if (deckPaths.length === 0) {
     console.log("No deck files found");
     return;
   }
 
   const results = yield* Effect.all(
-    result.paths.map((p) => deckManager.readDeck(p).pipe(Effect.either)),
+    deckPaths.map((p) => deckManager.readDeck(p).pipe(Effect.either)),
     { concurrency: "unbounded" },
   );
 
@@ -84,7 +86,7 @@ const program = Effect.gen(function* () {
   for (let i = 0; i < results.length; i++) {
     const r = results[i]!;
     if (r._tag === "Right") {
-      decks.push({ path: result.paths[i]!, file: r.right });
+      decks.push({ path: deckPaths[i]!, file: r.right });
     }
   }
 
@@ -96,9 +98,9 @@ const program = Effect.gen(function* () {
 const FileSystemAndPath = Layer.mergeAll(BunFileSystem.layer, Path.layer);
 
 export const CheckDuplicatesLive = Layer.mergeAll(
-  DeckManagerLive,
-  DeckDiscoveryLive.pipe(Layer.provide(IgnoreFileServiceLive)),
-).pipe(Layer.provide(FileSystemAndPath));
+  FileSystemAndPath,
+  DeckManagerLive.pipe(Layer.provide(FileSystemAndPath)),
+);
 
 if (import.meta.main) {
   Effect.runPromise(program.pipe(Effect.provide(CheckDuplicatesLive)));

@@ -1,7 +1,8 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from "react";
 import { Effect, Fiber, Exit } from "effect";
 import { Path } from "@effect/platform";
-import { DeckDiscovery, DeckLoader, AppLive, buildDeckTree, type DeckTreeNode } from "../services";
+import { scanDecks } from "@re/workspace";
+import { DeckLoader, AppLive, buildDeckTree, type DeckTreeNode } from "../services";
 
 export interface UseDecksResult {
   loading: boolean;
@@ -66,21 +67,25 @@ export function useDecks(rootPath: string): UseDecksResult {
     dispatch({ type: "SET_LOADING", payload: true });
 
     const program = Effect.gen(function* () {
-      const discovery = yield* DeckDiscovery;
       const loader = yield* DeckLoader;
       const path = yield* Path.Path;
 
-      const result = yield* discovery.discoverDecks(rootPath);
-
-      // If discovery failed, return empty tree with error
-      if (result.error) {
-        return { tree: [] as DeckTreeNode[], error: result.error };
+      const discovered = yield* scanDecks(rootPath).pipe(Effect.either);
+      if (discovered._tag === "Left") {
+        const message =
+          "message" in discovered.left && typeof discovered.left.message === "string"
+            ? discovered.left.message
+            : discovered.left._tag;
+        return { tree: [] as DeckTreeNode[], error: message };
       }
 
       const now = new Date();
-      const stats = yield* loader.loadAllDecks(result.paths, now);
+      const stats = yield* loader.loadAllDecks(
+        discovered.right.decks.map((deck) => deck.absolutePath),
+        now,
+      );
 
-      return { tree: buildDeckTree(stats, rootPath, path), error: null };
+      return { tree: buildDeckTree(stats, discovered.right.rootPath, path), error: null };
     }).pipe(Effect.provide(AppLive));
 
     const fiber = Effect.runFork(program);
