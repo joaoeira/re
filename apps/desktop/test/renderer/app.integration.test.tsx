@@ -91,7 +91,8 @@ describe("renderer integration", () => {
     expect(screen.getByText("ok")).toBeTruthy();
     expect(screen.getByText("read")).toBeTruthy();
     expect(screen.getByText("parse")).toBeTruthy();
-    expect(screen.getByText("Snapshot as of 2025-01-10T00:00:00.000Z")).toBeTruthy();
+    expect(screen.getByText(/Snapshot updated/)).toBeTruthy();
+    expect(screen.getByTitle("2025-01-10T00:00:00.000Z")).toBeTruthy();
     expect(screen.getByText("2 due")).toBeTruthy();
   });
 
@@ -183,7 +184,8 @@ describe("renderer integration", () => {
     await waitFor(() => expect(screen.getByText("new-deck")).toBeTruthy());
     expect(screen.getByText("deck")).toBeTruthy();
     expect(screen.getByText("1 due")).toBeTruthy();
-    expect(screen.getByText("Snapshot as of 2025-01-10T12:00:00.000Z")).toBeTruthy();
+    expect(screen.getByText(/Snapshot updated/)).toBeTruthy();
+    expect(screen.getByTitle("2025-01-10T12:00:00.000Z")).toBeTruthy();
   });
 
   it("shows error when settings fail to load", async () => {

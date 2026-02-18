@@ -69,8 +69,8 @@ export const isCardDue = (card: ItemMetadata, now: Date): boolean => {
 };
 
 export const resolveDueDateIfDue = (card: ItemMetadata, now: Date): Date | null => {
-  const dueDate = computeDueDate(card);
   if (card.state === State.New) return null;
+  const dueDate = computeDueDate(card);
   return dueDate !== null && dueDate <= now ? dueDate : null;
 };
 

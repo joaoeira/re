@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect";
 import { Path } from "@effect/platform";
-import { DeckManager, Scheduler } from "@re/workspace";
+import { DeckManager, isCardDue } from "@re/workspace";
 import { State } from "@re/core";
 
 export interface DeckStats {
@@ -24,7 +24,6 @@ export const DeckLoaderLive = Layer.effect(
   DeckLoader,
   Effect.gen(function* () {
     const deckManager = yield* DeckManager;
-    const scheduler = yield* Scheduler;
     const pathService = yield* Path.Path;
 
     const loadSingleDeck = (filePath: string, now: Date): Effect.Effect<DeckStats, never> =>
@@ -55,7 +54,7 @@ export const DeckLoaderLive = Layer.effect(
             totalCards++;
             if (card.state === State.New) {
               newCards++;
-            } else if (scheduler.isDue(card, now)) {
+            } else if (isCardDue(card, now)) {
               dueCards++;
             }
           }

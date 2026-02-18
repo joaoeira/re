@@ -104,7 +104,7 @@ export function DeckRow({ node, depth, isCollapsed, onToggle, onClick }: DeckRow
         </span>
       )}
 
-      {totalCards !== null && totalCards !== undefined && (
+      {totalCards !== null && (
         <span className="ml-2 shrink-0 text-xs tabular-nums text-muted-foreground">
           {totalCards}
         </span>

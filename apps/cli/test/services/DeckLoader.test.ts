@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect";
 import { FileSystem, Path } from "@effect/platform";
 import { SystemError } from "@effect/platform/Error";
 import { DeckLoader, DeckLoaderLive } from "../../src/services/DeckLoader";
-import { DeckManagerLive, SchedulerLive } from "@re/workspace";
+import { DeckManagerLive } from "@re/workspace";
 
 const validDeckContent = `---
 title: Test
@@ -40,9 +40,7 @@ const MockDeckManager = DeckManagerLive.pipe(
   Layer.provide(Layer.mergeAll(MockFileSystem, Path.layer)),
 );
 
-const TestLayer = DeckLoaderLive.pipe(
-  Layer.provide(Layer.mergeAll(MockDeckManager, SchedulerLive, Path.layer)),
-);
+const TestLayer = DeckLoaderLive.pipe(Layer.provide(Layer.mergeAll(MockDeckManager, Path.layer)));
 
 describe("DeckLoader", () => {
   it("loads valid deck with correct stats", async () => {
