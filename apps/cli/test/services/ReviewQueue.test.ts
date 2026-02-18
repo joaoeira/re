@@ -22,7 +22,7 @@ import {
   type Selection,
   type QueueItem,
 } from "../../src/services/ReviewQueue";
-import { DeckParserLive } from "../../src/services/DeckParser";
+import { DeckManagerLive } from "@re/workspace";
 import { SchedulerLive } from "../../src/services/Scheduler";
 import type { DeckTreeNode } from "../../src/services";
 
@@ -81,19 +81,19 @@ const MockFileSystem = FileSystem.layerNoop({
   },
 });
 
-const MockDeckParser = DeckParserLive.pipe(
+const MockDeckManager = DeckManagerLive.pipe(
   Layer.provide(Layer.mergeAll(MockFileSystem, Path.layer)),
 );
 
 const TestLayer = ReviewQueueServiceLive.pipe(
   Layer.provide(
-    Layer.mergeAll(MockDeckParser, SchedulerLive, NewFirstOrderingStrategy, Path.layer),
+    Layer.mergeAll(MockDeckManager, SchedulerLive, NewFirstOrderingStrategy, Path.layer),
   ),
 );
 
 const DueFirstTestLayer = ReviewQueueServiceLive.pipe(
   Layer.provide(
-    Layer.mergeAll(MockDeckParser, SchedulerLive, DueFirstOrderingStrategy, Path.layer),
+    Layer.mergeAll(MockDeckManager, SchedulerLive, DueFirstOrderingStrategy, Path.layer),
   ),
 );
 
@@ -384,7 +384,7 @@ describe("ReviewQueueService", () => {
       ReviewQueueServiceLive.pipe(
         Layer.provide(
           Layer.mergeAll(
-            MockDeckParser,
+            MockDeckManager,
             SchedulerLive,
             Path.layer,
             QueueOrderingStrategyFromSpec.pipe(Layer.provide(specLayer)),
@@ -479,7 +479,7 @@ describe("Composable ordering primitives", () => {
   const makeItem = (
     id: string,
     category: "new" | "due",
-    itemIndex: number,
+    filePosition: number,
     dueDate: Date | null = null,
     deckPath: string = "/deck.md",
   ): QueueItem => ({
@@ -489,7 +489,7 @@ describe("Composable ordering primitives", () => {
     item: { type: "qa", content: "", cards: [] } as any,
     card: { id, state: category === "new" ? 0 : 2 } as any,
     cardIndex: 0,
-    itemIndex,
+    filePosition,
     category,
     dueDate,
   });

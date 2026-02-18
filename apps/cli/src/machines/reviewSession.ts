@@ -3,14 +3,13 @@ import { Effect, Runtime } from "effect";
 import type { QueueItem } from "../services/ReviewQueue";
 import type { ReviewLogEntry, FSRSGrade, ScheduleResult } from "../services/Scheduler";
 import { Scheduler } from "../services/Scheduler";
-import { DeckWriter } from "../services/DeckWriter";
+import { DeckManager } from "@re/workspace";
 
 interface GradingResult {
   schedulerLog: ScheduleResult["schedulerLog"];
   queueIndex: number;
   deckPath: string;
-  itemIndex: number;
-  cardIndex: number;
+  cardId: string;
 }
 
 interface SessionStats {
@@ -27,7 +26,7 @@ interface ReviewSessionContext {
   currentIndex: number;
 
   // Runtime for Effect execution
-  runtime: Runtime.Runtime<Scheduler | DeckWriter>;
+  runtime: Runtime.Runtime<Scheduler | DeckManager>;
 
   // Undo stack - stores review logs for each completed review
   reviewLogStack: readonly ReviewLogEntry[];
@@ -62,7 +61,7 @@ const gradingActor = fromPromise(
       queueItem: QueueItem;
       queueIndex: number;
       grade: FSRSGrade;
-      runtime: Runtime.Runtime<Scheduler | DeckWriter>;
+      runtime: Runtime.Runtime<Scheduler | DeckManager>;
     };
     signal: AbortSignal;
   }): Promise<GradingResult> => {
@@ -70,14 +69,13 @@ const gradingActor = fromPromise(
 
     const program = Effect.gen(function* () {
       const scheduler = yield* Scheduler;
-      const deckWriter = yield* DeckWriter;
+      const deckManager = yield* DeckManager;
 
       const scheduleResult = yield* scheduler.scheduleReview(queueItem.card, grade, new Date());
 
-      yield* deckWriter.updateCard(
+      yield* deckManager.updateCardMetadata(
         queueItem.deckPath,
-        queueItem.itemIndex,
-        queueItem.cardIndex,
+        queueItem.card.id,
         scheduleResult.updatedCard,
       );
 
@@ -85,8 +83,7 @@ const gradingActor = fromPromise(
         schedulerLog: scheduleResult.schedulerLog,
         queueIndex,
         deckPath: queueItem.deckPath,
-        itemIndex: queueItem.itemIndex,
-        cardIndex: queueItem.cardIndex,
+        cardId: queueItem.card.id,
       };
     });
 
@@ -101,19 +98,18 @@ const undoActor = fromPromise(
   }: {
     input: {
       reviewLog: ReviewLogEntry;
-      runtime: Runtime.Runtime<Scheduler | DeckWriter>;
+      runtime: Runtime.Runtime<Scheduler | DeckManager>;
     };
     signal: AbortSignal;
   }): Promise<number> => {
     const { reviewLog, runtime } = input;
 
     const program = Effect.gen(function* () {
-      const deckWriter = yield* DeckWriter;
+      const deckManager = yield* DeckManager;
 
-      yield* deckWriter.updateCard(
+      yield* deckManager.updateCardMetadata(
         reviewLog.deckPath,
-        reviewLog.itemIndex,
-        reviewLog.cardIndex,
+        reviewLog.cardId,
         reviewLog.previousCard,
       );
 
@@ -130,7 +126,7 @@ export const reviewSessionMachine = setup({
     events: {} as ReviewSessionEvent,
     input: {} as {
       queue: readonly QueueItem[];
-      runtime: Runtime.Runtime<Scheduler | DeckWriter>;
+      runtime: Runtime.Runtime<Scheduler | DeckManager>;
     },
   },
 
@@ -253,8 +249,7 @@ export const reviewSessionMachine = setup({
                   ...result.schedulerLog,
                   queueIndex: result.queueIndex,
                   deckPath: result.deckPath,
-                  itemIndex: result.itemIndex,
-                  cardIndex: result.cardIndex,
+                  cardId: result.cardId,
                 };
                 const stats = {
                   ...context.sessionStats,

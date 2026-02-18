@@ -19,7 +19,6 @@ import { createMockFileSystem, type MockFileSystemConfig } from "./mock-file-sys
 const makeCard = (id: string, state: 0 | 1 | 2 | 3 = 0): string =>
   `<!--@ ${id} 0 0 ${state} 0-->`;
 
-const makeDeck = (...items: string[]): string => items.join("");
 
 const singleCardItem = (id: string, content: string): string =>
   `${makeCard(id)}\n${content}`;

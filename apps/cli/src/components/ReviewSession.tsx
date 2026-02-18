@@ -3,6 +3,7 @@ import { useKeyboard } from "@opentui/react";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { Effect, Exit, Layer, Runtime, Scope } from "effect";
 import { BunFileSystem } from "@effect/platform-bun";
+import { Path } from "@effect/platform";
 import { reviewSessionMachine } from "../machines/reviewSession";
 import { CardRenderer } from "./CardRenderer";
 import { GradeButtons } from "./GradeButtons";
@@ -13,7 +14,7 @@ import { themeColors as theme } from "../ThemeContext";
 import type { QueueItem } from "../services/ReviewQueue";
 import type { CardSpec, Grade } from "@re/core";
 import { Scheduler, SchedulerLive } from "../services/Scheduler";
-import { DeckWriter, DeckWriterLive } from "../services/DeckWriter";
+import { DeckManager, DeckManagerLive } from "@re/workspace";
 import { Loading } from "./Spinner";
 
 interface ReviewSessionProps {
@@ -22,12 +23,12 @@ interface ReviewSessionProps {
   onQuit: () => void;
 }
 
-const ReviewSessionLayer = Layer.mergeAll(SchedulerLive, DeckWriterLive).pipe(
-  Layer.provide(BunFileSystem.layer),
+const ReviewSessionLayer = Layer.mergeAll(SchedulerLive, DeckManagerLive).pipe(
+  Layer.provide(Layer.mergeAll(BunFileSystem.layer, Path.layer)),
 );
 
 function useReviewSessionRuntime() {
-  const [runtime, setRuntime] = useState<Runtime.Runtime<Scheduler | DeckWriter> | null>(null);
+  const [runtime, setRuntime] = useState<Runtime.Runtime<Scheduler | DeckManager> | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const closeRef = useRef<Effect.Effect<void> | null>(null);
 
@@ -108,7 +109,7 @@ function ReviewSessionInner({
   runtime,
   onComplete,
   onQuit,
-}: ReviewSessionProps & { runtime: Runtime.Runtime<Scheduler | DeckWriter> }) {
+}: ReviewSessionProps & { runtime: Runtime.Runtime<Scheduler | DeckManager> }) {
   const [state, send] = useMachine(reviewSessionMachine, {
     input: { queue, runtime },
   });

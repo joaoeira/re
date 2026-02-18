@@ -15,7 +15,7 @@ const makeCard = (state: number, stability: number, lastReview: Date | null): It
   lastReview,
 });
 
-const makeQueueItem = (itemIndex: number, cardIndex = 0): QueueItem => {
+const makeQueueItem = (filePosition: number, cardIndex = 0): QueueItem => {
   const card = makeCard(State.New, 0, null);
   const item: Item = {
     cards: [card],
@@ -28,7 +28,7 @@ const makeQueueItem = (itemIndex: number, cardIndex = 0): QueueItem => {
     item,
     card,
     cardIndex,
-    itemIndex,
+    filePosition,
     category: "new",
     dueDate: null,
   };
@@ -59,8 +59,7 @@ const mockGradingActor = fromPromise(
     },
     queueIndex: input.queueIndex,
     deckPath: input.queueItem.deckPath,
-    itemIndex: input.queueItem.itemIndex,
-    cardIndex: input.queueItem.cardIndex,
+    cardId: input.queueItem.card.id,
   }),
 );
 
@@ -247,8 +246,7 @@ describe("reviewSessionMachine", () => {
           },
           queueIndex: i.queueIndex,
           deckPath: i.queueItem.deckPath,
-          itemIndex: i.queueItem.itemIndex,
-          cardIndex: i.queueItem.cardIndex,
+          cardId: i.queueItem.card.id,
         };
       });
 

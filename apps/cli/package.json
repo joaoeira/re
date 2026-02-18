@@ -21,6 +21,7 @@
     "@opentui/react": "^0.1.67",
     "@re/core": "workspace:*",
     "@re/types": "workspace:*",
+    "@re/workspace": "workspace:*",
     "@xstate/react": "^6.0.0",
     "effect": "^3.19.14",
     "react": "^19.1.0",

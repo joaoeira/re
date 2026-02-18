@@ -118,7 +118,7 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
       }),
 
     remove: (targetPath) =>
-      Effect.gen(function* () {
+      Effect.sync(() => {
         delete store[targetPath];
       }),
 

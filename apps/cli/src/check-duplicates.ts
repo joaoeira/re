@@ -2,14 +2,9 @@
 import { Effect, Layer, Array, Record, pipe } from "effect";
 import { BunFileSystem } from "@effect/platform-bun";
 import { Path } from "@effect/platform";
-import {
-  DeckDiscovery,
-  DeckDiscoveryLive,
-  DeckParser,
-  DeckParserLive,
-  IgnoreFileServiceLive,
-  type ParsedDeck,
-} from "./services";
+import type { ParsedFile } from "@re/core";
+import { DeckManager, DeckManagerLive } from "@re/workspace";
+import { DeckDiscovery, DeckDiscoveryLive, IgnoreFileServiceLive } from "./services";
 
 export interface CardLocation {
   readonly filePath: string;
@@ -20,7 +15,9 @@ export interface CardLocation {
 
 export type DuplicateMap = Record<string, readonly CardLocation[]>;
 
-export const extractCardLocations = (decks: readonly ParsedDeck[]): readonly CardLocation[] =>
+export const extractCardLocations = (
+  decks: readonly { path: string; file: ParsedFile }[],
+): readonly CardLocation[] =>
   pipe(
     decks,
     Array.flatMap((deck) =>
@@ -63,7 +60,7 @@ export const formatDuplicates = (duplicates: DuplicateMap): string => {
 
 const program = Effect.gen(function* () {
   const discovery = yield* DeckDiscovery;
-  const parser = yield* DeckParser;
+  const deckManager = yield* DeckManager;
 
   const rootPath = process.cwd();
   const result = yield* discovery.discoverDecks(rootPath);
@@ -78,7 +75,19 @@ const program = Effect.gen(function* () {
     return;
   }
 
-  const decks = yield* parser.parseAll(result.paths);
+  const results = yield* Effect.all(
+    result.paths.map((p) => deckManager.readDeck(p).pipe(Effect.either)),
+    { concurrency: "unbounded" },
+  );
+
+  const decks: { path: string; file: import("@re/core").ParsedFile }[] = [];
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i]!;
+    if (r._tag === "Right") {
+      decks.push({ path: result.paths[i]!, file: r.right });
+    }
+  }
+
   const locations = extractCardLocations(decks);
   const duplicates = findDuplicates(locations);
   console.log(formatDuplicates(duplicates));
@@ -87,7 +96,7 @@ const program = Effect.gen(function* () {
 const FileSystemAndPath = Layer.mergeAll(BunFileSystem.layer, Path.layer);
 
 export const CheckDuplicatesLive = Layer.mergeAll(
-  DeckParserLive,
+  DeckManagerLive,
   DeckDiscoveryLive.pipe(Layer.provide(IgnoreFileServiceLive)),
 ).pipe(Layer.provide(FileSystemAndPath));
 

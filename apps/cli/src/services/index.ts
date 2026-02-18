@@ -24,15 +24,7 @@ export {
   itemMetadataToFSRSCard,
   fsrsCardToItemMetadata,
 } from "./Scheduler";
-export { DeckWriter, DeckWriterLive, DeckWriteError } from "./DeckWriter";
-export {
-  DeckParser,
-  DeckParserLive,
-  DeckReadError,
-  DeckParseError,
-  type DeckParserError,
-  type ParsedDeck,
-} from "./DeckParser";
+export { DeckManager, DeckManagerLive } from "@re/workspace";
 export { DeckLoader, DeckLoaderLive, type DeckStats } from "./DeckLoader";
 export { buildDeckTree, type DeckTreeNode } from "../lib/buildDeckTree";
 export {
@@ -47,24 +39,22 @@ export {
   type ReviewQueue,
 } from "./ReviewQueue";
 
+import { DeckManagerLive } from "@re/workspace";
 import { DeckDiscoveryLive } from "./DeckDiscovery";
 import { IgnoreFileServiceLive } from "./IgnoreFileService";
 import { SchedulerLive } from "./Scheduler";
-import { DeckParserLive } from "./DeckParser";
 import { DeckLoaderLive } from "./DeckLoader";
 import { ReviewQueueLive } from "./ReviewQueue";
 
 const FileSystemAndPath = Layer.mergeAll(BunFileSystem.layer, Path.layer);
 
-// Base layer: FileSystem + Path + Scheduler + DeckParser + IgnoreFileService
 const BaseLive = Layer.mergeAll(
   FileSystemAndPath,
   SchedulerLive,
-  DeckParserLive.pipe(Layer.provide(FileSystemAndPath)),
+  DeckManagerLive.pipe(Layer.provide(FileSystemAndPath)),
   IgnoreFileServiceLive.pipe(Layer.provide(FileSystemAndPath)),
 );
 
-// Full application layer
 export const AppLive = Layer.mergeAll(
   Path.layer,
   DeckDiscoveryLive,

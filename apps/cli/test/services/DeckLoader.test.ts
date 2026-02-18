@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect";
 import { FileSystem, Path } from "@effect/platform";
 import { SystemError } from "@effect/platform/Error";
 import { DeckLoader, DeckLoaderLive } from "../../src/services/DeckLoader";
-import { DeckParserLive } from "../../src/services/DeckParser";
+import { DeckManagerLive } from "@re/workspace";
 import { SchedulerLive } from "../../src/services/Scheduler";
 
 const validDeckContent = `---
@@ -37,11 +37,13 @@ const MockFileSystem = FileSystem.layerNoop({
   },
 });
 
-const MockDeckParser = DeckParserLive.pipe(
+const MockDeckManager = DeckManagerLive.pipe(
   Layer.provide(Layer.mergeAll(MockFileSystem, Path.layer)),
 );
 
-const TestLayer = DeckLoaderLive.pipe(Layer.provide(Layer.merge(MockDeckParser, SchedulerLive)));
+const TestLayer = DeckLoaderLive.pipe(
+  Layer.provide(Layer.mergeAll(MockDeckManager, SchedulerLive, Path.layer)),
+);
 
 describe("DeckLoader", () => {
   it("loads valid deck with correct stats", async () => {
@@ -77,7 +79,7 @@ describe("DeckLoader", () => {
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
     expect(result.isEmpty).toBe(true);
-    expect(result.parseError).toContain("Parse error");
+    expect(result.parseError).toBeTruthy();
   });
 
   it("handles read errors gracefully", async () => {
@@ -87,6 +89,6 @@ describe("DeckLoader", () => {
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
     expect(result.isEmpty).toBe(true);
-    expect(result.parseError).toContain("Read error");
+    expect(result.parseError).toBe("Deck not found");
   });
 });

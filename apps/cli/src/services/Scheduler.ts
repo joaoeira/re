@@ -29,8 +29,7 @@ export interface ScheduleResult {
 export interface ReviewLogEntry extends SchedulerLog {
   readonly queueIndex: number;
   readonly deckPath: string;
-  readonly itemIndex: number;
-  readonly cardIndex: number;
+  readonly cardId: string;
 }
 
 export class ScheduleError extends Data.TaggedError("ScheduleError")<{

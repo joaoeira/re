@@ -1,6 +1,7 @@
 import { Context, Effect, Layer } from "effect";
+import { Path } from "@effect/platform";
+import { DeckManager } from "@re/workspace";
 import { Scheduler } from "./Scheduler";
-import { DeckParser } from "./DeckParser";
 import { State } from "@re/core";
 
 export interface DeckStats {
@@ -23,27 +24,29 @@ export const DeckLoader = Context.GenericTag<DeckLoader>("DeckLoader");
 export const DeckLoaderLive = Layer.effect(
   DeckLoader,
   Effect.gen(function* () {
-    const parser = yield* DeckParser;
+    const deckManager = yield* DeckManager;
     const scheduler = yield* Scheduler;
+    const pathService = yield* Path.Path;
 
     const loadSingleDeck = (filePath: string, now: Date): Effect.Effect<DeckStats, never> =>
       Effect.gen(function* () {
-        const parseResult = yield* parser.parse(filePath).pipe(Effect.either);
+        const name = pathService.basename(filePath, ".md");
+        const readResult = yield* deckManager.readDeck(filePath).pipe(Effect.either);
 
-        if (parseResult._tag === "Left") {
-          const error = parseResult.left;
+        if (readResult._tag === "Left") {
+          const error = readResult.left;
           return {
             path: filePath,
-            name: filePath.split("/").pop()?.replace(".md", "") ?? "",
+            name,
             totalCards: 0,
             newCards: 0,
             dueCards: 0,
             isEmpty: true,
-            parseError: error.message,
+            parseError: error._tag === "DeckNotFound" ? "Deck not found" : error.message,
           };
         }
 
-        const { name, file } = parseResult.right;
+        const file = readResult.right;
         let totalCards = 0;
         let newCards = 0;
         let dueCards = 0;

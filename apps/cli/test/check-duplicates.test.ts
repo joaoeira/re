@@ -1,14 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { Effect, Layer } from "effect";
-import { FileSystem, Path } from "@effect/platform";
-import { SystemError } from "@effect/platform/Error";
 import {
   extractCardLocations,
   findDuplicates,
   formatDuplicates,
   type CardLocation,
 } from "../src/check-duplicates";
-import type { ParsedDeck } from "../src/services";
+import type { ParsedFile } from "@re/core";
 
 const makeCard = (id: string) => ({
   id,
@@ -19,9 +16,11 @@ const makeCard = (id: string) => ({
   lastReview: null,
 });
 
-const makeDeck = (path: string, cards: { itemIndex: number; cardIds: string[] }[]): ParsedDeck => ({
+const makeDeck = (
+  path: string,
+  cards: { cardIds: string[] }[],
+): { path: string; file: ParsedFile } => ({
   path,
-  name: path.split("/").pop()?.replace(".md", "") ?? "",
   file: {
     preamble: "",
     items: cards.map(({ cardIds }) => ({
@@ -34,7 +33,7 @@ const makeDeck = (path: string, cards: { itemIndex: number; cardIds: string[] }[
 describe("check-duplicates", () => {
   describe("extractCardLocations", () => {
     it("extracts all card locations from a single deck", () => {
-      const decks = [makeDeck("/deck1.md", [{ itemIndex: 0, cardIds: ["a", "b"] }])];
+      const decks = [makeDeck("/deck1.md", [{ cardIds: ["a", "b"] }])];
 
       const result = extractCardLocations(decks);
 
@@ -46,8 +45,8 @@ describe("check-duplicates", () => {
 
     it("extracts locations from multiple decks", () => {
       const decks = [
-        makeDeck("/deck1.md", [{ itemIndex: 0, cardIds: ["a"] }]),
-        makeDeck("/deck2.md", [{ itemIndex: 0, cardIds: ["b"] }]),
+        makeDeck("/deck1.md", [{ cardIds: ["a"] }]),
+        makeDeck("/deck2.md", [{ cardIds: ["b"] }]),
       ];
 
       const result = extractCardLocations(decks);
@@ -60,10 +59,7 @@ describe("check-duplicates", () => {
 
     it("extracts locations from multiple items in a deck", () => {
       const decks = [
-        makeDeck("/deck1.md", [
-          { itemIndex: 0, cardIds: ["a"] },
-          { itemIndex: 1, cardIds: ["b"] },
-        ]),
+        makeDeck("/deck1.md", [{ cardIds: ["a"] }, { cardIds: ["b"] }]),
       ];
 
       const result = extractCardLocations(decks);

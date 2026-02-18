@@ -1,8 +1,8 @@
 import { Context, Effect, Layer, Array as Arr, Order, Random, Chunk } from "effect";
 import { Path } from "@effect/platform";
 import { type Item, type ItemMetadata, State } from "@re/core";
+import { DeckManager } from "@re/workspace";
 import { Scheduler } from "./Scheduler";
-import { DeckParser } from "./DeckParser";
 import type { DeckTreeNode } from "../lib/buildDeckTree";
 
 export type Selection =
@@ -16,8 +16,8 @@ export interface QueueItem {
   readonly relativePath: string;
   readonly item: Item;
   readonly card: ItemMetadata;
-  readonly cardIndex: number; // index within item.cards (for multi-card items)
-  readonly itemIndex: number; // index within ParsedFile.items (for stable updates)
+  readonly cardIndex: number;
+  readonly filePosition: number;
   readonly category: "new" | "due";
   readonly dueDate: Date | null;
 }
@@ -62,7 +62,7 @@ export const byDueDate: Order.Order<QueueItem> = Order.make((a, b) => {
 
 export const byFilePosition: Order.Order<QueueItem> = Order.combine(
   Order.mapInput(Order.string, (q: QueueItem) => q.deckPath),
-  Order.mapInput(Order.number, (q: QueueItem) => q.itemIndex),
+  Order.mapInput(Order.number, (q: QueueItem) => q.filePosition),
 );
 
 export interface QueueOrderSpec {
@@ -198,7 +198,7 @@ const collectDeckPaths = (selection: Selection, tree: readonly DeckTreeNode[]): 
 export const ReviewQueueServiceLive = Layer.effect(
   ReviewQueueService,
   Effect.gen(function* () {
-    const deckParser = yield* DeckParser;
+    const deckManager = yield* DeckManager;
     const scheduler = yield* Scheduler;
     const orderingStrategy = yield* QueueOrderingStrategy;
     const pathService = yield* Path.Path;
@@ -208,20 +208,29 @@ export const ReviewQueueServiceLive = Layer.effect(
         Effect.gen(function* () {
           const deckPaths = collectDeckPaths(selection, tree);
 
-          const parsedDecks = yield* deckParser.parseAll(deckPaths);
+          const results = yield* Effect.all(
+            deckPaths.map((p) => deckManager.readDeck(p).pipe(Effect.either)),
+            { concurrency: "unbounded" },
+          );
 
           const allItems: QueueItem[] = [];
 
-          for (const { path: deckPath, name: deckName, file } of parsedDecks) {
+          let filePosition = 0;
+          for (let i = 0; i < deckPaths.length; i++) {
+            const result = results[i]!;
+            if (result._tag === "Left") continue;
+
+            const deckPath = deckPaths[i]!;
+            const file = result.right;
+            const deckName = pathService.basename(deckPath, ".md");
             const relativePath = pathService.relative(rootPath, deckPath);
-            for (let itemIndex = 0; itemIndex < file.items.length; itemIndex++) {
-              const item = file.items[itemIndex]!;
+
+            for (const item of file.items) {
               for (let cardIndex = 0; cardIndex < item.cards.length; cardIndex++) {
                 const card = item.cards[cardIndex]!;
                 const isNew = card.state === State.New;
                 const isDue = !isNew && scheduler.isDue(card, now);
 
-                // Only include new or due cards
                 if (isNew || isDue) {
                   allItems.push({
                     deckPath,
@@ -230,11 +239,12 @@ export const ReviewQueueServiceLive = Layer.effect(
                     item,
                     card,
                     cardIndex,
-                    itemIndex,
+                    filePosition,
                     category: isNew ? "new" : "due",
                     dueDate: scheduler.getReviewDate(card),
                   });
                 }
+                filePosition++;
               }
             }
           }
