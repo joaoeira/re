@@ -14,6 +14,7 @@ export type DeckTreeGroup = {
   readonly name: string;
   readonly relativePath: string;
   readonly totalCards: number;
+  readonly dueCards: number;
   readonly stateCounts: DeckStateCounts;
   readonly errorCount: number;
   readonly children: readonly DeckTreeNode[];
@@ -33,6 +34,7 @@ type MutableGroup = {
   name: string;
   relativePath: string;
   totalCards: number;
+  dueCards: number;
   stateCounts: { new: number; learning: number; review: number; relearning: number };
   errorCount: number;
   children: DeckTreeNode[];
@@ -41,6 +43,7 @@ type MutableGroup = {
 const addSnapshotCounts = (group: MutableGroup, snapshot: DeckSnapshot): void => {
   if (snapshot.status === "ok") {
     group.totalCards += snapshot.totalCards;
+    group.dueCards += snapshot.dueCards;
     group.stateCounts.new += snapshot.stateCounts.new;
     group.stateCounts.learning += snapshot.stateCounts.learning;
     group.stateCounts.review += snapshot.stateCounts.review;
@@ -77,6 +80,7 @@ export const buildDeckTree = (snapshots: readonly DeckSnapshot[]): DeckTreeNode[
       name: segments[upToIndex]!,
       relativePath: groupPath,
       totalCards: 0,
+      dueCards: 0,
       stateCounts: { new: 0, learning: 0, review: 0, relearning: 0 },
       errorCount: 0,
       children: [],

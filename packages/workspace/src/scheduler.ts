@@ -62,6 +62,18 @@ export const computeDueDate = (card: ItemMetadata): Date | null => {
   return null;
 };
 
+export const isCardDue = (card: ItemMetadata, now: Date): boolean => {
+  if (card.state === State.New) return false;
+  const dueDate = computeDueDate(card);
+  return dueDate !== null && dueDate <= now;
+};
+
+export const resolveDueDateIfDue = (card: ItemMetadata, now: Date): Date | null => {
+  const dueDate = computeDueDate(card);
+  if (card.state === State.New) return null;
+  return dueDate !== null && dueDate <= now ? dueDate : null;
+};
+
 /**
  * Compute the scheduled interval in days for a card.
  * This is what was scheduled at last review, not the current stability.
@@ -141,13 +153,7 @@ export interface Scheduler {
 export const Scheduler = Context.GenericTag<Scheduler>("@re/workspace/Scheduler");
 
 export const SchedulerLive = Layer.succeed(Scheduler, {
-  isDue: (card, now) => {
-    if (card.state === State.New) return false;
-    if (!card.lastReview) return false;
-
-    const dueDate = computeDueDate(card);
-    return dueDate !== null && dueDate <= now;
-  },
+  isDue: (card, now) => isCardDue(card, now),
 
   getReviewDate: (card) => computeDueDate(card),
 

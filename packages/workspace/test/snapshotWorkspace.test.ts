@@ -7,6 +7,8 @@ import { snapshotWorkspace, WorkspaceRootNotDirectory, WorkspaceRootNotFound } f
 import { formatMetadataParseError } from "../src/snapshotWorkspace";
 import { createMockFileSystemLayer, type MockFileSystemConfig } from "./mock-file-system";
 
+const AS_OF = new Date("2025-01-10T00:00:00Z");
+
 const runSnapshot = (
   rootPath: string,
   config: MockFileSystemConfig,
@@ -118,23 +120,28 @@ Shared prompt
 Shared answer
 `;
 
-    const result = await runSnapshot("/root", {
-      entryTypes: {
-        "/root": "Directory",
-        "/root/mixed.md": "File",
+    const result = await runSnapshot(
+      "/root",
+      {
+        entryTypes: {
+          "/root": "Directory",
+          "/root/mixed.md": "File",
+        },
+        directories: {
+          "/root": ["mixed.md"],
+        },
+        fileContents: {
+          "/root/mixed.md": mixedDeck,
+        },
       },
-      directories: {
-        "/root": ["mixed.md"],
-      },
-      fileContents: {
-        "/root/mixed.md": mixedDeck,
-      },
-    });
+      { asOf: AS_OF },
+    );
 
     const deck = result.decks[0]!;
     expect(deck.status).toBe("ok");
     if (deck.status === "ok") {
       expect(deck.totalCards).toBe(6);
+      expect(deck.dueCards).toBe(4);
       expect(deck.stateCounts).toEqual({
         new: 2,
         learning: 1,
@@ -162,6 +169,7 @@ Shared answer
     expect(deck.status).toBe("ok");
     if (deck.status === "ok") {
       expect(deck.totalCards).toBe(0);
+      expect(deck.dueCards).toBe(0);
       expect(deck.stateCounts).toEqual({
         new: 0,
         learning: 0,
@@ -200,7 +208,110 @@ Shared answer
     expect(good?.status).toBe("ok");
     if (good?.status === "ok") {
       expect(good.totalCards).toBe(1);
+      expect(good.dueCards).toBe(0);
     }
+  });
+
+  it("counts due cards using stored due and legacy fallback semantics", async () => {
+    const dueDeck = `<!--@ due-eq 5 4 2 0 2025-01-01T00:00:00Z 2025-01-10T00:00:00Z-->
+Due exactly at boundary
+---
+Answer
+
+<!--@ due-fallback 2 4 2 0 2025-01-08T00:00:00Z-->
+Due from legacy fallback
+---
+Answer
+
+<!--@ due-later 5 4 2 0 2025-01-01T00:00:00Z 2025-01-11T00:00:00Z-->
+Not due yet
+---
+Answer
+
+<!--@ review-missing-time 5 4 2 0-->
+Review with no lastReview
+---
+Answer
+
+<!--@ new-card 0 0 0 0-->
+New card
+---
+Answer
+`;
+
+    const result = await runSnapshot(
+      "/root",
+      {
+        entryTypes: {
+          "/root": "Directory",
+          "/root/due.md": "File",
+        },
+        directories: {
+          "/root": ["due.md"],
+        },
+        fileContents: {
+          "/root/due.md": dueDeck,
+        },
+      },
+      { asOf: AS_OF },
+    );
+
+    const deck = result.decks[0]!;
+    expect(deck.status).toBe("ok");
+    if (deck.status === "ok") {
+      expect(deck.totalCards).toBe(5);
+      expect(deck.dueCards).toBe(2);
+      expect(deck.stateCounts.new).toBe(1);
+      expect(deck.stateCounts.review).toBe(4);
+    }
+  });
+
+  it("keeps dueCards at zero for all-new decks", async () => {
+    const result = await runSnapshot(
+      "/root",
+      {
+        entryTypes: {
+          "/root": "Directory",
+          "/root/new-only.md": "File",
+        },
+        directories: {
+          "/root": ["new-only.md"],
+        },
+        fileContents: {
+          "/root/new-only.md": `${makeCard("new-a")}\n${makeCard("new-b")}`,
+        },
+      },
+      { asOf: AS_OF },
+    );
+
+    const deck = result.decks[0]!;
+    expect(deck.status).toBe("ok");
+    if (deck.status === "ok") {
+      expect(deck.totalCards).toBe(2);
+      expect(deck.dueCards).toBe(0);
+    }
+  });
+
+  it("returns deterministic asOf when provided", async () => {
+    const asOf = new Date("2025-01-15T03:04:05.000Z");
+    const result = await runSnapshot(
+      "/root",
+      {
+        entryTypes: {
+          "/root": "Directory",
+          "/root/deck.md": "File",
+        },
+        directories: {
+          "/root": ["deck.md"],
+        },
+        fileContents: {
+          "/root/deck.md": makeCard("card"),
+        },
+      },
+      { asOf },
+    );
+
+    expect(result.asOf).toBe(asOf.toISOString());
   });
 
   it("returns parse_error and normalizes InvalidFieldValue messages", async () => {

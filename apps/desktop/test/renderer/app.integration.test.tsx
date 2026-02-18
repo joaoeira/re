@@ -29,6 +29,7 @@ describe("renderer integration", () => {
           type: "success",
           data: {
             rootPath,
+            asOf: "2025-01-10T00:00:00.000Z",
             decks: [
               {
                 absolutePath: `${rootPath}/ok.md`,
@@ -36,6 +37,7 @@ describe("renderer integration", () => {
                 name: "ok",
                 status: "ok" as const,
                 totalCards: 3,
+                dueCards: 2,
                 stateCounts: { new: 1, learning: 1, review: 1, relearning: 0 },
               },
               {
@@ -89,6 +91,8 @@ describe("renderer integration", () => {
     expect(screen.getByText("ok")).toBeTruthy();
     expect(screen.getByText("read")).toBeTruthy();
     expect(screen.getByText("parse")).toBeTruthy();
+    expect(screen.getByText("Snapshot as of 2025-01-10T00:00:00.000Z")).toBeTruthy();
+    expect(screen.getByText("2 due")).toBeTruthy();
   });
 
   it("updates deck list when WorkspaceSnapshotChanged event fires", async () => {
@@ -108,6 +112,7 @@ describe("renderer integration", () => {
           type: "success",
           data: {
             rootPath: "/workspace",
+            asOf: "2025-01-10T00:00:00.000Z",
             decks: [
               {
                 absolutePath: "/workspace/deck.md",
@@ -115,6 +120,7 @@ describe("renderer integration", () => {
                 name: "deck",
                 status: "ok" as const,
                 totalCards: 1,
+                dueCards: 0,
                 stateCounts: { new: 1, learning: 0, review: 0, relearning: 0 },
               },
             ],
@@ -151,6 +157,7 @@ describe("renderer integration", () => {
 
     handler!({
       rootPath: "/workspace",
+      asOf: "2025-01-10T12:00:00.000Z",
       decks: [
         {
           absolutePath: "/workspace/deck.md",
@@ -158,6 +165,7 @@ describe("renderer integration", () => {
           name: "deck",
           status: "ok",
           totalCards: 5,
+          dueCards: 1,
           stateCounts: { new: 2, learning: 1, review: 1, relearning: 1 },
         },
         {
@@ -166,6 +174,7 @@ describe("renderer integration", () => {
           name: "new-deck",
           status: "ok",
           totalCards: 3,
+          dueCards: 0,
           stateCounts: { new: 3, learning: 0, review: 0, relearning: 0 },
         },
       ],
@@ -173,6 +182,8 @@ describe("renderer integration", () => {
 
     await waitFor(() => expect(screen.getByText("new-deck")).toBeTruthy());
     expect(screen.getByText("deck")).toBeTruthy();
+    expect(screen.getByText("1 due")).toBeTruthy();
+    expect(screen.getByText("Snapshot as of 2025-01-10T12:00:00.000Z")).toBeTruthy();
   });
 
   it("shows error when settings fail to load", async () => {

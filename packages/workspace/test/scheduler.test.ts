@@ -10,7 +10,7 @@ import {
   type ItemMetadata,
 } from "@re/core";
 
-import { Scheduler, SchedulerLive } from "../src";
+import { Scheduler, SchedulerLive, isCardDue, resolveDueDateIfDue } from "../src";
 
 const makeCard = (input: {
   readonly state: State;
@@ -30,6 +30,76 @@ const makeCard = (input: {
 });
 
 describe("Scheduler", () => {
+  it("isCardDue matches SchedulerLive.isDue across representative states", async () => {
+    const now = new Date("2025-01-10T12:00:00Z");
+    const cases = [
+      makeCard({ state: State.New, lastReview: null, due: null }),
+      makeCard({
+        state: State.Review,
+        stability: 2,
+        lastReview: new Date("2025-01-01T12:00:00Z"),
+        due: null,
+      }),
+      makeCard({
+        state: State.Review,
+        stability: 20,
+        lastReview: new Date("2025-01-09T12:00:00Z"),
+        due: null,
+      }),
+      makeCard({
+        state: State.Relearning,
+        learningSteps: 0,
+        lastReview: new Date("2025-01-10T12:05:00Z"),
+        due: null,
+      }),
+      makeCard({
+        state: State.Review,
+        stability: 1,
+        lastReview: null,
+        due: new Date("2025-01-10T11:00:00Z"),
+      }),
+      makeCard({
+        state: State.Review,
+        stability: 1,
+        lastReview: null,
+        due: null,
+      }),
+    ];
+
+    await Effect.gen(function* () {
+      const scheduler = yield* Scheduler;
+      for (const card of cases) {
+        expect(isCardDue(card, now)).toBe(scheduler.isDue(card, now));
+      }
+    }).pipe(Effect.provide(SchedulerLive), Effect.runPromise);
+  });
+
+  it("treats dueDate equal to asOf as due", () => {
+    const asOf = new Date("2025-01-10T00:00:00Z");
+    const card = makeCard({
+      state: State.Review,
+      stability: 30,
+      lastReview: new Date("2025-01-09T00:00:00Z"),
+      due: new Date("2025-01-10T00:00:00Z"),
+    });
+
+    expect(isCardDue(card, asOf)).toBe(true);
+    expect(resolveDueDateIfDue(card, asOf)?.toISOString()).toBe(asOf.toISOString());
+  });
+
+  it("returns not due for non-new cards missing both lastReview and due", () => {
+    const card = makeCard({
+      state: State.Review,
+      stability: 10,
+      lastReview: null,
+      due: null,
+    });
+    const now = new Date("2025-01-10T00:00:00Z");
+
+    expect(isCardDue(card, now)).toBe(false);
+    expect(resolveDueDateIfDue(card, now)).toBeNull();
+  });
+
   it("getReviewDate prefers stored due over legacy reconstruction", async () => {
     const now = new Date("2025-01-10T00:00:00Z");
     const storedDue = new Date("2025-01-05T00:00:00Z");

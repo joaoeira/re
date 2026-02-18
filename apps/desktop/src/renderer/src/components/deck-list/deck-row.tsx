@@ -28,6 +28,12 @@ export function DeckRow({ node, depth, isCollapsed, onToggle, onClick }: DeckRow
       ? node.snapshot.totalCards
       : null;
 
+  const dueCards = isGroup
+    ? node.dueCards
+    : node.snapshot.status === "ok"
+      ? node.snapshot.dueCards
+      : null;
+
   return (
     <button
       type="button"
@@ -91,6 +97,12 @@ export function DeckRow({ node, depth, isCollapsed, onToggle, onClick }: DeckRow
       <span className="flex-1" />
 
       {stateCounts && <DeckStateBadges stateCounts={stateCounts} />}
+
+      {dueCards !== null && dueCards > 0 && (
+        <span className="ml-2 shrink-0 rounded-sm bg-state-review/10 px-1.5 py-0.5 text-xs tabular-nums font-medium text-state-review">
+          {dueCards} due
+        </span>
+      )}
 
       {totalCards !== null && totalCards !== undefined && (
         <span className="ml-2 shrink-0 text-xs tabular-nums text-muted-foreground">

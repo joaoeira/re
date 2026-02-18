@@ -3,6 +3,7 @@ import { Schema } from "@effect/schema";
 import { parseFile, State, type MetadataParseError, type ParsedFile } from "@re/core";
 import { Effect } from "effect";
 
+import { isCardDue } from "./scheduler";
 import {
   scanDecks,
   ScanDecksErrorSchema,
@@ -30,6 +31,7 @@ export const DeckSnapshotOkSchema = Schema.Struct({
   ...DeckSnapshotBaseFields,
   status: Schema.Literal("ok"),
   totalCards: Schema.Number,
+  dueCards: Schema.Number,
   stateCounts: DeckStateCountsSchema,
 });
 
@@ -55,6 +57,7 @@ export type DeckSnapshot = typeof DeckSnapshotSchema.Type;
 
 export const SnapshotWorkspaceResultSchema = Schema.Struct({
   rootPath: Schema.String,
+  asOf: Schema.String,
   decks: Schema.Array(DeckSnapshotSchema),
 });
 
@@ -63,6 +66,9 @@ export type SnapshotWorkspaceResult = typeof SnapshotWorkspaceResultSchema.Type;
 export const SnapshotWorkspaceErrorSchema = ScanDecksErrorSchema;
 
 export type SnapshotWorkspaceError = ScanDecksError;
+export type SnapshotWorkspaceOptions = ScanDecksOptions & {
+  readonly asOf?: Date;
+};
 
 type DeckStateCountKey = keyof DeckStateCounts;
 type MutableDeckStateCounts = Record<DeckStateCountKey, number>;
@@ -88,22 +94,29 @@ const incrementDeckStateCount = (stateCounts: MutableDeckStateCounts, state: Sta
 
 const summarizeParsedDeck = (
   parsedFile: ParsedFile,
+  asOf: Date,
 ): {
   totalCards: number;
+  dueCards: number;
   stateCounts: DeckStateCounts;
 } => {
   const stateCounts = emptyDeckStateCounts();
   let totalCards = 0;
+  let dueCards = 0;
 
   for (const item of parsedFile.items) {
     for (const card of item.cards) {
       totalCards += 1;
       incrementDeckStateCount(stateCounts, card.state);
+      if (isCardDue(card, asOf)) {
+        dueCards += 1;
+      }
     }
   }
 
   return {
     totalCards,
+    dueCards,
     stateCounts: {
       new: stateCounts.new,
       learning: stateCounts.learning,
@@ -129,6 +142,7 @@ export const formatMetadataParseError = (error: MetadataParseError): string => {
 const snapshotDeck = (
   deck: DeckEntry,
   fileSystem: FileSystem.FileSystem,
+  asOf: Date,
 ): Effect.Effect<DeckSnapshot, never> =>
   fileSystem.readFileString(deck.absolutePath).pipe(
     Effect.matchEffect({
@@ -147,11 +161,12 @@ const snapshotDeck = (
               message: formatMetadataParseError(error),
             }),
             onSuccess: (parsed): DeckSnapshot => {
-              const { totalCards, stateCounts } = summarizeParsedDeck(parsed);
+              const { totalCards, dueCards, stateCounts } = summarizeParsedDeck(parsed, asOf);
               return {
                 ...deck,
                 status: "ok",
                 totalCards,
+                dueCards,
                 stateCounts,
               };
             },
@@ -162,7 +177,7 @@ const snapshotDeck = (
 
 export const snapshotWorkspace = (
   rootPath: string,
-  options?: ScanDecksOptions,
+  options?: SnapshotWorkspaceOptions,
 ): Effect.Effect<
   SnapshotWorkspaceResult,
   SnapshotWorkspaceError,
@@ -170,16 +185,18 @@ export const snapshotWorkspace = (
 > =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
+    const asOf = options?.asOf ?? new Date();
     const scanResult = yield* scanDecks(rootPath, options);
 
     const deckSnapshots = yield* Effect.forEach(
       scanResult.decks,
-      (deck) => snapshotDeck(deck, fileSystem),
+      (deck) => snapshotDeck(deck, fileSystem, asOf),
       { concurrency: 16 },
     );
 
     return {
       rootPath: scanResult.rootPath,
+      asOf: asOf.toISOString(),
       decks: deckSnapshots,
     };
   });

@@ -23,6 +23,7 @@ export {
   SnapshotWorkspaceErrorSchema,
   type DeckStateCounts,
   type DeckSnapshot,
+  type SnapshotWorkspaceOptions,
   type SnapshotWorkspaceResult,
   type SnapshotWorkspaceError,
 } from "./snapshotWorkspace";
@@ -82,6 +83,8 @@ export {
   type ScheduleResult,
   type SchedulerLog,
   computeDueDate,
+  isCardDue,
+  resolveDueDateIfDue,
   computeElapsedDays,
   computeScheduledDays,
   itemMetadataToFSRSCard,

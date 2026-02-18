@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { buildDeckTree, flattenDeckTree, type DeckTreeGroup, type DeckTreeLeaf } from "../src";
 import type { DeckSnapshot, DeckStateCounts } from "../src/snapshotWorkspace";
 
-const okSnapshot = (relativePath: string, counts?: Partial<DeckStateCounts>): DeckSnapshot => {
+const okSnapshot = (
+  relativePath: string,
+  counts?: Partial<DeckStateCounts>,
+  dueCards?: number,
+): DeckSnapshot => {
   const stateCounts = {
     new: 0,
     learning: 0,
@@ -18,6 +22,7 @@ const okSnapshot = (relativePath: string, counts?: Partial<DeckStateCounts>): De
     name: relativePath.split("/").pop()!.replace(/\.md$/i, ""),
     totalCards:
       stateCounts.new + stateCounts.learning + stateCounts.review + stateCounts.relearning,
+    dueCards: dueCards ?? 0,
     stateCounts,
   };
 };
@@ -62,7 +67,7 @@ describe("buildDeckTree", () => {
   });
 
   it("creates a group for a single nested deck", () => {
-    const snapshot = okSnapshot("lang/vocab.md", { new: 3, review: 7 });
+    const snapshot = okSnapshot("lang/vocab.md", { new: 3, review: 7 }, 2);
     const tree = buildDeckTree([snapshot]);
 
     expect(tree).toHaveLength(1);
@@ -72,6 +77,7 @@ describe("buildDeckTree", () => {
     expect(group.name).toBe("lang");
     expect(group.relativePath).toBe("lang");
     expect(group.totalCards).toBe(10);
+    expect(group.dueCards).toBe(2);
     expect(group.stateCounts).toEqual({ new: 3, learning: 0, review: 7, relearning: 0 });
     expect(group.errorCount).toBe(0);
 
@@ -90,6 +96,7 @@ describe("buildDeckTree", () => {
     expect(groupA.name).toBe("a");
     expect(groupA.depth).toBe(0);
     expect(groupA.totalCards).toBe(1);
+    expect(groupA.dueCards).toBe(0);
 
     const groupB = groupA.children[0] as DeckTreeGroup;
     expect(groupB.name).toBe("b");
@@ -108,12 +115,13 @@ describe("buildDeckTree", () => {
 
   it("aggregates counts from multiple children in the same group", () => {
     const tree = buildDeckTree([
-      okSnapshot("math/algebra.md", { new: 5, review: 3 }),
-      okSnapshot("math/calculus.md", { new: 2, learning: 4 }),
+      okSnapshot("math/algebra.md", { new: 5, review: 3 }, 2),
+      okSnapshot("math/calculus.md", { new: 2, learning: 4 }, 1),
     ]);
 
     const group = tree[0] as DeckTreeGroup;
     expect(group.totalCards).toBe(14);
+    expect(group.dueCards).toBe(3);
     expect(group.stateCounts).toEqual({
       new: 7,
       learning: 4,
@@ -124,26 +132,29 @@ describe("buildDeckTree", () => {
   });
 
   it("aggregates counts through all ancestor groups", () => {
-    const tree = buildDeckTree([okSnapshot("a/b/deep.md", { new: 10 })]);
+    const tree = buildDeckTree([okSnapshot("a/b/deep.md", { new: 10 }, 4)]);
 
     const groupA = tree[0] as DeckTreeGroup;
     expect(groupA.totalCards).toBe(10);
+    expect(groupA.dueCards).toBe(4);
     expect(groupA.stateCounts.new).toBe(10);
 
     const groupB = groupA.children[0] as DeckTreeGroup;
     expect(groupB.totalCards).toBe(10);
+    expect(groupB.dueCards).toBe(4);
     expect(groupB.stateCounts.new).toBe(10);
   });
 
   it("increments errorCount for error snapshots without adding card counts", () => {
     const tree = buildDeckTree([
-      okSnapshot("lang/good.md", { new: 5 }),
+      okSnapshot("lang/good.md", { new: 5 }, 2),
       errorSnapshot("lang/bad.md", "parse_error"),
       errorSnapshot("lang/broken.md", "read_error"),
     ]);
 
     const group = tree[0] as DeckTreeGroup;
     expect(group.totalCards).toBe(5);
+    expect(group.dueCards).toBe(2);
     expect(group.stateCounts.new).toBe(5);
     expect(group.errorCount).toBe(2);
   });
@@ -176,6 +187,7 @@ describe("buildDeckTree", () => {
 
     const group = tree[0] as DeckTreeGroup;
     expect(group.totalCards).toBe(0);
+    expect(group.dueCards).toBe(0);
     expect(group.stateCounts).toEqual({ new: 0, learning: 0, review: 0, relearning: 0 });
     expect(group.errorCount).toBe(2);
   });

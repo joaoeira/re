@@ -159,6 +159,7 @@ Answer
       );
 
       expect(result.rootPath).toBe(rootPath);
+      expect(Number.isNaN(Date.parse(result.asOf))).toBe(false);
       expect(result.decks).toHaveLength(3);
       expect(result.decks.map((deck) => deck.status)).toEqual(["ok", "read_error", "parse_error"]);
 
@@ -166,6 +167,7 @@ Answer
       expect(okDeck).toBeDefined();
       if (okDeck?.status === "ok") {
         expect(okDeck.totalCards).toBe(1);
+        expect(okDeck.dueCards).toBe(0);
         expect(okDeck.stateCounts).toEqual({
           new: 1,
           learning: 0,

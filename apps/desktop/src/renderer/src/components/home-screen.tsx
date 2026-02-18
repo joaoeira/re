@@ -160,6 +160,7 @@ export function HomeScreen() {
 
   return (
     <section>
+      <p className="mb-2 text-xs text-muted-foreground">Snapshot as of {snapshotResult.asOf}</p>
       <DeckList snapshots={snapshotResult.decks} onDeckClick={handleDeckClick} />
     </section>
   );

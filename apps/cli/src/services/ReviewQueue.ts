@@ -2,7 +2,7 @@ import {
   ReviewDuePolicy,
   ReviewQueueBuilder,
   ReviewQueueBuilderLive,
-  Scheduler,
+  resolveDueDateIfDue,
   ShuffledOrderingStrategy,
   type ReviewQueue as WorkspaceReviewQueue,
 } from "@re/workspace";
@@ -75,15 +75,8 @@ const collectDeckPaths = (selection: Selection, tree: readonly DeckTreeNode[]): 
 
 export const SchedulerDuePolicyLive = Layer.effect(
   ReviewDuePolicy,
-  Effect.gen(function* () {
-    const scheduler = yield* Scheduler;
-
-    return {
-      dueDateIfDue: (card, now) => {
-        const dueDate = scheduler.getReviewDate(card);
-        return dueDate && dueDate <= now ? Option.some(dueDate) : Option.none();
-      },
-    };
+  Effect.succeed({
+    dueDateIfDue: (card, now) => Option.fromNullable(resolveDueDateIfDue(card, now)),
   }),
 );
 
