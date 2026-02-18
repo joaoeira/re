@@ -7,7 +7,7 @@ import { ReviewSession } from "./components/ReviewSession";
 import { Loading } from "./components/Spinner";
 import { Header, Panel, StatsRow, Footer, ErrorDisplay, EmptyState, Hint } from "./components/ui";
 import { themeColors as theme } from "./ThemeContext";
-import type { Selection } from "./services/ReviewQueue";
+import type { Selection } from "./services";
 
 export function App() {
   const cwd = process.cwd();

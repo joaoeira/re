@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { inferType, type CardSpec, type Grade, type ItemType } from "@re/core";
 import { QAType, ClozeType } from "@re/types";
-import type { QueueItem } from "../services/ReviewQueue";
+import type { QueueItem } from "@re/workspace";
 
 const itemTypes = [QAType, ClozeType] as ReadonlyArray<ItemType<unknown, unknown, unknown>>;
 

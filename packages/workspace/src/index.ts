@@ -48,3 +48,28 @@ export {
   type ReadError,
   type WriteError,
 } from "./DeckManager";
+
+export {
+  ReviewDuePolicy,
+  ReviewQueueBuilder,
+  ReviewQueueBuilderLive,
+  QueueOrderSpec,
+  QueueOrderingStrategy,
+  QueueOrderingStrategyFromSpec,
+  NewFirstByDueDateSpec,
+  DueFirstByDueDateSpec,
+  NewFirstShuffledSpec,
+  NewFirstFileOrderSpec,
+  NewFirstOrderingStrategy,
+  DueFirstOrderingStrategy,
+  ShuffledOrderingStrategy,
+  preserveOrder,
+  sortBy,
+  shuffle,
+  chain,
+  byDueDate,
+  byFilePosition,
+  type QueueItem,
+  type ReviewQueue,
+  type WithinGroupOrder,
+} from "./reviewQueue";

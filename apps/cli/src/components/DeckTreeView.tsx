@@ -2,7 +2,7 @@ import type { SelectOption } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useMemo, useCallback, useRef } from "react";
 import type { DeckTreeNode } from "../lib/buildDeckTree";
-import type { Selection } from "../services/ReviewQueue";
+import type { Selection } from "../services";
 import { themeColors as theme, glyphs } from "../ThemeContext";
 
 interface DeckTreeViewProps {

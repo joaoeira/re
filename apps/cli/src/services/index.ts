@@ -25,18 +25,20 @@ export {
   fsrsCardToItemMetadata,
 } from "./Scheduler";
 export { DeckManager, DeckManagerLive } from "@re/workspace";
+export {
+  QueueOrderingStrategy,
+  NewFirstOrderingStrategy,
+  DueFirstOrderingStrategy,
+  type QueueItem,
+  type ReviewQueue,
+} from "@re/workspace";
 export { DeckLoader, DeckLoaderLive, type DeckStats } from "./DeckLoader";
 export { buildDeckTree, type DeckTreeNode } from "../lib/buildDeckTree";
 export {
   ReviewQueueService,
   ReviewQueueServiceLive,
   ReviewQueueLive,
-  QueueOrderingStrategy,
-  NewFirstOrderingStrategy,
-  DueFirstOrderingStrategy,
   type Selection,
-  type QueueItem,
-  type ReviewQueue,
 } from "./ReviewQueue";
 
 import { DeckManagerLive } from "@re/workspace";

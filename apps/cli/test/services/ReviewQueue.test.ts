@@ -1,12 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option, Random } from "effect";
 import { FileSystem, Path } from "@effect/platform";
 import { SystemError } from "@effect/platform/Error";
+import { State, numericField, type ItemMetadata } from "@re/core";
 import {
   ReviewQueueService,
   ReviewQueueServiceLive,
+  ReviewQueueLive,
+  SchedulerDuePolicyLive,
+  type Selection,
+} from "../../src/services/ReviewQueue";
+import {
   NewFirstOrderingStrategy,
   DueFirstOrderingStrategy,
+  QueueOrderingStrategy,
   QueueOrderingStrategyFromSpec,
   NewFirstByDueDateSpec,
   DueFirstByDueDateSpec,
@@ -19,11 +26,12 @@ import {
   chain,
   byDueDate,
   byFilePosition,
-  type Selection,
   type QueueItem,
-} from "../../src/services/ReviewQueue";
-import { DeckManagerLive } from "@re/workspace";
-import { SchedulerLive } from "../../src/services/Scheduler";
+  DeckManager,
+  DeckManagerLive,
+  ReviewDuePolicy,
+} from "@re/workspace";
+import { Scheduler, SchedulerLive } from "../../src/services/Scheduler";
 import type { DeckTreeNode } from "../../src/services";
 
 // New card (state=0)
@@ -593,5 +601,229 @@ describe("Composable ordering primitives", () => {
       expect(orderedNew.length).toBe(2);
       expect(new Set(orderedNew.map((i) => i.card.id))).toEqual(new Set(["new1", "new2"]));
     });
+  });
+});
+
+describe("SchedulerDuePolicyLive", () => {
+  const makeCard = (
+    state: State,
+    stability: number,
+    learningSteps: number,
+    lastReview: Date | null,
+  ): ItemMetadata => ({
+    id: `card-${state}-${stability}-${learningSteps}` as any,
+    stability: numericField(stability),
+    difficulty: numericField(5),
+    state,
+    learningSteps,
+    lastReview,
+  });
+
+  it("matches Scheduler due semantics across card states", async () => {
+    const now = new Date("2025-01-10T12:00:00Z");
+
+    const program = Effect.gen(function* () {
+      const duePolicy = yield* ReviewDuePolicy;
+      const scheduler = yield* Scheduler;
+
+      const cases: ItemMetadata[] = [
+        makeCard(State.New, 0, 0, null),
+        makeCard(State.Review, 2, 0, new Date("2025-01-01T12:00:00Z")),
+        makeCard(State.Review, 20, 0, new Date("2025-01-09T12:00:00Z")),
+        makeCard(State.Learning, 0, 0, new Date("2025-01-10T11:50:00Z")),
+        makeCard(State.Learning, 0, 1, new Date("2025-01-10T11:58:00Z")),
+        makeCard(State.Relearning, 0, 0, new Date("2025-01-10T11:30:00Z")),
+        makeCard(State.Relearning, 0, 0, new Date("2025-01-10T12:05:00Z")),
+      ];
+
+      for (const card of cases) {
+        const expectedIsDue = scheduler.isDue(card, now);
+        const expectedDate = scheduler.getReviewDate(card);
+        const actual = duePolicy.dueDateIfDue(card, now);
+
+        if (expectedIsDue && expectedDate) {
+          expect(Option.isSome(actual)).toBe(true);
+          if (Option.isSome(actual)) {
+            expect(actual.value.toISOString()).toBe(expectedDate.toISOString());
+          }
+        } else {
+          expect(Option.isNone(actual)).toBe(true);
+        }
+      }
+    });
+
+    const testLayer = Layer.mergeAll(
+      SchedulerLive,
+      SchedulerDuePolicyLive.pipe(Layer.provide(SchedulerLive)),
+    );
+
+    await program.pipe(
+      Effect.provide(testLayer),
+      Effect.runPromise,
+    );
+  });
+});
+
+describe("ReviewQueue default strategy", () => {
+  it("ReviewQueueLive uses shuffled ordering by default", async () => {
+    const tree = buildTestTree();
+    const selection: Selection = { type: "deck", path: "/decks/mixed.md" };
+    const now = new Date("2025-01-10T00:00:00Z");
+
+    const program = Effect.gen(function* () {
+      const service = yield* ReviewQueueService;
+      return yield* service.buildQueue(selection, tree, "/decks", now);
+    }).pipe(
+      Effect.provide(
+        ReviewQueueLive.pipe(Layer.provide(Layer.mergeAll(MockDeckManager, SchedulerLive, Path.layer))),
+      ),
+    );
+
+    const result = await Effect.runPromise(program.pipe(Effect.withRandom(Random.make("seed"))));
+    expect(result.items.map((item) => item.card.id)).toEqual(["card4", "card1", "card3", "card2"]);
+  });
+});
+
+describe("ReviewQueue parity harness", () => {
+  const collectDeckPathsLegacy = (selection: Selection, tree: readonly DeckTreeNode[]): string[] => {
+    const paths: string[] = [];
+
+    const collectFromNode = (node: DeckTreeNode): void => {
+      if (node.type === "deck") {
+        paths.push(node.stats.path);
+      } else {
+        for (const child of node.children) {
+          collectFromNode(child);
+        }
+      }
+    };
+
+    const findAndCollect = (nodes: readonly DeckTreeNode[], targetPath: string): boolean => {
+      for (const node of nodes) {
+        if (node.type === "folder" && node.path === targetPath) {
+          collectFromNode(node);
+          return true;
+        }
+        if (node.type === "deck" && node.stats.path === targetPath) {
+          paths.push(node.stats.path);
+          return true;
+        }
+        if (node.type === "folder") {
+          if (findAndCollect(node.children, targetPath)) return true;
+        }
+      }
+      return false;
+    };
+
+    switch (selection.type) {
+      case "all":
+        for (const node of tree) {
+          collectFromNode(node);
+        }
+        break;
+      case "folder":
+        findAndCollect(tree, selection.path);
+        break;
+      case "deck":
+        findAndCollect(tree, selection.path);
+        break;
+    }
+
+    return paths;
+  };
+
+  const buildLegacyQueue = (
+    selection: Selection,
+    tree: readonly DeckTreeNode[],
+    rootPath: string,
+    now: Date,
+  ) =>
+    Effect.gen(function* () {
+      const deckManager = yield* DeckManager;
+      const scheduler = yield* Scheduler;
+      const orderingStrategy = yield* QueueOrderingStrategy;
+      const pathService = yield* Path.Path;
+
+      const deckPaths = collectDeckPathsLegacy(selection, tree);
+      const results = yield* Effect.all(
+        deckPaths.map((p) => deckManager.readDeck(p).pipe(Effect.either)),
+        { concurrency: "unbounded" },
+      );
+
+      const allItems: QueueItem[] = [];
+      let filePosition = 0;
+
+      for (let i = 0; i < deckPaths.length; i++) {
+        const result = results[i]!;
+        if (result._tag === "Left") continue;
+
+        const deckPath = deckPaths[i]!;
+        const file = result.right;
+        const deckName = pathService.basename(deckPath, ".md");
+        const relativePath = pathService.relative(rootPath, deckPath);
+
+        for (const item of file.items) {
+          for (let cardIndex = 0; cardIndex < item.cards.length; cardIndex++) {
+            const card = item.cards[cardIndex]!;
+            const isNew = card.state === State.New;
+            const isDue = !isNew && scheduler.isDue(card, now);
+
+            if (isNew || isDue) {
+              allItems.push({
+                deckPath,
+                deckName,
+                relativePath,
+                item,
+                card,
+                cardIndex,
+                filePosition,
+                category: isNew ? "new" : "due",
+                dueDate: scheduler.getReviewDate(card),
+              });
+            }
+            filePosition++;
+          }
+        }
+      }
+
+      const orderedItems = yield* orderingStrategy.order(allItems);
+      return {
+        items: orderedItems,
+        totalNew: orderedItems.filter((i) => i.category === "new").length,
+        totalDue: orderedItems.filter((i) => i.category === "due").length,
+      };
+    });
+
+  const normalizeQueue = (queue: { items: readonly QueueItem[]; totalNew: number; totalDue: number }) => ({
+    totalNew: queue.totalNew,
+    totalDue: queue.totalDue,
+    items: queue.items.map((item) => ({
+      deckPath: item.deckPath,
+      cardId: item.card.id,
+      cardIndex: item.cardIndex,
+      filePosition: item.filePosition,
+      category: item.category,
+      dueDate: item.dueDate ? item.dueDate.toISOString() : null,
+      relativePath: item.relativePath,
+      deckName: item.deckName,
+    })),
+  });
+
+  it("matches legacy queue output for the same selection", async () => {
+    const tree = buildTestTree();
+    const selection: Selection = { type: "all" };
+    const now = new Date("2025-01-10T00:00:00Z");
+
+    const newQueue = await Effect.gen(function* () {
+      const service = yield* ReviewQueueService;
+      return yield* service.buildQueue(selection, tree, "/decks", now);
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    const legacyQueue = await buildLegacyQueue(selection, tree, "/decks", now).pipe(
+      Effect.provide(Layer.mergeAll(MockDeckManager, SchedulerLive, NewFirstOrderingStrategy, Path.layer)),
+      Effect.runPromise,
+    );
+
+    expect(normalizeQueue(newQueue)).toEqual(normalizeQueue(legacyQueue));
   });
 });

@@ -1,5 +1,5 @@
 import type { CardSpec, Grade } from "@re/core";
-import type { QueueItem } from "../services/ReviewQueue";
+import type { QueueItem } from "@re/workspace";
 import { useTheme } from "../ThemeContext";
 import { Panel, Hint } from "./ui";
 import { RGBA } from "@opentui/core";

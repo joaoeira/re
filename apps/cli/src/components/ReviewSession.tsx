@@ -11,7 +11,7 @@ import { SessionSummary } from "./SessionSummary";
 import { Header, Footer, ErrorDisplay } from "./ui";
 import { getCardSpec } from "../lib/getCardSpec";
 import { themeColors as theme } from "../ThemeContext";
-import type { QueueItem } from "../services/ReviewQueue";
+import type { QueueItem } from "@re/workspace";
 import type { CardSpec, Grade } from "@re/core";
 import { Scheduler, SchedulerLive } from "../services/Scheduler";
 import { DeckManager, DeckManagerLive } from "@re/workspace";
