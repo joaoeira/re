@@ -44,7 +44,7 @@ const mockGradingActor = fromPromise(
       queueItem: QueueItem;
       queueIndex: number;
       grade: FSRSGrade;
-      runtime: unknown;
+      runtime: any;
     };
   }) => ({
     schedulerLog: {
@@ -60,13 +60,13 @@ const mockGradingActor = fromPromise(
     },
     queueIndex: input.queueIndex,
     deckPath: input.queueItem.deckPath,
-    cardId: input.queueItem.card.id,
+    cardId: input.queueItem.card.id as string,
   }),
 );
 
 // Mock undo actor that returns the queueIndex
 const mockUndoActor = fromPromise(
-  async ({ input }: { input: { reviewLog: ReviewLogEntry; runtime: unknown } }) =>
+  async ({ input }: { input: { reviewLog: ReviewLogEntry; runtime: any } }) =>
     input.reviewLog.queueIndex,
 );
 
@@ -227,10 +227,51 @@ describe("reviewSessionMachine", () => {
     });
   });
 
+  describe("skip functionality", () => {
+    it("can skip a card in showPrompt", () => {
+      const queue = [makeQueueItem(0), makeQueueItem(1)];
+      const actor = createActor(createTestMachine(), {
+        input: { queue, runtime: {} as never },
+      });
+      actor.start();
+      actor.send({ type: "START" }); // In showPrompt
+      actor.send({ type: "SKIP" });
+
+      expect(actor.getSnapshot().value).toEqual({ presenting: "showPrompt" });
+      expect(actor.getSnapshot().context.currentIndex).toBe(1);
+    });
+
+    it("can skip a card in showAnswer", () => {
+      const queue = [makeQueueItem(0), makeQueueItem(1)];
+      const actor = createActor(createTestMachine(), {
+        input: { queue, runtime: {} as never },
+      });
+      actor.start();
+      actor.send({ type: "START" });
+      actor.send({ type: "REVEAL" }); // In showAnswer
+      actor.send({ type: "SKIP" });
+
+      expect(actor.getSnapshot().value).toEqual({ presenting: "showPrompt" });
+      expect(actor.getSnapshot().context.currentIndex).toBe(1);
+    });
+
+    it("skipping the last card completes the session", () => {
+      const queue = [makeQueueItem(0)];
+      const actor = createActor(createTestMachine(), {
+        input: { queue, runtime: {} as never },
+      });
+      actor.start();
+      actor.send({ type: "START" });
+      actor.send({ type: "SKIP" });
+
+      expect(actor.getSnapshot().value).toBe("complete");
+    });
+  });
+
   describe("blocking during grading", () => {
     it("does not allow QUIT during grading", async () => {
       // Create a slow grading actor to test blocking
-      const slowGradingActor = fromPromise(async ({ input }: { input: unknown }) => {
+      const slowGradingActor = fromPromise(async ({ input }: { input: any }) => {
         await new Promise((resolve) => setTimeout(resolve, 100));
         const i = input as { queueItem: QueueItem; queueIndex: number; grade: FSRSGrade };
         return {
@@ -247,7 +288,7 @@ describe("reviewSessionMachine", () => {
           },
           queueIndex: i.queueIndex,
           deckPath: i.queueItem.deckPath,
-          cardId: i.queueItem.card.id,
+          cardId: i.queueItem.card.id as string,
         };
       });
 

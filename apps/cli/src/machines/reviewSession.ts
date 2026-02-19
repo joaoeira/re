@@ -20,6 +20,28 @@ interface SessionStats {
   easy: number;
 }
 
+function incrementStats(stats: SessionStats, rating: number): SessionStats {
+  const next = { ...stats, reviewed: stats.reviewed + 1 };
+  switch (rating) {
+    case 0: return { ...next, again: next.again + 1 };
+    case 1: return { ...next, hard: next.hard + 1 };
+    case 2: return { ...next, good: next.good + 1 };
+    case 3: return { ...next, easy: next.easy + 1 };
+    default: return next;
+  }
+}
+
+function decrementStats(stats: SessionStats, rating: number): SessionStats {
+  const next = { ...stats, reviewed: Math.max(0, stats.reviewed - 1) };
+  switch (rating) {
+    case 0: return { ...next, again: Math.max(0, next.again - 1) };
+    case 1: return { ...next, hard: Math.max(0, next.hard - 1) };
+    case 2: return { ...next, good: Math.max(0, next.good - 1) };
+    case 3: return { ...next, easy: Math.max(0, next.easy - 1) };
+    default: return next;
+  }
+}
+
 interface ReviewSessionContext {
   // Queue state
   queue: readonly QueueItem[];
@@ -177,28 +199,30 @@ export const reviewSessionMachine = setup({
 
     presenting: {
       initial: "showPrompt",
+      on: {
+        SKIP: [
+          {
+            target: "#reviewSession.complete",
+            guard: "isLastCard",
+            actions: "clearError",
+          },
+          {
+            target: ".showPrompt",
+            actions: ["incrementIndex", "hideCard", "clearError"],
+          },
+        ],
+        UNDO: {
+          guard: "canUndo",
+          target: "#reviewSession.undoing",
+        },
+        QUIT: { target: "#reviewSession.complete" },
+      },
 
       states: {
         showPrompt: {
           entry: "hideCard",
           on: {
             REVEAL: { target: "showAnswer", actions: "clearError" },
-            SKIP: [
-              {
-                target: "#reviewSession.complete",
-                guard: "isLastCard",
-                actions: "clearError",
-              },
-              {
-                target: "showPrompt",
-                actions: ["incrementIndex", "hideCard", "clearError"],
-              },
-            ],
-            UNDO: {
-              guard: "canUndo",
-              target: "#reviewSession.undoing",
-            },
-            QUIT: { target: "#reviewSession.complete" },
           },
         },
 
@@ -212,27 +236,16 @@ export const reviewSessionMachine = setup({
                 error: null,
               }),
             },
-            SKIP: [
-              {
-                target: "#reviewSession.complete",
-                guard: "isLastCard",
-                actions: "clearError",
-              },
-              {
-                target: "showPrompt",
-                actions: ["incrementIndex", "hideCard", "clearError"],
-              },
-            ],
-            UNDO: {
-              guard: "canUndo",
-              target: "#reviewSession.undoing",
-            },
-            QUIT: { target: "#reviewSession.complete" },
           },
         },
 
         grading: {
           // No UNDO/QUIT/SKIP here - blocked during grading to prevent race
+          on: {
+            SKIP: undefined,
+            UNDO: undefined,
+            QUIT: undefined,
+          },
           invoke: {
             src: "grading",
             input: ({ context }) => ({
@@ -251,27 +264,9 @@ export const reviewSessionMachine = setup({
                   deckPath: result.deckPath,
                   cardId: result.cardId,
                 };
-                const stats = {
-                  ...context.sessionStats,
-                  reviewed: context.sessionStats.reviewed + 1,
-                };
-                const updatedStats = (() => {
-                  switch (result.schedulerLog.rating) {
-                    case 0:
-                      return { ...stats, again: stats.again + 1 };
-                    case 1:
-                      return { ...stats, hard: stats.hard + 1 };
-                    case 2:
-                      return { ...stats, good: stats.good + 1 };
-                    case 3:
-                      return { ...stats, easy: stats.easy + 1 };
-                    default:
-                      return stats;
-                  }
-                })();
                 return {
                   reviewLogStack: [...context.reviewLogStack, entry],
-                  sessionStats: updatedStats,
+                  sessionStats: incrementStats(context.sessionStats, result.schedulerLog.rating),
                   error: null,
                 };
               }),
@@ -291,6 +286,11 @@ export const reviewSessionMachine = setup({
             },
             { target: "showPrompt", actions: ["incrementIndex", "hideCard"] },
           ],
+          on: {
+            SKIP: undefined,
+            UNDO: undefined,
+            QUIT: undefined,
+          },
         },
       },
     },
@@ -306,28 +306,10 @@ export const reviewSessionMachine = setup({
           target: "presenting.showPrompt",
           actions: assign(({ context, event }) => {
             const last = context.reviewLogStack[context.reviewLogStack.length - 1]!;
-            const stats = {
-              ...context.sessionStats,
-              reviewed: Math.max(0, context.sessionStats.reviewed - 1),
-            };
-            const updatedStats = (() => {
-              switch (last.rating) {
-                case 0:
-                  return { ...stats, again: Math.max(0, stats.again - 1) };
-                case 1:
-                  return { ...stats, hard: Math.max(0, stats.hard - 1) };
-                case 2:
-                  return { ...stats, good: Math.max(0, stats.good - 1) };
-                case 3:
-                  return { ...stats, easy: Math.max(0, stats.easy - 1) };
-                default:
-                  return stats;
-              }
-            })();
             return {
               reviewLogStack: context.reviewLogStack.slice(0, -1),
               currentIndex: event.output,
-              sessionStats: updatedStats,
+              sessionStats: decrementStats(context.sessionStats, last.rating),
               error: null,
             };
           }),
