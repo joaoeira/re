@@ -51,6 +51,15 @@ export {
 } from "./DeckManager";
 
 export {
+  extractCardLocations,
+  findDuplicates,
+  findWorkspaceDuplicates,
+  type CardLocation,
+  type DuplicateMap,
+  type WorkspaceDuplicateResult,
+} from "./duplicateCards";
+
+export {
   ReviewQueueBuilder,
   ReviewQueueBuilderLive,
   ReviewQueueService,
