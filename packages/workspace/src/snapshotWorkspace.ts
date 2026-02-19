@@ -185,8 +185,9 @@ export const snapshotWorkspace = (
 > =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    const asOf = options?.asOf ?? new Date();
-    const scanResult = yield* scanDecks(rootPath, options);
+    const { asOf: asOfOption, ...scanOptions } = options ?? {};
+    const asOf = asOfOption ?? new Date();
+    const scanResult = yield* scanDecks(rootPath, scanOptions);
 
     const deckSnapshots = yield* Effect.forEach(
       scanResult.decks,
