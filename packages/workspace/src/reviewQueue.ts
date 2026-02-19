@@ -1,8 +1,10 @@
 import { Path } from "@effect/platform";
 import { type Item, type ItemMetadata, State } from "@re/core";
-import { Array as Arr, Chunk, Context, Effect, Layer, Option, Order, Random } from "effect";
+import { Array as Arr, Chunk, Context, Effect, Layer, Order, Random } from "effect";
 
 import { DeckManager } from "./DeckManager";
+import type { DeckTreeNode } from "./deckTree";
+import { resolveDueDateIfDue } from "./scheduler";
 
 export interface QueueItem {
   readonly deckPath: string;
@@ -21,6 +23,61 @@ export interface ReviewQueue {
   readonly totalNew: number;
   readonly totalDue: number;
 }
+
+export type ReviewQueueSelection =
+  | { readonly type: "all" }
+  | { readonly type: "folder"; readonly path: string }
+  | { readonly type: "deck"; readonly path: string };
+
+export const collectDeckPathsFromSelection = (
+  selection: ReviewQueueSelection,
+  tree: readonly DeckTreeNode[],
+): string[] => {
+  const paths: string[] = [];
+
+  const collectFromNode = (node: DeckTreeNode): void => {
+    if (node.kind === "leaf") {
+      paths.push(node.snapshot.absolutePath);
+    } else {
+      for (const child of node.children) {
+        collectFromNode(child);
+      }
+    }
+  };
+
+  const findAndCollect = (nodes: readonly DeckTreeNode[], targetPath: string): boolean => {
+    for (const node of nodes) {
+      if (node.kind === "group" && node.relativePath === targetPath) {
+        collectFromNode(node);
+        return true;
+      }
+      if (node.kind === "leaf" && node.relativePath === targetPath) {
+        paths.push(node.snapshot.absolutePath);
+        return true;
+      }
+      if (node.kind === "group" && findAndCollect(node.children, targetPath)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  switch (selection.type) {
+    case "all":
+      for (const node of tree) {
+        collectFromNode(node);
+      }
+      break;
+    case "folder":
+      findAndCollect(tree, selection.path);
+      break;
+    case "deck":
+      findAndCollect(tree, selection.path);
+      break;
+  }
+
+  return paths;
+};
 
 export type WithinGroupOrder<A> = (items: readonly A[]) => Effect.Effect<readonly A[]>;
 
@@ -132,12 +189,6 @@ export const ShuffledOrderingStrategy = Layer.succeed(QueueOrderingStrategy, {
   order: shuffle<QueueItem>(),
 });
 
-export interface ReviewDuePolicy {
-  readonly dueDateIfDue: (card: ItemMetadata, now: Date) => Option.Option<Date>;
-}
-
-export const ReviewDuePolicy = Context.GenericTag<ReviewDuePolicy>("@re/workspace/ReviewDuePolicy");
-
 export interface ReviewQueueBuilder {
   /**
    * Contract for `deckPaths`:
@@ -159,7 +210,6 @@ export const ReviewQueueBuilderLive = Layer.effect(
   ReviewQueueBuilder,
   Effect.gen(function* () {
     const deckManager = yield* DeckManager;
-    const duePolicy = yield* ReviewDuePolicy;
     const orderingStrategy = yield* QueueOrderingStrategy;
     const pathService = yield* Path.Path;
 
@@ -199,8 +249,8 @@ export const ReviewQueueBuilderLive = Layer.effect(
                     dueDate: null,
                   });
                 } else {
-                  const dueDate = duePolicy.dueDateIfDue(card, now);
-                  if (Option.isSome(dueDate)) {
+                  const dueDate = resolveDueDateIfDue(card, now);
+                  if (dueDate !== null) {
                     allItems.push({
                       deckPath,
                       deckName,
@@ -210,7 +260,7 @@ export const ReviewQueueBuilderLive = Layer.effect(
                       cardIndex,
                       filePosition,
                       category: "due",
-                      dueDate: dueDate.value,
+                      dueDate,
                     });
                   }
                 }
@@ -230,3 +280,34 @@ export const ReviewQueueBuilderLive = Layer.effect(
     };
   }),
 );
+
+export interface ReviewQueueService {
+  readonly buildQueue: (
+    selection: ReviewQueueSelection,
+    tree: readonly DeckTreeNode[],
+    rootPath: string,
+    now: Date,
+  ) => Effect.Effect<ReviewQueue>;
+}
+
+export const ReviewQueueService = Context.GenericTag<ReviewQueueService>(
+  "@re/workspace/ReviewQueueService",
+);
+
+export const ReviewQueueServiceLive = Layer.effect(
+  ReviewQueueService,
+  Effect.gen(function* () {
+    const queueBuilder = yield* ReviewQueueBuilder;
+
+    return {
+      buildQueue: (selection, tree, rootPath, now) =>
+        queueBuilder.buildQueue({
+          deckPaths: collectDeckPathsFromSelection(selection, tree),
+          rootPath,
+          now,
+        }),
+    };
+  }),
+).pipe(Layer.provide(ReviewQueueBuilderLive));
+
+export const ReviewQueueLive = ReviewQueueServiceLive.pipe(Layer.provide(ShuffledOrderingStrategy));

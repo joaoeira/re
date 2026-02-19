@@ -1,14 +1,12 @@
 import { Path } from "@effect/platform";
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
   DeckManagerLive,
   QueueOrderingStrategy,
-  ReviewDuePolicy,
   ReviewQueueBuilder,
   ReviewQueueBuilderLive,
-  resolveDueDateIfDue,
   snapshotWorkspace,
 } from "../src";
 import { createMockFileSystemLayer, type MockFileSystemConfig } from "./mock-file-system";
@@ -65,10 +63,6 @@ Answer
       Effect.runPromise,
     );
 
-    const duePolicyLayer = Layer.succeed(ReviewDuePolicy, {
-      dueDateIfDue: (card, now) => Option.fromNullable(resolveDueDateIfDue(card, now)),
-    });
-
     const identityOrderingLayer = Layer.succeed(QueueOrderingStrategy, {
       order: (items) => Effect.succeed(items),
     });
@@ -87,9 +81,7 @@ Answer
     }).pipe(
       Effect.provide(
         ReviewQueueBuilderLive.pipe(
-          Layer.provide(
-            Layer.mergeAll(deckManagerLayer, duePolicyLayer, identityOrderingLayer, Path.layer),
-          ),
+          Layer.provide(Layer.mergeAll(deckManagerLayer, identityOrderingLayer, Path.layer)),
         ),
       ),
       Effect.runPromise,

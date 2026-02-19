@@ -3,7 +3,7 @@ import { Effect, Fiber, Exit } from "effect";
 import {
   ReviewQueueService,
   AppLive,
-  type Selection,
+  type ReviewQueueSelection,
   type ReviewQueue,
   type DeckTreeNode,
 } from "../services";
@@ -48,7 +48,7 @@ const initialState: QueueState = {
 };
 
 export function useReviewQueue(
-  selection: Selection | null,
+  selection: ReviewQueueSelection | null,
   tree: readonly DeckTreeNode[],
   rootPath: string,
 ): UseReviewQueueResult {

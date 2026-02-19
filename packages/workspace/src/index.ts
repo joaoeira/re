@@ -51,9 +51,11 @@ export {
 } from "./DeckManager";
 
 export {
-  ReviewDuePolicy,
   ReviewQueueBuilder,
   ReviewQueueBuilderLive,
+  ReviewQueueService,
+  ReviewQueueServiceLive,
+  ReviewQueueLive,
   QueueOrderSpec,
   QueueOrderingStrategy,
   QueueOrderingStrategyFromSpec,
@@ -70,8 +72,10 @@ export {
   chain,
   byDueDate,
   byFilePosition,
+  collectDeckPathsFromSelection,
   type QueueItem,
   type ReviewQueue,
+  type ReviewQueueSelection,
   type WithinGroupOrder,
 } from "./reviewQueue";
 

@@ -1,7 +1,7 @@
 import { FileSystem, Path } from "@effect/platform";
 import { SystemError } from "@effect/platform/Error";
 import { State, numericField, type ItemId } from "@re/core";
-import { Effect, Layer, Option, Random } from "effect";
+import { Effect, Layer, Random } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -13,7 +13,6 @@ import {
   QueueOrderSpec,
   QueueOrderingStrategy,
   QueueOrderingStrategyFromSpec,
-  ReviewDuePolicy,
   ReviewQueueBuilder,
   ReviewQueueBuilderLive,
   byDueDate,
@@ -136,38 +135,13 @@ const MockDeckManager = DeckManagerLive.pipe(
   Layer.provide(Layer.mergeAll(MockFileSystem, Path.layer)),
 );
 
-const computeDueDate = (card: QueueItem["card"]): Date | null => {
-  if (card.state === State.New || !card.lastReview) return null;
-
-  if (card.state === State.Review) {
-    return new Date(card.lastReview.getTime() + card.stability.value * 24 * 60 * 60 * 1000);
-  }
-
-  if (card.state === State.Learning) {
-    const steps = [1, 10] as const;
-    const step = steps[card.learningSteps] ?? steps[0];
-    return new Date(card.lastReview.getTime() + step * 60 * 1000);
-  }
-
-  const relearningSteps = [10] as const;
-  const step = relearningSteps[card.learningSteps] ?? relearningSteps[0];
-  return new Date(card.lastReview.getTime() + step * 60 * 1000);
-};
-
-const DuePolicyLive = Layer.succeed(ReviewDuePolicy, {
-  dueDateIfDue: (card, now) => {
-    const dueDate = computeDueDate(card);
-    return dueDate !== null && dueDate <= now ? Option.some(dueDate) : Option.none();
-  },
-});
-
 const IdentityOrderingStrategy = Layer.succeed(QueueOrderingStrategy, {
   order: (items) => Effect.succeed(items),
 });
 
 const BuilderLayer = (orderingLayer: Layer.Layer<QueueOrderingStrategy>) =>
   ReviewQueueBuilderLive.pipe(
-    Layer.provide(Layer.mergeAll(MockDeckManager, DuePolicyLive, orderingLayer, Path.layer)),
+    Layer.provide(Layer.mergeAll(MockDeckManager, orderingLayer, Path.layer)),
   );
 
 const runQueue = (input: {
@@ -222,35 +196,6 @@ describe("ReviewQueueBuilder", () => {
     expect(result.items.map((item) => item.filePosition)).toEqual([0, 2, 4, 5]);
   });
 
-  it("does not invoke due policy for new cards", async () => {
-    let calls = 0;
-    let calledWithNew = false;
-
-    const CountingPolicyLive = Layer.succeed(ReviewDuePolicy, {
-      dueDateIfDue: (card) => {
-        calls += 1;
-        if (card.state === State.New) {
-          calledWithNew = true;
-        }
-        return Option.none();
-      },
-    });
-
-    const layer = ReviewQueueBuilderLive.pipe(
-      Layer.provide(
-        Layer.mergeAll(MockDeckManager, CountingPolicyLive, IdentityOrderingStrategy, Path.layer),
-      ),
-    );
-
-    const result = await runQueue({
-      deckPaths: ["/decks/gaps-a.md"],
-      layer,
-    });
-
-    expect(calls).toBe(2);
-    expect(calledWithNew).toBe(false);
-    expect(result.items.map((item) => item.card.id)).toEqual(["a-new"]);
-  });
 });
 
 describe("ReviewQueue ordering from spec", () => {

@@ -7,12 +7,12 @@ import { ReviewSession } from "./components/ReviewSession";
 import { Loading } from "./components/Spinner";
 import { Header, Panel, StatsRow, Footer, ErrorDisplay, EmptyState, Hint } from "./components/ui";
 import { themeColors as theme } from "./ThemeContext";
-import type { Selection } from "./services";
+import type { ReviewQueueSelection } from "./services";
 
 export function App() {
   const cwd = process.cwd();
   const renderer = useRenderer();
-  const [confirmedSelection, setConfirmedSelection] = useState<Selection | null>(null);
+  const [confirmedSelection, setConfirmedSelection] = useState<ReviewQueueSelection | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
   const { loading, error, tree, refresh: refreshDecks } = useDecks(cwd);
 
@@ -43,7 +43,7 @@ export function App() {
     }
   });
 
-  const handleSelectionConfirm = useCallback((selection: Selection) => {
+  const handleSelectionConfirm = useCallback((selection: ReviewQueueSelection) => {
     setConfirmedSelection(selection);
   }, []);
 

@@ -2,14 +2,14 @@ import type { SelectOption } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useMemo, useCallback, useRef } from "react";
 import type { DeckTreeNode } from "@re/workspace";
-import type { Selection } from "../services";
+import type { ReviewQueueSelection } from "../services";
 import { themeColors as theme, glyphs } from "../ThemeContext";
 
 interface DeckTreeViewProps {
   tree: DeckTreeNode[];
   focused?: boolean;
-  onSelect?: (selection: Selection) => void;
-  onChange?: (selection: Selection) => void;
+  onSelect?: (selection: ReviewQueueSelection) => void;
+  onChange?: (selection: ReviewQueueSelection) => void;
 }
 
 interface AggregatedStats {
@@ -19,7 +19,7 @@ interface AggregatedStats {
 }
 
 interface FlattenedItem {
-  selection: Selection;
+  selection: ReviewQueueSelection;
   name: string;
   description: string;
   depth: number;
@@ -162,7 +162,7 @@ export function DeckTreeView({ tree, focused = false, onSelect, onChange }: Deck
     (index: number, option: SelectOption | null) => {
       currentIndexRef.current = index;
       if (option && onChange) {
-        onChange(option.value as Selection);
+        onChange(option.value as ReviewQueueSelection);
       }
     },
     [onChange],
@@ -171,7 +171,7 @@ export function DeckTreeView({ tree, focused = false, onSelect, onChange }: Deck
   const handleSelect = useCallback(
     (index: number, option: SelectOption | null) => {
       if (option && onSelect) {
-        onSelect(option.value as Selection);
+        onSelect(option.value as ReviewQueueSelection);
       }
     },
     [onSelect],

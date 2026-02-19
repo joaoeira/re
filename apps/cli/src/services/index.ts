@@ -1,6 +1,7 @@
 import { Layer } from "effect";
 import { BunFileSystem } from "@effect/platform-bun";
 import { Path } from "@effect/platform";
+import { DeckManagerLive, ReviewQueueLive } from "@re/workspace";
 
 export {
   Scheduler,
@@ -22,18 +23,16 @@ export {
   QueueOrderingStrategy,
   NewFirstOrderingStrategy,
   DueFirstOrderingStrategy,
-  type QueueItem,
-  type ReviewQueue,
-} from "@re/workspace";
-export {
+  ReviewQueueBuilder,
+  ReviewQueueBuilderLive,
   ReviewQueueService,
   ReviewQueueServiceLive,
   ReviewQueueLive,
-  type Selection,
-} from "./ReviewQueue";
-
-import { DeckManagerLive } from "@re/workspace";
-import { ReviewQueueLive } from "./ReviewQueue";
+  collectDeckPathsFromSelection,
+  type ReviewQueueSelection,
+  type QueueItem,
+  type ReviewQueue,
+} from "@re/workspace";
 
 const FileSystemAndPath = Layer.mergeAll(BunFileSystem.layer, Path.layer);
 
