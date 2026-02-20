@@ -25,10 +25,10 @@ export function GradeButtons({ disabled, onGrade }: GradeButtonsProps) {
           size="sm"
           disabled={disabled}
           onClick={() => onGrade(grade)}
-          className="gap-2 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground disabled:opacity-30"
+          className="gap-2 text-foreground hover:bg-muted disabled:opacity-30"
         >
-          <span className="text-sm">{label}</span>
-          <kbd className="border border-primary-foreground/20 bg-primary-foreground/5 px-1 py-0.5 text-[10px] text-primary-foreground/30">
+          <span className="text-xs">{label}</span>
+          <kbd className="border border-border px-1 py-0.5 text-[10px] text-muted-foreground/60">
             {key}
           </kbd>
         </Button>

@@ -1,29 +1,11 @@
-import { userEvent } from "@vitest/browser/context";
+import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { describe, expect, it, vi } from "vitest";
 
 import { SelectionToolbar } from "@/components/selection-toolbar";
 
 describe("SelectionToolbar", () => {
-  it("shows cards due and enabled review button when no selection with cards due", async () => {
-    const screen = await render(
-      <SelectionToolbar
-        selectedCount={0}
-        reviewableCount={5}
-        reviewDisabled={false}
-        onClearSelection={vi.fn()}
-        onReview={vi.fn()}
-      />,
-    );
-
-    await expect.element(screen.getByText("5 cards due")).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: "Review" })).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: "Review" })).not.toBeDisabled();
-    expect(screen.getByText("selected").query()).toBeNull();
-    expect(screen.getByRole("button", { name: "Clear deck selection" }).query()).toBeNull();
-  });
-
-  it("shows zero cards due and disabled review button when nothing is due", async () => {
+  it("renders nothing when no selection and no cards due", async () => {
     const screen = await render(
       <SelectionToolbar
         selectedCount={0}
@@ -34,11 +16,28 @@ describe("SelectionToolbar", () => {
       />,
     );
 
-    await expect.element(screen.getByText("0 cards due")).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: "Review" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Review" }).query()).toBeNull();
   });
 
-  it("shows selection count, cards due, and clear button when decks are selected", async () => {
+  it("shows due count and review button when cards are due without selection", async () => {
+    const screen = await render(
+      <SelectionToolbar
+        selectedCount={0}
+        reviewableCount={5}
+        reviewDisabled={false}
+        onClearSelection={vi.fn()}
+        onReview={vi.fn()}
+      />,
+    );
+
+    await expect.element(screen.getByText("5 due")).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Review" })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Review" })).not.toBeDisabled();
+    expect(screen.getByText("selected").query()).toBeNull();
+    expect(screen.getByRole("button", { name: "Clear deck selection" }).query()).toBeNull();
+  });
+
+  it("shows selection count, due count, and clear button when decks are selected", async () => {
     const screen = await render(
       <SelectionToolbar
         selectedCount={3}
@@ -50,14 +49,14 @@ describe("SelectionToolbar", () => {
     );
 
     await expect.element(screen.getByText("3 selected")).toBeVisible();
-    await expect.element(screen.getByText("10 cards due")).toBeVisible();
+    await expect.element(screen.getByText("10 due")).toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Clear deck selection" }))
       .toBeVisible();
     await expect.element(screen.getByRole("button", { name: "Review" })).not.toBeDisabled();
   });
 
-  it("disables review button when selection has zero reviewable cards", async () => {
+  it("shows toolbar when decks selected even with zero due", async () => {
     const screen = await render(
       <SelectionToolbar
         selectedCount={2}
@@ -108,7 +107,7 @@ describe("SelectionToolbar", () => {
     const onReview = vi.fn();
     const screen = await render(
       <SelectionToolbar
-        selectedCount={0}
+        selectedCount={2}
         reviewableCount={0}
         reviewDisabled={true}
         onClearSelection={vi.fn()}
@@ -119,6 +118,86 @@ describe("SelectionToolbar", () => {
     const button = screen.getByRole("button", { name: "Review" });
     await expect.element(button).toBeDisabled();
     (button.element() as HTMLElement).click();
+    expect(onReview).not.toHaveBeenCalled();
+  });
+
+  it("shows the Space keyboard hint on the review button", async () => {
+    const screen = await render(
+      <SelectionToolbar
+        selectedCount={0}
+        reviewableCount={5}
+        reviewDisabled={false}
+        onClearSelection={vi.fn()}
+        onReview={vi.fn()}
+      />,
+    );
+
+    await expect.element(screen.getByText("Space")).toBeVisible();
+  });
+
+  it("calls onReview when Space is pressed", async () => {
+    const onReview = vi.fn();
+    await render(
+      <SelectionToolbar
+        selectedCount={0}
+        reviewableCount={5}
+        reviewDisabled={false}
+        onClearSelection={vi.fn()}
+        onReview={onReview}
+      />,
+    );
+
+    await userEvent.keyboard(" ");
+    expect(onReview).toHaveBeenCalledOnce();
+  });
+
+  it("does not call onReview when Space is pressed and review is disabled", async () => {
+    const onReview = vi.fn();
+    await render(
+      <SelectionToolbar
+        selectedCount={2}
+        reviewableCount={0}
+        reviewDisabled={true}
+        onClearSelection={vi.fn()}
+        onReview={onReview}
+      />,
+    );
+
+    await userEvent.keyboard(" ");
+    expect(onReview).not.toHaveBeenCalled();
+  });
+
+  it("does not register Space handler when toolbar is hidden", async () => {
+    const onReview = vi.fn();
+    await render(
+      <SelectionToolbar
+        selectedCount={0}
+        reviewableCount={0}
+        reviewDisabled={true}
+        onClearSelection={vi.fn()}
+        onReview={onReview}
+      />,
+    );
+
+    await userEvent.keyboard(" ");
+    expect(onReview).not.toHaveBeenCalled();
+  });
+
+  it("does not call onReview when Space is pressed with modifier keys", async () => {
+    const onReview = vi.fn();
+    await render(
+      <SelectionToolbar
+        selectedCount={0}
+        reviewableCount={5}
+        reviewDisabled={false}
+        onClearSelection={vi.fn()}
+        onReview={onReview}
+      />,
+    );
+
+    await userEvent.keyboard("{Control>} {/Control}");
+    await userEvent.keyboard("{Meta>} {/Meta}");
+    await userEvent.keyboard("{Alt>} {/Alt}");
     expect(onReview).not.toHaveBeenCalled();
   });
 });
