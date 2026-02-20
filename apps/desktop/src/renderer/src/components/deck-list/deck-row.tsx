@@ -14,11 +14,7 @@ type DeckRowProps = {
   readonly descendantDeckPaths: readonly string[];
 };
 
-export function DeckRow({
-  node,
-  depth,
-  descendantDeckPaths,
-}: DeckRowProps) {
+export function DeckRow({ node, depth, descendantDeckPaths }: DeckRowProps) {
   const navigate = useNavigate();
   const deckListStore = useDeckListStore();
   const deckSelectionStore = useDeckSelectionStore();
@@ -54,7 +50,11 @@ export function DeckRow({
   };
 
   const handleToggleFolderSelection = () => {
-    deckSelectionStore.send({ type: "toggleFolder", path: node.relativePath, descendantPaths: descendantDeckPaths });
+    deckSelectionStore.send({
+      type: "toggleFolder",
+      path: node.relativePath,
+      descendantPaths: descendantDeckPaths,
+    });
   };
 
   const handleDeckTitleClick = () => {

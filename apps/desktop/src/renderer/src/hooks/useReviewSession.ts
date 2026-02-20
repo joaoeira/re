@@ -63,10 +63,7 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
     return createIpc(window.desktopApi);
   }, []);
 
-  const deckSelectionKey = useMemo(
-    () => (decks === "all" ? "all" : decks.join("\u0000")),
-    [decks],
-  );
+  const deckSelectionKey = useMemo(() => (decks === "all" ? "all" : decks.join("\u0000")), [decks]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -110,7 +107,10 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
         );
 
         const absoluteByRelative = new Map(
-          snapshot.decks.map((deckSnapshot) => [deckSnapshot.relativePath, deckSnapshot.absolutePath]),
+          snapshot.decks.map((deckSnapshot) => [
+            deckSnapshot.relativePath,
+            deckSnapshot.absolutePath,
+          ]),
         );
 
         const deckPaths =

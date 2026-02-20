@@ -118,11 +118,15 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
   return (
     <section className="flex min-h-screen flex-col px-6 py-5 pb-24">
       <header className="flex items-center gap-3">
-        <Button type="button" variant="ghost" size="icon" onClick={() => void navigate({ to: "/" })}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => void navigate({ to: "/" })}
+        >
           <ArrowLeft size={16} />
           <span className="sr-only">Back to decks</span>
         </Button>
-        <span className="text-sm tabular-nums text-muted-foreground">{progress}</span>
         <span className="truncate text-sm text-foreground">{headerDeckName}</span>
       </header>
 
@@ -154,6 +158,7 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
           onReveal={() => send({ type: "REVEAL" })}
           onGrade={(grade) => send({ type: "GRADE", grade })}
           gradingDisabled={isGrading}
+          progress={progress}
         />
       )}
     </section>

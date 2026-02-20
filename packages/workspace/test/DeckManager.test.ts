@@ -35,7 +35,11 @@ const twoSidedType: ItemType<{ front: string; back: string }> = {
     const parts = content.split("---\n");
     if (parts.length < 2) {
       return Effect.fail(
-        new ContentParseError({ type: "two-sided", message: "Missing separator", raw: content }),
+        new ContentParseError({
+          type: "two-sided",
+          message: "Missing separator",
+          raw: content,
+        }),
       );
     }
     return Effect.succeed({ front: parts[0]!, back: parts[1]! });
@@ -57,7 +61,11 @@ const twoCardType: ItemType<{ front: string; back: string }> = {
     const parts = content.split("---\n");
     if (parts.length < 2) {
       return Effect.fail(
-        new ContentParseError({ type: "two-card", message: "Missing separator", raw: content }),
+        new ContentParseError({
+          type: "two-card",
+          message: "Missing separator",
+          raw: content,
+        }),
       );
     }
     return Effect.succeed({ front: parts[0]!, back: parts[1]! });
@@ -126,15 +134,15 @@ const runSuccess = <A>(
   };
 };
 
-// ---------------------------------------------------------------------------
-// readDeck
-// ---------------------------------------------------------------------------
-
 describe("DeckManager.readDeck", () => {
   it("returns parsed file for valid deck", async () => {
     const content = `# Title\n${singleCardItem("abc", "Question\n---\nAnswer\n")}`;
     const result = await run(
-      { entryTypes: {}, directories: {}, fileContents: { "/deck.md": content } },
+      {
+        entryTypes: {},
+        directories: {},
+        fileContents: { "/deck.md": content },
+      },
       (m) => m.readDeck("/deck.md"),
     );
 
@@ -194,10 +202,6 @@ describe("DeckManager.readDeck", () => {
     }
   });
 });
-
-// ---------------------------------------------------------------------------
-// updateCardMetadata
-// ---------------------------------------------------------------------------
 
 describe("DeckManager.updateCardMetadata", () => {
   const deckContent = `# Preamble\n${singleCardItem("card-a", "Q1\n---\nA1\n")}${singleCardItem("card-b", "Q2\n---\nA2\n")}`;
@@ -310,10 +314,6 @@ describe("DeckManager.updateCardMetadata", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// replaceItem
-// ---------------------------------------------------------------------------
-
 describe("DeckManager.replaceItem", () => {
   const deckContent = `${singleCardItem("item-a", "OldQ\n---\nOldA\n")}${singleCardItem("item-b", "Q2\n---\nA2\n")}`;
 
@@ -323,7 +323,10 @@ describe("DeckManager.replaceItem", () => {
       directories: {},
       fileContents: { "/deck.md": deckContent },
     };
-    const newItem: Item = { cards: [meta("item-a")], content: "NewQ\n---\nNewA\n" };
+    const newItem: Item = {
+      cards: [meta("item-a")],
+      content: "NewQ\n---\nNewA\n",
+    };
     const { promise, store } = runSuccess(config, (m) =>
       m.replaceItem("/deck.md", "item-a", newItem, twoSidedType),
     );
@@ -384,7 +387,10 @@ describe("DeckManager.replaceItem", () => {
       directories: {},
       fileContents: { "/deck.md": deckContent },
     };
-    const newItem: Item = { cards: [meta("item-a")], content: "no separator here" };
+    const newItem: Item = {
+      cards: [meta("item-a")],
+      content: "no separator here",
+    };
     const { promise } = runEither(config, (m) =>
       m.replaceItem("/deck.md", "item-a", newItem, twoSidedType),
     );
@@ -400,10 +406,6 @@ describe("DeckManager.replaceItem", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// appendItem
-// ---------------------------------------------------------------------------
-
 describe("DeckManager.appendItem", () => {
   it("appends to deck with existing items", async () => {
     const existing = singleCardItem("existing", "Q\n---\nA\n");
@@ -412,7 +414,10 @@ describe("DeckManager.appendItem", () => {
       directories: {},
       fileContents: { "/deck.md": existing },
     };
-    const newItem: Item = { cards: [meta("new-card")], content: "NewQ\n---\nNewA\n" };
+    const newItem: Item = {
+      cards: [meta("new-card")],
+      content: "NewQ\n---\nNewA\n",
+    };
     const { promise, store } = runSuccess(config, (m) =>
       m.appendItem("/deck.md", newItem, twoSidedType),
     );
@@ -487,10 +492,6 @@ describe("DeckManager.appendItem", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// removeItem
-// ---------------------------------------------------------------------------
-
 describe("DeckManager.removeItem", () => {
   it("removes item from middle, preserves surrounding items", async () => {
     const content = `${singleCardItem("a", "QA\n")}${singleCardItem("b", "QB\n")}${singleCardItem("c", "QC\n")}`;
@@ -525,7 +526,11 @@ describe("DeckManager.removeItem", () => {
   it("fails with CardNotFound for nonexistent ID", async () => {
     const content = singleCardItem("a", "Q\n");
     const { promise } = runEither(
-      { entryTypes: {}, directories: {}, fileContents: { "/deck.md": content } },
+      {
+        entryTypes: {},
+        directories: {},
+        fileContents: { "/deck.md": content },
+      },
       (m) => m.removeItem("/deck.md", "nope"),
     );
     const result = await promise;
@@ -536,10 +541,6 @@ describe("DeckManager.removeItem", () => {
     }
   });
 });
-
-// ---------------------------------------------------------------------------
-// Atomic write behavior
-// ---------------------------------------------------------------------------
 
 describe("DeckManager atomic write", () => {
   it("produces DeckWriteError on write failure", async () => {
@@ -576,7 +577,11 @@ describe("DeckManager atomic write", () => {
     await promise;
 
     const readBack = await run(
-      { entryTypes: {}, directories: {}, fileContents: { "/deck.md": store["/deck.md"]! } },
+      {
+        entryTypes: {},
+        directories: {},
+        fileContents: { "/deck.md": store["/deck.md"]! },
+      },
       (m) => m.readDeck("/deck.md"),
     );
 

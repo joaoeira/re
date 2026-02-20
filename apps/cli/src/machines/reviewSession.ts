@@ -23,22 +23,32 @@ interface SessionStats {
 function incrementStats(stats: SessionStats, rating: number): SessionStats {
   const next = { ...stats, reviewed: stats.reviewed + 1 };
   switch (rating) {
-    case 0: return { ...next, again: next.again + 1 };
-    case 1: return { ...next, hard: next.hard + 1 };
-    case 2: return { ...next, good: next.good + 1 };
-    case 3: return { ...next, easy: next.easy + 1 };
-    default: return next;
+    case 0:
+      return { ...next, again: next.again + 1 };
+    case 1:
+      return { ...next, hard: next.hard + 1 };
+    case 2:
+      return { ...next, good: next.good + 1 };
+    case 3:
+      return { ...next, easy: next.easy + 1 };
+    default:
+      return next;
   }
 }
 
 function decrementStats(stats: SessionStats, rating: number): SessionStats {
   const next = { ...stats, reviewed: Math.max(0, stats.reviewed - 1) };
   switch (rating) {
-    case 0: return { ...next, again: Math.max(0, next.again - 1) };
-    case 1: return { ...next, hard: Math.max(0, next.hard - 1) };
-    case 2: return { ...next, good: Math.max(0, next.good - 1) };
-    case 3: return { ...next, easy: Math.max(0, next.easy - 1) };
-    default: return next;
+    case 0:
+      return { ...next, again: Math.max(0, next.again - 1) };
+    case 1:
+      return { ...next, hard: Math.max(0, next.hard - 1) };
+    case 2:
+      return { ...next, good: Math.max(0, next.good - 1) };
+    case 3:
+      return { ...next, easy: Math.max(0, next.easy - 1) };
+    default:
+      return next;
   }
 }
 

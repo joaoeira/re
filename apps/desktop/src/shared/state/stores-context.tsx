@@ -29,7 +29,13 @@ export function useDeckSelectionStore(): DeckSelectionStore {
   return useStores().deckSelection;
 }
 
-export function StoresProvider({ children, stores }: { children: React.ReactNode; stores: Stores }) {
+export function StoresProvider({
+  children,
+  stores,
+}: {
+  children: React.ReactNode;
+  stores: Stores;
+}) {
   return <StoresContext.Provider value={stores}>{children}</StoresContext.Provider>;
 }
 

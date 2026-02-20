@@ -229,7 +229,9 @@ describe("renderer integration", () => {
     const stores = createStores();
     const screen = await renderApp(stores);
 
-    await expect.element(screen.getByText("No workspace configured. Set a workspace root path in settings.")).toBeVisible();
+    await expect
+      .element(screen.getByText("No workspace configured. Set a workspace root path in settings."))
+      .toBeVisible();
   });
 
   it("shows message when workspace has no decks", async () => {

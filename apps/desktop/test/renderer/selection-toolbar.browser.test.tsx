@@ -51,7 +51,9 @@ describe("SelectionToolbar", () => {
 
     await expect.element(screen.getByText("3 selected")).toBeVisible();
     await expect.element(screen.getByText("10 cards due")).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: "Clear deck selection" })).toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Clear deck selection" }))
+      .toBeVisible();
     await expect.element(screen.getByRole("button", { name: "Review" })).not.toBeDisabled();
   });
 

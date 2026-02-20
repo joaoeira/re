@@ -25,7 +25,9 @@ export function SelectionToolbar({
         {hasSelection ? (
           <>
             <div className="flex items-center gap-2 border-r border-dashed border-background/40 px-3">
-              <span className="text-xs tabular-nums text-background/80">{selectedCount} selected</span>
+              <span className="text-xs tabular-nums text-background/80">
+                {selectedCount} selected
+              </span>
               <button
                 type="button"
                 onClick={onClearSelection}
@@ -52,7 +54,9 @@ export function SelectionToolbar({
           </>
         ) : (
           <div className="flex items-center gap-3 px-3 py-2">
-            <span className="text-xs tabular-nums text-background/80">{reviewableCount} cards due</span>
+            <span className="text-xs tabular-nums text-background/80">
+              {reviewableCount} cards due
+            </span>
             <Button
               type="button"
               size="sm"
@@ -68,4 +72,3 @@ export function SelectionToolbar({
     </div>
   );
 }
-

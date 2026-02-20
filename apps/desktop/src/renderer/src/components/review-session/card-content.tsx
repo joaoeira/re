@@ -28,4 +28,3 @@ export function CardContent({ card, isRevealed }: CardContentProps) {
     </div>
   );
 }
-

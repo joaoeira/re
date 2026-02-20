@@ -34,7 +34,9 @@ const reviewItemTypes = [QAType, ClozeType] as const;
 
 const DeckManagerServicesLive = DeckManagerLive.pipe(Layer.provide(NodeServicesLive));
 const ReviewQueueBuilderServicesLive = ReviewQueueBuilderLive.pipe(
-  Layer.provide(Layer.mergeAll(DeckManagerServicesLive, ShuffledOrderingStrategy, NodeServicesLive)),
+  Layer.provide(
+    Layer.mergeAll(DeckManagerServicesLive, ShuffledOrderingStrategy, NodeServicesLive),
+  ),
 );
 
 const ReviewServicesLive = Layer.mergeAll(
@@ -51,10 +53,7 @@ const assertWithinRoot = (deckPath: string, rootPath: string): boolean => {
   const resolvedDeckPath = path.resolve(deckPath);
   const relativePath = path.relative(resolvedRootPath, resolvedDeckPath);
 
-  return (
-    relativePath === "" ||
-    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
-  );
+  return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
 };
 
 const findCardLocationById = (

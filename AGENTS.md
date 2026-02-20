@@ -25,7 +25,7 @@ const mapError = (error: unknown) => {
   return new ApiGenericError({ message: String(error) });
 };
 
-someEffect.pipe(Effect.mapError(mapError))
+someEffect.pipe(Effect.mapError(mapError));
 ```
 
 ```ts
@@ -33,7 +33,12 @@ someEffect.pipe(Effect.mapError(mapError))
 try {
   return await Effect.runPromise(someEffect);
 } catch (error) {
-  if (typeof error === "object" && error !== null && "_tag" in error && error._tag === "not_found") {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    error._tag === "not_found"
+  ) {
     throw new RecoverableError(error.message);
   }
   throw error;
@@ -54,7 +59,7 @@ deckManager.readDeck(deckPath).pipe(
     DeckReadError: (e) => Effect.fail(new CardContentReadError({ message: e.message })),
     DeckParseError: (e) => Effect.fail(new CardContentParseError({ message: e.message })),
   }),
-)
+);
 ```
 
 When crossing from Effect into Promise-land (e.g. for XState `fromPromise` actors), handle error classification inside the Effect pipeline before calling `runPromise`:
@@ -67,7 +72,8 @@ const loadCard = async (input) =>
       Effect.catchTags({
         not_found: (e) => Effect.fail(new RecoverableCardLoadError(e.message)),
         parse_error: (e) => Effect.fail(new RecoverableCardLoadError(e.message)),
-        card_index_out_of_bounds: () => Effect.fail(new RecoverableCardLoadError("Card index out of bounds")),
+        card_index_out_of_bounds: () =>
+          Effect.fail(new RecoverableCardLoadError("Card index out of bounds")),
       }),
     ),
   );
@@ -81,7 +87,7 @@ Errors not caught by `catchTags` fall through naturally — `read_error` in the 
 
 ```ts
 // OK — uniform wrapping, no classification
-someEffect.pipe(Effect.mapError((e) => new ApiError({ message: toErrorMessage(e) })))
+someEffect.pipe(Effect.mapError((e) => new ApiError({ message: toErrorMessage(e) })));
 ```
 
 The problem is specifically the classification variant: a function that receives `unknown` and uses an `instanceof` or `_tag` chain to sort errors into different buckets.
@@ -99,12 +105,15 @@ Stores use `@xstate/store` with React context injection — never module-scoped 
 ### Pattern
 
 Store module (`myStore.ts`):
+
 ```ts
 import { createStore } from "@xstate/store";
 
 export const createMyStore = () =>
   createStore({
-    context: { /* initial state */ },
+    context: {
+      /* initial state */
+    },
     on: {
       someEvent: (context, event: { value: string }) => ({ ...context, value: event.value }),
     },
@@ -114,6 +123,7 @@ export type MyStore = ReturnType<typeof createMyStore>;
 ```
 
 Context (`stores-context.tsx`):
+
 ```tsx
 import { createContext, useContext } from "react";
 import { createMyStore, type MyStore } from "./myStore";
@@ -128,9 +138,17 @@ function useStores(): Stores {
   return stores;
 }
 
-export function useMyStore(): MyStore { return useStores().my; }
+export function useMyStore(): MyStore {
+  return useStores().my;
+}
 
-export function StoresProvider({ children, stores }: { children: React.ReactNode; stores: Stores }) {
+export function StoresProvider({
+  children,
+  stores,
+}: {
+  children: React.ReactNode;
+  stores: Stores;
+}) {
   return <StoresContext.Provider value={stores}>{children}</StoresContext.Provider>;
 }
 
@@ -140,6 +158,7 @@ export function createStores(): Stores {
 ```
 
 Component usage:
+
 ```tsx
 const myStore = useMyStore();
 const value = useSelector(myStore, (s) => s.context.value);
@@ -157,16 +176,18 @@ myStore.send({ type: "someEvent", value: "new" });
 ### Testing
 
 Tests create fresh stores — no reset events needed:
+
 ```tsx
 const stores = createStores();
 const screen = await render(
   <StoresProvider stores={stores}>
     <ComponentUnderTest />
-  </StoresProvider>
+  </StoresProvider>,
 );
 ```
 
 Assert store state directly when needed:
+
 ```ts
 expect(stores.deckSelection.getSnapshot().context.selected).toHaveProperty("deck.md");
 ```
@@ -178,6 +199,7 @@ The desktop app uses Vitest 4 browser mode with headless Chromium for component 
 ### Setup
 
 Config uses `test.projects` (NOT `test.workspace` which was removed in Vitest 4):
+
 ```ts
 export default defineConfig({
   test: {
@@ -188,7 +210,12 @@ export default defineConfig({
         test: {
           name: "browser",
           include: ["test/**/*.browser.test.tsx"],
-          browser: { enabled: true, headless: true, provider: playwright(), instances: [{ browser: "chromium" }] },
+          browser: {
+            enabled: true,
+            headless: true,
+            provider: playwright(),
+            instances: [{ browser: "chromium" }],
+          },
         },
       },
     ],

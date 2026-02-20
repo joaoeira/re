@@ -1,10 +1,6 @@
 import { assign, fromPromise, setup, type SnapshotFrom } from "xstate";
 
-import type {
-  FSRSGrade,
-  LightQueueItem,
-  SerializedItemMetadata,
-} from "@shared/rpc/schemas/review";
+import type { FSRSGrade, LightQueueItem, SerializedItemMetadata } from "@shared/rpc/schemas/review";
 
 export class RecoverableCardLoadError extends Error {
   override readonly name = "RecoverableCardLoadError";

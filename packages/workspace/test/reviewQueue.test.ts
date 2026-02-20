@@ -195,7 +195,6 @@ describe("ReviewQueueBuilder", () => {
     expect(result.items.map((item) => item.card.id)).toEqual(["a-new", "a-due", "b-new", "b-due"]);
     expect(result.items.map((item) => item.filePosition)).toEqual([0, 2, 4, 5]);
   });
-
 });
 
 describe("ReviewQueue ordering from spec", () => {

@@ -112,7 +112,10 @@ export function HomeScreen() {
             ),
             Effect.catchAll((workspaceError) =>
               Effect.sync(() => {
-                workspaceStore.send({ type: "setError", error: toScanErrorMessage(workspaceError) });
+                workspaceStore.send({
+                  type: "setError",
+                  error: toScanErrorMessage(workspaceError),
+                });
               }),
             ),
           ),

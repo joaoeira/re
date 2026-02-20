@@ -43,4 +43,3 @@ function ReviewRoute() {
   const { decks } = Route.useSearch();
   return <ReviewSession decks={decks} />;
 }
-

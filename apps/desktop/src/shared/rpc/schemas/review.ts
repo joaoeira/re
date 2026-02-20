@@ -73,7 +73,9 @@ const StrictDateFromStringSchema: Schema.Schema<Date, string> = Schema.transform
 
       const date = new Date(value);
       if (Number.isNaN(date.getTime())) {
-        return ParseResult.fail(new ParseResult.Type(ast, value, `Invalid ISO timestamp: "${value}"`));
+        return ParseResult.fail(
+          new ParseResult.Type(ast, value, `Invalid ISO timestamp: "${value}"`),
+        );
       }
 
       if (!isValidCalendarDate(value, date)) {

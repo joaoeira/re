@@ -226,7 +226,9 @@ describe("ReviewQueueLive defaults", () => {
       const service = yield* ReviewQueueService;
       return yield* service.buildQueue(selection, tree, "/decks", now);
     }).pipe(
-      Effect.provide(ReviewQueueLive.pipe(Layer.provide(Layer.mergeAll(MockDeckManager, Path.layer)))),
+      Effect.provide(
+        ReviewQueueLive.pipe(Layer.provide(Layer.mergeAll(MockDeckManager, Path.layer))),
+      ),
       Effect.withRandom(Random.make("seed")),
       Effect.runPromise,
     );

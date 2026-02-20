@@ -13,10 +13,7 @@ import { StoresProvider, createStores } from "@shared/state/stores-context";
 import { DeckRow } from "@/components/deck-list/deck-row";
 import type { DeckTreeLeaf, DeckTreeGroup } from "@re/workspace";
 
-async function renderWithProviders(
-  ui: React.ReactNode,
-  stores = createStores(),
-) {
+async function renderWithProviders(ui: React.ReactNode, stores = createStores()) {
   const rootRoute = createRootRoute({ component: () => ui });
   const indexRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -128,9 +125,7 @@ describe("DeckRow", () => {
       );
 
       await expect.element(screen.getByText("languages")).toBeVisible();
-      await expect
-        .element(screen.getByRole("button", { name: "Collapse folder" }))
-        .toBeVisible();
+      await expect.element(screen.getByRole("button", { name: "Collapse folder" })).toBeVisible();
       await expect.element(screen.getByTitle("New")).toBeVisible();
       await expect.element(screen.getByTitle("Review")).toBeVisible();
       await expect.element(screen.getByText("4 due")).toBeVisible();
@@ -152,7 +147,9 @@ describe("DeckRow", () => {
       expect(stores.deckSelection.getSnapshot().context.selected).toHaveProperty("algorithms.md");
 
       (checkbox.element() as HTMLElement).click();
-      expect(stores.deckSelection.getSnapshot().context.selected).not.toHaveProperty("algorithms.md");
+      expect(stores.deckSelection.getSnapshot().context.selected).not.toHaveProperty(
+        "algorithms.md",
+      );
     });
   });
 
@@ -207,17 +204,13 @@ describe("DeckRow", () => {
 
       expect(stores.deckList.getSnapshot().context.collapsed).toHaveProperty("languages");
 
-      await expect
-        .element(screen.getByRole("button", { name: "Expand folder" }))
-        .toBeVisible();
+      await expect.element(screen.getByRole("button", { name: "Expand folder" })).toBeVisible();
 
       await userEvent.click(screen.getByRole("button", { name: "Expand folder" }));
 
       expect(stores.deckList.getSnapshot().context.collapsed).not.toHaveProperty("languages");
 
-      await expect
-        .element(screen.getByRole("button", { name: "Collapse folder" }))
-        .toBeVisible();
+      await expect.element(screen.getByRole("button", { name: "Collapse folder" })).toBeVisible();
     });
   });
 

@@ -17,9 +17,7 @@ export function SessionSummary({ stats, canUndo, onUndo, onBack }: SessionSummar
   return (
     <div className="mx-auto flex w-full max-w-[70ch] flex-col gap-5">
       <h2 className="text-2xl font-semibold text-foreground">Session Complete</h2>
-      <p className="text-sm text-muted-foreground">
-        Reviewed: {stats.reviewed}
-      </p>
+      <p className="text-sm text-muted-foreground">Reviewed: {stats.reviewed}</p>
       <p className="text-sm text-muted-foreground">
         Again: {stats.again} | Hard: {stats.hard} | Good: {stats.good} | Easy: {stats.easy}
       </p>
@@ -36,4 +34,3 @@ export function SessionSummary({ stats, canUndo, onUndo, onBack }: SessionSummar
     </div>
   );
 }
-

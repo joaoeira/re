@@ -16,7 +16,9 @@ const baseWireMetadata = {
 
 describe("SerializedItemMetadataSchema", () => {
   it("round-trips metadata with strict date decoding and numeric raw preservation", async () => {
-    const decoded = await Effect.runPromise(Schema.decodeUnknown(SerializedItemMetadataSchema)(baseWireMetadata));
+    const decoded = await Effect.runPromise(
+      Schema.decodeUnknown(SerializedItemMetadataSchema)(baseWireMetadata),
+    );
     const encoded = await Effect.runPromise(Schema.encode(SerializedItemMetadataSchema)(decoded));
 
     expect(encoded.stability.raw).toBe("5.20");

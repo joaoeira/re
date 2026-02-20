@@ -247,7 +247,8 @@ describe("desktopReviewSessionMachine", () => {
 
     await waitForSnapshot(
       actor,
-      (snapshot) => snapshot.matches({ presenting: "showPrompt" }) && snapshot.context.currentIndex === 1,
+      (snapshot) =>
+        snapshot.matches({ presenting: "showPrompt" }) && snapshot.context.currentIndex === 1,
     );
     actor.send({ type: "REVEAL" });
     await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "showAnswer" }));
@@ -257,12 +258,14 @@ describe("desktopReviewSessionMachine", () => {
     actor.send({ type: "UNDO" });
     await waitForSnapshot(
       actor,
-      (snapshot) => snapshot.matches({ presenting: "showPrompt" }) && snapshot.context.currentIndex === 1,
+      (snapshot) =>
+        snapshot.matches({ presenting: "showPrompt" }) && snapshot.context.currentIndex === 1,
     );
     actor.send({ type: "UNDO" });
     const fullyUndone = await waitForSnapshot(
       actor,
-      (snapshot) => snapshot.matches({ presenting: "showPrompt" }) && snapshot.context.currentIndex === 0,
+      (snapshot) =>
+        snapshot.matches({ presenting: "showPrompt" }) && snapshot.context.currentIndex === 0,
     );
 
     expect(fullyUndone.context.sessionStats.reviewed).toBe(0);
@@ -297,13 +300,15 @@ describe("desktopReviewSessionMachine", () => {
     actor.send({ type: "GRADE", grade: 2 });
     await waitForSnapshot(
       actor,
-      (snapshot) => snapshot.matches({ presenting: "loading" }) && snapshot.context.currentIndex === 1,
+      (snapshot) =>
+        snapshot.matches({ presenting: "loading" }) && snapshot.context.currentIndex === 1,
     );
 
     actor.send({ type: "UNDO" });
     const restored = await waitForSnapshot(
       actor,
-      (snapshot) => snapshot.matches({ presenting: "showPrompt" }) && snapshot.context.currentIndex === 0,
+      (snapshot) =>
+        snapshot.matches({ presenting: "showPrompt" }) && snapshot.context.currentIndex === 0,
     );
 
     expect(undoReview).toHaveBeenCalledTimes(1);
@@ -354,7 +359,8 @@ describe("desktopReviewSessionMachine", () => {
     actor.send({ type: "UNDO" });
     const restored = await waitForSnapshot(
       actor,
-      (snapshot) => snapshot.matches({ presenting: "showPrompt" }) && snapshot.context.currentIndex === 0,
+      (snapshot) =>
+        snapshot.matches({ presenting: "showPrompt" }) && snapshot.context.currentIndex === 0,
     );
 
     expect(undoReview).toHaveBeenCalledTimes(1);
