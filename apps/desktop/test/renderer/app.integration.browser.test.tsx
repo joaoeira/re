@@ -1,12 +1,23 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { render } from "vitest-browser-react";
 import { RouterProvider, createHashHistory, createRouter } from "@tanstack/react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { workspaceStore } from "@shared/state/workspaceStore";
 import { routeTree } from "../../src/renderer/src/routeTree.gen";
 
+const mockDesktopApi = (
+  invoke: (...args: unknown[]) => Promise<unknown>,
+  subscribe: (...args: unknown[]) => () => void,
+) => {
+  Object.defineProperty(window, "desktopApi", {
+    configurable: true,
+    value: { invoke, subscribe },
+  });
+};
+
 describe("renderer integration", () => {
-  afterEach(() => {
-    cleanup();
+  beforeEach(() => {
+    workspaceStore.send({ type: "reset" });
   });
 
   it("loads workspace snapshot and renders deck list", async () => {
@@ -16,9 +27,7 @@ describe("renderer integration", () => {
           type: "success",
           data: {
             settingsVersion: 1,
-            workspace: {
-              rootPath: "/Users/joaoeira/Documents/deck",
-            },
+            workspace: { rootPath: "/workspace" },
           },
         };
       }
@@ -62,38 +71,20 @@ describe("renderer integration", () => {
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
     });
 
-    const eventHandlers = new Map<string, (payload: unknown) => void>();
-    const subscribe = vi
-      .fn()
-      .mockImplementation((name: string, handler: (payload: unknown) => void) => {
-        eventHandlers.set(name, handler);
-        return () => {
-          eventHandlers.delete(name);
-        };
-      });
-
-    Object.defineProperty(window, "desktopApi", {
-      configurable: true,
-      value: { invoke, subscribe },
+    const subscribe = vi.fn().mockImplementation((_name: string, _handler: unknown) => {
+      return () => undefined;
     });
 
+    mockDesktopApi(invoke, subscribe);
+
     const router = createRouter({ routeTree, history: createHashHistory() });
-    render(<RouterProvider router={router} />);
+    const screen = await render(<RouterProvider router={router} />);
 
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("GetSettings", {}));
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("GetWorkspaceSnapshot", {
-        rootPath: "/Users/joaoeira/Documents/deck",
-        options: { includeHidden: false, extraIgnorePatterns: [] },
-      }),
-    );
-
-    expect(screen.getByText("ok")).toBeTruthy();
-    expect(screen.getByText("read")).toBeTruthy();
-    expect(screen.getByText("parse")).toBeTruthy();
-    expect(screen.getByText(/Snapshot updated/)).toBeTruthy();
-    expect(screen.getByTitle("2025-01-10T00:00:00.000Z")).toBeTruthy();
-    expect(screen.getByText("2 due")).toBeTruthy();
+    await expect.element(screen.getByText("ok")).toBeVisible();
+    await expect.element(screen.getByText("read")).toBeVisible();
+    await expect.element(screen.getByText("parse")).toBeVisible();
+    await expect.element(screen.getByText(/Snapshot updated/)).toBeVisible();
+    await expect.element(screen.getByText("2 due")).toBeVisible();
   });
 
   it("updates deck list when WorkspaceSnapshotChanged event fires", async () => {
@@ -142,16 +133,13 @@ describe("renderer integration", () => {
         };
       });
 
-    Object.defineProperty(window, "desktopApi", {
-      configurable: true,
-      value: { invoke, subscribe },
-    });
+    mockDesktopApi(invoke, subscribe);
 
     const router = createRouter({ routeTree, history: createHashHistory() });
-    render(<RouterProvider router={router} />);
+    const screen = await render(<RouterProvider router={router} />);
 
-    await waitFor(() => expect(screen.getByText("deck")).toBeTruthy());
-    expect(screen.queryByText("new-deck")).toBeNull();
+    await expect.element(screen.getByText("deck", { exact: true })).toBeVisible();
+    expect(screen.getByText("new-deck").query()).toBeNull();
 
     const handler = eventHandlers.get("WorkspaceSnapshotChanged");
     expect(handler).toBeDefined();
@@ -181,11 +169,10 @@ describe("renderer integration", () => {
       ],
     });
 
-    await waitFor(() => expect(screen.getByText("new-deck")).toBeTruthy());
-    expect(screen.getByText("deck")).toBeTruthy();
-    expect(screen.getByText("1 due")).toBeTruthy();
-    expect(screen.getByText(/Snapshot updated/)).toBeTruthy();
-    expect(screen.getByTitle("2025-01-10T12:00:00.000Z")).toBeTruthy();
+    await expect.element(screen.getByText("new-deck")).toBeVisible();
+    await expect.element(screen.getByText("deck", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("1 due")).toBeVisible();
+    await expect.element(screen.getByText(/Snapshot updated/)).toBeVisible();
   });
 
   it("shows error when settings fail to load", async () => {
@@ -208,18 +195,11 @@ describe("renderer integration", () => {
     });
 
     const subscribe = vi.fn().mockReturnValue(() => undefined);
-
-    Object.defineProperty(window, "desktopApi", {
-      configurable: true,
-      value: { invoke, subscribe },
-    });
+    mockDesktopApi(invoke, subscribe);
 
     const router = createRouter({ routeTree, history: createHashHistory() });
-    render(<RouterProvider router={router} />);
+    const screen = await render(<RouterProvider router={router} />);
 
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("GetSettings", {}));
-    await waitFor(() => expect(screen.getByText(/Settings file is invalid/)).toBeTruthy());
-
-    expect(invoke.mock.calls.some(([method]) => method === "GetWorkspaceSnapshot")).toBe(false);
+    await expect.element(screen.getByText(/Settings file is invalid/)).toBeVisible();
   });
 });

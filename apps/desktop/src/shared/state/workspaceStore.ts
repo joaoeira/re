@@ -25,5 +25,10 @@ export const workspaceStore = createStore({
       snapshotResult: null,
       error: event.error,
     }),
+    reset: () => ({
+      status: "idle" as const,
+      snapshotResult: null as SnapshotWorkspaceResult | null,
+      error: null as string | null,
+    }),
   },
 });
