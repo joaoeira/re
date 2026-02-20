@@ -126,7 +126,7 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
         <span className="truncate text-sm text-foreground">{headerDeckName}</span>
       </header>
 
-      <div className="flex flex-1 flex-col justify-center py-8">
+      <div className="flex flex-1 flex-col justify-start py-8">
         {snapshot.context.error && (
           <p className="mb-4 text-center text-sm text-destructive">{snapshot.context.error}</p>
         )}
