@@ -116,7 +116,7 @@ describe("SelectionToolbar", () => {
 
     const button = screen.getByRole("button", { name: "Review" });
     await expect.element(button).toBeDisabled();
-    button.element().click();
+    (button.element() as HTMLElement).click();
     expect(onReview).not.toHaveBeenCalled();
   });
 });

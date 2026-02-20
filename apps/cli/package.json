@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@effect/platform": "^0.94.1",
+    "@effect/platform": "^0.94.5",
     "@effect/platform-bun": "^0.87.0",
     "@opentui/core": "^0.1.67",
     "@opentui/react": "^0.1.67",

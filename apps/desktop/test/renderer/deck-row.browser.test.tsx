@@ -34,7 +34,6 @@ async function renderWithProviders(
 
   const screen = await render(
     <StoresProvider stores={stores}>
-      {/* @ts-expect-error -- test router type differs from app router */}
       <RouterProvider router={router} />
     </StoresProvider>,
   );
@@ -149,10 +148,10 @@ describe("DeckRow", () => {
 
       const checkbox = screen.getByRole("checkbox", { name: "Select algorithms" });
 
-      checkbox.element().click();
+      (checkbox.element() as HTMLElement).click();
       expect(stores.deckSelection.getSnapshot().context.selected).toHaveProperty("algorithms.md");
 
-      checkbox.element().click();
+      (checkbox.element() as HTMLElement).click();
       expect(stores.deckSelection.getSnapshot().context.selected).not.toHaveProperty("algorithms.md");
     });
   });
@@ -166,13 +165,13 @@ describe("DeckRow", () => {
       );
 
       const checkbox = screen.getByRole("checkbox", { name: "Select languages" });
-      checkbox.element().click();
+      (checkbox.element() as HTMLElement).click();
 
       const selected = stores.deckSelection.getSnapshot().context.selected;
       expect(selected).toHaveProperty("languages/rust.md");
       expect(selected).toHaveProperty("languages/go.md");
 
-      checkbox.element().click();
+      (checkbox.element() as HTMLElement).click();
 
       const afterDeselect = stores.deckSelection.getSnapshot().context.selected;
       expect(afterDeselect).not.toHaveProperty("languages/rust.md");
