@@ -40,45 +40,43 @@ export function SelectionToolbar({
   if (hidden) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center">
-      <div className="pointer-events-auto w-full border-t border-border bg-muted/30 px-6 py-2.5">
-        <div className="mx-auto grid max-w-2xl grid-cols-[1fr_auto_1fr] items-center">
-          <div>
-            {hasSelection && (
-              <div className="flex items-center gap-1.5">
-                <span className="tabular-nums text-xs text-muted-foreground">
-                  {selectedCount} selected
-                </span>
-                <button
-                  type="button"
-                  onClick={onClearSelection}
-                  className="text-muted-foreground/50 transition-colors hover:text-foreground"
-                  aria-label="Clear deck selection"
-                >
-                  <X size={10} />
-                </button>
-              </div>
-            )}
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={reviewDisabled}
-            onClick={onReview}
-            className="gap-3 hover:bg-foreground hover:text-background disabled:opacity-30"
-          >
-            <span className="text-xs">Review</span>
-            <kbd className="border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground/60">
-              Space
-            </kbd>
-          </Button>
-
-          <span className="tabular-nums text-xs text-muted-foreground justify-self-end">
-            {reviewableCount} due
-          </span>
+    <div className="shrink-0 border-t border-border bg-muted/30 px-6 py-2.5">
+      <div className="mx-auto grid max-w-2xl grid-cols-[1fr_auto_1fr] items-center">
+        <div>
+          {hasSelection && (
+            <div className="flex items-center gap-1.5">
+              <span className="tabular-nums text-xs text-muted-foreground">
+                {selectedCount} selected
+              </span>
+              <button
+                type="button"
+                onClick={onClearSelection}
+                className="text-muted-foreground/50 transition-colors hover:text-foreground"
+                aria-label="Clear deck selection"
+              >
+                <X size={10} />
+              </button>
+            </div>
+          )}
         </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={reviewDisabled}
+          onClick={onReview}
+          className="gap-3 hover:border-foreground disabled:opacity-30"
+        >
+          <span className="text-xs">Review</span>
+          <kbd className="border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground/60">
+            Space
+          </kbd>
+        </Button>
+
+        <span className="tabular-nums text-xs text-muted-foreground justify-self-end">
+          {reviewableCount} due
+        </span>
       </div>
     </div>
   );

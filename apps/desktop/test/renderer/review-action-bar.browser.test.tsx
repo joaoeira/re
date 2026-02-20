@@ -11,29 +11,9 @@ describe("ReviewActionBar", () => {
   const noop = () => {};
 
   describe("reveal mode", () => {
-    it("shows the Review label", async () => {
-      const screen = await render(
-        <ReviewActionBar
-          mode="reveal"
-          onReveal={noop}
-          onGrade={noop}
-          gradingDisabled={false}
-          progress="3/10"
-        />,
-      );
-
-      await expect.element(screen.getByText("Review")).toBeVisible();
-    });
-
     it("shows the Show Answer button", async () => {
       const screen = await render(
-        <ReviewActionBar
-          mode="reveal"
-          onReveal={noop}
-          onGrade={noop}
-          gradingDisabled={false}
-          progress="1/5"
-        />,
+        <ReviewActionBar mode="reveal" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
       );
 
       await expect.element(screen.getByText("Show Answer")).toBeVisible();
@@ -41,41 +21,15 @@ describe("ReviewActionBar", () => {
 
     it("shows the Space keyboard hint", async () => {
       const screen = await render(
-        <ReviewActionBar
-          mode="reveal"
-          onReveal={noop}
-          onGrade={noop}
-          gradingDisabled={false}
-          progress="1/5"
-        />,
+        <ReviewActionBar mode="reveal" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
       );
 
       await expect.element(screen.getByText("Space")).toBeVisible();
     });
 
-    it("shows the progress counter", async () => {
-      const screen = await render(
-        <ReviewActionBar
-          mode="reveal"
-          onReveal={noop}
-          onGrade={noop}
-          gradingDisabled={false}
-          progress="7/24"
-        />,
-      );
-
-      await expect.element(screen.getByText("7/24")).toBeVisible();
-    });
-
     it("does not show grade buttons", async () => {
       const screen = await render(
-        <ReviewActionBar
-          mode="reveal"
-          onReveal={noop}
-          onGrade={noop}
-          gradingDisabled={false}
-          progress="1/5"
-        />,
+        <ReviewActionBar mode="reveal" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
       );
 
       expect(screen.getByText("Again").query()).toBeNull();
@@ -86,13 +40,7 @@ describe("ReviewActionBar", () => {
 
     it("does not show the Grade label", async () => {
       const screen = await render(
-        <ReviewActionBar
-          mode="reveal"
-          onReveal={noop}
-          onGrade={noop}
-          gradingDisabled={false}
-          progress="1/5"
-        />,
+        <ReviewActionBar mode="reveal" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
       );
 
       expect(screen.getByText("Grade").query()).toBeNull();
@@ -106,7 +54,6 @@ describe("ReviewActionBar", () => {
           onReveal={onReveal}
           onGrade={noop}
           gradingDisabled={false}
-          progress="1/5"
         />,
       );
 
@@ -118,41 +65,15 @@ describe("ReviewActionBar", () => {
   describe("grade mode", () => {
     it("shows the Grade label", async () => {
       const screen = await render(
-        <ReviewActionBar
-          mode="grade"
-          onReveal={noop}
-          onGrade={noop}
-          gradingDisabled={false}
-          progress="3/10"
-        />,
+        <ReviewActionBar mode="grade" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
       );
 
       await expect.element(screen.getByText("Grade")).toBeVisible();
     });
 
-    it("does not show the Review label", async () => {
-      const screen = await render(
-        <ReviewActionBar
-          mode="grade"
-          onReveal={noop}
-          onGrade={noop}
-          gradingDisabled={false}
-          progress="3/10"
-        />,
-      );
-
-      expect(screen.getByText("Review").query()).toBeNull();
-    });
-
     it("shows all four grade buttons", async () => {
       const screen = await render(
-        <ReviewActionBar
-          mode="grade"
-          onReveal={noop}
-          onGrade={noop}
-          gradingDisabled={false}
-          progress="3/10"
-        />,
+        <ReviewActionBar mode="grade" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
       );
 
       await expect.element(screen.getByText("Again")).toBeVisible();
@@ -163,13 +84,7 @@ describe("ReviewActionBar", () => {
 
     it("shows keyboard hints 1 through 4", async () => {
       const screen = await render(
-        <ReviewActionBar
-          mode="grade"
-          onReveal={noop}
-          onGrade={noop}
-          gradingDisabled={false}
-          progress="5/8"
-        />,
+        <ReviewActionBar mode="grade" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
       );
 
       await expect.element(screen.getByText("1", { exact: true })).toBeVisible();
@@ -180,42 +95,16 @@ describe("ReviewActionBar", () => {
 
     it("does not show the Show Answer button", async () => {
       const screen = await render(
-        <ReviewActionBar
-          mode="grade"
-          onReveal={noop}
-          onGrade={noop}
-          gradingDisabled={false}
-          progress="3/10"
-        />,
+        <ReviewActionBar mode="grade" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
       );
 
       expect(screen.getByText("Show Answer").query()).toBeNull();
     });
 
-    it("shows the progress counter", async () => {
-      const screen = await render(
-        <ReviewActionBar
-          mode="grade"
-          onReveal={noop}
-          onGrade={noop}
-          gradingDisabled={false}
-          progress="12/24"
-        />,
-      );
-
-      await expect.element(screen.getByText("12/24")).toBeVisible();
-    });
-
     it("fires onGrade with the correct grade for each button", async () => {
       const onGrade = vi.fn();
       const screen = await render(
-        <ReviewActionBar
-          mode="grade"
-          onReveal={noop}
-          onGrade={onGrade}
-          gradingDisabled={false}
-          progress="1/5"
-        />,
+        <ReviewActionBar mode="grade" onReveal={noop} onGrade={onGrade} gradingDisabled={false} />,
       );
 
       await userEvent.click(screen.getByText("Again"));
@@ -235,13 +124,7 @@ describe("ReviewActionBar", () => {
 
     it("disables grade buttons when gradingDisabled is true", async () => {
       const screen = await render(
-        <ReviewActionBar
-          mode="grade"
-          onReveal={noop}
-          onGrade={noop}
-          gradingDisabled={true}
-          progress="1/5"
-        />,
+        <ReviewActionBar mode="grade" onReveal={noop} onGrade={noop} gradingDisabled={true} />,
       );
 
       await expect.element(screen.getByText("Again").element().closest("button")!).toBeDisabled();
@@ -253,13 +136,7 @@ describe("ReviewActionBar", () => {
     it("does not fire onGrade when buttons are disabled", async () => {
       const onGrade = vi.fn();
       const screen = await render(
-        <ReviewActionBar
-          mode="grade"
-          onReveal={noop}
-          onGrade={onGrade}
-          gradingDisabled={true}
-          progress="1/5"
-        />,
+        <ReviewActionBar mode="grade" onReveal={noop} onGrade={onGrade} gradingDisabled={true} />,
       );
 
       (screen.getByText("Again").element() as HTMLElement).click();

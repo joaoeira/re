@@ -1,8 +1,5 @@
 import type { FSRSGrade } from "@shared/rpc/schemas/review";
 
-import { Eye } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
 import { GradeButtons } from "@/components/review-session/grade-buttons";
 
 type ReviewActionBarProps = {
@@ -10,7 +7,6 @@ type ReviewActionBarProps = {
   readonly onReveal: () => void;
   readonly onGrade: (grade: FSRSGrade) => void;
   readonly gradingDisabled: boolean;
-  readonly progress: string;
 };
 
 export function ReviewActionBar({
@@ -18,35 +14,26 @@ export function ReviewActionBar({
   onReveal,
   onGrade,
   gradingDisabled,
-  progress,
 }: ReviewActionBarProps) {
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center">
-      <div className="pointer-events-auto w-full border-t border-border bg-muted/30 px-6 py-2.5">
-        <div className="mx-auto flex max-w-2xl items-center justify-between">
-          <span className="text-xs text-muted-foreground">
-            {mode === "reveal" ? "Review" : "Grade"}
-          </span>
-
-          {mode === "reveal" ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onReveal}
-              className="group gap-3 hover:bg-foreground hover:text-background"
-            >
-              <Eye className="size-3.5 opacity-50 transition-opacity group-hover:opacity-100" />
-              <span className="text-xs">Show Answer</span>
-              <Kbd>Space</Kbd>
-            </Button>
-          ) : (
-            <GradeButtons disabled={gradingDisabled} onGrade={onGrade} />
-          )}
-
-          <span className="tabular-nums text-xs text-muted-foreground">{progress}</span>
+    <div className="shrink-0 border-t border-border bg-muted/30 px-6 py-2.5">
+      {mode === "reveal" ? (
+        <div className="mx-auto flex max-w-xl items-center justify-center">
+          <button
+            type="button"
+            onClick={onReveal}
+            className="flex items-center gap-3 border border-border px-3 py-1 text-xs transition-colors hover:border-foreground"
+          >
+            <span>Show Answer</span>
+            <Kbd>Space</Kbd>
+          </button>
         </div>
-      </div>
+      ) : (
+        <div className="mx-auto flex max-w-xl items-center justify-between">
+          <span className="text-[11px] uppercase tracking-widest text-muted-foreground">Grade</span>
+          <GradeButtons disabled={gradingDisabled} onGrade={onGrade} />
+        </div>
+      )}
     </div>
   );
 }

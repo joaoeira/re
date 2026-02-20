@@ -163,17 +163,23 @@ export function HomeScreen() {
 
   if (workspaceStatus === "idle" || workspaceStatus === "loading") {
     return (
-      <div className="py-12 text-center text-sm text-muted-foreground">Loading workspace...</div>
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        Loading workspace...
+      </div>
     );
   }
 
   if (workspaceError) {
-    return <div className="py-12 text-center text-sm text-destructive">{workspaceError}</div>;
+    return (
+      <div className="flex flex-1 items-center justify-center text-sm text-destructive">
+        {workspaceError}
+      </div>
+    );
   }
 
   if (!snapshotResult) {
     return (
-      <div className="py-12 text-center text-sm text-muted-foreground">
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
         No workspace configured. Set a workspace root path in settings.
       </div>
     );
@@ -205,11 +211,10 @@ export function HomeScreen() {
   const toolbarReviewableCards = hasSelectedDecks ? selectedReviewableCards : totalReviewableCards;
 
   return (
-    <section>
-      <p className="mb-2 text-xs text-muted-foreground" title={snapshotResult.asOf}>
-        Snapshot updated {snapshotAge}
-      </p>
-      <DeckList snapshots={snapshotResult.decks} />
+    <>
+      <div className="flex-1 overflow-auto">
+        <DeckList snapshots={snapshotResult.decks} />
+      </div>
 
       {toolbarVisible && (
         <SelectionToolbar
@@ -229,6 +234,6 @@ export function HomeScreen() {
           }}
         />
       )}
-    </section>
+    </>
   );
 }

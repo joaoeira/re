@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useReviewSession } from "@/hooks/useReviewSession";
@@ -69,15 +68,15 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
 
   if (session.status === "loading") {
     return (
-      <section className="flex min-h-screen items-center justify-center px-6 py-10">
+      <div className="flex flex-1 items-center justify-center">
         <p className="text-sm text-muted-foreground">Building review queue...</p>
-      </section>
+      </div>
     );
   }
 
   if (session.status === "error") {
     return (
-      <section className="flex min-h-screen items-center justify-center px-6 py-10">
+      <div className="flex flex-1 items-center justify-center">
         <div className="mx-auto flex max-w-xl flex-col items-center gap-4 text-center">
           <h2 className="text-xl font-semibold">Failed to start review</h2>
           <p className="text-sm text-destructive">{session.message}</p>
@@ -85,20 +84,20 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
             Back to decks
           </Button>
         </div>
-      </section>
+      </div>
     );
   }
 
   if (session.status === "empty") {
     return (
-      <section className="flex min-h-screen items-center justify-center px-6 py-10">
+      <div className="flex flex-1 items-center justify-center">
         <div className="mx-auto flex max-w-xl flex-col items-center gap-4 text-center">
           <h2 className="text-xl font-semibold">Nothing to review</h2>
           <Button type="button" size="sm" onClick={() => void navigate({ to: "/" })}>
             Back to decks
           </Button>
         </div>
-      </section>
+      </div>
     );
   }
 
@@ -109,28 +108,9 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
   const isShowingAnswer = snapshot.matches({ presenting: "showAnswer" });
   const isGrading = snapshot.matches({ presenting: "grading" });
 
-  const queueLength = snapshot.context.queue.length;
-  const currentIndex = snapshot.context.currentIndex;
-  const currentItem = snapshot.context.queue[Math.min(currentIndex, queueLength - 1)] ?? null;
-  const progress = `${isComplete ? queueLength : currentIndex + 1}/${queueLength}`;
-  const headerDeckName = isComplete ? "Session complete" : (currentItem?.deckName ?? "");
-
   return (
-    <section className="flex min-h-screen flex-col px-6 py-5 pb-24">
-      <header className="flex items-center gap-3">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={() => void navigate({ to: "/" })}
-        >
-          <ArrowLeft size={16} />
-          <span className="sr-only">Back to decks</span>
-        </Button>
-        <span className="truncate text-sm text-foreground">{headerDeckName}</span>
-      </header>
-
-      <div className="flex flex-1 flex-col justify-start py-8">
+    <>
+      <div className="flex flex-1 flex-col overflow-auto px-6 py-5">
         {snapshot.context.error && (
           <p className="mb-4 text-center text-sm text-destructive">{snapshot.context.error}</p>
         )}
@@ -158,9 +138,8 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
           onReveal={() => send({ type: "REVEAL" })}
           onGrade={(grade) => send({ type: "GRADE", grade })}
           gradingDisabled={isGrading}
-          progress={progress}
         />
       )}
-    </section>
+    </>
   );
 }
