@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { useSelector } from "@xstate/store-react";
 
 import type { ScanDecksError, SnapshotWorkspaceResult } from "@re/workspace";
 import type { SettingsError } from "@shared/settings";
 import { WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
+import { deckSelectionStore } from "@shared/state/deckSelectionStore";
 import { Effect } from "effect";
 import type { RpcDefectError } from "electron-effect-rpc/renderer";
 
 import { DeckList } from "./deck-list";
+import { SelectionToolbar } from "./selection-toolbar";
 import { createIpc } from "../lib/ipc";
 
 const DEFAULT_SNAPSHOT_OPTIONS = {
@@ -73,6 +77,8 @@ export function HomeScreen() {
   const [snapshotResult, setSnapshotResult] = useState<SnapshotWorkspaceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
+  const selectedDecks = useSelector(deckSelectionStore, (state) => state.context.selected);
 
   const ipc = useMemo(() => {
     if (!window.desktopApi) return null;
@@ -160,9 +166,17 @@ export function HomeScreen() {
     return unsubscribeSnapshot;
   }, [ipc, loadWorkspaceSnapshot]);
 
-  const handleDeckClick = useCallback((_relativePath: string) => {
-    // Future: navigate to deck view
-  }, []);
+  const handleDeckTitleClick = useCallback(
+    (relativePath: string) => {
+      void navigate({
+        to: "/review",
+        search: {
+          decks: [relativePath],
+        },
+      });
+    },
+    [navigate],
+  );
 
   if (isLoading) {
     return (
@@ -183,13 +197,69 @@ export function HomeScreen() {
   }
 
   const snapshotAge = formatSnapshotAge(snapshotResult.asOf, new Date());
+  const selectedDeckPaths = Object.keys(selectedDecks);
+  const decksByRelativePath = new Map(
+    snapshotResult.decks.map((deckSnapshot) => [deckSnapshot.relativePath, deckSnapshot]),
+  );
+  const validSelectedDeckPaths = selectedDeckPaths.filter((relativePath) =>
+    decksByRelativePath.has(relativePath),
+  );
+
+  const totalReviewableCards = snapshotResult.decks.reduce((total, snapshot) => {
+    if (snapshot.status !== "ok") return total;
+    return total + snapshot.dueCards + snapshot.stateCounts.new;
+  }, 0);
+
+  const selectedReviewableCards = validSelectedDeckPaths.reduce((total, relativePath) => {
+    const snapshot = decksByRelativePath.get(relativePath);
+    if (!snapshot || snapshot.status !== "ok") return total;
+    return total + snapshot.dueCards + snapshot.stateCounts.new;
+  }, 0);
+
+  const hasSelectedDecks = validSelectedDeckPaths.length > 0;
+  const toolbarVisible = totalReviewableCards > 0 || hasSelectedDecks;
+  const reviewEnabled = hasSelectedDecks ? selectedReviewableCards > 0 : totalReviewableCards > 0;
+  const toolbarReviewableCards = hasSelectedDecks ? selectedReviewableCards : totalReviewableCards;
 
   return (
     <section>
       <p className="mb-2 text-xs text-muted-foreground" title={snapshotResult.asOf}>
         Snapshot updated {snapshotAge}
       </p>
-      <DeckList snapshots={snapshotResult.decks} onDeckClick={handleDeckClick} />
+      <DeckList
+        snapshots={snapshotResult.decks}
+        selectedDecks={selectedDecks}
+        onToggleDeckSelection={(relativePath) =>
+          deckSelectionStore.send({ type: "toggleDeck", path: relativePath })
+        }
+        onToggleFolderSelection={(relativePath, descendantDeckPaths) =>
+          deckSelectionStore.send({
+            type: "toggleFolder",
+            path: relativePath,
+            descendantPaths: descendantDeckPaths,
+          })
+        }
+        onDeckTitleClick={handleDeckTitleClick}
+      />
+
+      {toolbarVisible && (
+        <SelectionToolbar
+          selectedCount={validSelectedDeckPaths.length}
+          reviewableCount={toolbarReviewableCards}
+          reviewDisabled={!reviewEnabled}
+          onClearSelection={() => deckSelectionStore.send({ type: "clear" })}
+          onReview={() => {
+            if (!reviewEnabled) return;
+
+            void navigate({
+              to: "/review",
+              search: {
+                decks: hasSelectedDecks ? validSelectedDeckPaths : "all",
+              },
+            });
+          }}
+        />
+      )}
     </section>
   );
 }

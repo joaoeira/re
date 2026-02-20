@@ -1,18 +1,38 @@
 import { AlertCircle, ChevronDown, ChevronRight, FileText, Folder } from "lucide-react";
 import { cn } from "@shared/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DeckTreeNode } from "@re/workspace";
 import { DeckStateBadges } from "./deck-state-badges";
+
+type CheckedState = boolean | "indeterminate";
 
 type DeckRowProps = {
   readonly node: DeckTreeNode;
   readonly depth: number;
   readonly isCollapsed: boolean;
-  readonly onToggle: (path: string) => void;
-  readonly onClick: (relativePath: string) => void;
+  readonly checkboxState: CheckedState;
+  readonly descendantDeckPaths: readonly string[];
+  readonly onToggleCollapse: (path: string) => void;
+  readonly onToggleDeckSelection: (relativePath: string) => void;
+  readonly onToggleFolderSelection: (
+    relativePath: string,
+    descendantDeckPaths: readonly string[],
+  ) => void;
+  readonly onDeckTitleClick: (relativePath: string) => void;
 };
 
-export function DeckRow({ node, depth, isCollapsed, onToggle, onClick }: DeckRowProps) {
+export function DeckRow({
+  node,
+  depth,
+  isCollapsed,
+  checkboxState,
+  descendantDeckPaths,
+  onToggleCollapse,
+  onToggleDeckSelection,
+  onToggleFolderSelection,
+  onDeckTitleClick,
+}: DeckRowProps) {
   const isGroup = node.kind === "group";
   const isError = node.kind === "leaf" && node.snapshot.status !== "ok";
 
@@ -34,40 +54,46 @@ export function DeckRow({ node, depth, isCollapsed, onToggle, onClick }: DeckRow
       ? node.snapshot.dueCards
       : null;
 
+  const checkboxChecked = checkboxState === true;
+  const checkboxIndeterminate = checkboxState === "indeterminate";
+
   return (
-    <button
-      type="button"
+    <div
       role="listitem"
-      onClick={() => onClick(node.relativePath)}
       className={cn(
         "flex w-full items-center gap-2 border-b border-border py-2 pr-3 text-left transition-colors",
-        "hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+        "hover:bg-accent/50",
         isError && "opacity-60",
       )}
       style={{ paddingLeft: `${depth * 20 + 12}px` }}
     >
       {isGroup ? (
-        <span
-          role="button"
-          tabIndex={-1}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle(node.relativePath);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.stopPropagation();
-              e.preventDefault();
-              onToggle(node.relativePath);
-            }
-          }}
-          className="flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
+        <button
+          type="button"
+          onClick={() => onToggleCollapse(node.relativePath)}
+          aria-label={isCollapsed ? "Expand folder" : "Collapse folder"}
+          className="flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-        </span>
+        </button>
       ) : (
         <span className="h-5 w-5 shrink-0" />
       )}
+
+      <Checkbox
+        checked={checkboxChecked}
+        indeterminate={checkboxIndeterminate}
+        onCheckedChange={() => {
+          if (isGroup) {
+            onToggleFolderSelection(node.relativePath, descendantDeckPaths);
+            return;
+          }
+
+          onToggleDeckSelection(node.relativePath);
+        }}
+        aria-label={`Select ${node.name}`}
+        disabled={isGroup && descendantDeckPaths.length === 0}
+      />
 
       {isGroup ? (
         <Folder size={16} className="shrink-0 text-muted-foreground" />
@@ -90,9 +116,17 @@ export function DeckRow({ node, depth, isCollapsed, onToggle, onClick }: DeckRow
         <FileText size={16} className="shrink-0 text-muted-foreground" />
       )}
 
-      <span className={cn("min-w-0 truncate text-sm text-foreground", isGroup && "font-medium")}>
-        {node.name}
-      </span>
+      {isGroup ? (
+        <span className="min-w-0 truncate text-sm font-medium text-foreground">{node.name}</span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onDeckTitleClick(node.relativePath)}
+          className="min-w-0 truncate text-left text-sm text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {node.name}
+        </button>
+      )}
 
       <span className="flex-1" />
 
@@ -129,6 +163,6 @@ export function DeckRow({ node, depth, isCollapsed, onToggle, onClick }: DeckRow
           </Tooltip>
         </TooltipProvider>
       )}
-    </button>
+    </div>
   );
 }

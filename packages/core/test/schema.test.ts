@@ -260,6 +260,15 @@ describe("LastReviewFromString", () => {
     }),
   );
 
+  it.scoped("rejects invalid calendar date Feb 30 with offset", () =>
+    Effect.gen(function* () {
+      const result = yield* Schema.decodeUnknown(LastReviewFromString)(
+        "2025-02-30T10:30:00+02:00",
+      ).pipe(Effect.flip);
+      assert.ok(result);
+    }),
+  );
+
   it.scoped("rejects invalid calendar date Feb 29 in non-leap year", () =>
     Effect.gen(function* () {
       const result = yield* Schema.decodeUnknown(LastReviewFromString)("2025-02-29T10:30:00Z").pipe(

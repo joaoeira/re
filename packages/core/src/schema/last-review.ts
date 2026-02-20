@@ -14,6 +14,17 @@ import { ParseResult, Schema } from "effect";
 const ISO_TIMESTAMP_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
+const parseTimezoneOffsetMinutes = (timezone: string): number => {
+  if (timezone === "Z") {
+    return 0;
+  }
+
+  const sign = timezone.startsWith("-") ? -1 : 1;
+  const hours = parseInt(timezone.slice(1, 3), 10);
+  const minutes = parseInt(timezone.slice(4, 6), 10);
+  return sign * (hours * 60 + minutes);
+};
+
 /**
  * Validate that the date components in the string match what JS Date parsed.
  * This catches invalid calendar dates like Feb 30 that JS normalizes.
@@ -36,11 +47,19 @@ const isValidCalendarDate = (s: string, d: Date): boolean => {
     );
   }
 
-  // For offset timestamps, we need to check the local interpretation
-  // The safest approach: reconstruct and compare the UTC result
-  // If normalization occurred, the milliseconds won't match a clean parse
-  const reparsed = new Date(s);
-  return d.getTime() === reparsed.getTime();
+  // For offset timestamps, convert the parsed UTC instant back into the original
+  // offset-local clock components and compare against the captured input values.
+  const offsetMinutes = parseTimezoneOffsetMinutes(tz!);
+  const localTimeInOffset = new Date(d.getTime() + offsetMinutes * 60 * 1000);
+
+  return (
+    localTimeInOffset.getUTCFullYear() === parseInt(year!, 10) &&
+    localTimeInOffset.getUTCMonth() + 1 === parseInt(month!, 10) &&
+    localTimeInOffset.getUTCDate() === parseInt(day!, 10) &&
+    localTimeInOffset.getUTCHours() === parseInt(hour!, 10) &&
+    localTimeInOffset.getUTCMinutes() === parseInt(minute!, 10) &&
+    localTimeInOffset.getUTCSeconds() === parseInt(second!, 10)
+  );
 };
 
 /**
