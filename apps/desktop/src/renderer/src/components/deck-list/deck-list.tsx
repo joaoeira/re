@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useSelector } from "@xstate/store-react";
 import { buildDeckTree, flattenDeckTree, type DeckSnapshot } from "@re/workspace";
-import { deckListStore } from "@shared/state/deckListStore";
+import { useDeckListStore } from "@shared/state/stores-context";
 import { collectGroupDeckDescendants } from "@shared/lib/deckTreeSelectors";
 import { DeckRow } from "./deck-row";
 
@@ -10,6 +10,7 @@ type DeckListProps = {
 };
 
 export function DeckList({ snapshots }: DeckListProps) {
+  const deckListStore = useDeckListStore();
   const collapsed = useSelector(deckListStore, (s) => s.context.collapsed);
 
   const tree = useMemo(() => buildDeckTree(snapshots), [snapshots]);

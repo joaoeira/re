@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { deckSelectionStore } from "@shared/state/deckSelectionStore";
+import { createDeckSelectionStore } from "@shared/state/deckSelectionStore";
 import { getGroupCheckboxState } from "@shared/lib/deckTreeSelectors";
+
+let deckSelectionStore: ReturnType<typeof createDeckSelectionStore>;
 
 const selectedKeys = () => Object.keys(deckSelectionStore.getSnapshot().context.selected).sort();
 
 describe("deckSelectionStore", () => {
   beforeEach(() => {
-    deckSelectionStore.send({ type: "clear" });
+    deckSelectionStore = createDeckSelectionStore();
   });
 
   it("toggles single deck selection on and off", () => {

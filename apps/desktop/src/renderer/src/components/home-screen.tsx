@@ -5,8 +5,7 @@ import { useSelector } from "@xstate/store-react";
 import type { ScanDecksError } from "@re/workspace";
 import type { SettingsError } from "@shared/settings";
 import { WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
-import { deckSelectionStore } from "@shared/state/deckSelectionStore";
-import { workspaceStore } from "@shared/state/workspaceStore";
+import { useDeckSelectionStore, useWorkspaceStore } from "@shared/state/stores-context";
 import { Effect } from "effect";
 import type { RpcDefectError } from "electron-effect-rpc/renderer";
 
@@ -76,6 +75,8 @@ const toSettingsErrorMessage = (error: SettingsError): string => {
 
 export function HomeScreen() {
   const navigate = useNavigate();
+  const workspaceStore = useWorkspaceStore();
+  const deckSelectionStore = useDeckSelectionStore();
 
   const workspaceStatus = useSelector(workspaceStore, (s) => s.context.status);
   const snapshotResult = useSelector(workspaceStore, (s) => s.context.snapshotResult);
@@ -117,7 +118,7 @@ export function HomeScreen() {
           ),
       );
     },
-    [ipc],
+    [ipc, workspaceStore],
   );
 
   useEffect(() => {
@@ -155,7 +156,7 @@ export function HomeScreen() {
     );
 
     return unsubscribeSnapshot;
-  }, [ipc, loadWorkspaceSnapshot]);
+  }, [ipc, loadWorkspaceSnapshot, workspaceStore]);
 
   if (workspaceStatus === "idle" || workspaceStatus === "loading") {
     return (

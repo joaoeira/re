@@ -1,8 +1,7 @@
 import { AlertCircle, ChevronDown, ChevronRight, FileText, Folder } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@xstate/store-react";
-import { deckListStore } from "@shared/state/deckListStore";
-import { deckSelectionStore } from "@shared/state/deckSelectionStore";
+import { useDeckListStore, useDeckSelectionStore } from "@shared/state/stores-context";
 import { cn } from "@shared/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -21,6 +20,8 @@ export function DeckRow({
   descendantDeckPaths,
 }: DeckRowProps) {
   const navigate = useNavigate();
+  const deckListStore = useDeckListStore();
+  const deckSelectionStore = useDeckSelectionStore();
   const isGroup = node.kind === "group";
   const isError = node.kind === "leaf" && node.snapshot.status !== "ok";
 

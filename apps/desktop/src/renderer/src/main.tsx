@@ -5,6 +5,9 @@ import { RouterProvider } from "@tanstack/react-router";
 import "./styles.css";
 
 import { router } from "./lib/router";
+import { StoresProvider, createStores } from "@shared/state/stores-context";
+
+const stores = createStores();
 
 const root = document.getElementById("root");
 if (!root) {
@@ -13,6 +16,8 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <StoresProvider stores={stores}>
+      <RouterProvider router={router} />
+    </StoresProvider>
   </StrictMode>,
 );
