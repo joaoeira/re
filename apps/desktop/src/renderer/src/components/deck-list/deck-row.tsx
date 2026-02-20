@@ -1,42 +1,75 @@
 import { AlertCircle, ChevronDown, ChevronRight, FileText, Folder } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { useSelector } from "@xstate/store-react";
+import { deckListStore } from "@shared/state/deckListStore";
+import { deckSelectionStore } from "@shared/state/deckSelectionStore";
 import { cn } from "@shared/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DeckTreeNode } from "@re/workspace";
 import { DeckStateBadges } from "./deck-state-badges";
 
-type CheckedState = boolean | "indeterminate";
-
 type DeckRowProps = {
   readonly node: DeckTreeNode;
   readonly depth: number;
-  readonly isCollapsed: boolean;
-  readonly checkboxState: CheckedState;
   readonly descendantDeckPaths: readonly string[];
-  readonly onToggleCollapse: (path: string) => void;
-  readonly onToggleDeckSelection: (relativePath: string) => void;
-  readonly onToggleFolderSelection: (
-    relativePath: string,
-    descendantDeckPaths: readonly string[],
-  ) => void;
-  readonly onDeckTitleClick: (relativePath: string) => void;
-  readonly onFolderTitleClick: (relativePath: string, descendantDeckPaths: readonly string[]) => void;
 };
 
 export function DeckRow({
   node,
   depth,
-  isCollapsed,
-  checkboxState,
   descendantDeckPaths,
-  onToggleCollapse,
-  onToggleDeckSelection,
-  onToggleFolderSelection,
-  onDeckTitleClick,
-  onFolderTitleClick,
 }: DeckRowProps) {
+  const navigate = useNavigate();
   const isGroup = node.kind === "group";
   const isError = node.kind === "leaf" && node.snapshot.status !== "ok";
+
+  const isCollapsed = useSelector(deckListStore, (s) =>
+    isGroup ? node.relativePath in s.context.collapsed : false,
+  );
+
+  const checkboxState = useSelector(deckSelectionStore, (s) => {
+    if (isGroup) {
+      if (descendantDeckPaths.length === 0) return false;
+      let selectedCount = 0;
+      for (const descendantPath of descendantDeckPaths) {
+        if (descendantPath in s.context.selected) {
+          selectedCount += 1;
+        }
+      }
+      if (selectedCount === 0) return false;
+      if (selectedCount === descendantDeckPaths.length) return true;
+      return "indeterminate";
+    }
+    return node.relativePath in s.context.selected;
+  });
+
+  const handleToggleCollapse = () => {
+    deckListStore.send({ type: "toggle", path: node.relativePath });
+  };
+
+  const handleToggleDeckSelection = () => {
+    deckSelectionStore.send({ type: "toggleDeck", path: node.relativePath });
+  };
+
+  const handleToggleFolderSelection = () => {
+    deckSelectionStore.send({ type: "toggleFolder", path: node.relativePath, descendantPaths: descendantDeckPaths });
+  };
+
+  const handleDeckTitleClick = () => {
+    void navigate({
+      to: "/review",
+      search: { decks: [node.relativePath] },
+    });
+  };
+
+  const handleFolderTitleClick = () => {
+    if (descendantDeckPaths.length === 0) return;
+    void navigate({
+      to: "/review",
+      search: { decks: [...descendantDeckPaths] },
+    });
+  };
 
   const stateCounts = isGroup
     ? node.stateCounts
@@ -72,7 +105,7 @@ export function DeckRow({
       {isGroup ? (
         <button
           type="button"
-          onClick={() => onToggleCollapse(node.relativePath)}
+          onClick={handleToggleCollapse}
           aria-label={isCollapsed ? "Expand folder" : "Collapse folder"}
           className="flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
@@ -87,11 +120,11 @@ export function DeckRow({
         indeterminate={checkboxIndeterminate}
         onCheckedChange={() => {
           if (isGroup) {
-            onToggleFolderSelection(node.relativePath, descendantDeckPaths);
+            handleToggleFolderSelection();
             return;
           }
 
-          onToggleDeckSelection(node.relativePath);
+          handleToggleDeckSelection();
         }}
         aria-label={`Select ${node.name}`}
         disabled={isGroup && descendantDeckPaths.length === 0}
@@ -121,7 +154,7 @@ export function DeckRow({
       {isGroup ? (
         <button
           type="button"
-          onClick={() => onFolderTitleClick(node.relativePath, descendantDeckPaths)}
+          onClick={handleFolderTitleClick}
           className="min-w-0 cursor-pointer truncate text-left text-sm font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {node.name}
@@ -129,7 +162,7 @@ export function DeckRow({
       ) : (
         <button
           type="button"
-          onClick={() => onDeckTitleClick(node.relativePath)}
+          onClick={handleDeckTitleClick}
           className="min-w-0 cursor-pointer truncate text-left text-sm text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {node.name}

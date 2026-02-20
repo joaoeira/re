@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { deckSelectionStore } from "@shared/state/deckSelectionStore";
-import { getGroupCheckboxState } from "@/components/deck-list/deck-list";
+import { getGroupCheckboxState } from "@shared/lib/deckTreeSelectors";
 
 const selectedKeys = () => Object.keys(deckSelectionStore.getSnapshot().context.selected).sort();
 

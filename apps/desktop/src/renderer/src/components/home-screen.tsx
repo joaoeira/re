@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@xstate/store-react";
 
-import type { ScanDecksError, SnapshotWorkspaceResult } from "@re/workspace";
+import type { ScanDecksError } from "@re/workspace";
 import type { SettingsError } from "@shared/settings";
 import { WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
 import { deckSelectionStore } from "@shared/state/deckSelectionStore";
+import { workspaceStore } from "@shared/state/workspaceStore";
 import { Effect } from "effect";
 import type { RpcDefectError } from "electron-effect-rpc/renderer";
 
@@ -74,11 +75,12 @@ const toSettingsErrorMessage = (error: SettingsError): string => {
 };
 
 export function HomeScreen() {
-  const [snapshotResult, setSnapshotResult] = useState<SnapshotWorkspaceResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
-  const selectedDecks = useSelector(deckSelectionStore, (state) => state.context.selected);
+
+  const workspaceStatus = useSelector(workspaceStore, (s) => s.context.status);
+  const snapshotResult = useSelector(workspaceStore, (s) => s.context.snapshotResult);
+  const workspaceError = useSelector(workspaceStore, (s) => s.context.error);
+  const selectedDecks = useSelector(deckSelectionStore, (s) => s.context.selected);
 
   const ipc = useMemo(() => {
     if (!window.desktopApi) return null;
@@ -88,7 +90,7 @@ export function HomeScreen() {
   const loadWorkspaceSnapshot = useCallback(
     (rootPath: string) => {
       if (!ipc) return;
-      setIsLoading(true);
+      workspaceStore.send({ type: "setLoading" });
 
       void Effect.runPromise(
         ipc.client
@@ -99,23 +101,19 @@ export function HomeScreen() {
           .pipe(
             Effect.tap((result) =>
               Effect.sync(() => {
-                setSnapshotResult(result);
-                setError(null);
+                workspaceStore.send({ type: "setSnapshot", snapshot: result });
               }),
             ),
             Effect.catchTag("RpcDefectError", (rpcDefect) =>
               Effect.sync(() => {
-                setSnapshotResult(null);
-                setError(toRpcDefectMessage(rpcDefect));
+                workspaceStore.send({ type: "setError", error: toRpcDefectMessage(rpcDefect) });
               }),
             ),
             Effect.catchAll((workspaceError) =>
               Effect.sync(() => {
-                setSnapshotResult(null);
-                setError(toScanErrorMessage(workspaceError));
+                workspaceStore.send({ type: "setError", error: toScanErrorMessage(workspaceError) });
               }),
             ),
-            Effect.ensuring(Effect.sync(() => setIsLoading(false))),
           ),
       );
     },
@@ -124,15 +122,12 @@ export function HomeScreen() {
 
   useEffect(() => {
     if (!ipc) {
-      setError("Desktop IPC bridge is unavailable.");
-      setIsLoading(false);
+      workspaceStore.send({ type: "setError", error: "Desktop IPC bridge is unavailable." });
       return;
     }
 
     const unsubscribeSnapshot = ipc.events.subscribe(WorkspaceSnapshotChanged, (snapshot) => {
-      setSnapshotResult(snapshot);
-      setError(null);
-      setIsLoading(false);
+      workspaceStore.send({ type: "setSnapshot", snapshot });
     });
 
     void Effect.runPromise(
@@ -142,22 +137,18 @@ export function HomeScreen() {
             if (settings.workspace.rootPath) {
               loadWorkspaceSnapshot(settings.workspace.rootPath);
             } else {
-              setSnapshotResult(null);
-              setError(null);
-              setIsLoading(false);
+              workspaceStore.send({ type: "setSnapshot", snapshot: null });
             }
           }),
         ),
         Effect.catchTag("RpcDefectError", (rpcDefect) =>
           Effect.sync(() => {
-            setError(toRpcDefectMessage(rpcDefect));
-            setIsLoading(false);
+            workspaceStore.send({ type: "setError", error: toRpcDefectMessage(rpcDefect) });
           }),
         ),
         Effect.catchAll((settingsError) =>
           Effect.sync(() => {
-            setError(toSettingsErrorMessage(settingsError));
-            setIsLoading(false);
+            workspaceStore.send({ type: "setError", error: toSettingsErrorMessage(settingsError) });
           }),
         ),
       ),
@@ -166,39 +157,14 @@ export function HomeScreen() {
     return unsubscribeSnapshot;
   }, [ipc, loadWorkspaceSnapshot]);
 
-  const handleDeckTitleClick = useCallback(
-    (relativePath: string) => {
-      void navigate({
-        to: "/review",
-        search: {
-          decks: [relativePath],
-        },
-      });
-    },
-    [navigate],
-  );
-
-  const handleFolderTitleClick = useCallback(
-    (_relativePath: string, descendantDeckPaths: readonly string[]) => {
-      if (descendantDeckPaths.length === 0) return;
-      void navigate({
-        to: "/review",
-        search: {
-          decks: [...descendantDeckPaths],
-        },
-      });
-    },
-    [navigate],
-  );
-
-  if (isLoading) {
+  if (workspaceStatus === "idle" || workspaceStatus === "loading") {
     return (
       <div className="py-12 text-center text-sm text-muted-foreground">Loading workspace...</div>
     );
   }
 
-  if (error) {
-    return <div className="py-12 text-center text-sm text-destructive">{error}</div>;
+  if (workspaceError) {
+    return <div className="py-12 text-center text-sm text-destructive">{workspaceError}</div>;
   }
 
   if (!snapshotResult) {
@@ -239,22 +205,7 @@ export function HomeScreen() {
       <p className="mb-2 text-xs text-muted-foreground" title={snapshotResult.asOf}>
         Snapshot updated {snapshotAge}
       </p>
-      <DeckList
-        snapshots={snapshotResult.decks}
-        selectedDecks={selectedDecks}
-        onToggleDeckSelection={(relativePath) =>
-          deckSelectionStore.send({ type: "toggleDeck", path: relativePath })
-        }
-        onToggleFolderSelection={(relativePath, descendantDeckPaths) =>
-          deckSelectionStore.send({
-            type: "toggleFolder",
-            path: relativePath,
-            descendantPaths: descendantDeckPaths,
-          })
-        }
-        onDeckTitleClick={handleDeckTitleClick}
-        onFolderTitleClick={handleFolderTitleClick}
-      />
+      <DeckList snapshots={snapshotResult.decks} />
 
       {toolbarVisible && (
         <SelectionToolbar
