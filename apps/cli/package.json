@@ -23,7 +23,7 @@
     "@re/types": "workspace:*",
     "@re/workspace": "workspace:*",
     "@xstate/react": "^6.0.0",
-    "effect": "^3.19.14",
+    "effect": "3.19.18",
     "react": "^19.1.0",
     "xstate": "^5.25.0"
   },
