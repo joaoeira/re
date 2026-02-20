@@ -178,6 +178,19 @@ export function HomeScreen() {
     [navigate],
   );
 
+  const handleFolderTitleClick = useCallback(
+    (_relativePath: string, descendantDeckPaths: readonly string[]) => {
+      if (descendantDeckPaths.length === 0) return;
+      void navigate({
+        to: "/review",
+        search: {
+          decks: [...descendantDeckPaths],
+        },
+      });
+    },
+    [navigate],
+  );
+
   if (isLoading) {
     return (
       <div className="py-12 text-center text-sm text-muted-foreground">Loading workspace...</div>
@@ -240,6 +253,7 @@ export function HomeScreen() {
           })
         }
         onDeckTitleClick={handleDeckTitleClick}
+        onFolderTitleClick={handleFolderTitleClick}
       />
 
       {toolbarVisible && (

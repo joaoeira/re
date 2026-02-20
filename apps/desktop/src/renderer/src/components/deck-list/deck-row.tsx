@@ -20,6 +20,7 @@ type DeckRowProps = {
     descendantDeckPaths: readonly string[],
   ) => void;
   readonly onDeckTitleClick: (relativePath: string) => void;
+  readonly onFolderTitleClick: (relativePath: string, descendantDeckPaths: readonly string[]) => void;
 };
 
 export function DeckRow({
@@ -32,6 +33,7 @@ export function DeckRow({
   onToggleDeckSelection,
   onToggleFolderSelection,
   onDeckTitleClick,
+  onFolderTitleClick,
 }: DeckRowProps) {
   const isGroup = node.kind === "group";
   const isError = node.kind === "leaf" && node.snapshot.status !== "ok";
@@ -117,12 +119,18 @@ export function DeckRow({
       )}
 
       {isGroup ? (
-        <span className="min-w-0 truncate text-sm font-medium text-foreground">{node.name}</span>
+        <button
+          type="button"
+          onClick={() => onFolderTitleClick(node.relativePath, descendantDeckPaths)}
+          className="min-w-0 cursor-pointer truncate text-left text-sm font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {node.name}
+        </button>
       ) : (
         <button
           type="button"
           onClick={() => onDeckTitleClick(node.relativePath)}
-          className="min-w-0 truncate text-left text-sm text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="min-w-0 cursor-pointer truncate text-left text-sm text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {node.name}
         </button>

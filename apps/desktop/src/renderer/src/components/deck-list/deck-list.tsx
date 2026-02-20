@@ -15,6 +15,7 @@ type DeckListProps = {
     descendantDeckPaths: readonly string[],
   ) => void;
   readonly onDeckTitleClick: (relativePath: string) => void;
+  readonly onFolderTitleClick: (relativePath: string, descendantDeckPaths: readonly string[]) => void;
 };
 
 const collectGroupDeckDescendants = (snapshotsTree: ReturnType<typeof buildDeckTree>) => {
@@ -64,6 +65,7 @@ export function DeckList({
   onToggleDeckSelection,
   onToggleFolderSelection,
   onDeckTitleClick,
+  onFolderTitleClick,
 }: DeckListProps) {
   const collapsed = useSelector(deckListStore, (s) => s.context.collapsed);
 
@@ -102,6 +104,7 @@ export function DeckList({
             onToggleDeckSelection={onToggleDeckSelection}
             onToggleFolderSelection={onToggleFolderSelection}
             onDeckTitleClick={onDeckTitleClick}
+            onFolderTitleClick={onFolderTitleClick}
           />
         ))}
       </div>
