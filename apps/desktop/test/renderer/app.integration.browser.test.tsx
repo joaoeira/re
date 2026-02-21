@@ -88,7 +88,6 @@ describe("renderer integration", () => {
     await expect.element(screen.getByText("ok")).toBeVisible();
     await expect.element(screen.getByText("read")).toBeVisible();
     await expect.element(screen.getByText("parse")).toBeVisible();
-    await expect.element(screen.getByText(/Snapshot updated/)).toBeVisible();
     await expect.element(screen.getByText("2 due")).toBeVisible();
   });
 
@@ -177,7 +176,6 @@ describe("renderer integration", () => {
     await expect.element(screen.getByText("new-deck")).toBeVisible();
     await expect.element(screen.getByText("deck", { exact: true })).toBeVisible();
     await expect.element(screen.getByText("1 due")).toBeVisible();
-    await expect.element(screen.getByText(/Snapshot updated/)).toBeVisible();
   });
 
   it("shows error when settings fail to load", async () => {

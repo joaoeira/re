@@ -34,7 +34,7 @@
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "effect": "3.19.18",
-    "electron-effect-rpc": "0.4.0",
+    "electron-effect-rpc": "0.5.0",
     "lucide-react": "0.564.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",

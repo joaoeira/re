@@ -98,7 +98,7 @@ app.whenReady().then(() => {
     ipcMain,
     handlers: createAppRpcHandlers(settingsRepository, watcherProxy),
     runtime,
-    getWindow: () => mainWindow,
+    getWindows: () => (mainWindow ? [mainWindow] : []),
   });
 
   watcher = createWorkspaceWatcher({

@@ -18,30 +18,6 @@ const DEFAULT_SNAPSHOT_OPTIONS = {
   extraIgnorePatterns: [],
 } as const;
 
-const MINUTE_MS = 60 * 1000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
-const MONTH_MS = 30 * DAY_MS;
-const YEAR_MS = 365 * DAY_MS;
-const RELATIVE_TIME = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-
-const formatSnapshotAge = (asOf: string, now: Date): string => {
-  const asOfDate = new Date(asOf);
-  if (Number.isNaN(asOfDate.getTime())) {
-    return asOf;
-  }
-
-  const deltaMs = asOfDate.getTime() - now.getTime();
-  const absMs = Math.abs(deltaMs);
-
-  if (absMs < MINUTE_MS) return "just now";
-  if (absMs < HOUR_MS) return RELATIVE_TIME.format(Math.round(deltaMs / MINUTE_MS), "minute");
-  if (absMs < DAY_MS) return RELATIVE_TIME.format(Math.round(deltaMs / HOUR_MS), "hour");
-  if (absMs < MONTH_MS) return RELATIVE_TIME.format(Math.round(deltaMs / DAY_MS), "day");
-  if (absMs < YEAR_MS) return RELATIVE_TIME.format(Math.round(deltaMs / MONTH_MS), "month");
-  return RELATIVE_TIME.format(Math.round(deltaMs / YEAR_MS), "year");
-};
-
 const toRpcDefectMessage = (error: RpcDefectError): string =>
   `RPC defect (${error.code}): ${error.message}`;
 
@@ -185,7 +161,6 @@ export function HomeScreen() {
     );
   }
 
-  const snapshotAge = formatSnapshotAge(snapshotResult.asOf, new Date());
   const selectedDeckPaths = Object.keys(selectedDecks);
   const decksByRelativePath = new Map(
     snapshotResult.decks.map((deckSnapshot) => [deckSnapshot.relativePath, deckSnapshot]),
