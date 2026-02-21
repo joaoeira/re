@@ -216,16 +216,17 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
 
             if (items.length > 0) {
               const lastItem = items[items.length - 1]!;
-              if (lastItem.content.length > 0 && !lastItem.content.endsWith("\n")) {
+              if (lastItem.content.length > 0 && !lastItem.content.endsWith("\n\n")) {
                 const fixedItems = [...items];
+                const trimmed = lastItem.content.replace(/\n*$/, "");
                 fixedItems[fixedItems.length - 1] = {
                   ...lastItem,
-                  content: lastItem.content + "\n",
+                  content: trimmed + "\n\n",
                 };
                 items = fixedItems;
               }
-            } else if (preamble.length > 0 && !preamble.endsWith("\n")) {
-              preamble = preamble + "\n";
+            } else if (preamble.length > 0 && !preamble.endsWith("\n\n")) {
+              preamble = preamble.replace(/\n*$/, "") + "\n\n";
             }
 
             const updatedItems = [...items, item];

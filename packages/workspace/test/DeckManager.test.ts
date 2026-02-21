@@ -440,10 +440,10 @@ describe("DeckManager.appendItem", () => {
     );
 
     await promise;
-    expect(store["/deck.md"]).toBe("# Title\n<!--@ first 0 0 0 0-->\nQ\n---\nA\n");
+    expect(store["/deck.md"]).toBe("# Title\n\n<!--@ first 0 0 0 0-->\nQ\n---\nA\n");
   });
 
-  it("ensures newline separator when last content lacks trailing newline", async () => {
+  it("ensures blank line separator when last content lacks trailing newline", async () => {
     const existing = `${makeCard("a")}\nContent without newline`;
     const config: MockFileSystemConfig = {
       entryTypes: {},
@@ -457,10 +457,10 @@ describe("DeckManager.appendItem", () => {
 
     await promise;
     const written = store["/deck.md"]!;
-    expect(written).toContain("Content without newline\n<!--@ b");
+    expect(written).toContain("Content without newline\n\n<!--@ b");
   });
 
-  it("ensures newline separator when preamble lacks trailing newline on empty deck", async () => {
+  it("ensures blank line separator when preamble lacks trailing newline on empty deck", async () => {
     const config: MockFileSystemConfig = {
       entryTypes: {},
       directories: {},
@@ -472,7 +472,9 @@ describe("DeckManager.appendItem", () => {
     );
 
     await promise;
-    expect(store["/deck.md"]).toBe("# No trailing newline\n<!--@ first 0 0 0 0-->\nQ\n---\nA\n");
+    expect(store["/deck.md"]).toBe(
+      "# No trailing newline\n\n<!--@ first 0 0 0 0-->\nQ\n---\nA\n",
+    );
   });
 
   it("fails with ItemValidationError on card count mismatch", async () => {
