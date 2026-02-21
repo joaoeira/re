@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { Cause, Effect, Exit } from "effect";
 import { describe, expect, it } from "vitest";
 
+import { createNoopReviewAnalyticsRepository, type ReviewAnalyticsRepository } from "@main/analytics";
 import { parseFile } from "@re/core";
 
 import { createHandlers } from "./helpers";
@@ -102,6 +103,9 @@ Answer
           deckPath,
           cardId: "review-card",
           previousCard: scheduled.previousCard,
+          reviewEntryId: scheduled.reviewEntryId,
+          expectedCurrentCardFingerprint: scheduled.expectedCurrentCardFingerprint,
+          previousCardFingerprint: scheduled.previousCardFingerprint,
         }),
       );
 
@@ -312,6 +316,140 @@ The capital of France is {{c1::Paris}}.
       await fs.rm(rootPath, { recursive: true, force: true });
       await fs.rm(settingsRoot, { recursive: true, force: true });
       await fs.rm(outsideDeckPath, { force: true });
+    }
+  });
+
+  it("returns undo_conflict when card metadata diverges before undo", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-"));
+    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));
+    const settingsFilePath = path.join(settingsRoot, "settings.json");
+    const deckPath = path.join(rootPath, "conflict.md");
+
+    try {
+      await fs.writeFile(
+        deckPath,
+        `<!--@ review-card 0 0 0 0-->
+Prompt
+---
+Answer
+`,
+        "utf8",
+      );
+
+      const handlers = await createHandlers(settingsFilePath);
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const firstSchedule = await Effect.runPromise(
+        handlers.ScheduleReview({
+          deckPath,
+          cardId: "review-card",
+          grade: 2,
+        }),
+      );
+
+      await Effect.runPromise(
+        handlers.ScheduleReview({
+          deckPath,
+          cardId: "review-card",
+          grade: 1,
+        }),
+      );
+
+      const undoExit = await Effect.runPromiseExit(
+        handlers.UndoReview({
+          deckPath,
+          cardId: "review-card",
+          previousCard: firstSchedule.previousCard,
+          reviewEntryId: firstSchedule.reviewEntryId,
+          expectedCurrentCardFingerprint: firstSchedule.expectedCurrentCardFingerprint,
+          previousCardFingerprint: firstSchedule.previousCardFingerprint,
+        }),
+      );
+
+      expect(Exit.isFailure(undoExit)).toBe(true);
+      if (Exit.isSuccess(undoExit)) {
+        throw new Error("Expected UndoReview to fail with conflict.");
+      }
+
+      const failure = Cause.failureOption(undoExit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("undo_conflict");
+      }
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(settingsRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("returns undo_safety_unavailable when intent journal persistence fails", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-"));
+    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));
+    const settingsFilePath = path.join(settingsRoot, "settings.json");
+    const deckPath = path.join(rootPath, "undo-safety.md");
+
+    try {
+      await fs.writeFile(
+        deckPath,
+        `<!--@ review-card 0 0 0 0-->
+Prompt
+---
+Answer
+`,
+        "utf8",
+      );
+
+      const failingAnalytics: ReviewAnalyticsRepository = {
+        ...createNoopReviewAnalyticsRepository(),
+        enabled: true,
+        recordSchedule: () => Effect.succeed(1),
+        persistIntent: () => Effect.fail(new Error("journal unavailable")),
+      };
+
+      const handlers = await createHandlers(
+        settingsFilePath,
+        undefined,
+        undefined,
+        undefined,
+        failingAnalytics,
+      );
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const scheduled = await Effect.runPromise(
+        handlers.ScheduleReview({
+          deckPath,
+          cardId: "review-card",
+          grade: 2,
+        }),
+      );
+
+      const undoExit = await Effect.runPromiseExit(
+        handlers.UndoReview({
+          deckPath,
+          cardId: "review-card",
+          previousCard: scheduled.previousCard,
+          reviewEntryId: scheduled.reviewEntryId,
+          expectedCurrentCardFingerprint: scheduled.expectedCurrentCardFingerprint,
+          previousCardFingerprint: scheduled.previousCardFingerprint,
+        }),
+      );
+
+      expect(Exit.isFailure(undoExit)).toBe(true);
+      if (Exit.isSuccess(undoExit)) {
+        throw new Error("Expected UndoReview to fail.");
+      }
+
+      const failure = Cause.failureOption(undoExit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("undo_safety_unavailable");
+      }
+
+      const parsed = await Effect.runPromise(parseFile(await fs.readFile(deckPath, "utf8")));
+      expect(parsed.items[0]!.cards[0]!.state).not.toBe(scheduled.previousCard.state);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(settingsRoot, { recursive: true, force: true });
     }
   });
 });

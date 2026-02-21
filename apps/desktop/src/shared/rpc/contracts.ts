@@ -18,8 +18,11 @@ import {
   CardContentErrorSchema,
   CardContentResultSchema,
   FSRSGradeSchema,
+  ReviewHistoryEntrySchema,
   ReviewOperationError,
+  ReviewStatsSchema,
   SerializedItemMetadataSchema,
+  UndoReviewErrorSchema,
 } from "@shared/rpc/schemas/review";
 
 const EditorCardTypeSchema = Schema.Literal("qa", "cloze");
@@ -127,6 +130,9 @@ export const ScheduleReview = rpc(
     grade: FSRSGradeSchema,
   }),
   Schema.Struct({
+    reviewEntryId: Schema.Union(Schema.Number.pipe(Schema.int(), Schema.positive()), Schema.Null),
+    expectedCurrentCardFingerprint: Schema.String,
+    previousCardFingerprint: Schema.String,
     previousCard: SerializedItemMetadataSchema,
   }),
   ReviewOperationError,
@@ -138,8 +144,35 @@ export const UndoReview = rpc(
     deckPath: Schema.String,
     cardId: Schema.String,
     previousCard: SerializedItemMetadataSchema,
+    reviewEntryId: Schema.Union(Schema.Number.pipe(Schema.int(), Schema.positive()), Schema.Null),
+    expectedCurrentCardFingerprint: Schema.String,
+    previousCardFingerprint: Schema.String,
   }),
   Schema.Struct({}),
+  UndoReviewErrorSchema,
+);
+
+export const GetReviewStats = rpc(
+  "GetReviewStats",
+  Schema.Struct({
+    rootPath: Schema.String,
+    includeUndone: Schema.optional(Schema.Boolean),
+  }),
+  ReviewStatsSchema,
+  ReviewOperationError,
+);
+
+export const ListReviewHistory = rpc(
+  "ListReviewHistory",
+  Schema.Struct({
+    rootPath: Schema.String,
+    includeUndone: Schema.optional(Schema.Boolean),
+    limit: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.positive())),
+    offset: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.nonNegative())),
+  }),
+  Schema.Struct({
+    entries: Schema.Array(ReviewHistoryEntrySchema),
+  }),
   ReviewOperationError,
 );
 
@@ -232,6 +265,8 @@ export const appContract = defineContract({
     GetCardContent,
     ScheduleReview,
     UndoReview,
+    GetReviewStats,
+    ListReviewHistory,
     AppendItem,
     ReplaceItem,
     GetItemForEdit,

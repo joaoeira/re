@@ -1,7 +1,11 @@
 import { Effect } from "effect";
 import type { IpcMainHandle } from "electron-effect-rpc/types";
 
+import type { ReviewAnalyticsRepository } from "@main/analytics";
+import { createNoopReviewAnalyticsRepository } from "@main/analytics";
 import type { EditorWindowParams } from "@main/editor-window";
+import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
+import { NoOpDeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import { NodeServicesLive } from "@main/effect/node-services";
 import { createAppRpcHandlers } from "@main/rpc/handlers";
 import { makeSettingsRepository } from "@main/settings/repository";
@@ -36,6 +40,8 @@ export const createHandlers = async (
   watcher?: WorkspaceWatcher,
   publish?: IpcMainHandle<AppContract>["publish"],
   openEditorWindow?: (params: EditorWindowParams) => void,
+  analyticsRepository?: ReviewAnalyticsRepository,
+  deckWriteCoordinator?: DeckWriteCoordinator,
 ) =>
   Effect.gen(function* () {
     const repository = yield* makeSettingsRepository({ settingsFilePath });
@@ -44,5 +50,7 @@ export const createHandlers = async (
       watcher ?? stubWatcher,
       publish ?? noOpPublish,
       openEditorWindow,
+      analyticsRepository ?? createNoopReviewAnalyticsRepository(),
+      deckWriteCoordinator ?? NoOpDeckWriteCoordinator,
     ).handlers;
   }).pipe(Effect.provide(NodeServicesLive), Effect.runPromise);

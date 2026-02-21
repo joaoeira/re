@@ -5,11 +5,24 @@ import { app, BrowserWindow, Menu, type MenuItemConstructorOptions, ipcMain } fr
 import { Effect, Runtime } from "effect";
 import type { IpcMainHandle } from "electron-effect-rpc/types";
 
+import {
+  createNoopReviewAnalyticsRepository,
+  createSqliteReviewAnalyticsRuntimeBundle,
+  replayPendingCompensationIntents,
+  type ReviewAnalyticsRepository,
+} from "@main/analytics";
 import { createEditorWindowManager, type EditorWindowManager } from "@main/editor-window";
 import { NodeServicesLive } from "@main/effect/node-services";
+import { createDeckWriteCoordinator, type DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import { createAppRpcHandlers } from "@main/rpc/handlers";
+import { ReviewServicesLive } from "@main/rpc/handlers/shared";
 import { makeSettingsRepository } from "@main/settings/repository";
 import { createWorkspaceWatcher, type WorkspaceWatcher } from "@main/watcher/workspace-watcher";
+import {
+  createSingleFlightTask,
+  createUnifiedQuitPipeline,
+  initializeAnalyticsRuntime,
+} from "@main/lifecycle";
 import type { AppContract } from "@shared/rpc/contracts";
 import { WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
 import { appIpc } from "@shared/rpc/ipc";
@@ -18,12 +31,18 @@ declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPLAY_INTERVAL_MS = 60_000;
 
 let mainWindow: BrowserWindow | null = null;
 let ipcHandle: ReturnType<typeof appIpc.main> | null = null;
 let watcher: WorkspaceWatcher | null = null;
 let editorWindowManager: EditorWindowManager | null = null;
-let closingEditorForQuit = false;
+
+let analyticsRuntime: ReturnType<typeof createSqliteReviewAnalyticsRuntimeBundle>["runtime"] | null = null;
+let analyticsRepository: ReviewAnalyticsRepository = createNoopReviewAnalyticsRepository();
+let deckWriteCoordinator: DeckWriteCoordinator = createDeckWriteCoordinator();
+
+let replayTimer: ReturnType<typeof setInterval> | null = null;
 
 const log = (...args: Array<unknown>): void => {
   console.log("[desktop/main]", ...args);
@@ -108,14 +127,96 @@ const createMainWindow = (): BrowserWindow => {
   return window;
 };
 
-app.whenReady().then(() => {
+const stopReplayTimer = (): void => {
+  if (replayTimer) {
+    clearInterval(replayTimer);
+    replayTimer = null;
+  }
+};
+
+const replayTask = createSingleFlightTask(async () => {
+  if (!analyticsRepository.enabled) {
+    return;
+  }
+
+  try {
+    await Effect.runPromise(
+      replayPendingCompensationIntents(analyticsRepository, deckWriteCoordinator).pipe(
+        Effect.provide(ReviewServicesLive),
+      ),
+    );
+  } catch (error) {
+    console.error("[desktop/main] compensation replay failed", error);
+  }
+});
+
+const replayPendingCompensations = async (): Promise<void> => replayTask.run();
+
+const startReplayTimer = (): void => {
+  if (!analyticsRepository.enabled || replayTimer) {
+    return;
+  }
+
+  replayTimer = setInterval(() => {
+    void replayPendingCompensations();
+  }, REPLAY_INTERVAL_MS);
+};
+
+const disposeWatcherAndIpc = (): void => {
+  if (watcher) {
+    watcher.stop();
+    watcher = null;
+  }
+  if (ipcHandle) {
+    ipcHandle.dispose();
+    ipcHandle = null;
+  }
+};
+
+const unifiedQuitPipeline = createUnifiedQuitPipeline({
+  closeEditorWindow: async () => {
+    const manager = editorWindowManager;
+    if (manager?.isOpen()) {
+      await manager.closeAndWait();
+    }
+    editorWindowManager = null;
+  },
+  stopReplayTimer,
+  disposeWatcherAndIpc,
+  disposeAnalytics: async () => {
+    if (analyticsRuntime) {
+      await analyticsRuntime.dispose();
+      analyticsRuntime = null;
+    }
+  },
+  requestQuit: () => {
+    app.quit();
+  },
+  onError: (error) => {
+    console.error("[desktop/main] shutdown pipeline failed", error);
+  },
+});
+
+app.whenReady().then(async () => {
   log("app ready");
   mainWindow = createMainWindow();
+  deckWriteCoordinator = createDeckWriteCoordinator();
 
   const settingsFilePath = path.join(app.getPath("userData"), "settings.json");
   const settingsRepository = Effect.runSync(
     makeSettingsRepository({ settingsFilePath }).pipe(Effect.provide(NodeServicesLive)),
   );
+
+  const analyticsBundle = createSqliteReviewAnalyticsRuntimeBundle({
+    dbPath: path.join(app.getPath("userData"), "re.db"),
+    journalPath: path.join(app.getPath("userData"), "analytics-compensation-intents.json"),
+  });
+  const initializedAnalytics = await initializeAnalyticsRuntime(analyticsBundle);
+  analyticsRepository = initializedAnalytics.repository;
+  analyticsRuntime = initializedAnalytics.runtime;
+  if (initializedAnalytics.startupFailed) {
+    console.error("[desktop/main] analytics startup probe failed, falling back to no-op");
+  }
 
   const watcherProxy: WorkspaceWatcher = {
     start: (rootPath) => watcher?.start(rootPath),
@@ -132,8 +233,13 @@ app.whenReady().then(() => {
   });
   setupApplicationMenu(() => editorWindowManager?.open({ mode: "create" }));
 
-  const rpc = createAppRpcHandlers(settingsRepository, watcherProxy, publishProxy, (params) =>
-    editorWindowManager?.open(params),
+  const rpc = createAppRpcHandlers(
+    settingsRepository,
+    watcherProxy,
+    publishProxy,
+    (params) => editorWindowManager?.open(params),
+    analyticsRepository,
+    deckWriteCoordinator,
   );
 
   const runtime = Runtime.defaultRuntime;
@@ -154,7 +260,12 @@ app.whenReady().then(() => {
     runtime,
   });
 
+  await replayPendingCompensations();
+  if (!ipcHandle) {
+    throw new Error("IPC handle is not initialized.");
+  }
   ipcHandle.start();
+  startReplayTimer();
 
   Effect.runPromise(settingsRepository.getSettings())
     .then((settings) => {
@@ -174,42 +285,14 @@ app.whenReady().then(() => {
 });
 
 app.on("before-quit", (event) => {
-  if (closingEditorForQuit) {
-    event.preventDefault();
-    return;
-  }
-
-  const manager = editorWindowManager;
-  if (!manager?.isOpen()) {
-    return;
-  }
-
-  event.preventDefault();
-  closingEditorForQuit = true;
-  void manager
-    .closeAndWait()
-    .then((closed) => {
-      closingEditorForQuit = false;
-      if (closed) {
-        app.quit();
-      }
-    })
-    .catch((error: unknown) => {
-      closingEditorForQuit = false;
-      console.error("[desktop/main] failed to close editor window during quit", error);
-    });
+  unifiedQuitPipeline.handleBeforeQuit(event);
 });
 
 app.on("will-quit", () => {
+  stopReplayTimer();
+  disposeWatcherAndIpc();
   editorWindowManager = null;
-  if (watcher) {
-    watcher.stop();
-    watcher = null;
-  }
-  if (ipcHandle) {
-    ipcHandle.dispose();
-    ipcHandle = null;
-  }
+  unifiedQuitPipeline.markShutdownComplete();
 });
 
 app.on("window-all-closed", () => {

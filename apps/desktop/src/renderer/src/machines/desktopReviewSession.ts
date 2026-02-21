@@ -6,6 +6,10 @@ export class RecoverableCardLoadError extends Error {
   override readonly name = "RecoverableCardLoadError";
 }
 
+export class RecoverableUndoConflictError extends Error {
+  override readonly name = "RecoverableUndoConflictError";
+}
+
 export interface CardContent {
   readonly prompt: string;
   readonly reveal: string;
@@ -15,6 +19,9 @@ export interface CardContent {
 interface UndoEntry {
   readonly deckPath: string;
   readonly cardId: string;
+  readonly reviewEntryId: number | null;
+  readonly expectedCurrentCardFingerprint: string;
+  readonly previousCardFingerprint: string;
   readonly previousCard: SerializedItemMetadata;
   readonly rating: FSRSGrade;
   readonly queueIndex: number;
@@ -87,15 +94,26 @@ type DesktopReviewSessionInput = {
     deckPath: string;
     cardId: string;
     grade: FSRSGrade;
-  }) => Promise<{ previousCard: SerializedItemMetadata }>;
+  }) => Promise<{
+    reviewEntryId: number | null;
+    expectedCurrentCardFingerprint: string;
+    previousCardFingerprint: string;
+    previousCard: SerializedItemMetadata;
+  }>;
   readonly undoReview: (input: {
     deckPath: string;
     cardId: string;
     previousCard: SerializedItemMetadata;
+    reviewEntryId: number | null;
+    expectedCurrentCardFingerprint: string;
+    previousCardFingerprint: string;
   }) => Promise<void>;
 };
 
 type GradingResult = {
+  readonly reviewEntryId: number | null;
+  readonly expectedCurrentCardFingerprint: string;
+  readonly previousCardFingerprint: string;
   readonly previousCard: SerializedItemMetadata;
   readonly rating: FSRSGrade;
   readonly queueIndex: number;
@@ -138,6 +156,9 @@ const gradingActor = fromPromise(
     });
 
     return {
+      reviewEntryId: scheduleResult.reviewEntryId,
+      expectedCurrentCardFingerprint: scheduleResult.expectedCurrentCardFingerprint,
+      previousCardFingerprint: scheduleResult.previousCardFingerprint,
       previousCard: scheduleResult.previousCard,
       rating: input.grade,
       queueIndex: input.queueIndex,
@@ -160,6 +181,9 @@ const undoActor = fromPromise(
       deckPath: input.undoEntry.deckPath,
       cardId: input.undoEntry.cardId,
       previousCard: input.undoEntry.previousCard,
+      reviewEntryId: input.undoEntry.reviewEntryId,
+      expectedCurrentCardFingerprint: input.undoEntry.expectedCurrentCardFingerprint,
+      previousCardFingerprint: input.undoEntry.previousCardFingerprint,
     });
 
     return input.undoEntry.queueIndex;
@@ -191,6 +215,10 @@ export const desktopReviewSessionMachine = setup({
     isRecoverableLoadError: ({ event }) => {
       const loadError = (event as { error?: unknown }).error;
       return loadError instanceof RecoverableCardLoadError;
+    },
+    isRecoverableUndoConflictError: ({ event }) => {
+      const undoError = (event as { error?: unknown }).error;
+      return undoError instanceof RecoverableUndoConflictError;
     },
   },
   actions: {
@@ -314,6 +342,9 @@ export const desktopReviewSessionMachine = setup({
                 const undoEntry: UndoEntry = {
                   deckPath: output.deckPath,
                   cardId: output.cardId,
+                  reviewEntryId: output.reviewEntryId,
+                  expectedCurrentCardFingerprint: output.expectedCurrentCardFingerprint,
+                  previousCardFingerprint: output.previousCardFingerprint,
                   previousCard: output.previousCard,
                   rating: output.rating,
                   queueIndex: output.queueIndex,
@@ -374,14 +405,24 @@ export const desktopReviewSessionMachine = setup({
             };
           }),
         },
-        onError: {
-          target: "presenting.loading",
-          actions: assign({
-            error: ({ event }) => String(event.error),
-          }),
-        },
+        onError: [
+          {
+            guard: "isRecoverableUndoConflictError",
+            target: "refreshRequired",
+            actions: assign({
+              error: ({ event }) => String(event.error),
+            }),
+          },
+          {
+            target: "presenting.loading",
+            actions: assign({
+              error: ({ event }) => String(event.error),
+            }),
+          },
+        ],
       },
     },
+    refreshRequired: {},
     complete: {
       on: {
         UNDO: {

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   desktopReviewSessionMachine,
   RecoverableCardLoadError,
+  RecoverableUndoConflictError,
 } from "@/machines/desktopReviewSession";
 import type { LightQueueItem, SerializedItemMetadata } from "@shared/rpc/schemas/review";
 
@@ -24,6 +25,13 @@ const previousCard: SerializedItemMetadata = {
   lastReview: null,
   due: null,
 };
+
+const scheduledReviewResult = (suffix = "1") => ({
+  reviewEntryId: Number(suffix),
+  expectedCurrentCardFingerprint: `expected-${suffix}`,
+  previousCardFingerprint: `previous-${suffix}`,
+  previousCard,
+});
 
 const createDeferred = <T>() => {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -67,7 +75,7 @@ describe("desktopReviewSessionMachine", () => {
       input: {
         queue: [queueItem()],
         loadCard: async () => ({ prompt: "Prompt", reveal: "Reveal", cardType: "qa" }),
-        scheduleReview: async () => ({ previousCard }),
+        scheduleReview: async () => scheduledReviewResult(),
         undoReview: async () => undefined,
       },
     });
@@ -99,7 +107,7 @@ describe("desktopReviewSessionMachine", () => {
       input: {
         queue: [queueItem({ cardId: "bad" }), queueItem({ cardId: "good" })],
         loadCard,
-        scheduleReview: async () => ({ previousCard }),
+        scheduleReview: async () => scheduledReviewResult(),
         undoReview: async () => undefined,
       },
     });
@@ -126,7 +134,7 @@ describe("desktopReviewSessionMachine", () => {
       input: {
         queue: [queueItem({ cardId: "bad-1" }), queueItem({ cardId: "bad-2" })],
         loadCard,
-        scheduleReview: async () => ({ previousCard }),
+        scheduleReview: async () => scheduledReviewResult(),
         undoReview: async () => undefined,
       },
     });
@@ -147,7 +155,7 @@ describe("desktopReviewSessionMachine", () => {
         loadCard: async () => {
           throw new Error("rpc transport failed");
         },
-        scheduleReview: async () => ({ previousCard }),
+        scheduleReview: async () => scheduledReviewResult(),
         undoReview: async () => undefined,
       },
     });
@@ -194,7 +202,12 @@ describe("desktopReviewSessionMachine", () => {
   });
 
   it("blocks UNDO and QUIT while grading is in flight", async () => {
-    const scheduleDeferred = createDeferred<{ previousCard: SerializedItemMetadata }>();
+    const scheduleDeferred = createDeferred<{
+      reviewEntryId: number | null;
+      expectedCurrentCardFingerprint: string;
+      previousCardFingerprint: string;
+      previousCard: SerializedItemMetadata;
+    }>();
     const undoReview = vi.fn(async () => undefined);
 
     const actor = createActor(desktopReviewSessionMachine, {
@@ -218,7 +231,7 @@ describe("desktopReviewSessionMachine", () => {
     expect(actor.getSnapshot().matches({ presenting: "grading" })).toBe(true);
     expect(undoReview).not.toHaveBeenCalled();
 
-    scheduleDeferred.resolve({ previousCard });
+    scheduleDeferred.resolve(scheduledReviewResult());
     await waitForSnapshot(actor, (snapshot) => snapshot.matches("complete"));
 
     actor.stop();
@@ -233,7 +246,7 @@ describe("desktopReviewSessionMachine", () => {
           reveal: `Reveal ${cardId}`,
           cardType: "qa",
         }),
-        scheduleReview: async () => ({ previousCard }),
+        scheduleReview: async () => scheduledReviewResult(),
         undoReview: async () => undefined,
       },
     });
@@ -287,7 +300,7 @@ describe("desktopReviewSessionMachine", () => {
           }
           return { prompt: "Prompt A", reveal: "Reveal A", cardType: "qa" };
         },
-        scheduleReview: async () => ({ previousCard }),
+        scheduleReview: async () => scheduledReviewResult(),
         undoReview,
       },
     });
@@ -323,7 +336,7 @@ describe("desktopReviewSessionMachine", () => {
       input: {
         queue: [queueItem()],
         loadCard: async () => ({ prompt: "Prompt", reveal: "Reveal", cardType: "qa" }),
-        scheduleReview: async () => ({ previousCard }),
+        scheduleReview: async () => scheduledReviewResult(),
         undoReview: async () => undefined,
       },
     });
@@ -343,7 +356,7 @@ describe("desktopReviewSessionMachine", () => {
       input: {
         queue: [queueItem()],
         loadCard: async () => ({ prompt: "Prompt", reveal: "Reveal", cardType: "qa" }),
-        scheduleReview: async () => ({ previousCard }),
+        scheduleReview: async () => scheduledReviewResult(),
         undoReview,
       },
     });
@@ -380,7 +393,7 @@ describe("desktopReviewSessionMachine", () => {
       input: {
         queue: [queueItem()],
         loadCard,
-        scheduleReview: async () => ({ previousCard }),
+        scheduleReview: async () => scheduledReviewResult(),
         undoReview: async () => undefined,
       },
     });
@@ -413,7 +426,7 @@ describe("desktopReviewSessionMachine", () => {
       input: {
         queue: [queueItem()],
         loadCard,
-        scheduleReview: async () => ({ previousCard }),
+        scheduleReview: async () => scheduledReviewResult(),
         undoReview: async () => undefined,
       },
     });
@@ -438,7 +451,12 @@ describe("desktopReviewSessionMachine", () => {
   });
 
   it("ignores CARD_EDITED while grading is in flight", async () => {
-    const scheduleDeferred = createDeferred<{ previousCard: SerializedItemMetadata }>();
+    const scheduleDeferred = createDeferred<{
+      reviewEntryId: number | null;
+      expectedCurrentCardFingerprint: string;
+      previousCardFingerprint: string;
+      previousCard: SerializedItemMetadata;
+    }>();
     const loadCard = vi.fn(async () => ({
       prompt: "Prompt",
       reveal: "Reveal",
@@ -465,8 +483,35 @@ describe("desktopReviewSessionMachine", () => {
     expect(actor.getSnapshot().matches({ presenting: "grading" })).toBe(true);
     expect(loadCard).toHaveBeenCalledTimes(1);
 
-    scheduleDeferred.resolve({ previousCard });
+    scheduleDeferred.resolve(scheduledReviewResult());
     await waitForSnapshot(actor, (snapshot) => snapshot.matches("complete"));
+    actor.stop();
+  });
+
+  it("transitions to refreshRequired when undo reports a recoverable conflict", async () => {
+    const actor = createActor(desktopReviewSessionMachine, {
+      input: {
+        queue: [queueItem()],
+        loadCard: async () => ({ prompt: "Prompt", reveal: "Reveal", cardType: "qa" }),
+        scheduleReview: async () => scheduledReviewResult(),
+        undoReview: async () => {
+          throw new RecoverableUndoConflictError("Undo conflict");
+        },
+      },
+    });
+
+    actor.start();
+
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "showPrompt" }));
+    actor.send({ type: "REVEAL" });
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "showAnswer" }));
+    actor.send({ type: "GRADE", grade: 2 });
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches("complete"));
+
+    actor.send({ type: "UNDO" });
+    const refreshed = await waitForSnapshot(actor, (snapshot) => snapshot.matches("refreshRequired"));
+    expect(refreshed.context.error).toContain("Undo conflict");
+
     actor.stop();
   });
 });

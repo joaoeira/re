@@ -3,23 +3,23 @@ import path from "node:path";
 import { createMetadata, type Item, type ItemMetadata } from "@re/core";
 import { ClozeType, QAType } from "@re/types";
 import { DeckManager, scanDecks } from "@re/workspace";
-import { Effect, Either, Layer, Option } from "effect";
+import { Effect, Either, Option } from "effect";
 import type { Implementations } from "electron-effect-rpc/types";
 
 import type { EditorWindowParams } from "@main/editor-window";
 import { NodeServicesLive } from "@main/effect/node-services";
+import { findCardLocationById } from "@main/card-location";
+import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import type { SettingsRepository } from "@main/settings/repository";
+import { toErrorMessage } from "@main/utils/format";
 import type { AppContract } from "@shared/rpc/contracts";
 import { CardEdited } from "@shared/rpc/contracts";
 import { EditorOperationError } from "@shared/rpc/schemas/editor";
 
 import {
   ReviewServicesLive,
-  toErrorMessage,
-  toStringId,
   validateDeckAccess,
-  getConfiguredRootPath,
-  findCardLocationById,
+  validateRequestedRootPath,
 } from "./shared";
 import type { AppEventPublisher, OpenEditorWindow } from "../handlers";
 
@@ -157,6 +157,7 @@ export const createEditorHandlers = (
   settingsRepository: SettingsRepository,
   publish: AppEventPublisher,
   openEditorWindow: OpenEditorWindow,
+  deckWriteCoordinator: DeckWriteCoordinator,
 ): EditorHandlersResult => {
   let duplicateIndexCache: DuplicateIndexCache | null = null;
   let duplicateIndexGeneration = 0;
@@ -207,7 +208,7 @@ export const createEditorHandlers = (
                         key: duplicateKey(itemCardTypeOption.value, item.content),
                         entry: {
                           deckPath: deck.absolutePath,
-                          cardIds: item.cards.map((card) => toStringId(card.id)),
+                          cardIds: item.cards.map((card) => card.id),
                         },
                       },
                     ];
@@ -271,15 +272,18 @@ export const createEditorHandlers = (
         const cards = Array.from({ length: cardCount }, () => createMetadata());
 
         const deckManager = yield* DeckManager;
-        yield* deckManager.appendItem(deckPath, { cards, content }, itemType);
+        yield* deckWriteCoordinator.withDeckLock(
+          deckPath,
+          deckManager.appendItem(deckPath, { cards, content }, itemType),
+        );
 
         markDuplicateIndexDirty();
 
         return {
-          cardIds: cards.map((card) => toStringId(card.id)),
+          cardIds: cards.map((card) => card.id),
         };
       }).pipe(
-        Effect.provide(Layer.mergeAll(ReviewServicesLive, NodeServicesLive)),
+        Effect.provide(ReviewServicesLive),
         Effect.mapError(toEditorError),
       ),
     ReplaceItem: ({ deckPath, cardId, content, cardType }) =>
@@ -299,58 +303,67 @@ export const createEditorHandlers = (
         const expectedNewCardCount = yield* parseEditorContent(cardType, content);
 
         const deckManager = yield* DeckManager;
-        const parsedDeck = yield* deckManager.readDeck(deckPath);
-        const location = findCardLocationById(parsedDeck, cardId);
-
-        if (!location) {
-          return yield* Effect.fail(
-            new EditorOperationError({
-              message: `Card not found: ${cardId}`,
-            }),
-          );
-        }
-
-        const oldItem = location.item;
-        const oldCardType = yield* detectEditorCardType(oldItem);
-
-        let mergedMetadata: readonly ItemMetadata[];
-
-        if (oldCardType !== cardType) {
-          mergedMetadata = Array.from({ length: expectedNewCardCount }, () => createMetadata());
-        } else if (cardType === "qa") {
-          mergedMetadata = [oldItem.cards[0] ?? createMetadata()];
-        } else {
-          const oldIndices = yield* uniqueClozeIndices(oldItem.content);
-          const newIndices = yield* uniqueClozeIndices(content);
-          const metadataByIndex = new Map<number, ItemMetadata>();
-
-          oldIndices.forEach((index, indexPosition) => {
-            const metadata = oldItem.cards[indexPosition];
-            if (metadata) {
-              metadataByIndex.set(index, metadata);
-            }
-          });
-
-          mergedMetadata = newIndices.map(
-            (index) => metadataByIndex.get(index) ?? createMetadata(),
-          );
-        }
-
-        const nextContent = ensureTrailingNewline(content);
-        yield* deckManager.replaceItem(
+        const mergedMetadata = yield* deckWriteCoordinator.withDeckLock(
           deckPath,
-          cardId,
-          { cards: mergedMetadata, content: nextContent },
-          newItemType,
+          Effect.gen(function* () {
+            const parsedDeck = yield* deckManager.readDeck(deckPath);
+            const location = findCardLocationById(parsedDeck, cardId);
+
+            if (!location) {
+              return yield* Effect.fail(
+                new EditorOperationError({
+                  message: `Card not found: ${cardId}`,
+                }),
+              );
+            }
+
+            const oldItem = location.item;
+            const oldCardType = yield* detectEditorCardType(oldItem);
+
+            let nextMergedMetadata: readonly ItemMetadata[];
+
+            if (oldCardType !== cardType) {
+              nextMergedMetadata = Array.from({ length: expectedNewCardCount }, () =>
+                createMetadata(),
+              );
+            } else if (cardType === "qa") {
+              nextMergedMetadata = [oldItem.cards[0] ?? createMetadata()];
+            } else {
+              const oldIndices = yield* uniqueClozeIndices(oldItem.content);
+              const newIndices = yield* uniqueClozeIndices(content);
+              const metadataByIndex = new Map<number, ItemMetadata>();
+
+              oldIndices.forEach((index, indexPosition) => {
+                const metadata = oldItem.cards[indexPosition];
+                if (metadata) {
+                  metadataByIndex.set(index, metadata);
+                }
+              });
+
+              nextMergedMetadata = newIndices.map(
+                (index) => metadataByIndex.get(index) ?? createMetadata(),
+              );
+            }
+
+            const nextContent = ensureTrailingNewline(content);
+            yield* deckManager.replaceItem(
+              deckPath,
+              cardId,
+              { cards: nextMergedMetadata, content: nextContent },
+              newItemType,
+            );
+
+            return nextMergedMetadata;
+          }),
         );
 
         markDuplicateIndexDirty();
 
         yield* publish(CardEdited, { deckPath, cardId });
 
-        return { cardIds: mergedMetadata.map((card) => toStringId(card.id)) };
+        return { cardIds: mergedMetadata.map((card) => card.id) };
       }).pipe(
-        Effect.provide(Layer.mergeAll(ReviewServicesLive, NodeServicesLive)),
+        Effect.provide(ReviewServicesLive),
         Effect.mapError(toEditorError),
       ),
     GetItemForEdit: ({ deckPath, cardId }) =>
@@ -383,26 +396,25 @@ export const createEditorHandlers = (
         return {
           content: location.item.content,
           cardType: itemCardType,
-          cardIds: location.item.cards.map((card) => toStringId(card.id)),
+          cardIds: location.item.cards.map((card) => card.id),
         };
       }).pipe(Effect.provide(ReviewServicesLive), Effect.mapError(toEditorError)),
     CheckDuplicates: ({ content, cardType, rootPath, excludeCardIds }) =>
       Effect.gen(function* () {
-        const configuredRootPath = yield* getConfiguredRootPath(
+        const configuredRootPath = yield* validateRequestedRootPath(
           settingsRepository,
-          toEditorError,
-          () => new EditorOperationError({ message: "Workspace root path is not configured." }),
+          {
+            requestedRootPath: rootPath,
+            mapSettingsError: toEditorError,
+            makeMissingRootError: () =>
+              new EditorOperationError({ message: "Workspace root path is not configured." }),
+            makeRootMismatchError: (configured, requested) =>
+              new EditorOperationError({
+                message: `Root path mismatch. Expected ${configured}, received ${requested}.`,
+              }),
+          },
         );
         const resolvedConfiguredRoot = path.resolve(configuredRootPath);
-        const resolvedRequestedRoot = path.resolve(rootPath);
-
-        if (resolvedConfiguredRoot !== resolvedRequestedRoot) {
-          return yield* Effect.fail(
-            new EditorOperationError({
-              message: `Root path mismatch. Expected ${configuredRootPath}, received ${rootPath}.`,
-            }),
-          );
-        }
 
         const parseResult = yield* Effect.either(parseEditorContent(cardType, content));
         if (Either.isLeft(parseResult)) {

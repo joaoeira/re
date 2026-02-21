@@ -182,3 +182,58 @@ export class ReviewOperationError extends Schema.TaggedError<ReviewOperationErro
 )("review_operation_error", {
   message: Schema.String,
 }) {}
+
+export class UndoConflictError extends Schema.TaggedError<UndoConflictError>(
+  "@re/desktop/rpc/UndoConflictError",
+)("undo_conflict", {
+  deckPath: Schema.String,
+  cardId: Schema.String,
+  message: Schema.String,
+  expectedCurrentCardFingerprint: Schema.String,
+  actualCurrentCardFingerprint: Schema.String,
+}) {}
+
+export class UndoSafetyUnavailableError extends Schema.TaggedError<UndoSafetyUnavailableError>(
+  "@re/desktop/rpc/UndoSafetyUnavailableError",
+)("undo_safety_unavailable", {
+  message: Schema.String,
+}) {}
+
+export const UndoReviewErrorSchema = Schema.Union(
+  ReviewOperationError,
+  UndoConflictError,
+  UndoSafetyUnavailableError,
+);
+
+export type UndoReviewError = typeof UndoReviewErrorSchema.Type;
+
+export const ReviewStatsSchema = Schema.Struct({
+  total: Schema.Number.pipe(Schema.nonNegative()),
+  active: Schema.Number.pipe(Schema.nonNegative()),
+  undone: Schema.Number.pipe(Schema.nonNegative()),
+});
+
+export type ReviewStats = typeof ReviewStatsSchema.Type;
+
+export const ReviewHistoryEntrySchema = Schema.Struct({
+  id: Schema.Number.pipe(Schema.int(), Schema.positive()),
+  workspaceCanonicalPath: Schema.String,
+  reviewedAt: Schema.String,
+  deckRelativePath: Schema.String,
+  deckPath: Schema.String,
+  cardId: Schema.String,
+  grade: FSRSGradeSchema,
+  previousState: Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
+  nextState: Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
+  previousDue: Schema.Union(Schema.String, Schema.Null),
+  nextDue: Schema.Union(Schema.String, Schema.Null),
+  previousStability: Schema.Number.pipe(Schema.nonNegative()),
+  nextStability: Schema.Number.pipe(Schema.nonNegative()),
+  previousDifficulty: Schema.Number.pipe(Schema.nonNegative()),
+  nextDifficulty: Schema.Number.pipe(Schema.nonNegative()),
+  previousLearningSteps: Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
+  nextLearningSteps: Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
+  undoneAt: Schema.Union(Schema.String, Schema.Null),
+});
+
+export type ReviewHistoryEntry = typeof ReviewHistoryEntrySchema.Type;

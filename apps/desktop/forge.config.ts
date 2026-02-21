@@ -8,7 +8,9 @@ import { FuseV1Options, FuseVersion } from "@electron/fuses";
 
 const config = {
   packagerConfig: {
-    asar: true,
+    asar: {
+      unpack: "**/*.{node,so,dylib,dll}",
+    },
     appBundleId: "com.re.desktop",
     executableName: "re-desktop",
   },

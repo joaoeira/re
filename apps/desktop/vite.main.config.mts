@@ -21,7 +21,12 @@ export default defineConfig({
       fileName: () => "main.js",
     },
     rollupOptions: {
-      external: ["electron", ...builtinModules, ...builtinModules.map((m) => `node:${m}`)],
+      external: [
+        "electron",
+        "better-sqlite3",
+        ...builtinModules,
+        ...builtinModules.map((m) => `node:${m}`),
+      ],
     },
   },
 });

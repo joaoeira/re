@@ -7,6 +7,7 @@ import { CardEdited } from "@shared/rpc/contracts";
 import {
   desktopReviewSessionMachine,
   RecoverableCardLoadError,
+  RecoverableUndoConflictError,
   type DesktopReviewSessionSend,
   type DesktopReviewSessionSnapshot,
 } from "@/machines/desktopReviewSession";
@@ -38,6 +39,7 @@ type UseReviewSessionResult =
       snapshot: DesktopReviewSessionSnapshot;
       totalDue: number;
       totalNew: number;
+      notice: string | null;
       send: DesktopReviewSessionSend;
     };
 
@@ -50,11 +52,15 @@ type ReviewSessionState =
       snapshot: DesktopReviewSessionSnapshot;
       totalDue: number;
       totalNew: number;
+      notice: string | null;
     };
 
 export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionResult {
   const [state, setState] = useState<ReviewSessionState>({ status: "loading" });
   const actorRef = useRef<ActorRefFrom<typeof desktopReviewSessionMachine> | null>(null);
+  const refreshReasonRef = useRef<string | null>(null);
+  const refreshInFlightRef = useRef(false);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const send: DesktopReviewSessionSend = useCallback((event) => {
     actorRef.current?.send(event);
   }, []);
@@ -84,6 +90,7 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
       actorRef.current = null;
     }
 
+    refreshInFlightRef.current = false;
     setState({ status: "loading" });
 
     const load = async () => {
@@ -154,7 +161,13 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
               ),
             scheduleReview: async (input) => Effect.runPromise(ipc.client.ScheduleReview(input)),
             undoReview: async (input) => {
-              await Effect.runPromise(ipc.client.UndoReview(input));
+              await Effect.runPromise(
+                ipc.client.UndoReview(input).pipe(
+                  Effect.catchTags({
+                    undo_conflict: (error) => Effect.fail(new RecoverableUndoConflictError(error.message)),
+                  }),
+                ),
+              );
             },
           },
         });
@@ -167,10 +180,22 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
           snapshot: actor.getSnapshot(),
           totalDue: queue.totalDue,
           totalNew: queue.totalNew,
+          notice: refreshReasonRef.current,
         });
+        refreshReasonRef.current = null;
 
         const subscription = actor.subscribe((snapshotValue) => {
           if (isCancelled) return;
+
+          if (snapshotValue.matches("refreshRequired")) {
+            if (!refreshInFlightRef.current) {
+              refreshInFlightRef.current = true;
+              refreshReasonRef.current = "Session state was refreshed due to external changes.";
+              setReloadNonce((value) => value + 1);
+            }
+            return;
+          }
+
           setState((currentState) => {
             if (currentState.status !== "ready") {
               return {
@@ -178,6 +203,7 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
                 snapshot: snapshotValue,
                 totalDue: queue.totalDue,
                 totalNew: queue.totalNew,
+                notice: refreshReasonRef.current,
               };
             }
 
@@ -226,7 +252,7 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
         actorRef.current = null;
       }
     };
-  }, [ipc, deckSelectionKey]);
+  }, [ipc, deckSelectionKey, reloadNonce]);
 
   if (state.status === "loading") {
     return { status: "loading", send };
@@ -245,6 +271,7 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
     snapshot: state.snapshot,
     totalDue: state.totalDue,
     totalNew: state.totalNew,
+    notice: state.notice,
     send,
   };
 }

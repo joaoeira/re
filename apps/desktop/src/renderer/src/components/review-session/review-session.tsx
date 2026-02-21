@@ -140,7 +140,7 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
     );
   }
 
-  const { snapshot, send } = session;
+  const { snapshot, send, notice } = session;
   const isComplete = snapshot.matches("complete");
   const isLoadingCard = snapshot.matches({ presenting: "loading" });
   const isShowingPrompt = snapshot.matches({ presenting: "showPrompt" });
@@ -150,6 +150,7 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
   return (
     <>
       <div className="flex flex-1 flex-col overflow-auto px-6 py-5">
+        {notice && <p className="mb-4 text-center text-sm text-sky-700">{notice}</p>}
         {snapshot.context.error && (
           <p className="mb-4 text-center text-sm text-destructive">{snapshot.context.error}</p>
         )}

@@ -1,10 +1,18 @@
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+
 import { inferType } from "@re/core";
 import { ClozeType, QAType } from "@re/types";
-import { DeckManager, ReviewQueueBuilder, Scheduler } from "@re/workspace";
-import { Effect } from "effect";
+import { DeckManager, ReviewQueueBuilder, Scheduler, computeDueDate } from "@re/workspace";
+import { Effect, Exit } from "effect";
 import type { Implementations } from "electron-effect-rpc/types";
 
+import type { ReviewAnalyticsRepository } from "@main/analytics";
+import { toMetadataFingerprint } from "@main/analytics/fingerprint";
+import { findCardLocationById } from "@main/card-location";
+import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import type { SettingsRepository } from "@main/settings/repository";
+import { toErrorMessage } from "@main/utils/format";
 import type { AppContract } from "@shared/rpc/contracts";
 import {
   CardContentIndexOutOfBoundsError,
@@ -12,44 +20,56 @@ import {
   CardContentParseError,
   CardContentReadError,
   ReviewOperationError,
+  UndoConflictError,
+  UndoSafetyUnavailableError,
 } from "@shared/rpc/schemas/review";
 
 import {
   ReviewServicesLive,
   assertWithinRoot,
-  findCardLocationById,
-  getConfiguredRootPath,
-  toErrorMessage,
-  toStringId,
+  canonicalizeWorkspacePath,
   validateDeckAccess,
+  validateRequestedRootPath,
 } from "./shared";
-
-import path from "node:path";
 
 const reviewItemTypes = [QAType, ClozeType] as const;
 
-type ReviewHandlerKeys = "BuildReviewQueue" | "GetCardContent" | "ScheduleReview" | "UndoReview";
+type ReviewHandlerKeys =
+  | "BuildReviewQueue"
+  | "GetCardContent"
+  | "ScheduleReview"
+  | "UndoReview"
+  | "GetReviewStats"
+  | "ListReviewHistory";
+
+const toReviewOperationError = (error: unknown): ReviewOperationError =>
+  new ReviewOperationError({ message: toErrorMessage(error) });
+
+const failWithReviewOperationError = (error: unknown) =>
+  Effect.fail(new ReviewOperationError({ message: toErrorMessage(error) }));
 
 export const createReviewHandlers = (
   settingsRepository: SettingsRepository,
+  analyticsRepository: ReviewAnalyticsRepository,
+  deckWriteCoordinator: DeckWriteCoordinator,
 ): Pick<Implementations<AppContract>, ReviewHandlerKeys> => ({
   BuildReviewQueue: ({ deckPaths, rootPath }) =>
     Effect.gen(function* () {
-      const configuredRootPath = yield* getConfiguredRootPath(
+      const configuredRootPath = yield* validateRequestedRootPath(
         settingsRepository,
-        (error) => new ReviewOperationError({ message: toErrorMessage(error) }),
-        () =>
-          new ReviewOperationError({
-            message: "Workspace root path is not configured.",
-          }),
+        {
+          requestedRootPath: rootPath,
+          mapSettingsError: toReviewOperationError,
+          makeMissingRootError: () =>
+            new ReviewOperationError({
+              message: "Workspace root path is not configured.",
+            }),
+          makeRootMismatchError: (configured, requested) =>
+            new ReviewOperationError({
+              message: `Root path mismatch. Expected ${configured}, received ${requested}.`,
+            }),
+        },
       );
-      if (path.resolve(rootPath) !== path.resolve(configuredRootPath)) {
-        return yield* Effect.fail(
-          new ReviewOperationError({
-            message: `Root path mismatch. Expected ${configuredRootPath}, received ${rootPath}.`,
-          }),
-        );
-      }
 
       for (const deckPath of deckPaths) {
         if (!assertWithinRoot(deckPath, configuredRootPath)) {
@@ -71,7 +91,7 @@ export const createReviewHandlers = (
       return {
         items: queue.items.map((queueItem) => ({
           deckPath: queueItem.deckPath,
-          cardId: toStringId(queueItem.card.id),
+          cardId: queueItem.card.id,
           cardIndex: queueItem.cardIndex,
           deckName: queueItem.deckName,
         })),
@@ -150,9 +170,9 @@ export const createReviewHandlers = (
     }).pipe(Effect.provide(ReviewServicesLive)),
   ScheduleReview: ({ deckPath, cardId, grade }) =>
     Effect.gen(function* () {
-      yield* validateDeckAccess(settingsRepository, {
+      const configuredRootPath = yield* validateDeckAccess(settingsRepository, {
         deckPath,
-        mapSettingsError: (error) => new ReviewOperationError({ message: toErrorMessage(error) }),
+        mapSettingsError: toReviewOperationError,
         makeMissingRootError: () =>
           new ReviewOperationError({
             message: "Workspace root path is not configured.",
@@ -166,33 +186,108 @@ export const createReviewHandlers = (
       const deckManager = yield* DeckManager;
       const scheduler = yield* Scheduler;
 
-      const parsed = yield* deckManager.readDeck(deckPath);
-      const cardLocation = findCardLocationById(parsed, cardId);
+      const reviewedAt = new Date();
 
-      if (!cardLocation) {
-        return yield* Effect.fail(
-          new ReviewOperationError({
-            message: `Card not found: ${cardId}`,
-          }),
-        );
-      }
+      const scheduleResult = yield* deckWriteCoordinator.withDeckLock(
+        deckPath,
+        Effect.gen(function* () {
+          const parsed = yield* deckManager.readDeck(deckPath).pipe(
+            Effect.catchTags({
+              DeckNotFound: failWithReviewOperationError,
+              DeckReadError: failWithReviewOperationError,
+              DeckParseError: failWithReviewOperationError,
+            }),
+          );
+          const cardLocation = findCardLocationById(parsed, cardId);
 
-      const scheduleResult = yield* scheduler.scheduleReview(cardLocation.card, grade, new Date());
+          if (!cardLocation) {
+            return yield* Effect.fail(
+              new ReviewOperationError({
+                message: `Card not found: ${cardId}`,
+              }),
+            );
+          }
 
-      yield* deckManager.updateCardMetadata(deckPath, cardId, scheduleResult.updatedCard);
+          const scheduled = yield* scheduler
+            .scheduleReview(cardLocation.card, grade, reviewedAt)
+            .pipe(Effect.mapError((error) => new ReviewOperationError({ message: error.message })));
+
+          yield* deckManager
+            .updateCardMetadata(deckPath, cardId, scheduled.updatedCard)
+            .pipe(
+              Effect.catchTags({
+                DeckNotFound: failWithReviewOperationError,
+                DeckReadError: failWithReviewOperationError,
+                DeckParseError: failWithReviewOperationError,
+                DeckWriteError: failWithReviewOperationError,
+                CardNotFound: failWithReviewOperationError,
+              }),
+            );
+
+          return {
+            previousCard: cardLocation.card,
+            previousDue: cardLocation.card.due ?? computeDueDate(cardLocation.card),
+            nextCard: scheduled.updatedCard,
+            expectedCurrentCardFingerprint: toMetadataFingerprint(scheduled.updatedCard),
+            previousCardFingerprint: toMetadataFingerprint(cardLocation.card),
+            grade,
+            previousState: scheduled.schedulerLog.previousState,
+            nextState: scheduled.updatedCard.state,
+            previousStability: cardLocation.card.stability.value,
+            nextStability: scheduled.updatedCard.stability.value,
+            previousDifficulty: cardLocation.card.difficulty.value,
+            nextDifficulty: scheduled.updatedCard.difficulty.value,
+            previousLearningSteps: cardLocation.card.learningSteps,
+            nextLearningSteps: scheduled.updatedCard.learningSteps,
+          };
+        }),
+      );
+
+      const canonicalWorkspacePath = yield* canonicalizeWorkspacePath(configuredRootPath).pipe(
+        Effect.catchAll(() => Effect.succeed(configuredRootPath)),
+      );
+      const deckRelativePath = path.relative(configuredRootPath, deckPath);
+      const reviewEntryId = yield* analyticsRepository.recordSchedule({
+        workspaceCanonicalPath: canonicalWorkspacePath,
+        deckPath,
+        deckRelativePath,
+        cardId,
+        grade: scheduleResult.grade,
+        previousState: scheduleResult.previousState,
+        nextState: scheduleResult.nextState,
+        previousDue: scheduleResult.previousDue,
+        nextDue: scheduleResult.nextCard.due,
+        previousStability: scheduleResult.previousStability,
+        nextStability: scheduleResult.nextStability,
+        previousDifficulty: scheduleResult.previousDifficulty,
+        nextDifficulty: scheduleResult.nextDifficulty,
+        previousLearningSteps: scheduleResult.previousLearningSteps,
+        nextLearningSteps: scheduleResult.nextLearningSteps,
+        reviewedAt,
+      });
 
       return {
-        previousCard: cardLocation.card,
+        reviewEntryId,
+        expectedCurrentCardFingerprint: scheduleResult.expectedCurrentCardFingerprint,
+        previousCardFingerprint: scheduleResult.previousCardFingerprint,
+        previousCard: scheduleResult.previousCard,
       };
     }).pipe(
       Effect.provide(ReviewServicesLive),
       Effect.mapError((e) => new ReviewOperationError({ message: toErrorMessage(e) })),
     ),
-  UndoReview: ({ deckPath, cardId, previousCard }) =>
+  UndoReview: ({
+    deckPath,
+    cardId,
+    previousCard,
+    reviewEntryId,
+    expectedCurrentCardFingerprint,
+    previousCardFingerprint,
+  }) =>
     Effect.gen(function* () {
       yield* validateDeckAccess(settingsRepository, {
         deckPath,
-        mapSettingsError: (error) => new ReviewOperationError({ message: toErrorMessage(error) }),
+        mapSettingsError: toReviewOperationError,
         makeMissingRootError: () =>
           new ReviewOperationError({
             message: "Workspace root path is not configured.",
@@ -203,10 +298,184 @@ export const createReviewHandlers = (
           }),
       });
 
+      const intent =
+        reviewEntryId === null
+          ? null
+          : ({
+              intentId: randomUUID(),
+              reviewEntryId,
+              deckPath,
+              cardId,
+              expectedCurrentCardFingerprint,
+              previousCardFingerprint,
+              createdAt: new Date().toISOString(),
+              attemptCount: 0,
+              status: "pending" as const,
+              lastError: null,
+            } as const);
+
+      if (intent !== null) {
+        yield* analyticsRepository
+          .persistIntent(intent)
+          .pipe(
+            Effect.mapError(
+              (error) =>
+                new UndoSafetyUnavailableError({
+                  message: `Failed to persist undo safety intent: ${toErrorMessage(error)}`,
+                }),
+            ),
+          );
+      }
+
       const deckManager = yield* DeckManager;
-      yield* deckManager.updateCardMetadata(deckPath, cardId, previousCard);
+
+      yield* deckWriteCoordinator
+        .withDeckLock(
+          deckPath,
+          Effect.gen(function* () {
+            const parsed = yield* deckManager.readDeck(deckPath).pipe(
+              Effect.catchTags({
+                DeckNotFound: failWithReviewOperationError,
+                DeckReadError: failWithReviewOperationError,
+                DeckParseError: failWithReviewOperationError,
+              }),
+            );
+            const cardLocation = findCardLocationById(parsed, cardId);
+
+            if (!cardLocation) {
+              return yield* Effect.fail(
+                new ReviewOperationError({
+                  message: `Card not found: ${cardId}`,
+                }),
+              );
+            }
+
+            const actualCurrentCardFingerprint = toMetadataFingerprint(cardLocation.card);
+            if (actualCurrentCardFingerprint !== expectedCurrentCardFingerprint) {
+              return yield* Effect.fail(
+                new UndoConflictError({
+                  deckPath,
+                  cardId,
+                  message:
+                    "Undo conflict detected. Card metadata changed outside this review session.",
+                  expectedCurrentCardFingerprint,
+                  actualCurrentCardFingerprint,
+                }),
+              );
+            }
+
+            yield* deckManager.updateCardMetadata(deckPath, cardId, previousCard).pipe(
+              Effect.catchTags({
+                DeckNotFound: failWithReviewOperationError,
+                DeckReadError: failWithReviewOperationError,
+                DeckParseError: failWithReviewOperationError,
+                DeckWriteError: failWithReviewOperationError,
+                CardNotFound: failWithReviewOperationError,
+              }),
+            );
+          }),
+        )
+        .pipe(
+          Effect.catchTag("undo_conflict", (error) =>
+            (intent === null
+              ? Effect.fail(error)
+              : analyticsRepository
+                  .markIntentConflict(intent.intentId, error.message)
+                  .pipe(Effect.zipRight(Effect.fail(error)))),
+          ),
+        );
+
+      if (intent !== null) {
+        const compensationExit = yield* Effect.exit(
+          analyticsRepository.compensateUndo({
+            reviewEntryId: intent.reviewEntryId,
+            undoneAt: new Date(),
+          }),
+        );
+
+        if (Exit.isSuccess(compensationExit)) {
+          yield* analyticsRepository.markIntentCompleted(intent.intentId);
+        } else {
+          yield* analyticsRepository.markIntentPendingFailure(
+            intent.intentId,
+            toErrorMessage(compensationExit.cause),
+          );
+        }
+      }
 
       return {};
+    }).pipe(Effect.provide(ReviewServicesLive)),
+  GetReviewStats: ({ rootPath, includeUndone }) =>
+    Effect.gen(function* () {
+      const configuredRootPath = yield* validateRequestedRootPath(
+        settingsRepository,
+        {
+          requestedRootPath: rootPath,
+          mapSettingsError: toReviewOperationError,
+          makeMissingRootError: () =>
+            new ReviewOperationError({
+              message: "Workspace root path is not configured.",
+            }),
+          makeRootMismatchError: (configured, requested) =>
+            new ReviewOperationError({
+              message: `Root path mismatch. Expected ${configured}, received ${requested}.`,
+            }),
+        },
+      );
+
+      const workspaceCanonicalPath = yield* canonicalizeWorkspacePath(configuredRootPath).pipe(
+        Effect.mapError((error) =>
+          new ReviewOperationError({
+            message: `Unable to canonicalize workspace path: ${toErrorMessage(error)}`,
+          }),
+        ),
+      );
+
+      return yield* analyticsRepository.getReviewStats({
+        workspaceCanonicalPath,
+        includeUndone: includeUndone ?? false,
+      });
+    }).pipe(
+      Effect.provide(ReviewServicesLive),
+      Effect.mapError((e) => new ReviewOperationError({ message: toErrorMessage(e) })),
+    ),
+  ListReviewHistory: ({ rootPath, includeUndone, limit, offset }) =>
+    Effect.gen(function* () {
+      const configuredRootPath = yield* validateRequestedRootPath(
+        settingsRepository,
+        {
+          requestedRootPath: rootPath,
+          mapSettingsError: toReviewOperationError,
+          makeMissingRootError: () =>
+            new ReviewOperationError({
+              message: "Workspace root path is not configured.",
+            }),
+          makeRootMismatchError: (configured, requested) =>
+            new ReviewOperationError({
+              message: `Root path mismatch. Expected ${configured}, received ${requested}.`,
+            }),
+        },
+      );
+
+      const workspaceCanonicalPath = yield* canonicalizeWorkspacePath(configuredRootPath).pipe(
+        Effect.mapError((error) =>
+          new ReviewOperationError({
+            message: `Unable to canonicalize workspace path: ${toErrorMessage(error)}`,
+          }),
+        ),
+      );
+
+      const normalizedLimit = Math.max(1, Math.min(500, limit ?? 100));
+      const normalizedOffset = Math.max(0, offset ?? 0);
+
+      const entries = yield* analyticsRepository.listReviewHistory({
+        workspaceCanonicalPath,
+        includeUndone: includeUndone ?? false,
+        limit: normalizedLimit,
+        offset: normalizedOffset,
+      });
+
+      return { entries };
     }).pipe(
       Effect.provide(ReviewServicesLive),
       Effect.mapError((e) => new ReviewOperationError({ message: toErrorMessage(e) })),

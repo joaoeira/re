@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import type { ParsedFile, Item } from "@re/core";
+import { FileSystem } from "@effect/platform";
 import {
   DeckManagerLive,
   ReviewQueueBuilderLive,
@@ -24,12 +24,8 @@ export const ReviewServicesLive = Layer.mergeAll(
   SchedulerLive,
   DeckManagerServicesLive,
   ReviewQueueBuilderServicesLive,
+  NodeServicesLive,
 );
-
-export const toErrorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
-export const toStringId = (id: string): string => id;
 
 export const assertWithinRoot = (deckPath: string, rootPath: string): boolean => {
   const resolvedRootPath = path.resolve(rootPath);
@@ -37,23 +33,6 @@ export const assertWithinRoot = (deckPath: string, rootPath: string): boolean =>
   const relativePath = path.relative(resolvedRootPath, resolvedDeckPath);
 
   return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
-};
-
-export const findCardLocationById = (
-  parsed: ParsedFile,
-  cardId: string,
-): { item: Item; card: Item["cards"][number]; itemIndex: number; cardIndex: number } | null => {
-  for (let itemIndex = 0; itemIndex < parsed.items.length; itemIndex++) {
-    const item = parsed.items[itemIndex]!;
-    for (let cardIndex = 0; cardIndex < item.cards.length; cardIndex++) {
-      const card = item.cards[cardIndex]!;
-      if (card.id === cardId) {
-        return { item, card, itemIndex, cardIndex };
-      }
-    }
-  }
-
-  return null;
 };
 
 export const getConfiguredRootPath = <E>(
@@ -91,3 +70,33 @@ export const validateDeckAccess = <E>(
       () => options.makeOutsideRootError(options.deckPath),
     ),
   );
+
+export const validateRequestedRootPath = <E>(
+  settingsRepository: SettingsRepository,
+  options: {
+    readonly requestedRootPath: string;
+    readonly mapSettingsError: (error: unknown) => E;
+    readonly makeMissingRootError: () => E;
+    readonly makeRootMismatchError: (configuredRootPath: string, requestedRootPath: string) => E;
+  },
+): Effect.Effect<string, E> =>
+  getConfiguredRootPath(
+    settingsRepository,
+    options.mapSettingsError,
+    options.makeMissingRootError,
+  ).pipe(
+    Effect.filterOrFail(
+      (configuredRootPath) =>
+        path.resolve(options.requestedRootPath) === path.resolve(configuredRootPath),
+      (configuredRootPath) =>
+        options.makeRootMismatchError(configuredRootPath, options.requestedRootPath),
+    ),
+  );
+
+export const canonicalizeWorkspacePath = (
+  rootPath: string,
+): Effect.Effect<string, unknown, FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    return yield* fileSystem.realPath(rootPath);
+  });
