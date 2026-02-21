@@ -3,6 +3,7 @@ import { createActor, type ActorRefFrom } from "xstate";
 import { Effect } from "effect";
 
 import { createIpc } from "@/lib/ipc";
+import { CardEdited } from "@shared/rpc/contracts";
 import {
   desktopReviewSessionMachine,
   RecoverableCardLoadError,
@@ -67,7 +68,8 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
 
   useEffect(() => {
     let isCancelled = false;
-    let unsubscribe: (() => void) | null = null;
+    let unsubscribeActor: (() => void) | null = null;
+    let unsubscribeCardEdited: (() => void) | null = null;
 
     if (!ipc) {
       setState({
@@ -185,9 +187,21 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
             };
           });
         });
-        unsubscribe = () => {
+        unsubscribeActor = () => {
           subscription.unsubscribe();
         };
+
+        unsubscribeCardEdited = ipc.events.subscribe(CardEdited, ({ deckPath, cardId }) => {
+          const snapshot = actor.getSnapshot();
+          const current = snapshot.context.queue[snapshot.context.currentIndex];
+          if (!current) {
+            return;
+          }
+
+          if (current.deckPath === deckPath && current.cardId === cardId) {
+            actor.send({ type: "CARD_EDITED" });
+          }
+        });
       } catch (error) {
         if (isCancelled) return;
         setState({
@@ -201,8 +215,11 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
 
     return () => {
       isCancelled = true;
-      if (unsubscribe) {
-        unsubscribe();
+      if (unsubscribeCardEdited) {
+        unsubscribeCardEdited();
+      }
+      if (unsubscribeActor) {
+        unsubscribeActor();
       }
       if (actorRef.current) {
         actorRef.current.stop();

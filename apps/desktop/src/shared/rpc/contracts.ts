@@ -7,6 +7,7 @@ import {
   SnapshotWorkspaceResultSchema,
 } from "@re/workspace";
 import { defineContract, event, rpc } from "electron-effect-rpc/contract";
+import { EditorOperationError } from "@shared/rpc/schemas/editor";
 import {
   SettingsErrorSchema,
   SettingsSchemaV1,
@@ -20,6 +21,24 @@ import {
   ReviewOperationError,
   SerializedItemMetadataSchema,
 } from "@shared/rpc/schemas/review";
+
+const EditorCardTypeSchema = Schema.Literal("qa", "cloze");
+
+const EditorCreateWindowParamsSchema = Schema.Struct({
+  mode: Schema.Literal("create"),
+  deckPath: Schema.optional(Schema.String),
+});
+
+const EditorEditWindowParamsSchema = Schema.Struct({
+  mode: Schema.Literal("edit"),
+  deckPath: Schema.String,
+  cardId: Schema.String,
+});
+
+const EditorWindowParamsSchema = Schema.Union(
+  EditorCreateWindowParamsSchema,
+  EditorEditWindowParamsSchema,
+);
 
 export const GetBootstrapData = rpc(
   "GetBootstrapData",
@@ -124,10 +143,82 @@ export const UndoReview = rpc(
   ReviewOperationError,
 );
 
+export const AppendItem = rpc(
+  "AppendItem",
+  Schema.Struct({
+    deckPath: Schema.String,
+    content: Schema.String,
+    cardType: EditorCardTypeSchema,
+  }),
+  Schema.Struct({
+    cardIds: Schema.Array(Schema.String),
+  }),
+  EditorOperationError,
+);
+
+export const ReplaceItem = rpc(
+  "ReplaceItem",
+  Schema.Struct({
+    deckPath: Schema.String,
+    cardId: Schema.String,
+    content: Schema.String,
+    cardType: EditorCardTypeSchema,
+  }),
+  Schema.Struct({
+    cardIds: Schema.Array(Schema.String),
+  }),
+  EditorOperationError,
+);
+
+export const GetItemForEdit = rpc(
+  "GetItemForEdit",
+  Schema.Struct({
+    deckPath: Schema.String,
+    cardId: Schema.String,
+  }),
+  Schema.Struct({
+    content: Schema.String,
+    cardType: EditorCardTypeSchema,
+    cardIds: Schema.Array(Schema.String),
+  }),
+  EditorOperationError,
+);
+
+export const CheckDuplicates = rpc(
+  "CheckDuplicates",
+  Schema.Struct({
+    content: Schema.String,
+    cardType: EditorCardTypeSchema,
+    rootPath: Schema.String,
+    excludeCardIds: Schema.Array(Schema.String),
+  }),
+  Schema.Struct({
+    isDuplicate: Schema.Boolean,
+    matchingDeckPath: Schema.optionalWith(Schema.String, { as: "Option" }),
+  }),
+  EditorOperationError,
+);
+
+export const OpenEditorWindow = rpc(
+  "OpenEditorWindow",
+  EditorWindowParamsSchema,
+  Schema.Struct({}),
+);
+
 export const WorkspaceSnapshotChanged = event(
   "WorkspaceSnapshotChanged",
   SnapshotWorkspaceResultSchema,
 );
+
+export const CardEdited = event(
+  "CardEdited",
+  Schema.Struct({
+    deckPath: Schema.String,
+    cardId: Schema.String,
+  }),
+);
+
+export const EditorNavigateRequest = event("EditorNavigateRequest", EditorWindowParamsSchema);
 
 export const appContract = defineContract({
   methods: [
@@ -141,8 +232,13 @@ export const appContract = defineContract({
     GetCardContent,
     ScheduleReview,
     UndoReview,
+    AppendItem,
+    ReplaceItem,
+    GetItemForEdit,
+    CheckDuplicates,
+    OpenEditorWindow,
   ] as const,
-  events: [WorkspaceSnapshotChanged] as const,
+  events: [WorkspaceSnapshotChanged, CardEdited, EditorNavigateRequest] as const,
 });
 
 export type AppContract = typeof appContract;

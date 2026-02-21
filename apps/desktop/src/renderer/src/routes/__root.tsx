@@ -1,4 +1,4 @@
-import { Outlet, createRootRoute } from "@tanstack/react-router";
+import { Outlet, createRootRoute, useRouterState } from "@tanstack/react-router";
 
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
@@ -8,6 +8,13 @@ export const Route = createRootRoute({
 });
 
 function RootLayout() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const isEditorRoute = pathname === "/editor";
+
+  if (isEditorRoute) {
+    return <Outlet />;
+  }
+
   return (
     <div className="flex h-screen bg-background">
       <Sidebar />

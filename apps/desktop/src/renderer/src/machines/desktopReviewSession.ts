@@ -73,7 +73,8 @@ type DesktopReviewSessionEvent =
   | { type: "REVEAL" }
   | { type: "GRADE"; grade: FSRSGrade }
   | { type: "UNDO" }
-  | { type: "QUIT" };
+  | { type: "QUIT" }
+  | { type: "CARD_EDITED" };
 
 type DesktopReviewSessionInput = {
   readonly queue: readonly LightQueueItem[];
@@ -278,6 +279,7 @@ export const desktopReviewSessionMachine = setup({
         showPrompt: {
           on: {
             REVEAL: { target: "showAnswer" },
+            CARD_EDITED: { target: "loading" },
           },
         },
         showAnswer: {
@@ -289,6 +291,7 @@ export const desktopReviewSessionMachine = setup({
                 error: () => null,
               }),
             },
+            CARD_EDITED: { target: "loading" },
           },
         },
         grading: {

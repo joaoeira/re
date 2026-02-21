@@ -2,11 +2,13 @@ import { createContext, useContext } from "react";
 import { createWorkspaceStore, type WorkspaceStore } from "./workspaceStore";
 import { createDeckListStore, type DeckListStore } from "./deckListStore";
 import { createDeckSelectionStore, type DeckSelectionStore } from "./deckSelectionStore";
+import { createEditorStore, type EditorStore } from "./editorStore";
 
 type Stores = {
   readonly workspace: WorkspaceStore;
   readonly deckList: DeckListStore;
   readonly deckSelection: DeckSelectionStore;
+  readonly editor: EditorStore;
 };
 
 const StoresContext = createContext<Stores | null>(null);
@@ -29,6 +31,10 @@ export function useDeckSelectionStore(): DeckSelectionStore {
   return useStores().deckSelection;
 }
 
+export function useEditorStore(): EditorStore {
+  return useStores().editor;
+}
+
 export function StoresProvider({
   children,
   stores,
@@ -44,5 +50,6 @@ export function createStores(): Stores {
     workspace: createWorkspaceStore(),
     deckList: createDeckListStore(),
     deckSelection: createDeckSelectionStore(),
+    editor: createEditorStore(),
   };
 }

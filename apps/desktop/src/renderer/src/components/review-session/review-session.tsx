@@ -1,11 +1,14 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { Effect } from "effect";
 
 import { useReviewSession } from "@/hooks/useReviewSession";
 import { CardContent } from "@/components/review-session/card-content";
 import { ReviewActionBar } from "@/components/review-session/review-action-bar";
 import { SessionSummary } from "@/components/review-session/session-summary";
 import { Button } from "@/components/ui/button";
+import { createIpc } from "@/lib/ipc";
+import type { DesktopReviewSessionSnapshot } from "@/machines/desktopReviewSession";
 
 type ReviewSessionProps = {
   readonly decks: "all" | string[];
@@ -14,6 +17,32 @@ type ReviewSessionProps = {
 export function ReviewSession({ decks }: ReviewSessionProps) {
   const navigate = useNavigate();
   const session = useReviewSession(decks);
+  const ipc = useMemo(() => {
+    if (!window.desktopApi) return null;
+    return createIpc(window.desktopApi);
+  }, []);
+
+  const openEditorForCurrentCard = useCallback(
+    (snapshot: DesktopReviewSessionSnapshot) => {
+      if (!ipc) {
+        return;
+      }
+
+      const queueItem = snapshot.context.queue[snapshot.context.currentIndex];
+      if (!queueItem) {
+        return;
+      }
+
+      void Effect.runPromise(
+        ipc.client.OpenEditorWindow({
+          mode: "edit",
+          deckPath: queueItem.deckPath,
+          cardId: queueItem.cardId,
+        }),
+      ).catch(() => undefined);
+    },
+    [ipc],
+  );
 
   useEffect(() => {
     if (session.status !== "ready") {
@@ -35,6 +64,16 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
       }
 
       if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (
+          (event.key === "e" || event.key === "E") &&
+          (snapshot.matches({ presenting: "showPrompt" }) ||
+            snapshot.matches({ presenting: "showAnswer" }))
+        ) {
+          event.preventDefault();
+          openEditorForCurrentCard(snapshot);
+          return;
+        }
+
         if (snapshot.matches({ presenting: "showPrompt" })) {
           if (event.key === " " || event.key === "Enter") {
             event.preventDefault();
@@ -64,7 +103,7 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
     return () => {
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [session]);
+  }, [openEditorForCurrentCard, session]);
 
   if (session.status === "loading") {
     return (
@@ -125,10 +164,26 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
         ) : isLoadingCard || snapshot.context.currentCard === null ? (
           <p className="text-center text-sm text-muted-foreground">Loading card...</p>
         ) : (
-          <CardContent
-            card={snapshot.context.currentCard}
-            isRevealed={isShowingAnswer || isGrading}
-          />
+          <>
+            <div className="mx-auto mb-3 flex w-full max-w-[70ch] justify-end">
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                disabled={isGrading}
+                onClick={() => openEditorForCurrentCard(snapshot)}
+              >
+                Edit
+                <kbd className="border border-border px-1 py-0.5 text-[10px] text-muted-foreground">
+                  E
+                </kbd>
+              </Button>
+            </div>
+            <CardContent
+              card={snapshot.context.currentCard}
+              isRevealed={isShowingAnswer || isGrading}
+            />
+          </>
         )}
       </div>
 

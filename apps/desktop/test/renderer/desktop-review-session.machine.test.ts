@@ -369,4 +369,100 @@ describe("desktopReviewSessionMachine", () => {
 
     actor.stop();
   });
+
+  it("reloads the current card when CARD_EDITED arrives in showPrompt", async () => {
+    const loadCard = vi
+      .fn()
+      .mockResolvedValueOnce({ prompt: "Prompt v1", reveal: "Reveal v1", cardType: "qa" as const })
+      .mockResolvedValueOnce({ prompt: "Prompt v2", reveal: "Reveal v2", cardType: "qa" as const });
+
+    const actor = createActor(desktopReviewSessionMachine, {
+      input: {
+        queue: [queueItem()],
+        loadCard,
+        scheduleReview: async () => ({ previousCard }),
+        undoReview: async () => undefined,
+      },
+    });
+
+    actor.start();
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "showPrompt" }));
+    expect(actor.getSnapshot().context.currentCard?.prompt).toBe("Prompt v1");
+
+    actor.send({ type: "CARD_EDITED" });
+
+    const reloaded = await waitForSnapshot(
+      actor,
+      (snapshot) =>
+        snapshot.matches({ presenting: "showPrompt" }) &&
+        snapshot.context.currentCard?.prompt === "Prompt v2",
+    );
+
+    expect(loadCard).toHaveBeenCalledTimes(2);
+    expect(reloaded.context.currentCard?.prompt).toBe("Prompt v2");
+    actor.stop();
+  });
+
+  it("reloads the current card when CARD_EDITED arrives in showAnswer", async () => {
+    const loadCard = vi
+      .fn()
+      .mockResolvedValueOnce({ prompt: "Prompt v1", reveal: "Reveal v1", cardType: "qa" as const })
+      .mockResolvedValueOnce({ prompt: "Prompt v2", reveal: "Reveal v2", cardType: "qa" as const });
+
+    const actor = createActor(desktopReviewSessionMachine, {
+      input: {
+        queue: [queueItem()],
+        loadCard,
+        scheduleReview: async () => ({ previousCard }),
+        undoReview: async () => undefined,
+      },
+    });
+
+    actor.start();
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "showPrompt" }));
+    actor.send({ type: "REVEAL" });
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "showAnswer" }));
+
+    actor.send({ type: "CARD_EDITED" });
+
+    const reloaded = await waitForSnapshot(
+      actor,
+      (snapshot) =>
+        snapshot.matches({ presenting: "showPrompt" }) &&
+        snapshot.context.currentCard?.prompt === "Prompt v2",
+    );
+
+    expect(loadCard).toHaveBeenCalledTimes(2);
+    expect(reloaded.context.currentCard?.prompt).toBe("Prompt v2");
+    actor.stop();
+  });
+
+  it("ignores CARD_EDITED while grading is in flight", async () => {
+    const scheduleDeferred = createDeferred<{ previousCard: SerializedItemMetadata }>();
+    const loadCard = vi.fn(async () => ({ prompt: "Prompt", reveal: "Reveal", cardType: "qa" as const }));
+
+    const actor = createActor(desktopReviewSessionMachine, {
+      input: {
+        queue: [queueItem()],
+        loadCard,
+        scheduleReview: async () => scheduleDeferred.promise,
+        undoReview: async () => undefined,
+      },
+    });
+
+    actor.start();
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "showPrompt" }));
+    actor.send({ type: "REVEAL" });
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "showAnswer" }));
+    actor.send({ type: "GRADE", grade: 2 });
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "grading" }));
+
+    actor.send({ type: "CARD_EDITED" });
+    expect(actor.getSnapshot().matches({ presenting: "grading" })).toBe(true);
+    expect(loadCard).toHaveBeenCalledTimes(1);
+
+    scheduleDeferred.resolve({ previousCard });
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches("complete"));
+    actor.stop();
+  });
 });

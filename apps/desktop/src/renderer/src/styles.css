@@ -214,4 +214,54 @@
   .review-markdown img {
     @apply h-auto max-w-full;
   }
+
+  .editor-prosemirror {
+    @apply min-h-[18rem] text-sm leading-6 text-foreground outline-none;
+  }
+
+  .editor-prosemirror > :first-child {
+    margin-top: 0;
+  }
+
+  .editor-prosemirror > :last-child {
+    margin-bottom: 0;
+  }
+
+  .editor-prosemirror p,
+  .editor-prosemirror ul,
+  .editor-prosemirror ol,
+  .editor-prosemirror pre,
+  .editor-prosemirror blockquote {
+    @apply mb-3;
+  }
+
+  .editor-prosemirror ul {
+    @apply list-disc pl-5;
+  }
+
+  .editor-prosemirror ol {
+    @apply list-decimal pl-5;
+  }
+
+  .editor-prosemirror h1,
+  .editor-prosemirror h2,
+  .editor-prosemirror h3 {
+    @apply mb-2 mt-4 font-semibold;
+  }
+
+  .editor-prosemirror code {
+    @apply bg-muted px-1 py-0.5 text-xs;
+  }
+
+  .editor-prosemirror pre {
+    @apply overflow-x-auto border border-border bg-muted p-3 text-xs;
+  }
+
+  .editor-prosemirror pre code {
+    @apply bg-transparent p-0;
+  }
+
+  .editor-code-block {
+    @apply font-mono;
+  }
 }

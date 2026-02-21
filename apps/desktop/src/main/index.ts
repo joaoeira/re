@@ -1,13 +1,16 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, Menu, type MenuItemConstructorOptions, ipcMain } from "electron";
 import { Effect, Runtime } from "effect";
+import type { IpcMainHandle } from "electron-effect-rpc/types";
 
+import { createEditorWindowManager, type EditorWindowManager } from "@main/editor-window";
 import { NodeServicesLive } from "@main/effect/node-services";
 import { createAppRpcHandlers } from "@main/rpc/handlers";
 import { makeSettingsRepository } from "@main/settings/repository";
 import { createWorkspaceWatcher, type WorkspaceWatcher } from "@main/watcher/workspace-watcher";
+import type { AppContract } from "@shared/rpc/contracts";
 import { WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
 import { appIpc } from "@shared/rpc/ipc";
 
@@ -19,9 +22,34 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
 let ipcHandle: ReturnType<typeof appIpc.main> | null = null;
 let watcher: WorkspaceWatcher | null = null;
+let editorWindowManager: EditorWindowManager | null = null;
 
 const log = (...args: Array<unknown>): void => {
   console.log("[desktop/main]", ...args);
+};
+
+const setupApplicationMenu = (openNewCard: () => void): void => {
+  const template: MenuItemConstructorOptions[] = [];
+
+  if (process.platform === "darwin") {
+    template.push({ role: "appMenu" });
+  }
+
+  template.push({
+    label: "File",
+    submenu: [
+      {
+        label: "New Card",
+        accelerator: "CommandOrControl+N",
+        click: () => openNewCard(),
+      },
+      process.platform === "darwin" ? { role: "close" } : { role: "quit" },
+    ],
+  });
+  template.push({ role: "editMenu" });
+  template.push({ role: "windowMenu" });
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 };
 
 const loadMainWindow = async (window: BrowserWindow): Promise<void> => {
@@ -56,6 +84,7 @@ const createMainWindow = (): BrowserWindow => {
   });
 
   window.on("closed", () => {
+    mainWindow = null;
     log("window closed");
   });
 
@@ -92,17 +121,38 @@ app.whenReady().then(() => {
     stop: () => watcher?.stop(),
   };
 
+  const publishProxy: IpcMainHandle<AppContract>["publish"] = (event, payload) =>
+    ipcHandle!.publish(event, payload);
+
+  editorWindowManager = createEditorWindowManager({
+    preloadPath: path.join(__dirname, "preload.js"),
+    publish: publishProxy,
+    log,
+  });
+  setupApplicationMenu(() => editorWindowManager?.open({ mode: "create" }));
+
+  const rpc = createAppRpcHandlers(
+    settingsRepository,
+    watcherProxy,
+    publishProxy,
+    (params) => editorWindowManager?.open(params),
+  );
+
   const runtime = Runtime.defaultRuntime;
 
   ipcHandle = appIpc.main({
     ipcMain,
-    handlers: createAppRpcHandlers(settingsRepository, watcherProxy),
+    handlers: rpc.handlers,
     runtime,
-    getWindows: () => (mainWindow ? [mainWindow] : []),
+    getWindows: () => BrowserWindow.getAllWindows(),
   });
 
   watcher = createWorkspaceWatcher({
-    publish: (snapshot) => ipcHandle!.publish(WorkspaceSnapshotChanged, snapshot),
+    publish: (snapshot) =>
+      Effect.gen(function* () {
+        rpc.markDuplicateIndexDirty();
+        yield* publishProxy(WorkspaceSnapshotChanged, snapshot);
+      }),
     runtime,
   });
 
@@ -119,13 +169,15 @@ app.whenReady().then(() => {
     });
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
       mainWindow = createMainWindow();
     }
   });
 });
 
-app.on("before-quit", () => {
+app.on("will-quit", () => {
+  editorWindowManager?.close();
+  editorWindowManager = null;
   if (watcher) {
     watcher.stop();
     watcher = null;
