@@ -23,6 +23,7 @@ let mainWindow: BrowserWindow | null = null;
 let ipcHandle: ReturnType<typeof appIpc.main> | null = null;
 let watcher: WorkspaceWatcher | null = null;
 let editorWindowManager: EditorWindowManager | null = null;
+let closingEditorForQuit = false;
 
 const log = (...args: Array<unknown>): void => {
   console.log("[desktop/main]", ...args);
@@ -131,11 +132,8 @@ app.whenReady().then(() => {
   });
   setupApplicationMenu(() => editorWindowManager?.open({ mode: "create" }));
 
-  const rpc = createAppRpcHandlers(
-    settingsRepository,
-    watcherProxy,
-    publishProxy,
-    (params) => editorWindowManager?.open(params),
+  const rpc = createAppRpcHandlers(settingsRepository, watcherProxy, publishProxy, (params) =>
+    editorWindowManager?.open(params),
   );
 
   const runtime = Runtime.defaultRuntime;
@@ -175,8 +173,34 @@ app.whenReady().then(() => {
   });
 });
 
+app.on("before-quit", (event) => {
+  if (closingEditorForQuit) {
+    event.preventDefault();
+    return;
+  }
+
+  const manager = editorWindowManager;
+  if (!manager?.isOpen()) {
+    return;
+  }
+
+  event.preventDefault();
+  closingEditorForQuit = true;
+  void manager
+    .closeAndWait()
+    .then((closed) => {
+      closingEditorForQuit = false;
+      if (closed) {
+        app.quit();
+      }
+    })
+    .catch((error: unknown) => {
+      closingEditorForQuit = false;
+      console.error("[desktop/main] failed to close editor window during quit", error);
+    });
+});
+
 app.on("will-quit", () => {
-  editorWindowManager?.close();
   editorWindowManager = null;
   if (watcher) {
     watcher.stop();

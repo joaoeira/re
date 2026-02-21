@@ -439,7 +439,11 @@ describe("desktopReviewSessionMachine", () => {
 
   it("ignores CARD_EDITED while grading is in flight", async () => {
     const scheduleDeferred = createDeferred<{ previousCard: SerializedItemMetadata }>();
-    const loadCard = vi.fn(async () => ({ prompt: "Prompt", reveal: "Reveal", cardType: "qa" as const }));
+    const loadCard = vi.fn(async () => ({
+      prompt: "Prompt",
+      reveal: "Reveal",
+      cardType: "qa" as const,
+    }));
 
     const actor = createActor(desktopReviewSessionMachine, {
       input: {

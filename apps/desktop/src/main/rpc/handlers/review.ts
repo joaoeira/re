@@ -28,11 +28,7 @@ import path from "node:path";
 
 const reviewItemTypes = [QAType, ClozeType] as const;
 
-type ReviewHandlerKeys =
-  | "BuildReviewQueue"
-  | "GetCardContent"
-  | "ScheduleReview"
-  | "UndoReview";
+type ReviewHandlerKeys = "BuildReviewQueue" | "GetCardContent" | "ScheduleReview" | "UndoReview";
 
 export const createReviewHandlers = (
   settingsRepository: SettingsRepository,

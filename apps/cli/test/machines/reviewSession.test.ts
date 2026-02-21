@@ -271,25 +271,31 @@ describe("reviewSessionMachine", () => {
   describe("blocking during grading", () => {
     it("does not allow QUIT during grading", async () => {
       // Create a slow grading actor to test blocking
-      const slowGradingActor = fromPromise(async ({ input }: { input: { queueItem: QueueItem; queueIndex: number; grade: FSRSGrade; runtime: unknown } }) => {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        return {
-          schedulerLog: {
-            rating: input.grade,
-            previousState: input.queueItem.card.state,
-            previousCard: input.queueItem.card,
-            due: new Date(),
-            stability: 1,
-            difficulty: 5,
-            scheduledDays: 1,
-            learningSteps: 0,
-            review: new Date(),
-          },
-          queueIndex: input.queueIndex,
-          deckPath: input.queueItem.deckPath,
-          cardId: input.queueItem.card.id,
-        };
-      });
+      const slowGradingActor = fromPromise(
+        async ({
+          input,
+        }: {
+          input: { queueItem: QueueItem; queueIndex: number; grade: FSRSGrade; runtime: unknown };
+        }) => {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          return {
+            schedulerLog: {
+              rating: input.grade,
+              previousState: input.queueItem.card.state,
+              previousCard: input.queueItem.card,
+              due: new Date(),
+              stability: 1,
+              difficulty: 5,
+              scheduledDays: 1,
+              learningSteps: 0,
+              review: new Date(),
+            },
+            queueIndex: input.queueIndex,
+            deckPath: input.queueItem.deckPath,
+            cardId: input.queueItem.card.id,
+          };
+        },
+      );
 
       const slowMachine = reviewSessionMachine.provide({
         actors: {

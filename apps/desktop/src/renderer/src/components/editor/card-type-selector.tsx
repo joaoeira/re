@@ -6,11 +6,7 @@ type CardTypeSelectorProps = {
   readonly disabled?: boolean;
 };
 
-export function CardTypeSelector({
-  cardType,
-  onChange,
-  disabled = false,
-}: CardTypeSelectorProps) {
+export function CardTypeSelector({ cardType, onChange, disabled = false }: CardTypeSelectorProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-[11px] uppercase tracking-widest text-muted-foreground">Card Type</span>

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow } from "electron";
+import { BrowserWindow, dialog } from "electron";
 import { Effect } from "effect";
 import type { IpcMainHandle } from "electron-effect-rpc/types";
 
@@ -27,6 +27,8 @@ export type EditorWindowParams =
 export interface EditorWindowManager {
   readonly open: (params: EditorWindowParams) => void;
   readonly close: () => void;
+  readonly closeAndWait: () => Promise<boolean>;
+  readonly destroy: () => void;
   readonly isOpen: () => boolean;
 }
 
@@ -136,6 +138,22 @@ export const createEditorWindowManager = ({
       console.error("[desktop/main] editor renderer process gone", details);
     });
 
+    window.webContents.on("will-prevent-unload", (event) => {
+      const choice = dialog.showMessageBoxSync(window, {
+        type: "warning",
+        buttons: ["Discard Changes", "Cancel"],
+        defaultId: 1,
+        cancelId: 1,
+        noLink: true,
+        message: "You have unsaved changes.",
+        detail: "Discard unsaved changes and close the editor?",
+      });
+
+      if (choice === 0) {
+        event.preventDefault();
+      }
+    });
+
     editorWindow = window;
     void loadEditorWindow(window, params, log).catch((error: unknown) => {
       console.error("[desktop/main] failed to load editor window", error);
@@ -151,7 +169,70 @@ export const createEditorWindowManager = ({
     editorWindow.close();
   };
 
+  const closeAndWait = (): Promise<boolean> => {
+    if (!editorWindow || editorWindow.isDestroyed()) {
+      editorWindow = null;
+      return Promise.resolve(true);
+    }
+
+    const window = editorWindow;
+
+    return new Promise((resolve) => {
+      let resolved = false;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+      const finish = (closed: boolean): void => {
+        if (resolved) {
+          return;
+        }
+        resolved = true;
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        window.removeListener("close", onClose);
+        window.removeListener("closed", onClosed);
+        window.webContents.removeListener("will-prevent-unload", onWillPreventUnload);
+        resolve(closed);
+      };
+
+      const onClose = (event: Electron.Event): void => {
+        if (event.defaultPrevented) {
+          finish(false);
+        }
+      };
+
+      const onWillPreventUnload = (event: Electron.Event): void => {
+        if (!event.defaultPrevented) {
+          finish(false);
+        }
+      };
+
+      const onClosed = (): void => {
+        editorWindow = null;
+        finish(true);
+      };
+
+      window.on("close", onClose);
+      window.on("closed", onClosed);
+      window.webContents.on("will-prevent-unload", onWillPreventUnload);
+      timeoutId = setTimeout(() => {
+        finish(window.isDestroyed());
+      }, 2_000);
+      window.close();
+    });
+  };
+
+  const destroy = (): void => {
+    if (!editorWindow || editorWindow.isDestroyed()) {
+      editorWindow = null;
+      return;
+    }
+
+    editorWindow.destroy();
+    editorWindow = null;
+  };
+
   const isOpen = (): boolean => Boolean(editorWindow && !editorWindow.isDestroyed());
 
-  return { open, close, isOpen };
+  return { open, close, closeAndWait, destroy, isOpen };
 };

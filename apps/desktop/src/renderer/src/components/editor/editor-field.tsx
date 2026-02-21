@@ -87,7 +87,7 @@ export function EditorField({
 
     const editorMarkdown = getMarkdown(editor);
     if (editorMarkdown !== content) {
-      editor.commands.setContent(content);
+      editor.commands.setContent(content, { emitUpdate: false });
     }
   }, [content, editor]);
 

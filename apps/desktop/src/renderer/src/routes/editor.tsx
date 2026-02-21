@@ -29,7 +29,8 @@ const normalizeSearch = (search: Record<string, unknown>): EditorSearchParams =>
 };
 
 export const Route = createFileRoute("/editor")({
-  validateSearch: (search): EditorSearchParams => normalizeSearch(search as Record<string, unknown>),
+  validateSearch: (search): EditorSearchParams =>
+    normalizeSearch(search as Record<string, unknown>),
   component: EditorRoute,
 });
 

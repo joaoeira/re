@@ -99,7 +99,9 @@ export function useEditorSession(search: EditorSearchParams) {
         return;
       }
 
-      const scanned = await Effect.runPromise(ipc.client.ScanDecks({ rootPath: workspaceRootPath }));
+      const scanned = await Effect.runPromise(
+        ipc.client.ScanDecks({ rootPath: workspaceRootPath }),
+      );
       setDecks(scanned.decks);
 
       const selectedDeckPath = editorStore.getSnapshot().context.deckPath;
@@ -146,7 +148,9 @@ export function useEditorSession(search: EditorSearchParams) {
           return;
         }
 
-        const scanned = await Effect.runPromise(ipc.client.ScanDecks({ rootPath: configuredRootPath }));
+        const scanned = await Effect.runPromise(
+          ipc.client.ScanDecks({ rootPath: configuredRootPath }),
+        );
         if (cancelled) {
           return;
         }
@@ -219,7 +223,8 @@ export function useEditorSession(search: EditorSearchParams) {
       const sameRequest =
         params.mode === search.mode &&
         (params.mode === "create"
-          ? (params.deckPath ?? null) === (search.mode === "create" ? (search.deckPath ?? null) : null)
+          ? (params.deckPath ?? null) ===
+            (search.mode === "create" ? (search.deckPath ?? null) : null)
           : search.mode === "edit" &&
             params.deckPath === search.deckPath &&
             params.cardId === search.cardId);
@@ -285,6 +290,8 @@ export function useEditorSession(search: EditorSearchParams) {
     const beforeUnloadHandler = (event: BeforeUnloadEvent) => {
       if (editorStore.getSnapshot().context.dirty) {
         event.preventDefault();
+        // Electron docs recommend explicitly setting returnValue for consistent beforeunload handling.
+        Reflect.set(event, "returnValue", true);
       }
     };
 

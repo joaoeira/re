@@ -72,7 +72,9 @@ export function EditorRoot({ search }: EditorRootProps) {
 
       <footer className="flex min-h-9 items-center justify-between border-t border-border px-4 text-xs text-muted-foreground">
         <span>
-          {context.mode === "edit" ? "Editing existing card" : `Added ${context.addedCount} card(s)`}
+          {context.mode === "edit"
+            ? "Editing existing card"
+            : `Added ${context.addedCount} card(s)`}
         </span>
         <span>{session.rootPath ?? "No workspace root configured"}</span>
       </footer>

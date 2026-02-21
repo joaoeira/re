@@ -38,7 +38,8 @@ type DuplicateIndexCache = {
 const toEditorError = (error: unknown): EditorOperationError =>
   new EditorOperationError({ message: toErrorMessage(error) });
 
-const resolveEditorItemType = (cardType: EditorCardType) => (cardType === "qa" ? QAType : ClozeType);
+const resolveEditorItemType = (cardType: EditorCardType) =>
+  cardType === "qa" ? QAType : ClozeType;
 
 type EditorItemType<TParsed> = {
   readonly parse: (content: string) => Effect.Effect<TParsed, unknown>;
@@ -70,7 +71,9 @@ const duplicateKey = (cardType: EditorCardType, content: string): string =>
 const ensureTrailingNewline = (content: string): string =>
   content.endsWith("\n") ? content : `${content}\n`;
 
-const uniqueClozeIndices = (content: string): Effect.Effect<readonly number[], EditorOperationError> =>
+const uniqueClozeIndices = (
+  content: string,
+): Effect.Effect<readonly number[], EditorOperationError> =>
   ClozeType.parse(content).pipe(
     Effect.map((parsed) => {
       const indices: number[] = [];
@@ -126,7 +129,10 @@ const detectEditorCardType = (item: Item): Effect.Effect<EditorCardType, EditorO
     );
   });
 
-const hasCardIdOverlap = (cardIds: readonly string[], excludedIds: ReadonlySet<string>): boolean => {
+const hasCardIdOverlap = (
+  cardIds: readonly string[],
+  excludedIds: ReadonlySet<string>,
+): boolean => {
   for (const cardId of cardIds) {
     if (excludedIds.has(cardId)) {
       return true;
@@ -325,7 +331,9 @@ export const createEditorHandlers = (
             }
           });
 
-          mergedMetadata = newIndices.map((index) => metadataByIndex.get(index) ?? createMetadata());
+          mergedMetadata = newIndices.map(
+            (index) => metadataByIndex.get(index) ?? createMetadata(),
+          );
         }
 
         const nextContent = ensureTrailingNewline(content);
@@ -377,10 +385,7 @@ export const createEditorHandlers = (
           cardType: itemCardType,
           cardIds: location.item.cards.map((card) => toStringId(card.id)),
         };
-      }).pipe(
-        Effect.provide(ReviewServicesLive),
-        Effect.mapError(toEditorError),
-      ),
+      }).pipe(Effect.provide(ReviewServicesLive), Effect.mapError(toEditorError)),
     CheckDuplicates: ({ content, cardType, rootPath, excludeCardIds }) =>
       Effect.gen(function* () {
         const configuredRootPath = yield* getConfiguredRootPath(
@@ -416,10 +421,7 @@ export const createEditorHandlers = (
           isDuplicate: Boolean(match),
           matchingDeckPath: match ? Option.some(match.deckPath) : Option.none(),
         };
-      }).pipe(
-        Effect.provide(ReviewServicesLive),
-        Effect.mapError(toEditorError),
-      ),
+      }).pipe(Effect.provide(ReviewServicesLive), Effect.mapError(toEditorError)),
     OpenEditorWindow: (params) =>
       Effect.sync(() => {
         const normalizedParams: EditorWindowParams =

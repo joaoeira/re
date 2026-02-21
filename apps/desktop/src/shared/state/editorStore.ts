@@ -81,10 +81,7 @@ export const createEditorStore = () =>
           ? { ...splitQaContent(event.content), clozeContent: "" }
           : { frontContent: "", backContent: "", clozeContent: event.content.trim() }),
       }),
-      setEditIdentity: (
-        context,
-        event: { cardIds: readonly string[]; cardId: string | null },
-      ) => ({
+      setEditIdentity: (context, event: { cardIds: readonly string[]; cardId: string | null }) => ({
         ...context,
         editCardIds: event.cardIds,
         editCardId: event.cardId,
@@ -141,11 +138,9 @@ export const createEditorStore = () =>
       itemSaved: (context) => ({
         ...context,
         addedCount: context.addedCount + 1,
-        frontContent:
-          context.mode === "create" && !context.frontFrozen ? "" : context.frontContent,
+        frontContent: context.mode === "create" && !context.frontFrozen ? "" : context.frontContent,
         backContent: context.mode === "create" && !context.backFrozen ? "" : context.backContent,
-        clozeContent:
-          context.mode === "create" && !context.clozeFrozen ? "" : context.clozeContent,
+        clozeContent: context.mode === "create" && !context.clozeFrozen ? "" : context.clozeContent,
         dirty: false,
         isDuplicate: false,
         duplicateDeckPath: null,

@@ -29,10 +29,7 @@ export const stubWatcher: WorkspaceWatcher = {
 export const noOpPublish = ((..._args: [unknown, unknown]) =>
   Effect.void) as IpcMainHandle<AppContract>["publish"];
 
-export const defaultHandlers = createAppRpcHandlers(
-  stubSettingsRepository,
-  stubWatcher,
-).handlers;
+export const defaultHandlers = createAppRpcHandlers(stubSettingsRepository, stubWatcher).handlers;
 
 export const createHandlers = async (
   settingsFilePath: string,
