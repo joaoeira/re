@@ -44,7 +44,7 @@ const mockGradingActor = fromPromise(
       queueItem: QueueItem;
       queueIndex: number;
       grade: FSRSGrade;
-      runtime: any;
+      runtime: unknown;
     };
   }) => ({
     schedulerLog: {
@@ -60,13 +60,13 @@ const mockGradingActor = fromPromise(
     },
     queueIndex: input.queueIndex,
     deckPath: input.queueItem.deckPath,
-    cardId: input.queueItem.card.id as string,
+    cardId: input.queueItem.card.id,
   }),
 );
 
 // Mock undo actor that returns the queueIndex
 const mockUndoActor = fromPromise(
-  async ({ input }: { input: { reviewLog: ReviewLogEntry; runtime: any } }) =>
+  async ({ input }: { input: { reviewLog: ReviewLogEntry; runtime: unknown } }) =>
     input.reviewLog.queueIndex,
 );
 
@@ -271,14 +271,13 @@ describe("reviewSessionMachine", () => {
   describe("blocking during grading", () => {
     it("does not allow QUIT during grading", async () => {
       // Create a slow grading actor to test blocking
-      const slowGradingActor = fromPromise(async ({ input }: { input: any }) => {
+      const slowGradingActor = fromPromise(async ({ input }: { input: { queueItem: QueueItem; queueIndex: number; grade: FSRSGrade; runtime: unknown } }) => {
         await new Promise((resolve) => setTimeout(resolve, 100));
-        const i = input as { queueItem: QueueItem; queueIndex: number; grade: FSRSGrade };
         return {
           schedulerLog: {
-            rating: i.grade,
-            previousState: i.queueItem.card.state,
-            previousCard: i.queueItem.card,
+            rating: input.grade,
+            previousState: input.queueItem.card.state,
+            previousCard: input.queueItem.card,
             due: new Date(),
             stability: 1,
             difficulty: 5,
@@ -286,9 +285,9 @@ describe("reviewSessionMachine", () => {
             learningSteps: 0,
             review: new Date(),
           },
-          queueIndex: i.queueIndex,
-          deckPath: i.queueItem.deckPath,
-          cardId: i.queueItem.card.id as string,
+          queueIndex: input.queueIndex,
+          deckPath: input.queueItem.deckPath,
+          cardId: input.queueItem.card.id,
         };
       });
 
