@@ -11,6 +11,8 @@ import {
 } from "@main/di";
 import type { AppContract } from "@shared/rpc/contracts";
 
+import { provideHandlerServices } from "./shared";
+
 const APP_NAME = "re Desktop";
 
 type WorkspaceHandlerKeys =
@@ -61,5 +63,5 @@ export const createWorkspaceHandlers = () =>
         ),
     };
 
-    return handlers;
+    return provideHandlerServices(handlers);
   });

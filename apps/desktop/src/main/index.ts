@@ -28,7 +28,7 @@ import {
 import { NodeServicesLive } from "@main/effect/node-services";
 import { createDeckWriteCoordinator, type DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import { AppRpcHandlersServiceFromEffectLive } from "@main/rpc/handlers";
-import { ReviewServicesLive } from "@main/rpc/handlers/shared";
+import { HandlerServicesLive } from "@main/rpc/handlers/shared";
 import { makeSettingsRepository } from "@main/settings/repository";
 import { createWorkspaceWatcher, type WorkspaceWatcher } from "@main/watcher/workspace-watcher";
 import {
@@ -154,7 +154,7 @@ const replayTask = createSingleFlightTask(async () => {
   try {
     await Effect.runPromise(
       replayPendingCompensationIntents(analyticsRepository, deckWriteCoordinator).pipe(
-        Effect.provide(ReviewServicesLive),
+        Effect.provide(HandlerServicesLive),
       ),
     );
   } catch (error) {

@@ -20,7 +20,7 @@ const ReviewQueueBuilderServicesLive = ReviewQueueBuilderLive.pipe(
   ),
 );
 
-export const ReviewServicesLive = Layer.mergeAll(
+export const HandlerServicesLive = Layer.mergeAll(
   SchedulerLive,
   DeckManagerServicesLive,
   ReviewQueueBuilderServicesLive,
@@ -100,3 +100,38 @@ export const canonicalizeWorkspacePath = (
     const fileSystem = yield* FileSystem.FileSystem;
     return yield* fileSystem.realPath(rootPath);
   });
+
+type Handler = (input: never) => Effect.Effect<unknown, unknown, unknown>;
+
+type ProvidedHandler<THandler extends Handler> = (
+  input: THandler extends (input: infer TInput) => Effect.Effect<unknown, unknown, unknown>
+    ? TInput
+    : never,
+) => Effect.Effect<
+  THandler extends (input: never) => Effect.Effect<infer TSuccess, unknown, unknown>
+    ? TSuccess
+    : never,
+  THandler extends (input: never) => Effect.Effect<unknown, infer TError, unknown>
+    ? TError
+    : never,
+  Exclude<
+    THandler extends (input: never) => Effect.Effect<unknown, unknown, infer TRuntime>
+      ? TRuntime
+      : never,
+    Layer.Layer.Success<typeof HandlerServicesLive>
+  >
+>;
+
+type ProvidedHandlers<THandlers extends Record<string, Handler>> = {
+  [K in keyof THandlers]: ProvidedHandler<THandlers[K]>;
+};
+
+export const provideHandlerServices = <THandlers extends Record<string, Handler>>(
+  handlers: THandlers,
+): ProvidedHandlers<THandlers> =>
+  Object.fromEntries(
+    Object.entries(handlers).map(([key, handler]) => [
+      key,
+      (input: never) => handler(input).pipe(Effect.provide(HandlerServicesLive)),
+    ]),
+  ) as ProvidedHandlers<THandlers>;

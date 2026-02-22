@@ -30,6 +30,7 @@ import {
 import {
   assertWithinRoot,
   canonicalizeWorkspacePath,
+  provideHandlerServices,
   validateDeckAccess,
   validateRequestedRootPath,
 } from "./shared";
@@ -63,7 +64,7 @@ export const createReviewHandlers = () =>
     const analyticsRepository = yield* AnalyticsRepositoryService;
     const deckWriteCoordinator = yield* DeckWriteCoordinatorService;
 
-    return {
+    return provideHandlerServices({
   BuildReviewQueue: ({ deckPaths, rootPath }) =>
     Effect.gen(function* () {
       const configuredRootPath = yield* validateRequestedRootPath(
@@ -487,5 +488,5 @@ export const createReviewHandlers = () =>
     }).pipe(
       Effect.mapError((e) => new ReviewOperationError({ message: toErrorMessage(e) })),
     ),
-    } satisfies Pick<Implementations<AppContract, ReviewHandlerRuntime>, ReviewHandlerKeys>;
+    } satisfies Pick<Implementations<AppContract, ReviewHandlerRuntime>, ReviewHandlerKeys>);
   });

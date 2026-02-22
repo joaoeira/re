@@ -21,7 +21,7 @@ import type { AppContract } from "@shared/rpc/contracts";
 import { CardEdited } from "@shared/rpc/contracts";
 import { EditorOperationError } from "@shared/rpc/schemas/editor";
 
-import { validateDeckAccess, validateRequestedRootPath } from "./shared";
+import { provideHandlerServices, validateDeckAccess, validateRequestedRootPath } from "./shared";
 
 type EditorCardType = "qa" | "cloze";
 
@@ -441,5 +441,5 @@ export const createEditorHandlers = () =>
       }),
   };
 
-    return handlers;
+    return provideHandlerServices(handlers);
   });
