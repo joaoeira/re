@@ -11,6 +11,94 @@ Search here for real implementations when docs aren't enough.
 
 <!-- effect-solutions:end -->
 
+## Effect service definitions
+
+Always define service interfaces explicitly. Never let a service's public API be inferred from its implementation.
+
+### The anti-pattern
+
+```ts
+// DON'T — inferred service shape from implementation
+class Counter extends Effect.Service<Counter>()("app/Counter", {
+  effect: Effect.gen(function* () {
+    const state = new Map<string, number>()
+
+    const increment = Effect.fn("Counter.increment")(function* (key: string, amount = 1) {
+      const current = state.get(key) ?? 0
+      const next = current + amount
+      state.set(key, next)
+      return next
+    })
+
+    const reset = Effect.fn("Counter.reset")(function* (key: string) {
+      state.delete(key)
+    })
+
+    return { increment, reset }
+  }),
+}) {}
+```
+
+This fails in three ways:
+
+1. **Scannability**: to understand the service contract you must mentally execute the factory, skip past private state, and find the `return` object. In large services this makes the API invisible at a glance.
+2. **Top-down design**: you cannot consume the service before its implementation exists. The orchestrator has to wait for the implementation to be authored before the inferred types become available.
+3. **Type safety**: inferred types propagate implementation accidents globally. In the example above, `amount` has no explicit type annotation, and depending on the callback context TypeScript may infer `any` instead of `number`. With no explicit contract to check against, this `any` silently spreads to every consumer.
+
+### What to do instead
+
+Declare the interface as an explicit type parameter, separate from the implementation:
+
+```ts
+// DO — explicit interface, Context.GenericTag (current codebase pattern)
+export interface Counter {
+  readonly increment: (key: string, amount?: number) => Effect.Effect<number>
+  readonly reset: (key: string) => Effect.Effect<void>
+}
+
+export const Counter = Context.GenericTag<Counter>("app/Counter")
+
+export const CounterLive = Layer.effect(
+  Counter,
+  Effect.gen(function* () {
+    const state = new Map<string, number>()
+    return {
+      increment: (key, amount = 1) => Effect.sync(() => {
+        const current = state.get(key) ?? 0
+        const next = current + amount
+        state.set(key, next)
+        return next
+      }),
+      reset: (key) => Effect.sync(() => { state.delete(key) }),
+    }
+  }),
+)
+```
+
+```ts
+// DO — explicit interface, Effect.Service (class-based API)
+class Counter extends Effect.Service<Counter>()("app/Counter", {
+  effect: Effect.gen(function* () {
+    const state = new Map<string, number>()
+    return {
+      increment: (key: string, amount?: number) => Effect.sync(() => {
+        const current = state.get(key) ?? 0
+        const next = current + (amount ?? 1)
+        state.set(key, next)
+        return next
+      }),
+      reset: (key: string) => Effect.sync(() => { state.delete(key) }),
+    }
+  }),
+}) {
+  // Explicit interface as the type parameter to Effect.Service<Counter>
+  readonly increment!: (key: string, amount?: number) => Effect.Effect<number>
+  readonly reset!: (key: string) => Effect.Effect<void>
+}
+```
+
+The explicit interface acts as a rigid failsafe: if the implementation diverges from the contract, the compiler rejects it locally rather than silently degrading type safety across every consumer.
+
 ## Effect error handling
 
 Do not write utility functions that inspect `_tag` strings or use `instanceof` cascades to classify Effect errors. This is a recurring mistake that looks reasonable but works against the library.
