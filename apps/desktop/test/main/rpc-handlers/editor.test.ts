@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import { parseFile } from "@re/core";
 import type { AppContract } from "@shared/rpc/contracts";
 
-import { createHandlers } from "./helpers";
+import { createHandlersWithOverrides } from "./helpers";
 
 describe("editor handlers", () => {
   it("appends a new QA item", async () => {
@@ -27,7 +27,7 @@ describe("editor handlers", () => {
           publishEvents.push({ name: event.name, payload });
         })) as IpcMainHandle<AppContract>["publish"];
 
-      const handlers = await createHandlers(settingsFilePath, undefined, publish);
+      const handlers = await createHandlersWithOverrides(settingsFilePath, { publish });
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const result = await Effect.runPromise(
@@ -67,7 +67,7 @@ Answer
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const item = await Effect.runPromise(
@@ -104,7 +104,7 @@ The {{c1::first}} {{c2::second}} {{c3::third}}.
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const result = await Effect.runPromise(
@@ -149,7 +149,7 @@ Answer
           publishEvents.push({ name: event.name, payload });
         })) as IpcMainHandle<AppContract>["publish"];
 
-      const handlers = await createHandlers(settingsFilePath, undefined, publish);
+      const handlers = await createHandlersWithOverrides(settingsFilePath, { publish });
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       await Effect.runPromise(
@@ -188,7 +188,7 @@ Original answer
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const result = await Effect.runPromise(
@@ -226,7 +226,7 @@ Original answer
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const result = await Effect.runPromise(
@@ -264,7 +264,7 @@ The {{c1::capital}} of {{c2::France}}.
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const result = await Effect.runPromise(
@@ -302,7 +302,7 @@ The {{c1::first}} and {{c3::third}}.
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const result = await Effect.runPromise(
@@ -346,7 +346,7 @@ A2
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       await Effect.runPromise(
@@ -387,7 +387,7 @@ Answer
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const duplicate = await Effect.runPromise(
@@ -459,7 +459,7 @@ Answer
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const exit = await Effect.runPromiseExit(
@@ -498,7 +498,7 @@ Answer
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const exit = await Effect.runPromiseExit(
@@ -531,7 +531,7 @@ Answer
     const settingsFilePath = path.join(settingsRoot, "settings.json");
 
     try {
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const exit = await Effect.runPromiseExit(
@@ -565,12 +565,9 @@ Answer
 
     try {
       const openEditorWindow = vi.fn();
-      const handlers = await createHandlers(
-        settingsFilePath,
-        undefined,
-        undefined,
+      const handlers = await createHandlersWithOverrides(settingsFilePath, {
         openEditorWindow,
-      );
+      });
 
       await Effect.runPromise(
         handlers.OpenEditorWindow({

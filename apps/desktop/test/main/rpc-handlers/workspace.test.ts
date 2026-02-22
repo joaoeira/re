@@ -9,7 +9,7 @@ import type { WorkspaceWatcher } from "@main/watcher/workspace-watcher";
 import { WorkspaceRootNotFound as SnapshotWorkspaceRootNotFound } from "@re/workspace";
 import { WorkspaceRootNotFound as SettingsWorkspaceRootNotFound } from "@shared/settings";
 
-import { createHandlers, defaultHandlers } from "./helpers";
+import { createHandlersWithOverrides, defaultHandlers } from "./helpers";
 
 describe("workspace handlers", () => {
   it("returns bootstrap payload", async () => {
@@ -189,7 +189,7 @@ Answer
     const settingsFilePath = path.join(rootPath, "settings.json");
 
     try {
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       const result = await Effect.runPromise(handlers.GetSettings({}));
 
       expect(result).toEqual({
@@ -209,7 +209,7 @@ Answer
     try {
       await fs.mkdir(workspacePath, { recursive: true });
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       const result = await Effect.runPromise(
         handlers.SetWorkspaceRootPath({ rootPath: workspacePath }),
       );
@@ -226,7 +226,7 @@ Answer
     const nonexistentPath = path.join(rootPath, "missing");
 
     try {
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       const exit = await Effect.runPromiseExit(
         handlers.SetWorkspaceRootPath({ rootPath: nonexistentPath }),
       );
@@ -258,7 +258,9 @@ Answer
         start: vi.fn(),
         stop: vi.fn(),
       };
-      const handlers = await createHandlers(settingsFilePath, spyWatcher);
+      const handlers = await createHandlersWithOverrides(settingsFilePath, {
+        watcher: spyWatcher,
+      });
 
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath: workspacePath }));
 

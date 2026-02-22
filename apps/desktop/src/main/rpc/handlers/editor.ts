@@ -3,25 +3,25 @@ import path from "node:path";
 import { createMetadata, type Item, type ItemMetadata } from "@re/core";
 import { ClozeType, QAType } from "@re/types";
 import { DeckManager, scanDecks } from "@re/workspace";
+import type { FileSystem, Path } from "@effect/platform";
 import { Effect, Either, Option } from "effect";
 import type { Implementations } from "electron-effect-rpc/types";
 
 import type { EditorWindowParams } from "@main/editor-window";
-import { NodeServicesLive } from "@main/effect/node-services";
 import { findCardLocationById } from "@main/card-location";
-import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
-import type { SettingsRepository } from "@main/settings/repository";
+import {
+  AppEventPublisherService,
+  DeckWriteCoordinatorService,
+  DuplicateIndexInvalidationService,
+  EditorWindowManagerService,
+  SettingsRepositoryService,
+} from "@main/di";
 import { toErrorMessage } from "@main/utils/format";
 import type { AppContract } from "@shared/rpc/contracts";
 import { CardEdited } from "@shared/rpc/contracts";
 import { EditorOperationError } from "@shared/rpc/schemas/editor";
 
-import {
-  ReviewServicesLive,
-  validateDeckAccess,
-  validateRequestedRootPath,
-} from "./shared";
-import type { AppEventPublisher, OpenEditorWindow } from "../handlers";
+import { validateDeckAccess, validateRequestedRootPath } from "./shared";
 
 type EditorCardType = "qa" | "cloze";
 
@@ -148,17 +148,22 @@ type EditorHandlerKeys =
   | "CheckDuplicates"
   | "OpenEditorWindow";
 
+type EditorHandlerRuntime = DeckManager | FileSystem.FileSystem | Path.Path;
+
 export type EditorHandlersResult = {
-  readonly handlers: Pick<Implementations<AppContract>, EditorHandlerKeys>;
-  readonly markDuplicateIndexDirty: () => void;
+  readonly handlers: Pick<Implementations<AppContract, EditorHandlerRuntime>, EditorHandlerKeys>;
 };
 
-export const createEditorHandlers = (
-  settingsRepository: SettingsRepository,
-  publish: AppEventPublisher,
-  openEditorWindow: OpenEditorWindow,
-  deckWriteCoordinator: DeckWriteCoordinator,
-): EditorHandlersResult => {
+export const createEditorHandlers = () =>
+  Effect.gen(function* () {
+    const settingsRepository = yield* SettingsRepositoryService;
+    const appEventPublisher = yield* AppEventPublisherService;
+    const editorWindowManager = yield* EditorWindowManagerService;
+    const deckWriteCoordinator = yield* DeckWriteCoordinatorService;
+    const duplicateIndexInvalidation = yield* DuplicateIndexInvalidationService;
+    const publish = appEventPublisher.publish;
+    const openEditorWindow = editorWindowManager.openEditorWindow;
+
   let duplicateIndexCache: DuplicateIndexCache | null = null;
   let duplicateIndexGeneration = 0;
 
@@ -171,6 +176,8 @@ export const createEditorHandlers = (
     invalidateDuplicateIndex();
   };
 
+  duplicateIndexInvalidation.registerListener(markDuplicateIndexDirty);
+
   const rebuildDuplicateIndex = (rootPath: string) =>
     Effect.gen(function* () {
       type IndexRecord = {
@@ -179,10 +186,7 @@ export const createEditorHandlers = (
       };
 
       const deckManager = yield* DeckManager;
-      const scanned = yield* scanDecks(rootPath).pipe(
-        Effect.provide(NodeServicesLive),
-        Effect.mapError(toEditorError),
-      );
+      const scanned = yield* scanDecks(rootPath).pipe(Effect.mapError(toEditorError));
       const byKey = new Map<string, DuplicateIndexEntry[]>();
 
       const recordsByDeck = yield* Effect.forEach(
@@ -253,7 +257,7 @@ export const createEditorHandlers = (
       }
     });
 
-  const handlers: Pick<Implementations<AppContract>, EditorHandlerKeys> = {
+  const handlers: Pick<Implementations<AppContract, EditorHandlerRuntime>, EditorHandlerKeys> = {
     AppendItem: ({ deckPath, content, cardType }) =>
       Effect.gen(function* () {
         yield* validateDeckAccess(settingsRepository, {
@@ -282,10 +286,7 @@ export const createEditorHandlers = (
         return {
           cardIds: cards.map((card) => card.id),
         };
-      }).pipe(
-        Effect.provide(ReviewServicesLive),
-        Effect.mapError(toEditorError),
-      ),
+      }).pipe(Effect.mapError(toEditorError)),
     ReplaceItem: ({ deckPath, cardId, content, cardType }) =>
       Effect.gen(function* () {
         yield* validateDeckAccess(settingsRepository, {
@@ -362,10 +363,7 @@ export const createEditorHandlers = (
         yield* publish(CardEdited, { deckPath, cardId });
 
         return { cardIds: mergedMetadata.map((card) => card.id) };
-      }).pipe(
-        Effect.provide(ReviewServicesLive),
-        Effect.mapError(toEditorError),
-      ),
+      }).pipe(Effect.mapError(toEditorError)),
     GetItemForEdit: ({ deckPath, cardId }) =>
       Effect.gen(function* () {
         yield* validateDeckAccess(settingsRepository, {
@@ -398,7 +396,7 @@ export const createEditorHandlers = (
           cardType: itemCardType,
           cardIds: location.item.cards.map((card) => card.id),
         };
-      }).pipe(Effect.provide(ReviewServicesLive), Effect.mapError(toEditorError)),
+      }).pipe(Effect.mapError(toEditorError)),
     CheckDuplicates: ({ content, cardType, rootPath, excludeCardIds }) =>
       Effect.gen(function* () {
         const configuredRootPath = yield* validateRequestedRootPath(
@@ -433,7 +431,7 @@ export const createEditorHandlers = (
           isDuplicate: Boolean(match),
           matchingDeckPath: match ? Option.some(match.deckPath) : Option.none(),
         };
-      }).pipe(Effect.provide(ReviewServicesLive), Effect.mapError(toEditorError)),
+      }).pipe(Effect.mapError(toEditorError)),
     OpenEditorWindow: (params) =>
       Effect.sync(() => {
         const normalizedParams: EditorWindowParams =
@@ -447,5 +445,5 @@ export const createEditorHandlers = (
       }),
   };
 
-  return { handlers, markDuplicateIndexDirty };
-};
+    return { handlers } satisfies EditorHandlersResult;
+  });

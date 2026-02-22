@@ -4,14 +4,17 @@ import { randomUUID } from "node:crypto";
 import { inferType } from "@re/core";
 import { ClozeType, QAType } from "@re/types";
 import { DeckManager, ReviewQueueBuilder, Scheduler, computeDueDate } from "@re/workspace";
+import type { FileSystem, Path } from "@effect/platform";
 import { Effect, Exit } from "effect";
 import type { Implementations } from "electron-effect-rpc/types";
 
-import type { ReviewAnalyticsRepository } from "@main/analytics";
 import { toMetadataFingerprint } from "@main/analytics/fingerprint";
 import { findCardLocationById } from "@main/card-location";
-import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
-import type { SettingsRepository } from "@main/settings/repository";
+import {
+  AnalyticsRepositoryService,
+  DeckWriteCoordinatorService,
+  SettingsRepositoryService,
+} from "@main/di";
 import { toErrorMessage } from "@main/utils/format";
 import type { AppContract } from "@shared/rpc/contracts";
 import {
@@ -25,7 +28,6 @@ import {
 } from "@shared/rpc/schemas/review";
 
 import {
-  ReviewServicesLive,
   assertWithinRoot,
   canonicalizeWorkspacePath,
   validateDeckAccess,
@@ -42,17 +44,26 @@ type ReviewHandlerKeys =
   | "GetReviewStats"
   | "ListReviewHistory";
 
+type ReviewHandlerRuntime =
+  | DeckManager
+  | ReviewQueueBuilder
+  | Scheduler
+  | FileSystem.FileSystem
+  | Path.Path;
+
 const toReviewOperationError = (error: unknown): ReviewOperationError =>
   new ReviewOperationError({ message: toErrorMessage(error) });
 
 const failWithReviewOperationError = (error: unknown) =>
   Effect.fail(new ReviewOperationError({ message: toErrorMessage(error) }));
 
-export const createReviewHandlers = (
-  settingsRepository: SettingsRepository,
-  analyticsRepository: ReviewAnalyticsRepository,
-  deckWriteCoordinator: DeckWriteCoordinator,
-): Pick<Implementations<AppContract>, ReviewHandlerKeys> => ({
+export const createReviewHandlers = () =>
+  Effect.gen(function* () {
+    const settingsRepository = yield* SettingsRepositoryService;
+    const analyticsRepository = yield* AnalyticsRepositoryService;
+    const deckWriteCoordinator = yield* DeckWriteCoordinatorService;
+
+    return {
   BuildReviewQueue: ({ deckPaths, rootPath }) =>
     Effect.gen(function* () {
       const configuredRootPath = yield* validateRequestedRootPath(
@@ -99,7 +110,6 @@ export const createReviewHandlers = (
         totalDue: queue.totalDue,
       };
     }).pipe(
-      Effect.provide(ReviewServicesLive),
       Effect.mapError((e) => new ReviewOperationError({ message: toErrorMessage(e) })),
     ),
   GetCardContent: ({ deckPath, cardId, cardIndex }) =>
@@ -167,7 +177,7 @@ export const createReviewHandlers = (
         reveal: cardSpec.reveal,
         cardType: cardSpec.cardType as "qa" | "cloze",
       };
-    }).pipe(Effect.provide(ReviewServicesLive)),
+    }),
   ScheduleReview: ({ deckPath, cardId, grade }) =>
     Effect.gen(function* () {
       const configuredRootPath = yield* validateDeckAccess(settingsRepository, {
@@ -273,7 +283,6 @@ export const createReviewHandlers = (
         previousCard: scheduleResult.previousCard,
       };
     }).pipe(
-      Effect.provide(ReviewServicesLive),
       Effect.mapError((e) => new ReviewOperationError({ message: toErrorMessage(e) })),
     ),
   UndoReview: ({
@@ -404,7 +413,7 @@ export const createReviewHandlers = (
       }
 
       return {};
-    }).pipe(Effect.provide(ReviewServicesLive)),
+    }),
   GetReviewStats: ({ rootPath, includeUndone }) =>
     Effect.gen(function* () {
       const configuredRootPath = yield* validateRequestedRootPath(
@@ -436,7 +445,6 @@ export const createReviewHandlers = (
         includeUndone: includeUndone ?? false,
       });
     }).pipe(
-      Effect.provide(ReviewServicesLive),
       Effect.mapError((e) => new ReviewOperationError({ message: toErrorMessage(e) })),
     ),
   ListReviewHistory: ({ rootPath, includeUndone, limit, offset }) =>
@@ -477,7 +485,7 @@ export const createReviewHandlers = (
 
       return { entries };
     }).pipe(
-      Effect.provide(ReviewServicesLive),
       Effect.mapError((e) => new ReviewOperationError({ message: toErrorMessage(e) })),
     ),
-});
+    } satisfies Pick<Implementations<AppContract, ReviewHandlerRuntime>, ReviewHandlerKeys>;
+  });

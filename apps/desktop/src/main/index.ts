@@ -2,8 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { app, BrowserWindow, Menu, type MenuItemConstructorOptions, ipcMain } from "electron";
-import { Effect, Runtime } from "effect";
-import type { IpcMainHandle } from "electron-effect-rpc/types";
+import { Effect, Layer, Runtime } from "effect";
 
 import {
   createNoopReviewAnalyticsRepository,
@@ -12,9 +11,23 @@ import {
   type ReviewAnalyticsRepository,
 } from "@main/analytics";
 import { createEditorWindowManager, type EditorWindowManager } from "@main/editor-window";
+import {
+  AppRpcHandlersService,
+  AppEventPublisherService,
+  AnalyticsRepositoryServiceLive,
+  DeckWriteCoordinatorServiceLive,
+  DuplicateIndexInvalidationService,
+  EditorWindowManagerService,
+  SettingsRepositoryServiceLive,
+  WorkspaceWatcherControlService,
+  makeAppEventPublisherBridgeService,
+  makeDuplicateIndexInvalidationBridgeService,
+  makeEditorWindowManagerBridgeService,
+  makeWorkspaceWatcherControlBridgeService,
+} from "@main/di";
 import { NodeServicesLive } from "@main/effect/node-services";
 import { createDeckWriteCoordinator, type DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
-import { createAppRpcHandlers } from "@main/rpc/handlers";
+import { AppRpcHandlersServiceFromEffectLive } from "@main/rpc/handlers";
 import { ReviewServicesLive } from "@main/rpc/handlers/shared";
 import { makeSettingsRepository } from "@main/settings/repository";
 import { createWorkspaceWatcher, type WorkspaceWatcher } from "@main/watcher/workspace-watcher";
@@ -23,7 +36,6 @@ import {
   createUnifiedQuitPipeline,
   initializeAnalyticsRuntime,
 } from "@main/lifecycle";
-import type { AppContract } from "@shared/rpc/contracts";
 import { WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
 import { appIpc } from "@shared/rpc/ipc";
 
@@ -218,29 +230,38 @@ app.whenReady().then(async () => {
     console.error("[desktop/main] analytics startup probe failed, falling back to no-op");
   }
 
-  const watcherProxy: WorkspaceWatcher = {
-    start: (rootPath) => watcher?.start(rootPath),
-    stop: () => watcher?.stop(),
-  };
+  const appEventPublisher = makeAppEventPublisherBridgeService();
+  const workspaceWatcherControl = makeWorkspaceWatcherControlBridgeService();
+  const editorWindowManagerService = makeEditorWindowManagerBridgeService();
+  const duplicateIndexInvalidation = makeDuplicateIndexInvalidationBridgeService();
 
-  const publishProxy: IpcMainHandle<AppContract>["publish"] = (event, payload) =>
-    ipcHandle!.publish(event, payload);
+  const mainServicesLive = Layer.mergeAll(
+    SettingsRepositoryServiceLive(settingsRepository),
+    AnalyticsRepositoryServiceLive(analyticsRepository),
+    DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
+    Layer.succeed(AppEventPublisherService, appEventPublisher),
+    Layer.succeed(WorkspaceWatcherControlService, workspaceWatcherControl),
+    Layer.succeed(EditorWindowManagerService, editorWindowManagerService),
+    Layer.succeed(DuplicateIndexInvalidationService, duplicateIndexInvalidation),
+  );
+
+  const rpc = Effect.runSync(
+    Effect.gen(function* () {
+      return yield* AppRpcHandlersService;
+    }).pipe(
+      Effect.provide(
+        Layer.provide(AppRpcHandlersServiceFromEffectLive, mainServicesLive),
+      ),
+    ),
+  );
 
   editorWindowManager = createEditorWindowManager({
     preloadPath: path.join(__dirname, "preload.js"),
-    publish: publishProxy,
+    publish: appEventPublisher.publish,
     log,
   });
+  editorWindowManagerService.bindOpenEditorWindow((params) => editorWindowManager?.open(params));
   setupApplicationMenu(() => editorWindowManager?.open({ mode: "create" }));
-
-  const rpc = createAppRpcHandlers(
-    settingsRepository,
-    watcherProxy,
-    publishProxy,
-    (params) => editorWindowManager?.open(params),
-    analyticsRepository,
-    deckWriteCoordinator,
-  );
 
   const runtime = Runtime.defaultRuntime;
 
@@ -250,15 +271,17 @@ app.whenReady().then(async () => {
     runtime,
     getWindows: () => BrowserWindow.getAllWindows(),
   });
+  appEventPublisher.bind(ipcHandle.publish);
 
   watcher = createWorkspaceWatcher({
     publish: (snapshot) =>
       Effect.gen(function* () {
-        rpc.markDuplicateIndexDirty();
-        yield* publishProxy(WorkspaceSnapshotChanged, snapshot);
+        duplicateIndexInvalidation.markDuplicateIndexDirty();
+        yield* appEventPublisher.publish(WorkspaceSnapshotChanged, snapshot);
       }),
     runtime,
   });
+  workspaceWatcherControl.bind(watcher);
 
   await replayPendingCompensations();
   if (!ipcHandle) {

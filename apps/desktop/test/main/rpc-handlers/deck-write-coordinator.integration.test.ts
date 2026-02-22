@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 
-import { createHandlers } from "./helpers";
+import { createHandlersWithOverrides } from "./helpers";
 
 describe("shared deck write coordinator wiring", () => {
   it("uses the same coordinator for editor and review mutators", async () => {
@@ -35,14 +35,9 @@ Answer
         "utf8",
       );
 
-      const handlers = await createHandlers(
-        settingsFilePath,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        coordinator,
-      );
+      const handlers = await createHandlersWithOverrides(settingsFilePath, {
+        deckWriteCoordinator: coordinator,
+      });
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       await Effect.runPromise(

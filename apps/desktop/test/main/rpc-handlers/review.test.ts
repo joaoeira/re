@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { createNoopReviewAnalyticsRepository, type ReviewAnalyticsRepository } from "@main/analytics";
 import { parseFile } from "@re/core";
 
-import { createHandlers } from "./helpers";
+import { createHandlersWithOverrides } from "./helpers";
 
 describe("review handlers", () => {
   it("builds a review queue and returns QA card content", async () => {
@@ -28,7 +28,7 @@ Paris
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const queue = await Effect.runPromise(
@@ -79,7 +79,7 @@ Answer
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const scheduled = await Effect.runPromise(
@@ -142,7 +142,7 @@ Answer
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const exit = await Effect.runPromiseExit(
@@ -178,7 +178,7 @@ Answer
     try {
       await fs.writeFile(deckPath, "<!--@ bad 0 0 9 0-->", "utf8");
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const exit = await Effect.runPromiseExit(
@@ -214,7 +214,7 @@ Answer
     try {
       await fs.mkdir(deckPath);
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const exit = await Effect.runPromiseExit(
@@ -256,7 +256,7 @@ The capital of France is {{c1::Paris}}.
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const exit = await Effect.runPromiseExit(
@@ -292,7 +292,7 @@ The capital of France is {{c1::Paris}}.
     try {
       await fs.writeFile(outsideDeckPath, "# outside", "utf8");
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const exit = await Effect.runPromiseExit(
@@ -336,7 +336,7 @@ Answer
         "utf8",
       );
 
-      const handlers = await createHandlers(settingsFilePath);
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const firstSchedule = await Effect.runPromise(
@@ -406,13 +406,9 @@ Answer
         persistIntent: () => Effect.fail(new Error("journal unavailable")),
       };
 
-      const handlers = await createHandlers(
-        settingsFilePath,
-        undefined,
-        undefined,
-        undefined,
-        failingAnalytics,
-      );
+      const handlers = await createHandlersWithOverrides(settingsFilePath, {
+        analyticsRepository: failingAnalytics,
+      });
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const scheduled = await Effect.runPromise(
