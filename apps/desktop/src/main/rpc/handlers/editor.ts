@@ -150,10 +150,6 @@ type EditorHandlerKeys =
 
 type EditorHandlerRuntime = DeckManager | FileSystem.FileSystem | Path.Path;
 
-export type EditorHandlersResult = {
-  readonly handlers: Pick<Implementations<AppContract, EditorHandlerRuntime>, EditorHandlerKeys>;
-};
-
 export const createEditorHandlers = () =>
   Effect.gen(function* () {
     const settingsRepository = yield* SettingsRepositoryService;
@@ -445,5 +441,5 @@ export const createEditorHandlers = () =>
       }),
   };
 
-    return { handlers } satisfies EditorHandlersResult;
+    return handlers;
   });

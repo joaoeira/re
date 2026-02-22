@@ -53,7 +53,7 @@ const provideReviewServices = <THandlers extends Record<string, Handler>>(
 export const makeAppRpcHandlersEffect = Effect.gen(function* () {
   const workspaceHandlers = yield* createWorkspaceHandlers();
   const reviewHandlers = yield* createReviewHandlers();
-  const editorHandlers = (yield* createEditorHandlers()).handlers;
+  const editorHandlers = yield* createEditorHandlers();
 
   // Migration invariant: exported RPC handlers stay at R = never.
   const handlers: Implementations<AppContract, never> = {
