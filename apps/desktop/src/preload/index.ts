@@ -1,3 +1,6 @@
-import { appIpc } from "@shared/rpc/ipc";
+import { exposeIpcBridge } from "electron-effect-rpc/preload";
 
-(await appIpc.preload({ global: "desktopApi" })).expose();
+exposeIpcBridge({
+  global: "desktopApi",
+  channelPrefix: { rpc: "rpc/", event: "event/" },
+});
