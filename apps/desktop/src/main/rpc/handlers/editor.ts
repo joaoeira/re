@@ -18,7 +18,7 @@ import {
 } from "@main/di";
 import { toErrorMessage } from "@main/utils/format";
 import type { AppContract } from "@shared/rpc/contracts";
-import { CardEdited } from "@shared/rpc/contracts";
+import { CardEdited, CardsDeleted } from "@shared/rpc/contracts";
 import { EditorOperationError } from "@shared/rpc/schemas/editor";
 
 import { provideHandlerServices, validateDeckAccess, validateRequestedRootPath } from "./shared";
@@ -146,6 +146,7 @@ type EditorHandlerKeys =
   | "ReplaceItem"
   | "GetItemForEdit"
   | "CheckDuplicates"
+  | "DeleteItems"
   | "OpenEditorWindow";
 
 type EditorHandlerRuntime = DeckManager | FileSystem.FileSystem | Path.Path;
@@ -424,6 +425,48 @@ export const createEditorHandlers = () =>
             isDuplicate: Boolean(match),
             matchingDeckPath: match ? Option.some(match.deckPath) : Option.none(),
           };
+        }).pipe(Effect.mapError(toEditorError)),
+      DeleteItems: ({ items }) =>
+        Effect.gen(function* () {
+          const deckManager = yield* DeckManager;
+
+          const byDeck = new Map<string, string[]>();
+          for (const item of items) {
+            const existing = byDeck.get(item.deckPath);
+            if (existing) {
+              existing.push(item.cardId);
+            } else {
+              byDeck.set(item.deckPath, [item.cardId]);
+            }
+          }
+
+          for (const [deckPath, cardIds] of byDeck) {
+            yield* validateDeckAccess(settingsRepository, {
+              deckPath,
+              mapSettingsError: toEditorError,
+              makeMissingRootError: () =>
+                new EditorOperationError({ message: "Workspace root path is not configured." }),
+              makeOutsideRootError: (invalidDeckPath) =>
+                new EditorOperationError({
+                  message: `Deck path is outside workspace root: ${invalidDeckPath}`,
+                }),
+            });
+
+            yield* deckWriteCoordinator.withDeckLock(
+              deckPath,
+              Effect.forEach(cardIds, (cardId) => deckManager.removeItem(deckPath, cardId), {
+                concurrency: 1,
+              }),
+            );
+          }
+
+          markDuplicateIndexDirty();
+
+          yield* publish(CardsDeleted, {
+            items: items.map((i) => ({ deckPath: i.deckPath, cardId: i.cardId })),
+          });
+
+          return {};
         }).pipe(Effect.mapError(toEditorError)),
       OpenEditorWindow: (params) =>
         Effect.sync(() => {

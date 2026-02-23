@@ -279,6 +279,20 @@ export const CheckDuplicates = rpc(
   EditorOperationError,
 );
 
+const DeleteItemSchema = Schema.Struct({
+  deckPath: Schema.String,
+  cardId: Schema.String,
+});
+
+export const DeleteItems = rpc(
+  "DeleteItems",
+  Schema.Struct({
+    items: Schema.NonEmptyArray(DeleteItemSchema),
+  }),
+  Schema.Struct({}),
+  EditorOperationError,
+);
+
 export const OpenEditorWindow = rpc(
   "OpenEditorWindow",
   EditorWindowParamsSchema,
@@ -295,6 +309,13 @@ export const CardEdited = event(
   Schema.Struct({
     deckPath: Schema.String,
     cardId: Schema.String,
+  }),
+);
+
+export const CardsDeleted = event(
+  "CardsDeleted",
+  Schema.Struct({
+    items: Schema.Array(DeleteItemSchema),
   }),
 );
 
@@ -321,9 +342,10 @@ export const appContract = defineContract({
     ReplaceItem,
     GetItemForEdit,
     CheckDuplicates,
+    DeleteItems,
     OpenEditorWindow,
   ] as const,
-  events: [WorkspaceSnapshotChanged, CardEdited, EditorNavigateRequest] as const,
+  events: [WorkspaceSnapshotChanged, CardEdited, CardsDeleted, EditorNavigateRequest] as const,
   streamMethods: [StreamCompletion] as const,
 });
 

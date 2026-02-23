@@ -81,7 +81,8 @@ type DesktopReviewSessionEvent =
   | { type: "GRADE"; grade: FSRSGrade }
   | { type: "UNDO" }
   | { type: "QUIT" }
-  | { type: "CARD_EDITED" };
+  | { type: "CARD_EDITED" }
+  | { type: "CARD_DELETED" };
 
 type DesktopReviewSessionInput = {
   readonly queue: readonly LightQueueItem[];
@@ -203,6 +204,7 @@ export const desktopReviewSessionMachine = setup({
   },
   guards: {
     hasMoreCards: ({ context }) => context.currentIndex < context.queue.length - 1,
+    hasCardsAfterRemoval: ({ context }) => context.queue.length > 1,
     canUndo: ({ context }) => context.reviewLogStack.length > 0,
     isLastCard: ({ context }) => context.currentIndex >= context.queue.length - 1,
     hasMoreRecoverableLoadError: ({ context, event }) => {
@@ -224,6 +226,14 @@ export const desktopReviewSessionMachine = setup({
   actions: {
     incrementIndex: assign({
       currentIndex: ({ context }) => context.currentIndex + 1,
+    }),
+    removeCurrentCard: assign({
+      queue: ({ context }) => context.queue.filter((_, i) => i !== context.currentIndex),
+      currentIndex: ({ context }) =>
+        context.currentIndex >= context.queue.length - 1
+          ? Math.max(0, context.currentIndex - 1)
+          : context.currentIndex,
+      currentCard: () => null,
     }),
   },
 }).createMachine({
@@ -308,6 +318,14 @@ export const desktopReviewSessionMachine = setup({
           on: {
             REVEAL: { target: "showAnswer" },
             CARD_EDITED: { target: "loading" },
+            CARD_DELETED: [
+              {
+                guard: "hasCardsAfterRemoval",
+                target: "loading",
+                actions: "removeCurrentCard",
+              },
+              { target: "#desktopReviewSession.complete", actions: "removeCurrentCard" },
+            ],
           },
         },
         showAnswer: {
@@ -320,6 +338,14 @@ export const desktopReviewSessionMachine = setup({
               }),
             },
             CARD_EDITED: { target: "loading" },
+            CARD_DELETED: [
+              {
+                guard: "hasCardsAfterRemoval",
+                target: "loading",
+                actions: "removeCurrentCard",
+              },
+              { target: "#desktopReviewSession.complete", actions: "removeCurrentCard" },
+            ],
           },
         },
         grading: {

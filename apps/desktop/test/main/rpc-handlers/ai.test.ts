@@ -17,10 +17,12 @@ describe("AI stream handlers", () => {
     );
 
     const chunks = await Effect.runPromise(
-      streamHandlers.StreamCompletion({
-        model: "anthropic:claude-sonnet-4-20250514",
-        prompt: "hello world",
-      }).pipe(Stream.runCollect),
+      streamHandlers
+        .StreamCompletion({
+          model: "anthropic:claude-sonnet-4-20250514",
+          prompt: "hello world",
+        })
+        .pipe(Stream.runCollect),
     );
 
     expect(Array.from(chunks)).toEqual([{ delta: "hello" }, { delta: "world" }]);
@@ -37,10 +39,12 @@ describe("AI stream handlers", () => {
     );
 
     const exit = await Effect.runPromiseExit(
-      streamHandlers.StreamCompletion({
-        model: "anthropic:claude-sonnet-4-20250514",
-        prompt: "hello",
-      }).pipe(Stream.runCollect),
+      streamHandlers
+        .StreamCompletion({
+          model: "anthropic:claude-sonnet-4-20250514",
+          prompt: "hello",
+        })
+        .pipe(Stream.runCollect),
     );
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
@@ -56,7 +60,8 @@ describe("AI stream handlers", () => {
 
   it("preserves ai_provider_not_supported stream errors", async () => {
     const mockAiClient: AiClient = {
-      streamCompletion: () => Stream.fail(new AiProviderNotSupportedError({ model: "constructor:gpt-4o" })),
+      streamCompletion: () =>
+        Stream.fail(new AiProviderNotSupportedError({ model: "constructor:gpt-4o" })),
     };
 
     const streamHandlers = Effect.runSync(
@@ -64,10 +69,12 @@ describe("AI stream handlers", () => {
     );
 
     const exit = await Effect.runPromiseExit(
-      streamHandlers.StreamCompletion({
-        model: "constructor:gpt-4o",
-        prompt: "hello",
-      }).pipe(Stream.runCollect),
+      streamHandlers
+        .StreamCompletion({
+          model: "constructor:gpt-4o",
+          prompt: "hello",
+        })
+        .pipe(Stream.runCollect),
     );
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {

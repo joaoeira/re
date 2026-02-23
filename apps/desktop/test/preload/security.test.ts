@@ -10,9 +10,8 @@ describe("preload security", () => {
   it("uses a constrained bridge global and avoids exposing raw ipcRenderer", () => {
     const preloadSource = readFileSync(path.join(__dirname, "../../src/preload/index.ts"), "utf8");
 
-    expect(preloadSource).toContain("appIpc.preload");
-    expect(preloadSource).toContain(".expose()");
-    expect(preloadSource).toMatch(/await\s+appIpc\.preload\(/);
+    expect(preloadSource).toContain("exposeIpcBridge");
+    expect(preloadSource).toContain('"desktopApi"');
     expect(preloadSource).not.toContain("ipcRenderer");
     expect(preloadSource).not.toContain('contextBridge.exposeInMainWorld("ipcRenderer"');
   });

@@ -558,6 +558,151 @@ Answer
     }
   });
 
+  it("deletes a single item and publishes CardsDeleted event", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-delete-single-"));
+    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-settings-"));
+    const settingsFilePath = path.join(settingsRoot, "settings.json");
+    const deckPath = path.join(rootPath, "delete.md");
+    const publishEvents: Array<{ name: string; payload: unknown }> = [];
+
+    try {
+      await fs.writeFile(
+        deckPath,
+        `<!--@ card-a 0 0 0 0-->
+Q1
+---
+A1
+
+<!--@ card-b 0 0 0 0-->
+Q2
+---
+A2
+`,
+        "utf8",
+      );
+
+      const publish = ((event, payload) =>
+        Effect.sync(() => {
+          publishEvents.push({ name: event.name, payload });
+        })) as IpcMainHandle<AppContract>["publish"];
+
+      const handlers = await createHandlersWithOverrides(settingsFilePath, { publish });
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      await Effect.runPromise(
+        handlers.DeleteItems({
+          items: [{ deckPath, cardId: "card-a" }],
+        }),
+      );
+
+      const parsed = await Effect.runPromise(parseFile(await fs.readFile(deckPath, "utf8")));
+      expect(parsed.items).toHaveLength(1);
+      expect(parsed.items[0]!.cards[0]!.id).toBe("card-b");
+      expect(publishEvents).toContainEqual({
+        name: "CardsDeleted",
+        payload: { items: [{ deckPath, cardId: "card-a" }] },
+      });
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(settingsRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("deletes multiple items across decks", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-delete-multi-"));
+    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-settings-"));
+    const settingsFilePath = path.join(settingsRoot, "settings.json");
+    const deckA = path.join(rootPath, "deck-a.md");
+    const deckB = path.join(rootPath, "deck-b.md");
+
+    try {
+      await fs.writeFile(
+        deckA,
+        `<!--@ a1 0 0 0 0-->
+Q-A1
+---
+A-A1
+
+<!--@ a2 0 0 0 0-->
+Q-A2
+---
+A-A2
+`,
+        "utf8",
+      );
+      await fs.writeFile(
+        deckB,
+        `<!--@ b1 0 0 0 0-->
+Q-B1
+---
+A-B1
+`,
+        "utf8",
+      );
+
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      await Effect.runPromise(
+        handlers.DeleteItems({
+          items: [
+            { deckPath: deckA, cardId: "a1" },
+            { deckPath: deckB, cardId: "b1" },
+          ],
+        }),
+      );
+
+      const parsedA = await Effect.runPromise(parseFile(await fs.readFile(deckA, "utf8")));
+      expect(parsedA.items).toHaveLength(1);
+      expect(parsedA.items[0]!.cards[0]!.id).toBe("a2");
+
+      const parsedB = await Effect.runPromise(parseFile(await fs.readFile(deckB, "utf8")));
+      expect(parsedB.items).toHaveLength(0);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(settingsRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("returns editor_operation_error when DeleteItems card id is missing", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-delete-error-"));
+    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-settings-"));
+    const settingsFilePath = path.join(settingsRoot, "settings.json");
+    const deckPath = path.join(rootPath, "missing.md");
+
+    try {
+      await fs.writeFile(
+        deckPath,
+        `<!--@ existing 0 0 0 0-->
+Prompt
+---
+Answer
+`,
+        "utf8",
+      );
+
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const exit = await Effect.runPromiseExit(
+        handlers.DeleteItems({ items: [{ deckPath, cardId: "missing-id" }] }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected DeleteItems to fail.");
+      }
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("editor_operation_error");
+      }
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(settingsRoot, { recursive: true, force: true });
+    }
+  });
+
   it("delegates OpenEditorWindow calls to the editor window manager callback", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-open-"));
     const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-settings-"));

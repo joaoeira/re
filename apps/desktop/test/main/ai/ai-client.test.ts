@@ -52,12 +52,14 @@ const mocks = vi.hoisted(() => {
   return {
     APICallError: MockAPICallError,
     streamText: vi.fn<(input: StreamTextInput) => StreamTextResult>(),
-    createAnthropic: vi.fn(
-      (_options: { readonly apiKey: string }) => (model: string) => ({ provider: "anthropic", model }),
-    ),
-    createOpenAI: vi.fn(
-      (_options: { readonly apiKey: string }) => (model: string) => ({ provider: "openai", model }),
-    ),
+    createAnthropic: vi.fn((_options: { readonly apiKey: string }) => (model: string) => ({
+      provider: "anthropic",
+      model,
+    })),
+    createOpenAI: vi.fn((_options: { readonly apiKey: string }) => (model: string) => ({
+      provider: "openai",
+      model,
+    })),
   };
 });
 
@@ -77,9 +79,7 @@ vi.mock("@ai-sdk/provider", () => ({
   APICallError: mocks.APICallError,
 }));
 
-const makeSecretStore = (
-  getSecret: SecretStore["getSecret"],
-): SecretStore => ({
+const makeSecretStore = (getSecret: SecretStore["getSecret"]): SecretStore => ({
   getSecret,
   setSecret: () => Effect.void,
   deleteSecret: () => Effect.void,
@@ -188,7 +188,9 @@ describe("makeAiClient", () => {
     });
 
     const exit = await Effect.runPromiseExit(
-      service.streamCompletion({ model: "mistral:mixtral-8x7b", prompt: "hello" }).pipe(Stream.runCollect),
+      service
+        .streamCompletion({ model: "mistral:mixtral-8x7b", prompt: "hello" })
+        .pipe(Stream.runCollect),
     );
     const failure = getFailure(exit);
 
@@ -230,7 +232,9 @@ describe("makeAiClient", () => {
     });
 
     const exit = await Effect.runPromiseExit(
-      service.streamCompletion({ model: "constructor:gpt-4o", prompt: "hello" }).pipe(Stream.runCollect),
+      service
+        .streamCompletion({ model: "constructor:gpt-4o", prompt: "hello" })
+        .pipe(Stream.runCollect),
     );
     const failure = getFailure(exit);
 

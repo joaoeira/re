@@ -488,6 +488,139 @@ describe("desktopReviewSessionMachine", () => {
     actor.stop();
   });
 
+  it("removes the current card and loads the next when CARD_DELETED arrives in showPrompt", async () => {
+    const loadCard = vi.fn(async ({ cardId }: { cardId: string }) => ({
+      prompt: `Prompt ${cardId}`,
+      reveal: `Reveal ${cardId}`,
+      cardType: "qa" as const,
+    }));
+
+    const actor = createActor(desktopReviewSessionMachine, {
+      input: {
+        queue: [queueItem({ cardId: "card-a" }), queueItem({ cardId: "card-b" })],
+        loadCard,
+        scheduleReview: async () => scheduledReviewResult(),
+        undoReview: async () => undefined,
+      },
+    });
+
+    actor.start();
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "showPrompt" }));
+    expect(actor.getSnapshot().context.currentCard?.prompt).toBe("Prompt card-a");
+
+    actor.send({ type: "CARD_DELETED" });
+
+    const afterDelete = await waitForSnapshot(
+      actor,
+      (snapshot) =>
+        snapshot.matches({ presenting: "showPrompt" }) &&
+        snapshot.context.currentCard?.prompt === "Prompt card-b",
+    );
+
+    expect(afterDelete.context.queue).toHaveLength(1);
+    expect(afterDelete.context.queue[0]!.cardId).toBe("card-b");
+
+    actor.stop();
+  });
+
+  it("removes the current card and loads the next when CARD_DELETED arrives in showAnswer", async () => {
+    const loadCard = vi.fn(async ({ cardId }: { cardId: string }) => ({
+      prompt: `Prompt ${cardId}`,
+      reveal: `Reveal ${cardId}`,
+      cardType: "qa" as const,
+    }));
+
+    const actor = createActor(desktopReviewSessionMachine, {
+      input: {
+        queue: [queueItem({ cardId: "card-a" }), queueItem({ cardId: "card-b" })],
+        loadCard,
+        scheduleReview: async () => scheduledReviewResult(),
+        undoReview: async () => undefined,
+      },
+    });
+
+    actor.start();
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "showPrompt" }));
+    actor.send({ type: "REVEAL" });
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "showAnswer" }));
+
+    actor.send({ type: "CARD_DELETED" });
+
+    const afterDelete = await waitForSnapshot(
+      actor,
+      (snapshot) =>
+        snapshot.matches({ presenting: "showPrompt" }) &&
+        snapshot.context.currentCard?.prompt === "Prompt card-b",
+    );
+
+    expect(afterDelete.context.queue).toHaveLength(1);
+    expect(afterDelete.context.queue[0]!.cardId).toBe("card-b");
+
+    actor.stop();
+  });
+
+  it("completes the session when CARD_DELETED removes the last card", async () => {
+    const actor = createActor(desktopReviewSessionMachine, {
+      input: {
+        queue: [queueItem()],
+        loadCard: async () => ({ prompt: "Prompt", reveal: "Reveal", cardType: "qa" }),
+        scheduleReview: async () => scheduledReviewResult(),
+        undoReview: async () => undefined,
+      },
+    });
+
+    actor.start();
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "showPrompt" }));
+
+    actor.send({ type: "CARD_DELETED" });
+
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches("complete"));
+
+    actor.stop();
+  });
+
+  it("handles CARD_DELETED on the last card of a multi-card queue", async () => {
+    const actor = createActor(desktopReviewSessionMachine, {
+      input: {
+        queue: [queueItem({ cardId: "card-a" }), queueItem({ cardId: "card-b" })],
+        loadCard: async ({ cardId }) => ({
+          prompt: `Prompt ${cardId}`,
+          reveal: `Reveal ${cardId}`,
+          cardType: "qa" as const,
+        }),
+        scheduleReview: async () => scheduledReviewResult(),
+        undoReview: async () => undefined,
+      },
+    });
+
+    actor.start();
+
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "showPrompt" }));
+    actor.send({ type: "REVEAL" });
+    await waitForSnapshot(actor, (snapshot) => snapshot.matches({ presenting: "showAnswer" }));
+    actor.send({ type: "GRADE", grade: 2 });
+
+    await waitForSnapshot(
+      actor,
+      (snapshot) =>
+        snapshot.matches({ presenting: "showPrompt" }) && snapshot.context.currentIndex === 1,
+    );
+
+    actor.send({ type: "CARD_DELETED" });
+
+    const afterDelete = await waitForSnapshot(
+      actor,
+      (snapshot) =>
+        snapshot.matches({ presenting: "showPrompt" }) &&
+        snapshot.context.currentCard?.prompt === "Prompt card-a",
+    );
+
+    expect(afterDelete.context.queue).toHaveLength(1);
+    expect(afterDelete.context.queue[0]!.cardId).toBe("card-a");
+
+    actor.stop();
+  });
+
   it("transitions to refreshRequired when undo reports a recoverable conflict", async () => {
     const actor = createActor(desktopReviewSessionMachine, {
       input: {

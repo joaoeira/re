@@ -1,7 +1,7 @@
 import type { FSRSGrade } from "@shared/rpc/schemas/review";
 
 import { render } from "vitest-browser-react";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 
 import { ReviewActionBar } from "@/components/review-session/review-action-bar";
@@ -9,28 +9,30 @@ import { GradeButtons } from "@/components/review-session/grade-buttons";
 
 describe("ReviewActionBar", () => {
   const noop = () => {};
+  const baseProps = {
+    onReveal: noop,
+    onGrade: noop as (grade: FSRSGrade) => void,
+    onEdit: noop,
+    onDelete: noop,
+    gradingDisabled: false,
+    actionsDisabled: false,
+  };
 
   describe("reveal mode", () => {
     it("shows the Show Answer button", async () => {
-      const screen = await render(
-        <ReviewActionBar mode="reveal" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
-      );
+      const screen = await render(<ReviewActionBar {...baseProps} mode="reveal" />);
 
       await expect.element(screen.getByText("Show Answer")).toBeVisible();
     });
 
     it("shows the Space keyboard hint", async () => {
-      const screen = await render(
-        <ReviewActionBar mode="reveal" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
-      );
+      const screen = await render(<ReviewActionBar {...baseProps} mode="reveal" />);
 
       await expect.element(screen.getByText("Space")).toBeVisible();
     });
 
     it("does not show grade buttons", async () => {
-      const screen = await render(
-        <ReviewActionBar mode="reveal" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
-      );
+      const screen = await render(<ReviewActionBar {...baseProps} mode="reveal" />);
 
       expect(screen.getByText("Again").query()).toBeNull();
       expect(screen.getByText("Hard").query()).toBeNull();
@@ -38,23 +40,10 @@ describe("ReviewActionBar", () => {
       expect(screen.getByText("Easy").query()).toBeNull();
     });
 
-    it("does not show the Grade label", async () => {
-      const screen = await render(
-        <ReviewActionBar mode="reveal" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
-      );
-
-      expect(screen.getByText("Grade").query()).toBeNull();
-    });
-
     it("fires onReveal when the button is clicked", async () => {
       const onReveal = vi.fn();
       const screen = await render(
-        <ReviewActionBar
-          mode="reveal"
-          onReveal={onReveal}
-          onGrade={noop}
-          gradingDisabled={false}
-        />,
+        <ReviewActionBar {...baseProps} mode="reveal" onReveal={onReveal} />,
       );
 
       await userEvent.click(screen.getByText("Show Answer"));
@@ -63,18 +52,8 @@ describe("ReviewActionBar", () => {
   });
 
   describe("grade mode", () => {
-    it("shows the Grade label", async () => {
-      const screen = await render(
-        <ReviewActionBar mode="grade" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
-      );
-
-      await expect.element(screen.getByText("Grade")).toBeVisible();
-    });
-
     it("shows all four grade buttons", async () => {
-      const screen = await render(
-        <ReviewActionBar mode="grade" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
-      );
+      const screen = await render(<ReviewActionBar {...baseProps} mode="grade" />);
 
       await expect.element(screen.getByText("Again")).toBeVisible();
       await expect.element(screen.getByText("Hard")).toBeVisible();
@@ -83,9 +62,7 @@ describe("ReviewActionBar", () => {
     });
 
     it("shows keyboard hints 1 through 4", async () => {
-      const screen = await render(
-        <ReviewActionBar mode="grade" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
-      );
+      const screen = await render(<ReviewActionBar {...baseProps} mode="grade" />);
 
       await expect.element(screen.getByText("1", { exact: true })).toBeVisible();
       await expect.element(screen.getByText("2", { exact: true })).toBeVisible();
@@ -94,9 +71,7 @@ describe("ReviewActionBar", () => {
     });
 
     it("does not show the Show Answer button", async () => {
-      const screen = await render(
-        <ReviewActionBar mode="grade" onReveal={noop} onGrade={noop} gradingDisabled={false} />,
-      );
+      const screen = await render(<ReviewActionBar {...baseProps} mode="grade" />);
 
       expect(screen.getByText("Show Answer").query()).toBeNull();
     });
@@ -104,7 +79,7 @@ describe("ReviewActionBar", () => {
     it("fires onGrade with the correct grade for each button", async () => {
       const onGrade = vi.fn();
       const screen = await render(
-        <ReviewActionBar mode="grade" onReveal={noop} onGrade={onGrade} gradingDisabled={false} />,
+        <ReviewActionBar {...baseProps} mode="grade" onGrade={onGrade} />,
       );
 
       await userEvent.click(screen.getByText("Again"));
@@ -123,9 +98,7 @@ describe("ReviewActionBar", () => {
     });
 
     it("disables grade buttons when gradingDisabled is true", async () => {
-      const screen = await render(
-        <ReviewActionBar mode="grade" onReveal={noop} onGrade={noop} gradingDisabled={true} />,
-      );
+      const screen = await render(<ReviewActionBar {...baseProps} mode="grade" gradingDisabled />);
 
       await expect.element(screen.getByText("Again").element().closest("button")!).toBeDisabled();
       await expect.element(screen.getByText("Hard").element().closest("button")!).toBeDisabled();
@@ -136,7 +109,7 @@ describe("ReviewActionBar", () => {
     it("does not fire onGrade when buttons are disabled", async () => {
       const onGrade = vi.fn();
       const screen = await render(
-        <ReviewActionBar mode="grade" onReveal={noop} onGrade={onGrade} gradingDisabled={true} />,
+        <ReviewActionBar {...baseProps} mode="grade" onGrade={onGrade} gradingDisabled />,
       );
 
       (screen.getByText("Again").element() as HTMLElement).click();
@@ -145,6 +118,68 @@ describe("ReviewActionBar", () => {
       (screen.getByText("Easy").element() as HTMLElement).click();
 
       expect(onGrade).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("actions dropdown menu", () => {
+    const openMenu = async () => {
+      const trigger = page.getByRole("button", { name: "Card actions" });
+      await trigger.click();
+      await expect.element(page.getByRole("menuitem", { name: /Edit/ })).toBeVisible();
+    };
+
+    it("shows Edit and Delete items when menu is opened", async () => {
+      await render(<ReviewActionBar {...baseProps} mode="reveal" />);
+
+      await openMenu();
+
+      await expect.element(page.getByRole("menuitem", { name: /Edit/ })).toBeVisible();
+      await expect.element(page.getByRole("menuitem", { name: /Delete/ })).toBeVisible();
+    });
+
+    it("fires onEdit when Edit menu item is clicked", async () => {
+      const onEdit = vi.fn();
+      await render(<ReviewActionBar {...baseProps} mode="reveal" onEdit={onEdit} />);
+
+      await openMenu();
+      await page.getByRole("menuitem", { name: /Edit/ }).click();
+
+      expect(onEdit).toHaveBeenCalledOnce();
+    });
+
+    it("shows confirmation dialog when Delete menu item is clicked", async () => {
+      await render(<ReviewActionBar {...baseProps} mode="reveal" />);
+
+      await openMenu();
+      await page.getByRole("menuitem", { name: /Delete/ }).click();
+
+      await expect.element(page.getByText("Delete card")).toBeVisible();
+    });
+
+    it("fires onDelete when the dialog Delete button is confirmed", async () => {
+      const onDelete = vi.fn();
+      await render(<ReviewActionBar {...baseProps} mode="reveal" onDelete={onDelete} />);
+
+      await openMenu();
+      await page.getByRole("menuitem", { name: /Delete/ }).click();
+      await expect.element(page.getByText("Delete card")).toBeVisible();
+
+      (document.querySelector("[data-slot='alert-dialog-action']") as HTMLElement).click();
+
+      expect(onDelete).toHaveBeenCalledOnce();
+    });
+
+    it("does not fire onDelete when Cancel is clicked", async () => {
+      const onDelete = vi.fn();
+      await render(<ReviewActionBar {...baseProps} mode="reveal" onDelete={onDelete} />);
+
+      await openMenu();
+      await page.getByRole("menuitem", { name: /Delete/ }).click();
+      await expect.element(page.getByText("Delete card")).toBeVisible();
+
+      (document.querySelector("[data-slot='alert-dialog-cancel']") as HTMLElement).click();
+
+      expect(onDelete).not.toHaveBeenCalled();
     });
   });
 });

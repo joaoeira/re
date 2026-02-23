@@ -9,6 +9,7 @@ import { SessionSummary } from "@/components/review-session/session-summary";
 import { Button } from "@/components/ui/button";
 import { useIpc } from "@/lib/ipc-context";
 import type { DesktopReviewSessionSnapshot } from "@/machines/desktopReviewSession";
+import type { LightQueueItem } from "@shared/rpc/schemas/review";
 
 type ReviewSessionProps = {
   readonly decks: "all" | string[];
@@ -19,12 +20,16 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
   const session = useReviewSession(decks);
   const ipc = useIpc();
 
+  const getCurrentQueueItem = useCallback(
+    (snapshot: DesktopReviewSessionSnapshot): LightQueueItem | undefined =>
+      snapshot.context.queue[snapshot.context.currentIndex],
+    [],
+  );
+
   const openEditorForCurrentCard = useCallback(
     (snapshot: DesktopReviewSessionSnapshot) => {
-      const queueItem = snapshot.context.queue[snapshot.context.currentIndex];
-      if (!queueItem) {
-        return;
-      }
+      const queueItem = getCurrentQueueItem(snapshot);
+      if (!queueItem) return;
 
       void Effect.runPromise(
         ipc.client.OpenEditorWindow({
@@ -34,7 +39,21 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
         }),
       ).catch(() => undefined);
     },
-    [ipc],
+    [ipc, getCurrentQueueItem],
+  );
+
+  const deleteCurrentCard = useCallback(
+    (snapshot: DesktopReviewSessionSnapshot) => {
+      const queueItem = getCurrentQueueItem(snapshot);
+      if (!queueItem) return;
+
+      void Effect.runPromise(
+        ipc.client.DeleteItems({
+          items: [{ deckPath: queueItem.deckPath, cardId: queueItem.cardId }],
+        }),
+      ).catch(() => undefined);
+    },
+    [ipc, getCurrentQueueItem],
   );
 
   useEffect(() => {
@@ -159,20 +178,6 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
           <p className="text-center text-sm text-muted-foreground">Loading card...</p>
         ) : (
           <>
-            <div className="mx-auto mb-3 flex w-full max-w-[70ch] justify-end">
-              <Button
-                type="button"
-                size="xs"
-                variant="outline"
-                disabled={isGrading}
-                onClick={() => openEditorForCurrentCard(snapshot)}
-              >
-                Edit
-                <kbd className="border border-border px-1 py-0.5 text-[10px] text-muted-foreground">
-                  E
-                </kbd>
-              </Button>
-            </div>
             <CardContent
               card={snapshot.context.currentCard}
               isRevealed={isShowingAnswer || isGrading}
@@ -186,7 +191,10 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
           mode={isShowingPrompt ? "reveal" : "grade"}
           onReveal={() => send({ type: "REVEAL" })}
           onGrade={(grade) => send({ type: "GRADE", grade })}
+          onEdit={() => openEditorForCurrentCard(snapshot)}
+          onDelete={() => deleteCurrentCard(snapshot)}
           gradingDisabled={isGrading}
+          actionsDisabled={isGrading}
         />
       )}
     </>

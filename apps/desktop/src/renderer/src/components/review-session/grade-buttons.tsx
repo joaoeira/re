@@ -21,7 +21,7 @@ export function GradeButtons({ disabled, onGrade }: GradeButtonsProps) {
           type="button"
           disabled={disabled}
           onClick={() => onGrade(grade)}
-          className="flex items-center gap-2 border border-transparent px-3 py-1 text-xs text-foreground transition-colors hover:border-border disabled:opacity-30"
+          className="flex h-7 items-center gap-2 border border-transparent px-3 text-xs text-foreground transition-colors hover:border-border disabled:opacity-30"
         >
           <span>{label}</span>
           <kbd className="border border-border px-1 py-0.5 text-[10px] text-muted-foreground">
