@@ -164,7 +164,8 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
               await Effect.runPromise(
                 ipc.client.UndoReview(input).pipe(
                   Effect.catchTags({
-                    undo_conflict: (error) => Effect.fail(new RecoverableUndoConflictError(error.message)),
+                    undo_conflict: (error) =>
+                      Effect.fail(new RecoverableUndoConflictError(error.message)),
                   }),
                 ),
               );

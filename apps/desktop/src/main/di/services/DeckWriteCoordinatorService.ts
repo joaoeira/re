@@ -6,6 +6,5 @@ export const DeckWriteCoordinatorService = Context.GenericTag<DeckWriteCoordinat
   "@re/desktop/main/DeckWriteCoordinatorService",
 );
 
-export const DeckWriteCoordinatorServiceLive = (
-  deckWriteCoordinator: DeckWriteCoordinator,
-) => Layer.succeed(DeckWriteCoordinatorService, deckWriteCoordinator);
+export const DeckWriteCoordinatorServiceLive = (deckWriteCoordinator: DeckWriteCoordinator) =>
+  Layer.succeed(DeckWriteCoordinatorService, deckWriteCoordinator);

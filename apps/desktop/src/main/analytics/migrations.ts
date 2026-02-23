@@ -106,10 +106,9 @@ const validateMigrationKeys = <
 
 export const validateReviewAnalyticsMigrationKeys = validateMigrationKeys;
 
-const strictMigrationLoader: Migrator.Loader =
-  validateMigrationKeys(REVIEW_HISTORY_MIGRATIONS).pipe(
-    Effect.flatMap((migrations) => Migrator.fromRecord(migrations)),
-  );
+const strictMigrationLoader: Migrator.Loader = validateMigrationKeys(
+  REVIEW_HISTORY_MIGRATIONS,
+).pipe(Effect.flatMap((migrations) => Migrator.fromRecord(migrations)));
 
 const migrationRunner = Migrator.make({});
 

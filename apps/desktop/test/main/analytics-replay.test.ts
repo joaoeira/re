@@ -31,7 +31,9 @@ const makeIntent = (overrides: Partial<CompensationIntent> = {}): CompensationIn
   ...overrides,
 });
 
-const makeRepository = (overrides: Partial<ReviewAnalyticsRepository> = {}): ReviewAnalyticsRepository => ({
+const makeRepository = (
+  overrides: Partial<ReviewAnalyticsRepository> = {},
+): ReviewAnalyticsRepository => ({
   enabled: true,
   recordSchedule: () => Effect.succeed(null),
   compensateUndo: () => Effect.void,

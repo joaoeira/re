@@ -13,6 +13,7 @@ import {
   SettingsSchemaV1,
   SetWorkspaceRootPathInputSchema,
 } from "@shared/settings";
+import { SecretKeySchema, SecretStoreErrorSchema } from "@shared/secrets";
 import {
   BuildReviewQueueResultSchema,
   CardContentErrorSchema,
@@ -99,6 +100,40 @@ export const SetWorkspaceRootPath = rpc(
   SetWorkspaceRootPathInputSchema,
   SettingsSchemaV1,
   SettingsErrorSchema,
+);
+
+export const HasApiKey = rpc(
+  "HasApiKey",
+  Schema.Struct({
+    key: SecretKeySchema,
+  }),
+  Schema.Struct({
+    configured: Schema.Boolean,
+  }),
+  SecretStoreErrorSchema,
+);
+
+export const SetApiKey = rpc(
+  "SetApiKey",
+  Schema.Struct({
+    key: SecretKeySchema,
+    value: Schema.String,
+  }),
+  Schema.Struct({
+    success: Schema.Boolean,
+  }),
+  SecretStoreErrorSchema,
+);
+
+export const DeleteApiKey = rpc(
+  "DeleteApiKey",
+  Schema.Struct({
+    key: SecretKeySchema,
+  }),
+  Schema.Struct({
+    success: Schema.Boolean,
+  }),
+  SecretStoreErrorSchema,
 );
 
 export const BuildReviewQueue = rpc(
@@ -261,6 +296,9 @@ export const appContract = defineContract({
     GetWorkspaceSnapshot,
     GetSettings,
     SetWorkspaceRootPath,
+    HasApiKey,
+    SetApiKey,
+    DeleteApiKey,
     BuildReviewQueue,
     GetCardContent,
     ScheduleReview,

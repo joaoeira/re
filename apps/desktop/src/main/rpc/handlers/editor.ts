@@ -160,244 +160,242 @@ export const createEditorHandlers = () =>
     const publish = appEventPublisher.publish;
     const openEditorWindow = editorWindowManager.openEditorWindow;
 
-  let duplicateIndexCache: DuplicateIndexCache | null = null;
-  let duplicateIndexGeneration = 0;
+    let duplicateIndexCache: DuplicateIndexCache | null = null;
+    let duplicateIndexGeneration = 0;
 
-  const invalidateDuplicateIndex = (): void => {
-    duplicateIndexGeneration += 1;
-    duplicateIndexCache = null;
-  };
+    const invalidateDuplicateIndex = (): void => {
+      duplicateIndexGeneration += 1;
+      duplicateIndexCache = null;
+    };
 
-  const markDuplicateIndexDirty = (): void => {
-    invalidateDuplicateIndex();
-  };
+    const markDuplicateIndexDirty = (): void => {
+      invalidateDuplicateIndex();
+    };
 
-  duplicateIndexInvalidation.registerListener(markDuplicateIndexDirty);
+    duplicateIndexInvalidation.registerListener(markDuplicateIndexDirty);
 
-  const rebuildDuplicateIndex = (rootPath: string) =>
-    Effect.gen(function* () {
-      type IndexRecord = {
-        readonly key: string;
-        readonly entry: DuplicateIndexEntry;
-      };
+    const rebuildDuplicateIndex = (rootPath: string) =>
+      Effect.gen(function* () {
+        type IndexRecord = {
+          readonly key: string;
+          readonly entry: DuplicateIndexEntry;
+        };
 
-      const deckManager = yield* DeckManager;
-      const scanned = yield* scanDecks(rootPath).pipe(Effect.mapError(toEditorError));
-      const byKey = new Map<string, DuplicateIndexEntry[]>();
+        const deckManager = yield* DeckManager;
+        const scanned = yield* scanDecks(rootPath).pipe(Effect.mapError(toEditorError));
+        const byKey = new Map<string, DuplicateIndexEntry[]>();
 
-      const recordsByDeck = yield* Effect.forEach(
-        scanned.decks,
-        (deck) =>
-          deckManager.readDeck(deck.absolutePath).pipe(
-            Effect.option,
-            Effect.flatMap((parsedDeckOption) => {
-              if (Option.isNone(parsedDeckOption)) {
-                return Effect.succeed([] as readonly IndexRecord[]);
+        const recordsByDeck = yield* Effect.forEach(
+          scanned.decks,
+          (deck) =>
+            deckManager.readDeck(deck.absolutePath).pipe(
+              Effect.option,
+              Effect.flatMap((parsedDeckOption) => {
+                if (Option.isNone(parsedDeckOption)) {
+                  return Effect.succeed([] as readonly IndexRecord[]);
+                }
+
+                return Effect.forEach(parsedDeckOption.value.items, (item) =>
+                  detectEditorCardType(item).pipe(
+                    Effect.option,
+                    Effect.map((itemCardTypeOption): readonly IndexRecord[] => {
+                      if (Option.isNone(itemCardTypeOption)) {
+                        return [];
+                      }
+
+                      return [
+                        {
+                          key: duplicateKey(itemCardTypeOption.value, item.content),
+                          entry: {
+                            deckPath: deck.absolutePath,
+                            cardIds: item.cards.map((card) => card.id),
+                          },
+                        },
+                      ];
+                    }),
+                  ),
+                ).pipe(Effect.map((records) => records.flat()));
+              }),
+            ),
+          { concurrency: "unbounded" },
+        );
+
+        for (const deckRecords of recordsByDeck) {
+          for (const { key, entry } of deckRecords) {
+            const current = byKey.get(key) ?? [];
+            byKey.set(key, [...current, entry]);
+          }
+        }
+
+        return byKey;
+      });
+
+    const ensureDuplicateIndex = (rootPath: string) =>
+      Effect.gen(function* () {
+        const resolvedRootPath = path.resolve(rootPath);
+
+        while (true) {
+          const currentCache = duplicateIndexCache;
+          if (currentCache && currentCache.rootPath === resolvedRootPath) {
+            return currentCache;
+          }
+
+          const rebuildStartGeneration = duplicateIndexGeneration;
+          const byKey = yield* rebuildDuplicateIndex(resolvedRootPath);
+
+          if (duplicateIndexGeneration !== rebuildStartGeneration) {
+            continue;
+          }
+
+          const nextCache: DuplicateIndexCache = { rootPath: resolvedRootPath, byKey };
+          duplicateIndexCache = nextCache;
+          return nextCache;
+        }
+      });
+
+    const handlers: Pick<Implementations<AppContract, EditorHandlerRuntime>, EditorHandlerKeys> = {
+      AppendItem: ({ deckPath, content, cardType }) =>
+        Effect.gen(function* () {
+          yield* validateDeckAccess(settingsRepository, {
+            deckPath,
+            mapSettingsError: toEditorError,
+            makeMissingRootError: () =>
+              new EditorOperationError({ message: "Workspace root path is not configured." }),
+            makeOutsideRootError: (invalidDeckPath) =>
+              new EditorOperationError({
+                message: `Deck path is outside workspace root: ${invalidDeckPath}`,
+              }),
+          });
+
+          const itemType = resolveEditorItemType(cardType);
+          const cardCount = yield* parseEditorContent(cardType, content);
+          const cards = Array.from({ length: cardCount }, () => createMetadata());
+
+          const deckManager = yield* DeckManager;
+          yield* deckWriteCoordinator.withDeckLock(
+            deckPath,
+            deckManager.appendItem(deckPath, { cards, content }, itemType),
+          );
+
+          markDuplicateIndexDirty();
+
+          return {
+            cardIds: cards.map((card) => card.id),
+          };
+        }).pipe(Effect.mapError(toEditorError)),
+      ReplaceItem: ({ deckPath, cardId, content, cardType }) =>
+        Effect.gen(function* () {
+          yield* validateDeckAccess(settingsRepository, {
+            deckPath,
+            mapSettingsError: toEditorError,
+            makeMissingRootError: () =>
+              new EditorOperationError({ message: "Workspace root path is not configured." }),
+            makeOutsideRootError: (invalidDeckPath) =>
+              new EditorOperationError({
+                message: `Deck path is outside workspace root: ${invalidDeckPath}`,
+              }),
+          });
+
+          const newItemType = resolveEditorItemType(cardType);
+          const expectedNewCardCount = yield* parseEditorContent(cardType, content);
+
+          const deckManager = yield* DeckManager;
+          const mergedMetadata = yield* deckWriteCoordinator.withDeckLock(
+            deckPath,
+            Effect.gen(function* () {
+              const parsedDeck = yield* deckManager.readDeck(deckPath);
+              const location = findCardLocationById(parsedDeck, cardId);
+
+              if (!location) {
+                return yield* Effect.fail(
+                  new EditorOperationError({
+                    message: `Card not found: ${cardId}`,
+                  }),
+                );
               }
 
-              return Effect.forEach(parsedDeckOption.value.items, (item) =>
-                detectEditorCardType(item).pipe(
-                  Effect.option,
-                  Effect.map((itemCardTypeOption): readonly IndexRecord[] => {
-                    if (Option.isNone(itemCardTypeOption)) {
-                      return [];
-                    }
+              const oldItem = location.item;
+              const oldCardType = yield* detectEditorCardType(oldItem);
 
-                    return [
-                      {
-                        key: duplicateKey(itemCardTypeOption.value, item.content),
-                        entry: {
-                          deckPath: deck.absolutePath,
-                          cardIds: item.cards.map((card) => card.id),
-                        },
-                      },
-                    ];
-                  }),
-                ),
-              ).pipe(Effect.map((records) => records.flat()));
-            }),
-          ),
-        { concurrency: "unbounded" },
-      );
+              let nextMergedMetadata: readonly ItemMetadata[];
 
-      for (const deckRecords of recordsByDeck) {
-        for (const { key, entry } of deckRecords) {
-          const current = byKey.get(key) ?? [];
-          byKey.set(key, [...current, entry]);
-        }
-      }
+              if (oldCardType !== cardType) {
+                nextMergedMetadata = Array.from({ length: expectedNewCardCount }, () =>
+                  createMetadata(),
+                );
+              } else if (cardType === "qa") {
+                nextMergedMetadata = [oldItem.cards[0] ?? createMetadata()];
+              } else {
+                const oldIndices = yield* uniqueClozeIndices(oldItem.content);
+                const newIndices = yield* uniqueClozeIndices(content);
+                const metadataByIndex = new Map<number, ItemMetadata>();
 
-      return byKey;
-    });
+                oldIndices.forEach((index, indexPosition) => {
+                  const metadata = oldItem.cards[indexPosition];
+                  if (metadata) {
+                    metadataByIndex.set(index, metadata);
+                  }
+                });
 
-  const ensureDuplicateIndex = (rootPath: string) =>
-    Effect.gen(function* () {
-      const resolvedRootPath = path.resolve(rootPath);
+                nextMergedMetadata = newIndices.map(
+                  (index) => metadataByIndex.get(index) ?? createMetadata(),
+                );
+              }
 
-      while (true) {
-        const currentCache = duplicateIndexCache;
-        if (currentCache && currentCache.rootPath === resolvedRootPath) {
-          return currentCache;
-        }
-
-        const rebuildStartGeneration = duplicateIndexGeneration;
-        const byKey = yield* rebuildDuplicateIndex(resolvedRootPath);
-
-        if (duplicateIndexGeneration !== rebuildStartGeneration) {
-          continue;
-        }
-
-        const nextCache: DuplicateIndexCache = { rootPath: resolvedRootPath, byKey };
-        duplicateIndexCache = nextCache;
-        return nextCache;
-      }
-    });
-
-  const handlers: Pick<Implementations<AppContract, EditorHandlerRuntime>, EditorHandlerKeys> = {
-    AppendItem: ({ deckPath, content, cardType }) =>
-      Effect.gen(function* () {
-        yield* validateDeckAccess(settingsRepository, {
-          deckPath,
-          mapSettingsError: toEditorError,
-          makeMissingRootError: () =>
-            new EditorOperationError({ message: "Workspace root path is not configured." }),
-          makeOutsideRootError: (invalidDeckPath) =>
-            new EditorOperationError({
-              message: `Deck path is outside workspace root: ${invalidDeckPath}`,
-            }),
-        });
-
-        const itemType = resolveEditorItemType(cardType);
-        const cardCount = yield* parseEditorContent(cardType, content);
-        const cards = Array.from({ length: cardCount }, () => createMetadata());
-
-        const deckManager = yield* DeckManager;
-        yield* deckWriteCoordinator.withDeckLock(
-          deckPath,
-          deckManager.appendItem(deckPath, { cards, content }, itemType),
-        );
-
-        markDuplicateIndexDirty();
-
-        return {
-          cardIds: cards.map((card) => card.id),
-        };
-      }).pipe(Effect.mapError(toEditorError)),
-    ReplaceItem: ({ deckPath, cardId, content, cardType }) =>
-      Effect.gen(function* () {
-        yield* validateDeckAccess(settingsRepository, {
-          deckPath,
-          mapSettingsError: toEditorError,
-          makeMissingRootError: () =>
-            new EditorOperationError({ message: "Workspace root path is not configured." }),
-          makeOutsideRootError: (invalidDeckPath) =>
-            new EditorOperationError({
-              message: `Deck path is outside workspace root: ${invalidDeckPath}`,
-            }),
-        });
-
-        const newItemType = resolveEditorItemType(cardType);
-        const expectedNewCardCount = yield* parseEditorContent(cardType, content);
-
-        const deckManager = yield* DeckManager;
-        const mergedMetadata = yield* deckWriteCoordinator.withDeckLock(
-          deckPath,
-          Effect.gen(function* () {
-            const parsedDeck = yield* deckManager.readDeck(deckPath);
-            const location = findCardLocationById(parsedDeck, cardId);
-
-            if (!location) {
-              return yield* Effect.fail(
-                new EditorOperationError({
-                  message: `Card not found: ${cardId}`,
-                }),
+              const nextContent = ensureTrailingNewline(content);
+              yield* deckManager.replaceItem(
+                deckPath,
+                cardId,
+                { cards: nextMergedMetadata, content: nextContent },
+                newItemType,
               );
-            }
 
-            const oldItem = location.item;
-            const oldCardType = yield* detectEditorCardType(oldItem);
-
-            let nextMergedMetadata: readonly ItemMetadata[];
-
-            if (oldCardType !== cardType) {
-              nextMergedMetadata = Array.from({ length: expectedNewCardCount }, () =>
-                createMetadata(),
-              );
-            } else if (cardType === "qa") {
-              nextMergedMetadata = [oldItem.cards[0] ?? createMetadata()];
-            } else {
-              const oldIndices = yield* uniqueClozeIndices(oldItem.content);
-              const newIndices = yield* uniqueClozeIndices(content);
-              const metadataByIndex = new Map<number, ItemMetadata>();
-
-              oldIndices.forEach((index, indexPosition) => {
-                const metadata = oldItem.cards[indexPosition];
-                if (metadata) {
-                  metadataByIndex.set(index, metadata);
-                }
-              });
-
-              nextMergedMetadata = newIndices.map(
-                (index) => metadataByIndex.get(index) ?? createMetadata(),
-              );
-            }
-
-            const nextContent = ensureTrailingNewline(content);
-            yield* deckManager.replaceItem(
-              deckPath,
-              cardId,
-              { cards: nextMergedMetadata, content: nextContent },
-              newItemType,
-            );
-
-            return nextMergedMetadata;
-          }),
-        );
-
-        markDuplicateIndexDirty();
-
-        yield* publish(CardEdited, { deckPath, cardId });
-
-        return { cardIds: mergedMetadata.map((card) => card.id) };
-      }).pipe(Effect.mapError(toEditorError)),
-    GetItemForEdit: ({ deckPath, cardId }) =>
-      Effect.gen(function* () {
-        yield* validateDeckAccess(settingsRepository, {
-          deckPath,
-          mapSettingsError: toEditorError,
-          makeMissingRootError: () =>
-            new EditorOperationError({ message: "Workspace root path is not configured." }),
-          makeOutsideRootError: (invalidDeckPath) =>
-            new EditorOperationError({
-              message: `Deck path is outside workspace root: ${invalidDeckPath}`,
-            }),
-        });
-
-        const deckManager = yield* DeckManager;
-        const parsed = yield* deckManager.readDeck(deckPath);
-        const location = findCardLocationById(parsed, cardId);
-
-        if (!location) {
-          return yield* Effect.fail(
-            new EditorOperationError({
-              message: `Card not found: ${cardId}`,
+              return nextMergedMetadata;
             }),
           );
-        }
 
-        const itemCardType = yield* detectEditorCardType(location.item);
+          markDuplicateIndexDirty();
 
-        return {
-          content: location.item.content,
-          cardType: itemCardType,
-          cardIds: location.item.cards.map((card) => card.id),
-        };
-      }).pipe(Effect.mapError(toEditorError)),
-    CheckDuplicates: ({ content, cardType, rootPath, excludeCardIds }) =>
-      Effect.gen(function* () {
-        const configuredRootPath = yield* validateRequestedRootPath(
-          settingsRepository,
-          {
+          yield* publish(CardEdited, { deckPath, cardId });
+
+          return { cardIds: mergedMetadata.map((card) => card.id) };
+        }).pipe(Effect.mapError(toEditorError)),
+      GetItemForEdit: ({ deckPath, cardId }) =>
+        Effect.gen(function* () {
+          yield* validateDeckAccess(settingsRepository, {
+            deckPath,
+            mapSettingsError: toEditorError,
+            makeMissingRootError: () =>
+              new EditorOperationError({ message: "Workspace root path is not configured." }),
+            makeOutsideRootError: (invalidDeckPath) =>
+              new EditorOperationError({
+                message: `Deck path is outside workspace root: ${invalidDeckPath}`,
+              }),
+          });
+
+          const deckManager = yield* DeckManager;
+          const parsed = yield* deckManager.readDeck(deckPath);
+          const location = findCardLocationById(parsed, cardId);
+
+          if (!location) {
+            return yield* Effect.fail(
+              new EditorOperationError({
+                message: `Card not found: ${cardId}`,
+              }),
+            );
+          }
+
+          const itemCardType = yield* detectEditorCardType(location.item);
+
+          return {
+            content: location.item.content,
+            cardType: itemCardType,
+            cardIds: location.item.cards.map((card) => card.id),
+          };
+        }).pipe(Effect.mapError(toEditorError)),
+      CheckDuplicates: ({ content, cardType, rootPath, excludeCardIds }) =>
+        Effect.gen(function* () {
+          const configuredRootPath = yield* validateRequestedRootPath(settingsRepository, {
             requestedRootPath: rootPath,
             mapSettingsError: toEditorError,
             makeMissingRootError: () =>
@@ -406,40 +404,39 @@ export const createEditorHandlers = () =>
               new EditorOperationError({
                 message: `Root path mismatch. Expected ${configured}, received ${requested}.`,
               }),
-          },
-        );
-        const resolvedConfiguredRoot = path.resolve(configuredRootPath);
+          });
+          const resolvedConfiguredRoot = path.resolve(configuredRootPath);
 
-        const parseResult = yield* Effect.either(parseEditorContent(cardType, content));
-        if (Either.isLeft(parseResult)) {
+          const parseResult = yield* Effect.either(parseEditorContent(cardType, content));
+          if (Either.isLeft(parseResult)) {
+            return {
+              isDuplicate: false,
+              matchingDeckPath: Option.none(),
+            };
+          }
+
+          const index = yield* ensureDuplicateIndex(resolvedConfiguredRoot);
+          const entries = index.byKey.get(duplicateKey(cardType, content)) ?? [];
+          const excludedIds = new Set(excludeCardIds);
+          const match = entries.find((entry) => !hasCardIdOverlap(entry.cardIds, excludedIds));
+
           return {
-            isDuplicate: false,
-            matchingDeckPath: Option.none(),
+            isDuplicate: Boolean(match),
+            matchingDeckPath: match ? Option.some(match.deckPath) : Option.none(),
           };
-        }
-
-        const index = yield* ensureDuplicateIndex(resolvedConfiguredRoot);
-        const entries = index.byKey.get(duplicateKey(cardType, content)) ?? [];
-        const excludedIds = new Set(excludeCardIds);
-        const match = entries.find((entry) => !hasCardIdOverlap(entry.cardIds, excludedIds));
-
-        return {
-          isDuplicate: Boolean(match),
-          matchingDeckPath: match ? Option.some(match.deckPath) : Option.none(),
-        };
-      }).pipe(Effect.mapError(toEditorError)),
-    OpenEditorWindow: (params) =>
-      Effect.sync(() => {
-        const normalizedParams: EditorWindowParams =
-          params.mode === "create"
-            ? params.deckPath
-              ? { mode: "create", deckPath: params.deckPath }
-              : { mode: "create" }
-            : params;
-        openEditorWindow(normalizedParams);
-        return {};
-      }),
-  };
+        }).pipe(Effect.mapError(toEditorError)),
+      OpenEditorWindow: (params) =>
+        Effect.sync(() => {
+          const normalizedParams: EditorWindowParams =
+            params.mode === "create"
+              ? params.deckPath
+                ? { mode: "create", deckPath: params.deckPath }
+                : { mode: "create" }
+              : params;
+          openEditorWindow(normalizedParams);
+          return {};
+        }),
+    };
 
     return provideHandlerServices(handlers);
   });

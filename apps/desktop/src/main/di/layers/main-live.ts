@@ -17,17 +17,20 @@ import {
   EditorWindowManagerBridgeLive,
   EditorWindowManagerServiceLive,
 } from "../services/EditorWindowManagerService";
+import { SecretStoreServiceLive } from "../services/SecretStoreService";
 import { SettingsRepositoryServiceLive } from "../services/SettingsRepositoryService";
 import {
   WorkspaceWatcherControlBridgeLive,
   WorkspaceWatcherControlServiceLive,
 } from "../services/WorkspaceWatcherControlService";
 import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
+import type { SecretStore } from "@main/secrets/secret-store";
 import type { SettingsRepository } from "@main/settings/repository";
 import type { WorkspaceWatcher } from "@main/watcher/workspace-watcher";
 
 type MainStaticDependencies = {
   readonly settingsRepository: SettingsRepository;
+  readonly secretStore: SecretStore;
   readonly analyticsRepository: ReviewAnalyticsRepository;
   readonly deckWriteCoordinator: DeckWriteCoordinator;
 };
@@ -38,9 +41,15 @@ type MainDirectDependencies = MainStaticDependencies & {
   readonly openEditorWindow: OpenEditorWindow;
 };
 
-const MainStaticLive = ({ settingsRepository, analyticsRepository, deckWriteCoordinator }: MainStaticDependencies) =>
+const MainStaticLive = ({
+  settingsRepository,
+  secretStore,
+  analyticsRepository,
+  deckWriteCoordinator,
+}: MainStaticDependencies) =>
   Layer.mergeAll(
     SettingsRepositoryServiceLive(settingsRepository),
+    SecretStoreServiceLive(secretStore),
     AnalyticsRepositoryServiceLive(analyticsRepository),
     DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
   );
@@ -57,6 +66,7 @@ export const MainAppBridgeLive = (dependencies: MainStaticDependencies) =>
 
 export const MainAppDirectLive = ({
   settingsRepository,
+  secretStore,
   analyticsRepository,
   deckWriteCoordinator,
   publish,
@@ -64,7 +74,7 @@ export const MainAppDirectLive = ({
   openEditorWindow,
 }: MainDirectDependencies) =>
   Layer.mergeAll(
-    MainStaticLive({ settingsRepository, analyticsRepository, deckWriteCoordinator }),
+    MainStaticLive({ settingsRepository, secretStore, analyticsRepository, deckWriteCoordinator }),
     AppEventPublisherServiceLive(publish),
     WorkspaceWatcherControlServiceLive(watcher),
     EditorWindowManagerServiceLive(openEditorWindow),

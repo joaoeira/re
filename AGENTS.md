@@ -21,20 +21,20 @@ Always define service interfaces explicitly. Never let a service's public API be
 // DON'T — inferred service shape from implementation
 class Counter extends Effect.Service<Counter>()("app/Counter", {
   effect: Effect.gen(function* () {
-    const state = new Map<string, number>()
+    const state = new Map<string, number>();
 
     const increment = Effect.fn("Counter.increment")(function* (key: string, amount = 1) {
-      const current = state.get(key) ?? 0
-      const next = current + amount
-      state.set(key, next)
-      return next
-    })
+      const current = state.get(key) ?? 0;
+      const next = current + amount;
+      state.set(key, next);
+      return next;
+    });
 
     const reset = Effect.fn("Counter.reset")(function* (key: string) {
-      state.delete(key)
-    })
+      state.delete(key);
+    });
 
-    return { increment, reset }
+    return { increment, reset };
   }),
 }) {}
 ```
@@ -52,48 +52,56 @@ Declare the interface as an explicit type parameter, separate from the implement
 ```ts
 // DO — explicit interface, Context.GenericTag (current codebase pattern)
 export interface Counter {
-  readonly increment: (key: string, amount?: number) => Effect.Effect<number>
-  readonly reset: (key: string) => Effect.Effect<void>
+  readonly increment: (key: string, amount?: number) => Effect.Effect<number>;
+  readonly reset: (key: string) => Effect.Effect<void>;
 }
 
-export const Counter = Context.GenericTag<Counter>("app/Counter")
+export const Counter = Context.GenericTag<Counter>("app/Counter");
 
 export const CounterLive = Layer.effect(
   Counter,
   Effect.gen(function* () {
-    const state = new Map<string, number>()
+    const state = new Map<string, number>();
     return {
-      increment: (key, amount = 1) => Effect.sync(() => {
-        const current = state.get(key) ?? 0
-        const next = current + amount
-        state.set(key, next)
-        return next
-      }),
-      reset: (key) => Effect.sync(() => { state.delete(key) }),
-    }
+      increment: (key, amount = 1) =>
+        Effect.sync(() => {
+          const current = state.get(key) ?? 0;
+          const next = current + amount;
+          state.set(key, next);
+          return next;
+        }),
+      reset: (key) =>
+        Effect.sync(() => {
+          state.delete(key);
+        }),
+    };
   }),
-)
+);
 ```
 
 ```ts
 // DO — explicit interface, Effect.Service (class-based API)
 class Counter extends Effect.Service<Counter>()("app/Counter", {
   effect: Effect.gen(function* () {
-    const state = new Map<string, number>()
+    const state = new Map<string, number>();
     return {
-      increment: (key: string, amount?: number) => Effect.sync(() => {
-        const current = state.get(key) ?? 0
-        const next = current + (amount ?? 1)
-        state.set(key, next)
-        return next
-      }),
-      reset: (key: string) => Effect.sync(() => { state.delete(key) }),
-    }
+      increment: (key: string, amount?: number) =>
+        Effect.sync(() => {
+          const current = state.get(key) ?? 0;
+          const next = current + (amount ?? 1);
+          state.set(key, next);
+          return next;
+        }),
+      reset: (key: string) =>
+        Effect.sync(() => {
+          state.delete(key);
+        }),
+    };
   }),
 }) {
   // Explicit interface as the type parameter to Effect.Service<Counter>
-  readonly increment!: (key: string, amount?: number) => Effect.Effect<number>
-  readonly reset!: (key: string) => Effect.Effect<void>
+  readonly increment!: (key: string, amount?: number) => Effect.Effect<number>;
+  readonly reset!: (key: string) => Effect.Effect<void>;
 }
 ```
 

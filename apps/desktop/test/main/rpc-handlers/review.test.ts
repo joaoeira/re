@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { Cause, Effect, Exit } from "effect";
 import { describe, expect, it } from "vitest";
 
-import { createNoopReviewAnalyticsRepository, type ReviewAnalyticsRepository } from "@main/analytics";
+import {
+  createNoopReviewAnalyticsRepository,
+  type ReviewAnalyticsRepository,
+} from "@main/analytics";
 import { parseFile } from "@re/core";
 
 import { createHandlersWithOverrides } from "./helpers";

@@ -10,9 +10,7 @@ export {
   makeAppEventPublisherBridgeService,
   type AppEventPublisher,
 } from "./services/AppEventPublisherService";
-export {
-  AppRpcHandlersService,
-} from "./services/AppRpcHandlersService";
+export { AppRpcHandlersService } from "./services/AppRpcHandlersService";
 export {
   DeckWriteCoordinatorService,
   DeckWriteCoordinatorServiceLive,
@@ -30,6 +28,7 @@ export {
   makeEditorWindowManagerBridgeService,
   type OpenEditorWindow,
 } from "./services/EditorWindowManagerService";
+export { SecretStoreService, SecretStoreServiceLive } from "./services/SecretStoreService";
 export {
   SettingsRepositoryService,
   SettingsRepositoryServiceLive,

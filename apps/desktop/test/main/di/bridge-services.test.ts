@@ -36,7 +36,9 @@ describe("startup bridge services", () => {
     await Effect.runPromise(appEventPublisher.publish(CardEdited, { deckPath: "a", cardId: "b" }));
 
     expect(publishSpy).toHaveBeenCalledTimes(1);
-    expect(publishedEvents).toEqual([{ name: "CardEdited", payload: { deckPath: "a", cardId: "b" } }]);
+    expect(publishedEvents).toEqual([
+      { name: "CardEdited", payload: { deckPath: "a", cardId: "b" } },
+    ]);
   });
 
   it("keeps watcher controls safe before bind and forwards after bind", () => {

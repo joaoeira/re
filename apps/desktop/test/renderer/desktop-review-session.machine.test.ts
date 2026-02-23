@@ -509,7 +509,9 @@ describe("desktopReviewSessionMachine", () => {
     await waitForSnapshot(actor, (snapshot) => snapshot.matches("complete"));
 
     actor.send({ type: "UNDO" });
-    const refreshed = await waitForSnapshot(actor, (snapshot) => snapshot.matches("refreshRequired"));
+    const refreshed = await waitForSnapshot(actor, (snapshot) =>
+      snapshot.matches("refreshRequired"),
+    );
     expect(refreshed.context.error).toContain("Undo conflict");
 
     actor.stop();

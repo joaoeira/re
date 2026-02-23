@@ -139,7 +139,10 @@ const writeJournalFileAtomic = (
 
 const updateJournal = <A>(
   journalPath: string,
-  transform: (journal: IntentJournalFile) => { readonly journal: IntentJournalFile; readonly out: A },
+  transform: (journal: IntentJournalFile) => {
+    readonly journal: IntentJournalFile;
+    readonly out: A;
+  },
 ): Effect.Effect<A, unknown> =>
   Effect.gen(function* () {
     const current = yield* readJournalFile(journalPath);

@@ -1,4 +1,7 @@
-import { createNoopReviewAnalyticsRepository, type ReviewAnalyticsRepository } from "@main/analytics";
+import {
+  createNoopReviewAnalyticsRepository,
+  type ReviewAnalyticsRepository,
+} from "@main/analytics";
 import type { SqliteReviewAnalyticsRuntimeBundle } from "@main/analytics/sqlite-repository";
 
 export interface AnalyticsInitializationResult {
@@ -11,9 +14,7 @@ export interface SingleFlightTask {
   readonly run: () => Promise<void>;
 }
 
-export const createSingleFlightTask = (
-  task: () => Promise<void>,
-): SingleFlightTask => {
+export const createSingleFlightTask = (task: () => Promise<void>): SingleFlightTask => {
   let inFlight = false;
 
   return {

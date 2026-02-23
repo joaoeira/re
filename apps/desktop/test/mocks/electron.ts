@@ -34,6 +34,21 @@ export const ipcMain = {
   removeHandler: (_channel: string) => undefined,
 };
 
+export const safeStorage = {
+  isEncryptionAvailable: () => true,
+  encryptString: (plainText: string) => Buffer.from(`enc:${plainText}`),
+  decryptString: (encrypted: Buffer) => {
+    const value = encrypted.toString();
+    if (!value.startsWith("enc:")) {
+      throw new Error("bad ciphertext");
+    }
+
+    return value.slice(4);
+  },
+  getSelectedStorageBackend: () => "gnome_libsecret" as const,
+  setUsePlainTextEncryption: (_usePlainText: boolean) => undefined,
+};
+
 export const contextBridge = {
   exposeInMainWorld: (_name: string, _value: unknown) => undefined,
 };

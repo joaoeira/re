@@ -53,7 +53,10 @@ export const replayPendingCompensationIntents = (
 
       if (currentFingerprintResult.ok === false) {
         yield* analyticsRepository.noteReplayFailure();
-        yield* analyticsRepository.markIntentPendingFailure(intent.intentId, currentFingerprintResult.message);
+        yield* analyticsRepository.markIntentPendingFailure(
+          intent.intentId,
+          currentFingerprintResult.message,
+        );
         continue;
       }
 
@@ -94,7 +97,10 @@ export const replayPendingCompensationIntents = (
         if (intent.attemptCount + 1 >= MAX_ROLLBACK_ABSENT_RETRIES) {
           yield* analyticsRepository.markIntentConflict(intent.intentId, rollbackAbsentMessage);
         } else {
-          yield* analyticsRepository.markIntentPendingFailure(intent.intentId, rollbackAbsentMessage);
+          yield* analyticsRepository.markIntentPendingFailure(
+            intent.intentId,
+            rollbackAbsentMessage,
+          );
         }
         continue;
       }

@@ -12,6 +12,8 @@ import { NoOpDeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import { makeAppRpcHandlersEffect } from "@main/rpc/handlers";
 import { makeSettingsRepository } from "@main/settings/repository";
 
+import { stubSecretStore } from "./helpers";
+
 describe("duplicate index invalidation wiring", () => {
   it("invalidates duplicate cache when workspace root path updates", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-duplicate-root-"));
@@ -39,6 +41,7 @@ Answer
           Effect.provide(
             MainAppBridgeLive({
               settingsRepository,
+              secretStore: stubSecretStore,
               analyticsRepository: createNoopReviewAnalyticsRepository(),
               deckWriteCoordinator: NoOpDeckWriteCoordinator,
             }),
@@ -55,7 +58,9 @@ Answer
         excludeCardIds: [],
       };
 
-      const initialDuplicate = await Effect.runPromise(rpc.handlers.CheckDuplicates(duplicateInput));
+      const initialDuplicate = await Effect.runPromise(
+        rpc.handlers.CheckDuplicates(duplicateInput),
+      );
       expect(initialDuplicate.isDuplicate).toBe(true);
 
       await fs.writeFile(

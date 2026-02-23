@@ -9,10 +9,12 @@ import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import { NoOpDeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import { NodeServicesLive } from "@main/effect/node-services";
 import { makeAppRpcHandlersEffect } from "@main/rpc/handlers";
+import type { SecretStore } from "@main/secrets/secret-store";
 import { makeSettingsRepository } from "@main/settings/repository";
 import type { SettingsRepository } from "@main/settings/repository";
 import type { WorkspaceWatcher } from "@main/watcher/workspace-watcher";
 import type { AppContract } from "@shared/rpc/contracts";
+import { SecretNotFound } from "@shared/secrets";
 import { DEFAULT_SETTINGS } from "@shared/settings";
 
 export const stubSettingsRepository: SettingsRepository = {
@@ -31,6 +33,13 @@ export const stubWatcher: WorkspaceWatcher = {
   stop: () => {},
 };
 
+export const stubSecretStore: SecretStore = {
+  getSecret: (key) => Effect.fail(new SecretNotFound({ key })),
+  setSecret: () => Effect.void,
+  deleteSecret: () => Effect.void,
+  hasSecret: () => Effect.succeed(false),
+};
+
 export const noOpPublish = NoOpAppEventPublisher as IpcMainHandle<AppContract>["publish"];
 
 export const defaultHandlers = Effect.runSync(
@@ -38,6 +47,7 @@ export const defaultHandlers = Effect.runSync(
     Effect.provide(
       MainAppDirectLive({
         settingsRepository: stubSettingsRepository,
+        secretStore: stubSecretStore,
         analyticsRepository: createNoopReviewAnalyticsRepository(),
         deckWriteCoordinator: NoOpDeckWriteCoordinator,
         publish: noOpPublish,
@@ -55,6 +65,7 @@ export type HandlerTestOverrides = {
   readonly analyticsRepository?: ReviewAnalyticsRepository | undefined;
   readonly deckWriteCoordinator?: DeckWriteCoordinator | undefined;
   readonly settingsRepository?: SettingsRepository | undefined;
+  readonly secretStore?: SecretStore | undefined;
 };
 
 export const createHandlersWithOverrides = async (
@@ -69,7 +80,9 @@ export const createHandlersWithOverrides = async (
       Effect.provide(
         MainAppDirectLive({
           settingsRepository: repository,
-          analyticsRepository: overrides.analyticsRepository ?? createNoopReviewAnalyticsRepository(),
+          secretStore: overrides.secretStore ?? stubSecretStore,
+          analyticsRepository:
+            overrides.analyticsRepository ?? createNoopReviewAnalyticsRepository(),
           deckWriteCoordinator: overrides.deckWriteCoordinator ?? NoOpDeckWriteCoordinator,
           publish: overrides.publish ?? noOpPublish,
           watcher: overrides.watcher ?? stubWatcher,

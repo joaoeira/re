@@ -6,6 +6,5 @@ export const AnalyticsRepositoryService = Context.GenericTag<ReviewAnalyticsRepo
   "@re/desktop/main/AnalyticsRepositoryService",
 );
 
-export const AnalyticsRepositoryServiceLive = (
-  analyticsRepository: ReviewAnalyticsRepository,
-) => Layer.succeed(AnalyticsRepositoryService, analyticsRepository);
+export const AnalyticsRepositoryServiceLive = (analyticsRepository: ReviewAnalyticsRepository) =>
+  Layer.succeed(AnalyticsRepositoryService, analyticsRepository);

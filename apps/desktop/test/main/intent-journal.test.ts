@@ -8,9 +8,7 @@ import { describe, expect, it } from "vitest";
 import { createCompensationIntentJournal } from "@main/analytics/intent-journal";
 import type { CompensationIntent } from "@main/analytics/types";
 
-const makeIntent = (
-  overrides: Partial<CompensationIntent> = {},
-): CompensationIntent => ({
+const makeIntent = (overrides: Partial<CompensationIntent> = {}): CompensationIntent => ({
   intentId: "intent-1",
   reviewEntryId: 1,
   deckPath: "/workspace/deck.md",
@@ -47,7 +45,7 @@ describe("compensation intent journal", () => {
       expect(pending[0]!.intentId).toBe("intent-2");
 
       const raw = await fs.readFile(journalPath, "utf8");
-      expect(raw).toContain("\"version\": 1");
+      expect(raw).toContain('"version": 1');
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
     }

@@ -472,9 +472,7 @@ describe("DeckManager.appendItem", () => {
     );
 
     await promise;
-    expect(store["/deck.md"]).toBe(
-      "# No trailing newline\n\n<!--@ first 0 0 0 0-->\nQ\n---\nA\n",
-    );
+    expect(store["/deck.md"]).toBe("# No trailing newline\n\n<!--@ first 0 0 0 0-->\nQ\n---\nA\n");
   });
 
   it("fails with ItemValidationError on card count mismatch", async () => {

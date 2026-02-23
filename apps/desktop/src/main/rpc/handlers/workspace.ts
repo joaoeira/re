@@ -31,7 +31,10 @@ export const createWorkspaceHandlers = () =>
     const watcherControl = yield* WorkspaceWatcherControlService;
     const duplicateIndexInvalidation = yield* DuplicateIndexInvalidationService;
 
-    const handlers: Pick<Implementations<AppContract, WorkspaceHandlerRuntime>, WorkspaceHandlerKeys> = {
+    const handlers: Pick<
+      Implementations<AppContract, WorkspaceHandlerRuntime>,
+      WorkspaceHandlerKeys
+    > = {
       GetBootstrapData: () =>
         Effect.succeed({
           appName: APP_NAME,

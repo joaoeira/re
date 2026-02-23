@@ -81,7 +81,10 @@ export interface ReviewAnalyticsRepository {
   readonly persistIntent: (intent: CompensationIntent) => Effect.Effect<void, unknown>;
   readonly markIntentCompleted: (intentId: string) => Effect.Effect<void, never>;
   readonly markIntentConflict: (intentId: string, message: string) => Effect.Effect<void, never>;
-  readonly markIntentPendingFailure: (intentId: string, message: string) => Effect.Effect<void, never>;
+  readonly markIntentPendingFailure: (
+    intentId: string,
+    message: string,
+  ) => Effect.Effect<void, never>;
   readonly loadPendingIntents: () => Effect.Effect<readonly CompensationIntent[], never>;
   readonly getDiagnostics: () => Effect.Effect<AnalyticsDiagnostics, never>;
   readonly getReviewStats: (input: {

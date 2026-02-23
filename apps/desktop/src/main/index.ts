@@ -18,6 +18,7 @@ import {
   DeckWriteCoordinatorServiceLive,
   DuplicateIndexInvalidationService,
   EditorWindowManagerService,
+  SecretStoreServiceLive,
   SettingsRepositoryServiceLive,
   WorkspaceWatcherControlService,
   makeAppEventPublisherBridgeService,
@@ -26,9 +27,13 @@ import {
   makeWorkspaceWatcherControlBridgeService,
 } from "@main/di";
 import { NodeServicesLive } from "@main/effect/node-services";
-import { createDeckWriteCoordinator, type DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
+import {
+  createDeckWriteCoordinator,
+  type DeckWriteCoordinator,
+} from "@main/rpc/deck-write-coordinator";
 import { AppRpcHandlersServiceFromEffectLive } from "@main/rpc/handlers";
 import { HandlerServicesLive } from "@main/rpc/handlers/shared";
+import { makeSecretStore } from "@main/secrets";
 import { makeSettingsRepository } from "@main/settings/repository";
 import { createWorkspaceWatcher, type WorkspaceWatcher } from "@main/watcher/workspace-watcher";
 import {
@@ -50,7 +55,9 @@ let ipcHandle: ReturnType<typeof appIpc.main> | null = null;
 let watcher: WorkspaceWatcher | null = null;
 let editorWindowManager: EditorWindowManager | null = null;
 
-let analyticsRuntime: ReturnType<typeof createSqliteReviewAnalyticsRuntimeBundle>["runtime"] | null = null;
+let analyticsRuntime:
+  | ReturnType<typeof createSqliteReviewAnalyticsRuntimeBundle>["runtime"]
+  | null = null;
 let analyticsRepository: ReviewAnalyticsRepository = createNoopReviewAnalyticsRepository();
 let deckWriteCoordinator: DeckWriteCoordinator = createDeckWriteCoordinator();
 
@@ -209,103 +216,122 @@ const unifiedQuitPipeline = createUnifiedQuitPipeline({
   },
 });
 
-app.whenReady().then(async () => {
-  log("app ready");
-  mainWindow = createMainWindow();
-  deckWriteCoordinator = createDeckWriteCoordinator();
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
-  const settingsFilePath = path.join(app.getPath("userData"), "settings.json");
-  const settingsRepository = Effect.runSync(
-    makeSettingsRepository({ settingsFilePath }).pipe(Effect.provide(NodeServicesLive)),
-  );
-
-  const analyticsBundle = createSqliteReviewAnalyticsRuntimeBundle({
-    dbPath: path.join(app.getPath("userData"), "re.db"),
-    journalPath: path.join(app.getPath("userData"), "analytics-compensation-intents.json"),
-  });
-  const initializedAnalytics = await initializeAnalyticsRuntime(analyticsBundle);
-  analyticsRepository = initializedAnalytics.repository;
-  analyticsRuntime = initializedAnalytics.runtime;
-  if (initializedAnalytics.startupFailed) {
-    console.error("[desktop/main] analytics startup probe failed, falling back to no-op");
-  }
-
-  const appEventPublisher = makeAppEventPublisherBridgeService();
-  const workspaceWatcherControl = makeWorkspaceWatcherControlBridgeService();
-  const editorWindowManagerService = makeEditorWindowManagerBridgeService();
-  const duplicateIndexInvalidation = makeDuplicateIndexInvalidationBridgeService();
-
-  const mainServicesLive = Layer.mergeAll(
-    SettingsRepositoryServiceLive(settingsRepository),
-    AnalyticsRepositoryServiceLive(analyticsRepository),
-    DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
-    Layer.succeed(AppEventPublisherService, appEventPublisher),
-    Layer.succeed(WorkspaceWatcherControlService, workspaceWatcherControl),
-    Layer.succeed(EditorWindowManagerService, editorWindowManagerService),
-    Layer.succeed(DuplicateIndexInvalidationService, duplicateIndexInvalidation),
-  );
-
-  const rpc = Effect.runSync(
-    Effect.gen(function* () {
-      return yield* AppRpcHandlersService;
-    }).pipe(
-      Effect.provide(
-        Layer.provide(AppRpcHandlersServiceFromEffectLive, mainServicesLive),
-      ),
-    ),
-  );
-
-  editorWindowManager = createEditorWindowManager({
-    preloadPath: path.join(__dirname, "preload.js"),
-    publish: appEventPublisher.publish,
-    log,
-  });
-  editorWindowManagerService.bindOpenEditorWindow((params) => editorWindowManager?.open(params));
-  setupApplicationMenu(() => editorWindowManager?.open({ mode: "create" }));
-
-  const runtime = Runtime.defaultRuntime;
-
-  ipcHandle = appIpc.main({
-    ipcMain,
-    handlers: rpc.handlers,
-    runtime,
-    getWindows: () => BrowserWindow.getAllWindows(),
-  });
-  appEventPublisher.bind(ipcHandle.publish);
-
-  watcher = createWorkspaceWatcher({
-    publish: (snapshot) =>
-      Effect.gen(function* () {
-        duplicateIndexInvalidation.markDuplicateIndexDirty();
-        yield* appEventPublisher.publish(WorkspaceSnapshotChanged, snapshot);
-      }),
-    runtime,
-  });
-  workspaceWatcherControl.bind(watcher);
-
-  await replayPendingCompensations();
-  if (!ipcHandle) {
-    throw new Error("IPC handle is not initialized.");
-  }
-  ipcHandle.start();
-  startReplayTimer();
-
-  Effect.runPromise(settingsRepository.getSettings())
-    .then((settings) => {
-      if (settings.workspace.rootPath) {
-        watcher?.start(settings.workspace.rootPath);
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
       }
-    })
-    .catch((error: unknown) => {
-      log("failed to read settings for initial watcher start", error);
-    });
-
-  app.on("activate", () => {
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      mainWindow = createMainWindow();
+      mainWindow.focus();
     }
   });
-});
+
+  app.whenReady().then(async () => {
+    log("app ready");
+    mainWindow = createMainWindow();
+    deckWriteCoordinator = createDeckWriteCoordinator();
+
+    const userDataPath = app.getPath("userData");
+    const settingsFilePath = path.join(userDataPath, "settings.json");
+    const secretsFilePath = path.join(userDataPath, "secrets.json");
+    const settingsRepository = Effect.runSync(
+      makeSettingsRepository({ settingsFilePath }).pipe(Effect.provide(NodeServicesLive)),
+    );
+    const secretStore = Effect.runSync(
+      makeSecretStore({
+        encryptedFilePath: secretsFilePath,
+      }).pipe(Effect.provide(NodeServicesLive)),
+    );
+
+    const analyticsBundle = createSqliteReviewAnalyticsRuntimeBundle({
+      dbPath: path.join(userDataPath, "re.db"),
+      journalPath: path.join(userDataPath, "analytics-compensation-intents.json"),
+    });
+    const initializedAnalytics = await initializeAnalyticsRuntime(analyticsBundle);
+    analyticsRepository = initializedAnalytics.repository;
+    analyticsRuntime = initializedAnalytics.runtime;
+    if (initializedAnalytics.startupFailed) {
+      console.error("[desktop/main] analytics startup probe failed, falling back to no-op");
+    }
+
+    const appEventPublisher = makeAppEventPublisherBridgeService();
+    const workspaceWatcherControl = makeWorkspaceWatcherControlBridgeService();
+    const editorWindowManagerService = makeEditorWindowManagerBridgeService();
+    const duplicateIndexInvalidation = makeDuplicateIndexInvalidationBridgeService();
+
+    const mainServicesLive = Layer.mergeAll(
+      SettingsRepositoryServiceLive(settingsRepository),
+      SecretStoreServiceLive(secretStore),
+      AnalyticsRepositoryServiceLive(analyticsRepository),
+      DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
+      Layer.succeed(AppEventPublisherService, appEventPublisher),
+      Layer.succeed(WorkspaceWatcherControlService, workspaceWatcherControl),
+      Layer.succeed(EditorWindowManagerService, editorWindowManagerService),
+      Layer.succeed(DuplicateIndexInvalidationService, duplicateIndexInvalidation),
+    );
+
+    const rpc = Effect.runSync(
+      Effect.gen(function* () {
+        return yield* AppRpcHandlersService;
+      }).pipe(Effect.provide(Layer.provide(AppRpcHandlersServiceFromEffectLive, mainServicesLive))),
+    );
+
+    editorWindowManager = createEditorWindowManager({
+      preloadPath: path.join(__dirname, "preload.js"),
+      publish: appEventPublisher.publish,
+      log,
+    });
+    editorWindowManagerService.bindOpenEditorWindow((params) => editorWindowManager?.open(params));
+    setupApplicationMenu(() => editorWindowManager?.open({ mode: "create" }));
+
+    const runtime = Runtime.defaultRuntime;
+
+    ipcHandle = appIpc.main({
+      ipcMain,
+      handlers: rpc.handlers,
+      runtime,
+      getWindows: () => BrowserWindow.getAllWindows(),
+    });
+    appEventPublisher.bind(ipcHandle.publish);
+
+    watcher = createWorkspaceWatcher({
+      publish: (snapshot) =>
+        Effect.gen(function* () {
+          duplicateIndexInvalidation.markDuplicateIndexDirty();
+          yield* appEventPublisher.publish(WorkspaceSnapshotChanged, snapshot);
+        }),
+      runtime,
+    });
+    workspaceWatcherControl.bind(watcher);
+
+    await replayPendingCompensations();
+    if (!ipcHandle) {
+      throw new Error("IPC handle is not initialized.");
+    }
+    ipcHandle.start();
+    startReplayTimer();
+
+    Effect.runPromise(settingsRepository.getSettings())
+      .then((settings) => {
+        if (settings.workspace.rootPath) {
+          watcher?.start(settings.workspace.rootPath);
+        }
+      })
+      .catch((error: unknown) => {
+        log("failed to read settings for initial watcher start", error);
+      });
+
+    app.on("activate", () => {
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        mainWindow = createMainWindow();
+      }
+    });
+  });
+}
 
 app.on("before-quit", (event) => {
   unifiedQuitPipeline.handleBeforeQuit(event);

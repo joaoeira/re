@@ -342,19 +342,24 @@ export const createSqliteReviewAnalyticsRuntimeBundle = ({
       ),
     getDiagnostics: () =>
       journal.summarize().pipe(
-        Effect.map(({ pending, conflict }): AnalyticsDiagnostics => ({
-          pendingIntentCount: pending,
-          conflictIntentCount: conflict,
-          replayAttempts: diagnostics.replayAttempts,
-          replaySuccess: diagnostics.replaySuccess,
-          replayFailure: diagnostics.replayFailure,
-          droppedScheduleAnalyticsInsertCount: diagnostics.droppedScheduleAnalyticsInsertCount,
-          intentJournalWriteFailures: diagnostics.intentJournalWriteFailures,
-        })),
+        Effect.map(
+          ({ pending, conflict }): AnalyticsDiagnostics => ({
+            pendingIntentCount: pending,
+            conflictIntentCount: conflict,
+            replayAttempts: diagnostics.replayAttempts,
+            replaySuccess: diagnostics.replaySuccess,
+            replayFailure: diagnostics.replayFailure,
+            droppedScheduleAnalyticsInsertCount: diagnostics.droppedScheduleAnalyticsInsertCount,
+            intentJournalWriteFailures: diagnostics.intentJournalWriteFailures,
+          }),
+        ),
         Effect.catchAll((error) =>
           Effect.sync((): AnalyticsDiagnostics => {
             diagnostics.intentJournalWriteFailures += 1;
-            console.error("[desktop/analytics] failed to compute diagnostics", toErrorMessage(error));
+            console.error(
+              "[desktop/analytics] failed to compute diagnostics",
+              toErrorMessage(error),
+            );
             return {
               pendingIntentCount: 0,
               conflictIntentCount: 0,

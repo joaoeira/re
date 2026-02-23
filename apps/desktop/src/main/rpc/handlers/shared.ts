@@ -111,9 +111,7 @@ type ProvidedHandler<THandler extends Handler> = (
   THandler extends (input: never) => Effect.Effect<infer TSuccess, unknown, unknown>
     ? TSuccess
     : never,
-  THandler extends (input: never) => Effect.Effect<unknown, infer TError, unknown>
-    ? TError
-    : never,
+  THandler extends (input: never) => Effect.Effect<unknown, infer TError, unknown> ? TError : never,
   Exclude<
     THandler extends (input: never) => Effect.Effect<unknown, unknown, infer TRuntime>
       ? TRuntime

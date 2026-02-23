@@ -5,9 +5,10 @@ export interface DuplicateIndexInvalidationService {
   readonly registerListener: (listener: () => void) => void;
 }
 
-export const DuplicateIndexInvalidationService = Context.GenericTag<DuplicateIndexInvalidationService>(
-  "@re/desktop/main/DuplicateIndexInvalidationService",
-);
+export const DuplicateIndexInvalidationService =
+  Context.GenericTag<DuplicateIndexInvalidationService>(
+    "@re/desktop/main/DuplicateIndexInvalidationService",
+  );
 
 export const makeDuplicateIndexInvalidationBridgeService =
   (): DuplicateIndexInvalidationService => {
