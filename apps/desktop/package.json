@@ -73,7 +73,7 @@
     "electron": "38.0.0",
     "jsdom": "26.1.0",
     "vite": "7.1.2",
-    "vitest": "^4.0.16",
+    "vitest": "^4.0.18",
     "vitest-browser-react": "^2.0.5"
   },
   "engines": {

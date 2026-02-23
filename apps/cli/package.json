@@ -32,6 +32,6 @@
     "@types/bun": "latest",
     "@types/react": "^19.1.8",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.16"
+    "vitest": "^4.0.18"
   }
 }
