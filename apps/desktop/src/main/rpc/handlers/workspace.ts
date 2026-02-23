@@ -1,5 +1,6 @@
 import { parseFile } from "@re/core";
 import { scanDecks, snapshotWorkspace } from "@re/workspace";
+import { BrowserWindow, dialog } from "electron";
 import { Effect } from "effect";
 import type { FileSystem, Path } from "@effect/platform";
 import type { Implementations } from "electron-effect-rpc/types";
@@ -21,7 +22,8 @@ type WorkspaceHandlerKeys =
   | "ScanDecks"
   | "GetWorkspaceSnapshot"
   | "GetSettings"
-  | "SetWorkspaceRootPath";
+  | "SetWorkspaceRootPath"
+  | "SelectDirectory";
 
 type WorkspaceHandlerRuntime = FileSystem.FileSystem | Path.Path;
 
@@ -64,6 +66,15 @@ export const createWorkspaceHandlers = () =>
             }),
           ),
         ),
+      SelectDirectory: () =>
+        Effect.promise(async () => {
+          const options: Electron.OpenDialogOptions = { properties: ["openDirectory"] };
+          const focusedWindow = BrowserWindow.getFocusedWindow();
+          const result = focusedWindow
+            ? await dialog.showOpenDialog(focusedWindow, options)
+            : await dialog.showOpenDialog(options);
+          return { path: result.canceled ? null : (result.filePaths[0] ?? null) };
+        }),
     };
 
     return provideHandlerServices(handlers);

@@ -3,12 +3,14 @@ import { createWorkspaceStore, type WorkspaceStore } from "./workspaceStore";
 import { createDeckListStore, type DeckListStore } from "./deckListStore";
 import { createDeckSelectionStore, type DeckSelectionStore } from "./deckSelectionStore";
 import { createEditorStore, type EditorStore } from "./editorStore";
+import { createSettingsStore, type SettingsStore } from "./settingsStore";
 
 type Stores = {
   readonly workspace: WorkspaceStore;
   readonly deckList: DeckListStore;
   readonly deckSelection: DeckSelectionStore;
   readonly editor: EditorStore;
+  readonly settings: SettingsStore;
 };
 
 const StoresContext = createContext<Stores | null>(null);
@@ -35,6 +37,10 @@ export function useEditorStore(): EditorStore {
   return useStores().editor;
 }
 
+export function useSettingsStore(): SettingsStore {
+  return useStores().settings;
+}
+
 export function StoresProvider({
   children,
   stores,
@@ -51,5 +57,6 @@ export function createStores(): Stores {
     deckList: createDeckListStore(),
     deckSelection: createDeckSelectionStore(),
     editor: createEditorStore(),
+    settings: createSettingsStore(),
   };
 }

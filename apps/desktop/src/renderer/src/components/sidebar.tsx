@@ -1,6 +1,7 @@
 import { Home, Table2, Sparkles, Settings } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 
+import { useSettingsStore } from "@shared/state/stores-context";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const navItems = [
@@ -12,6 +13,7 @@ const navItems = [
 export function Sidebar() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const settingsStore = useSettingsStore();
 
   return (
     <nav
@@ -50,9 +52,9 @@ export function Sidebar() {
 
         <Tooltip>
           <TooltipTrigger
-            className="flex size-9 items-center justify-center text-sidebar-foreground/30 transition-colors"
+            className="flex size-9 items-center justify-center text-sidebar-foreground/60 transition-colors hover:text-sidebar-foreground"
             aria-label="Settings"
-            aria-disabled="true"
+            onClick={() => settingsStore.send({ type: "openSettings" })}
           >
             <Settings size={18} />
           </TooltipTrigger>

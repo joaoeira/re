@@ -8,80 +8,80 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as ReviewRouteImport } from './routes/review'
-import { Route as EditorRouteImport } from './routes/editor'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as rootRouteImport } from "./routes/__root";
+import { Route as ReviewRouteImport } from "./routes/review";
+import { Route as EditorRouteImport } from "./routes/editor";
+import { Route as IndexRouteImport } from "./routes/index";
 
 const ReviewRoute = ReviewRouteImport.update({
-  id: '/review',
-  path: '/review',
+  id: "/review",
+  path: "/review",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const EditorRoute = EditorRouteImport.update({
-  id: '/editor',
-  path: '/editor',
+  id: "/editor",
+  path: "/editor",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/editor': typeof EditorRoute
-  '/review': typeof ReviewRoute
+  "/": typeof IndexRoute;
+  "/editor": typeof EditorRoute;
+  "/review": typeof ReviewRoute;
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/editor': typeof EditorRoute
-  '/review': typeof ReviewRoute
+  "/": typeof IndexRoute;
+  "/editor": typeof EditorRoute;
+  "/review": typeof ReviewRoute;
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/editor': typeof EditorRoute
-  '/review': typeof ReviewRoute
+  __root__: typeof rootRouteImport;
+  "/": typeof IndexRoute;
+  "/editor": typeof EditorRoute;
+  "/review": typeof ReviewRoute;
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/editor' | '/review'
-  fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/editor' | '/review'
-  id: '__root__' | '/' | '/editor' | '/review'
-  fileRoutesById: FileRoutesById
+  fileRoutesByFullPath: FileRoutesByFullPath;
+  fullPaths: "/" | "/editor" | "/review";
+  fileRoutesByTo: FileRoutesByTo;
+  to: "/" | "/editor" | "/review";
+  id: "__root__" | "/" | "/editor" | "/review";
+  fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  EditorRoute: typeof EditorRoute
-  ReviewRoute: typeof ReviewRoute
+  IndexRoute: typeof IndexRoute;
+  EditorRoute: typeof EditorRoute;
+  ReviewRoute: typeof ReviewRoute;
 }
 
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    '/review': {
-      id: '/review'
-      path: '/review'
-      fullPath: '/review'
-      preLoaderRoute: typeof ReviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/editor': {
-      id: '/editor'
-      path: '/editor'
-      fullPath: '/editor'
-      preLoaderRoute: typeof EditorRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
+    "/review": {
+      id: "/review";
+      path: "/review";
+      fullPath: "/review";
+      preLoaderRoute: typeof ReviewRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/editor": {
+      id: "/editor";
+      path: "/editor";
+      fullPath: "/editor";
+      preLoaderRoute: typeof EditorRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/": {
+      id: "/";
+      path: "/";
+      fullPath: "/";
+      preLoaderRoute: typeof IndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
   }
 }
 
@@ -89,7 +89,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   EditorRoute: EditorRoute,
   ReviewRoute: ReviewRoute,
-}
+};
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+  ._addFileTypes<FileRouteTypes>();

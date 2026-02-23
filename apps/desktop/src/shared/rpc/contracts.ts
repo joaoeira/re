@@ -148,6 +148,14 @@ export const DeleteApiKey = rpc(
   SecretStoreErrorSchema,
 );
 
+export const SelectDirectory = rpc(
+  "SelectDirectory",
+  Schema.Struct({}),
+  Schema.Struct({
+    path: Schema.Union(Schema.String, Schema.Null),
+  }),
+);
+
 export const BuildReviewQueue = rpc(
   "BuildReviewQueue",
   Schema.Struct({
@@ -332,6 +340,7 @@ export const appContract = defineContract({
     HasApiKey,
     SetApiKey,
     DeleteApiKey,
+    SelectDirectory,
     BuildReviewQueue,
     GetCardContent,
     ScheduleReview,
