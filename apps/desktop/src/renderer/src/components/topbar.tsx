@@ -1,16 +1,16 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { Plus } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Effect } from "effect";
 
-import { createIpc } from "@/lib/ipc";
+import { useIpc } from "@/lib/ipc-context";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function Topbar() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isReview = pathname === "/review";
-  const ipc = useMemo(() => (window.desktopApi ? createIpc(window.desktopApi) : null), []);
+  const ipc = useIpc();
 
   useEffect(() => {
     if (!isReview) return;
@@ -76,7 +76,6 @@ export function Topbar() {
             <TooltipTrigger
               className="flex size-7 items-center justify-center border border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
               onClick={() => {
-                if (!ipc) return;
                 void Effect.runPromise(ipc.client.OpenEditorWindow({ mode: "create" })).catch(
                   () => undefined,
                 );

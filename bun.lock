@@ -44,6 +44,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@ai-sdk/anthropic": "^3.0.46",
+        "@ai-sdk/openai": "^3.0.30",
         "@ai-sdk/provider": "^3.0.8",
         "@base-ui/react": "1.2.0",
         "@effect/experimental": "^0.58.0",
@@ -66,7 +67,7 @@
         "class-variance-authority": "0.7.1",
         "clsx": "2.1.1",
         "effect": "3.19.18",
-        "electron-effect-rpc": "0.7.0",
+        "electron-effect-rpc": "0.7.1",
         "lucide-react": "0.564.0",
         "react": "19.2.3",
         "react-dom": "19.2.3",
@@ -157,6 +158,8 @@
     "@ai-sdk/anthropic": ["@ai-sdk/anthropic@3.0.46", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.15" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-zXJPiNHaIiQ6XUqLeSYZ3ZbSzjqt1pNWEUf2hlkXlmmw8IF8KI0ruuGaDwKCExmtuNRf0E4TDxhsc9wRgWTzpw=="],
 
     "@ai-sdk/gateway": ["@ai-sdk/gateway@3.0.53", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.15", "@vercel/oidc": "3.1.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-QT3FEoNARMRlk8JJVR7L98exiK9C8AGfrEJVbRxBT1yIXKs/N19o/+PsjTRVsARgDJNcy9JbJp1FspKucEat0Q=="],
+
+    "@ai-sdk/openai": ["@ai-sdk/openai@3.0.30", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.15" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-YDht3t7TDyWKP+JYZp20VuYqSjyF2brHYh47GGFDUPf2wZiqNQ263ecL+quar2bP3GZ3BeQA8f0m2B7UwLPR+g=="],
 
     "@ai-sdk/provider": ["@ai-sdk/provider@3.0.8", "", { "dependencies": { "json-schema": "^0.4.0" } }, "sha512-oGMAgGoQdBXbZqNG0Ze56CHjDZ1IDYOwGYxYjO5KLSlz5HiNQ9udIXsPZ61VWaHGZ5XW/jyjmr6t2xz2jGVwbQ=="],
 
@@ -1136,7 +1139,7 @@
 
     "electron": ["electron@38.0.0", "", { "dependencies": { "@electron/get": "^2.0.0", "@types/node": "^22.7.7", "extract-zip": "^2.0.1" }, "bin": { "electron": "cli.js" } }, "sha512-egljptiPJqbL/oamFCEY+g3RNeONWTVxZSGeyLqzK8xq106JhzuxnhJZ3sxt4DzJFaofbGyGJA37Oe9d+gVzYw=="],
 
-    "electron-effect-rpc": ["electron-effect-rpc@0.7.0", "", { "peerDependencies": { "@effect/schema": ">=0.69.0", "effect": ">=3.0.0", "electron": ">=28.0.0" } }, "sha512-jFmdKEUmbEeZT6g/GiarnUpsM3BnxAB4t+4xIk6co8i2eznKAPH2Z0xje5nEbkGRyeD33PrkRFNFD5WNqRIMew=="],
+    "electron-effect-rpc": ["electron-effect-rpc@0.7.1", "", { "peerDependencies": { "@effect/schema": ">=0.69.0", "effect": ">=3.0.0", "electron": ">=28.0.0" } }, "sha512-HI0mgbEiM970h6c6kIzE6AgdAI1k7f3n6GXDDEZUAHNja8oa3g/o56CokgInNzqpKdd/OAMSrqmDcqI6RuyK6A=="],
 
     "electron-installer-common": ["electron-installer-common@0.10.4", "", { "dependencies": { "@electron/asar": "^3.2.5", "@malept/cross-spawn-promise": "^1.0.0", "debug": "^4.1.1", "fs-extra": "^9.0.0", "glob": "^7.1.4", "lodash": "^4.17.15", "parse-author": "^2.0.0", "semver": "^7.1.1", "tmp-promise": "^3.0.2" }, "optionalDependencies": { "@types/fs-extra": "^9.0.1" } }, "sha512-8gMNPXfAqUE5CfXg8RL0vXpLE9HAaPkgLXVoHE3BMUzogMWenf4LmwQ27BdCUrEhkjrKl+igs2IHJibclR3z3Q=="],
 

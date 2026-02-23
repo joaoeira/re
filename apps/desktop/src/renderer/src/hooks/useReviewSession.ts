@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createActor, type ActorRefFrom } from "xstate";
 import { Effect } from "effect";
 
-import { createIpc } from "@/lib/ipc";
+import { useIpc } from "@/lib/ipc-context";
 import { CardEdited } from "@shared/rpc/contracts";
 import {
   desktopReviewSessionMachine,
@@ -61,13 +61,9 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
   const refreshReasonRef = useRef<string | null>(null);
   const refreshInFlightRef = useRef(false);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const ipc = useIpc();
   const send: DesktopReviewSessionSend = useCallback((event) => {
     actorRef.current?.send(event);
-  }, []);
-
-  const ipc = useMemo(() => {
-    if (!window.desktopApi) return null;
-    return createIpc(window.desktopApi);
   }, []);
 
   const deckSelectionKey = useMemo(() => (decks === "all" ? "all" : decks.join("\u0000")), [decks]);
@@ -76,14 +72,6 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
     let isCancelled = false;
     let unsubscribeActor: (() => void) | null = null;
     let unsubscribeCardEdited: (() => void) | null = null;
-
-    if (!ipc) {
-      setState({
-        status: "error",
-        message: "Desktop IPC bridge is unavailable.",
-      });
-      return;
-    }
 
     if (actorRef.current) {
       actorRef.current.stop();

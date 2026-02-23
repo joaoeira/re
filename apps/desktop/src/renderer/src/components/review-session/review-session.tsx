@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Effect } from "effect";
 
@@ -7,7 +7,7 @@ import { CardContent } from "@/components/review-session/card-content";
 import { ReviewActionBar } from "@/components/review-session/review-action-bar";
 import { SessionSummary } from "@/components/review-session/session-summary";
 import { Button } from "@/components/ui/button";
-import { createIpc } from "@/lib/ipc";
+import { useIpc } from "@/lib/ipc-context";
 import type { DesktopReviewSessionSnapshot } from "@/machines/desktopReviewSession";
 
 type ReviewSessionProps = {
@@ -17,17 +17,10 @@ type ReviewSessionProps = {
 export function ReviewSession({ decks }: ReviewSessionProps) {
   const navigate = useNavigate();
   const session = useReviewSession(decks);
-  const ipc = useMemo(() => {
-    if (!window.desktopApi) return null;
-    return createIpc(window.desktopApi);
-  }, []);
+  const ipc = useIpc();
 
   const openEditorForCurrentCard = useCallback(
     (snapshot: DesktopReviewSessionSnapshot) => {
-      if (!ipc) {
-        return;
-      }
-
       const queueItem = snapshot.context.queue[snapshot.context.currentIndex];
       if (!queueItem) {
         return;

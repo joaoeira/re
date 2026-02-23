@@ -3,6 +3,11 @@ export {
   AnalyticsRepositoryServiceLive,
 } from "./services/AnalyticsRepositoryService";
 export {
+  AiClientService,
+  AiClientServiceFromSecretStoreLive,
+  AiClientServiceLive,
+} from "./services/AiClientService";
+export {
   AppEventPublisherService,
   AppEventPublisherBridgeLive,
   AppEventPublisherServiceLive,

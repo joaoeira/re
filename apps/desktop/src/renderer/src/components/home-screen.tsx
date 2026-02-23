@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@xstate/store-react";
 
@@ -11,7 +11,7 @@ import type { RpcDefectError } from "electron-effect-rpc/renderer";
 
 import { DeckList } from "./deck-list";
 import { SelectionToolbar } from "./selection-toolbar";
-import { createIpc } from "../lib/ipc";
+import { useIpc } from "../lib/ipc-context";
 
 const DEFAULT_SNAPSHOT_OPTIONS = {
   includeHidden: false,
@@ -58,15 +58,10 @@ export function HomeScreen() {
   const snapshotResult = useSelector(workspaceStore, (s) => s.context.snapshotResult);
   const workspaceError = useSelector(workspaceStore, (s) => s.context.error);
   const selectedDecks = useSelector(deckSelectionStore, (s) => s.context.selected);
-
-  const ipc = useMemo(() => {
-    if (!window.desktopApi) return null;
-    return createIpc(window.desktopApi);
-  }, []);
+  const ipc = useIpc();
 
   const loadWorkspaceSnapshot = useCallback(
     (rootPath: string) => {
-      if (!ipc) return;
       workspaceStore.send({ type: "setLoading" });
 
       void Effect.runPromise(
@@ -101,11 +96,6 @@ export function HomeScreen() {
   );
 
   useEffect(() => {
-    if (!ipc) {
-      workspaceStore.send({ type: "setError", error: "Desktop IPC bridge is unavailable." });
-      return;
-    }
-
     const unsubscribeSnapshot = ipc.events.subscribe(WorkspaceSnapshotChanged, (snapshot) => {
       workspaceStore.send({ type: "setSnapshot", snapshot });
     });

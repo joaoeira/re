@@ -15,6 +15,7 @@ import {
   AppRpcHandlersService,
   AppEventPublisherService,
   AnalyticsRepositoryServiceLive,
+  AiClientServiceFromSecretStoreLive,
   DeckWriteCoordinatorServiceLive,
   DuplicateIndexInvalidationService,
   EditorWindowManagerService,
@@ -266,6 +267,7 @@ if (!gotSingleInstanceLock) {
     const mainServicesLive = Layer.mergeAll(
       SettingsRepositoryServiceLive(settingsRepository),
       SecretStoreServiceLive(secretStore),
+      AiClientServiceFromSecretStoreLive(secretStore),
       AnalyticsRepositoryServiceLive(analyticsRepository),
       DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
       Layer.succeed(AppEventPublisherService, appEventPublisher),
@@ -293,6 +295,7 @@ if (!gotSingleInstanceLock) {
     ipcHandle = appIpc.main({
       ipcMain,
       handlers: rpc.handlers,
+      streamHandlers: rpc.streamHandlers,
       runtime,
       getWindows: () => BrowserWindow.getAllWindows(),
     });

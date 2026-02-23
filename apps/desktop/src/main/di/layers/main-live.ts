@@ -7,6 +7,7 @@ import {
   AppEventPublisherServiceLive,
 } from "../services/AppEventPublisherService";
 import { AnalyticsRepositoryServiceLive } from "../services/AnalyticsRepositoryService";
+import { AiClientServiceFromSecretStoreLive } from "../services/AiClientService";
 import { DeckWriteCoordinatorServiceLive } from "../services/DeckWriteCoordinatorService";
 import {
   DuplicateIndexInvalidationBridgeLive,
@@ -50,6 +51,7 @@ const MainStaticLive = ({
   Layer.mergeAll(
     SettingsRepositoryServiceLive(settingsRepository),
     SecretStoreServiceLive(secretStore),
+    AiClientServiceFromSecretStoreLive(secretStore),
     AnalyticsRepositoryServiceLive(analyticsRepository),
     DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
   );

@@ -5,7 +5,7 @@ import { useSelector } from "@xstate/store-react";
 import type { ScanDecksResult } from "@re/workspace";
 import { Effect, Option } from "effect";
 
-import { createIpc } from "@/lib/ipc";
+import { useIpc } from "@/lib/ipc-context";
 import { EditorNavigateRequest, WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
 import { useEditorStore } from "@shared/state/stores-context";
 
@@ -83,22 +83,14 @@ export function useEditorSession(search: EditorSearchParams) {
   const initialMode = search.mode;
   const initialDeckPath = search.deckPath;
   const initialCardId = search.mode === "edit" ? search.cardId : null;
+  const ipc = useIpc();
 
   const [rootPath, setRootPath] = useState<string | null>(null);
   const [decks, setDecks] = useState<readonly DeckEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const ipc = useMemo(() => {
-    if (!window.desktopApi) return null;
-    return createIpc(window.desktopApi);
-  }, []);
-
   const refreshDecks = useCallback(
     async (workspaceRootPath: string) => {
-      if (!ipc) {
-        return;
-      }
-
       const scanned = await Effect.runPromise(
         ipc.client.ScanDecks({ rootPath: workspaceRootPath }),
       );
@@ -123,12 +115,6 @@ export function useEditorSession(search: EditorSearchParams) {
     let cancelled = false;
 
     const initialize = async () => {
-      if (!ipc) {
-        editorStore.send({ type: "setError", error: "Desktop IPC bridge is unavailable." });
-        setLoading(false);
-        return;
-      }
-
       setLoading(true);
 
       try {
@@ -210,10 +196,6 @@ export function useEditorSession(search: EditorSearchParams) {
   }, [editorStore, initialCardId, initialDeckPath, initialMode, ipc]);
 
   useEffect(() => {
-    if (!ipc) {
-      return;
-    }
-
     return ipc.events.subscribe(EditorNavigateRequest, (params) => {
       const dirty = editorStore.getSnapshot().context.dirty;
       if (dirty && !window.confirm("Discard unsaved changes?")) {
@@ -272,7 +254,7 @@ export function useEditorSession(search: EditorSearchParams) {
   }, [decks, editorStore, ipc, navigate, search]);
 
   useEffect(() => {
-    if (!ipc || !rootPath) {
+    if (!rootPath) {
       return;
     }
 
@@ -302,7 +284,7 @@ export function useEditorSession(search: EditorSearchParams) {
   }, [editorStore]);
 
   useEffect(() => {
-    if (!ipc || !rootPath || !context.deckPath) {
+    if (!rootPath || !context.deckPath) {
       if (context.isDuplicate || context.duplicateDeckPath !== null) {
         editorStore.send({ type: "setDuplicate", isDuplicate: false, deckPath: null });
       }
@@ -365,11 +347,6 @@ export function useEditorSession(search: EditorSearchParams) {
   ]);
 
   const submit = useCallback(async () => {
-    if (!ipc) {
-      editorStore.send({ type: "setError", error: "Desktop IPC bridge is unavailable." });
-      return;
-    }
-
     const snapshot = editorStore.getSnapshot().context;
     const content = buildEditorContent(snapshot);
 

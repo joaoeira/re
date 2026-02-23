@@ -6,7 +6,8 @@ import {
   SnapshotWorkspaceErrorSchema,
   SnapshotWorkspaceResultSchema,
 } from "@re/workspace";
-import { defineContract, event, rpc } from "electron-effect-rpc/contract";
+import { defineContract, event, rpc, streamRpc } from "electron-effect-rpc/contract";
+import { AiStreamChunkSchema, AiStreamErrorSchema, ModelIdSchema } from "@shared/rpc/schemas/ai";
 import { EditorOperationError } from "@shared/rpc/schemas/editor";
 import {
   SettingsErrorSchema,
@@ -42,6 +43,17 @@ const EditorEditWindowParamsSchema = Schema.Struct({
 const EditorWindowParamsSchema = Schema.Union(
   EditorCreateWindowParamsSchema,
   EditorEditWindowParamsSchema,
+);
+
+export const StreamCompletion = streamRpc(
+  "StreamCompletion",
+  Schema.Struct({
+    model: ModelIdSchema,
+    prompt: Schema.String,
+    systemPrompt: Schema.optional(Schema.String),
+  }),
+  AiStreamChunkSchema,
+  AiStreamErrorSchema,
 );
 
 export const GetBootstrapData = rpc(
@@ -312,6 +324,7 @@ export const appContract = defineContract({
     OpenEditorWindow,
   ] as const,
   events: [WorkspaceSnapshotChanged, CardEdited, EditorNavigateRequest] as const,
+  streamMethods: [StreamCompletion] as const,
 });
 
 export type AppContract = typeof appContract;

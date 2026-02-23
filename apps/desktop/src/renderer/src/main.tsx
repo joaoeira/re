@@ -4,6 +4,7 @@ import { RouterProvider } from "@tanstack/react-router";
 
 import "./styles.css";
 
+import { IpcProvider } from "./lib/ipc-context";
 import { router } from "./lib/router";
 import { StoresProvider, createStores } from "@shared/state/stores-context";
 
@@ -16,8 +17,10 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <StoresProvider stores={stores}>
-      <RouterProvider router={router} />
-    </StoresProvider>
+    <IpcProvider>
+      <StoresProvider stores={stores}>
+        <RouterProvider router={router} />
+      </StoresProvider>
+    </IpcProvider>
   </StrictMode>,
 );
