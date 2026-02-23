@@ -269,7 +269,9 @@ describe("makeAiClient", () => {
   it("maps APICallError 429 to ai_rate_limit and parses retry-after", async () => {
     mocks.streamText.mockImplementation(() => ({
       textStream: {
+        // async generator required to match textStream's AsyncIterable interface
         async *[Symbol.asyncIterator]() {
+          yield* [];
           throw new mocks.APICallError({
             message: "rate limited",
             statusCode: 429,
@@ -295,7 +297,9 @@ describe("makeAiClient", () => {
   it("maps network TypeError to ai_offline", async () => {
     mocks.streamText.mockImplementation(() => ({
       textStream: {
+        // async generator required to match textStream's AsyncIterable interface
         async *[Symbol.asyncIterator]() {
+          yield* [];
           throw new TypeError("fetch failed");
         },
       },
@@ -320,7 +324,9 @@ describe("makeAiClient", () => {
       capturedSignal = input.abortSignal;
       return {
         textStream: {
+          // async generator required to match textStream's AsyncIterable interface
           async *[Symbol.asyncIterator]() {
+            yield* [];
             while (!(input.abortSignal?.aborted ?? true)) {
               await new Promise((resolve) => setTimeout(resolve, 5));
             }
