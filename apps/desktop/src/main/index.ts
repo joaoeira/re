@@ -220,6 +220,7 @@ const unifiedQuitPipeline = createUnifiedQuitPipeline({
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
+  log("another instance is already running, quitting");
   app.quit();
 } else {
   app.on("second-instance", () => {
