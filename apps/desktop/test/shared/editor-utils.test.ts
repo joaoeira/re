@@ -178,6 +178,15 @@ describe("isSameEditorRequest", () => {
     ).toBe(false);
   });
 
+  it("rejects edit requests with different deckPath", () => {
+    expect(
+      isSameEditorRequest(
+        { mode: "edit", deckPath: "/a.md", cardId: "c1" },
+        { mode: "edit", deckPath: "/b.md", cardId: "c1" },
+      ),
+    ).toBe(false);
+  });
+
   it("rejects mismatched modes", () => {
     expect(
       isSameEditorRequest(

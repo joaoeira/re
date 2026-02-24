@@ -128,6 +128,30 @@ describe("editorStore", () => {
       expect(ctx().backContent).toBe("middle\n---\nend");
     });
 
+    it("handles separator-only content", () => {
+      store.send({ type: "loadForEdit", ...qaEvent, content: "\n---\n" });
+      expect(ctx().frontContent).toBe("");
+      expect(ctx().backContent).toBe("");
+    });
+
+    it("handles separator at start", () => {
+      store.send({ type: "loadForEdit", ...qaEvent, content: "\n---\nback only" });
+      expect(ctx().frontContent).toBe("");
+      expect(ctx().backContent).toBe("back only");
+    });
+
+    it("handles separator at end", () => {
+      store.send({ type: "loadForEdit", ...qaEvent, content: "front only\n---\n" });
+      expect(ctx().frontContent).toBe("front only");
+      expect(ctx().backContent).toBe("");
+    });
+
+    it("treats bare --- without surrounding newlines as content", () => {
+      store.send({ type: "loadForEdit", ...qaEvent, content: "before---after" });
+      expect(ctx().frontContent).toBe("before---after");
+      expect(ctx().backContent).toBe("");
+    });
+
     it("trims whitespace", () => {
       store.send({
         type: "loadForEdit",
@@ -327,7 +351,7 @@ describe("editorStore", () => {
       expect(ctx().backContent).toBe("answer");
     });
 
-    it("preserves content in edit mode regardless of frozen", () => {
+    it("preserves content in edit mode with frozen flags off", () => {
       store.send({
         type: "loadForEdit",
         content: "front\n---\nback",
@@ -336,6 +360,23 @@ describe("editorStore", () => {
         cardIds: ["c1"],
         deckPath: "/deck.md",
       });
+      store.send({ type: "setSubmitting", isSubmitting: true });
+      store.send({ type: "itemSaved" });
+      expect(ctx().frontContent).toBe("front");
+      expect(ctx().backContent).toBe("back");
+    });
+
+    it("preserves content in edit mode with frozen flags on", () => {
+      store.send({
+        type: "loadForEdit",
+        content: "front\n---\nback",
+        cardType: "qa",
+        cardId: "c1",
+        cardIds: ["c1"],
+        deckPath: "/deck.md",
+      });
+      store.send({ type: "toggleFrontFrozen" });
+      store.send({ type: "toggleBackFrozen" });
       store.send({ type: "setSubmitting", isSubmitting: true });
       store.send({ type: "itemSaved" });
       expect(ctx().frontContent).toBe("front");

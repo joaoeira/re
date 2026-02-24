@@ -28,15 +28,31 @@ describe("ClozePreview", () => {
     await expect.element(screen.getByText("and", { exact: false })).toBeVisible();
   });
 
-  it("renders incomplete syntax as plain text", async () => {
+  it("returns null for unclosed cloze syntax", async () => {
     const screen = await render(<ClozePreview content="{{c1:: no closing" />);
     expect(screen.container.innerHTML).toBe("");
   });
 
-  it("handles empty answer", async () => {
+  it("renders empty answer as a cloze span", async () => {
     const screen = await render(<ClozePreview content="test {{c1::}} end" />);
     await expect.element(screen.getByText("test")).toBeVisible();
     await expect.element(screen.getByText("end")).toBeVisible();
+    const spans = screen.container.querySelectorAll("span.border-dashed");
+    expect(spans.length).toBe(1);
+  });
+
+  it("handles multiline content inside cloze", async () => {
+    const screen = await render(<ClozePreview content={"{{c1::line1\nline2}}"} />);
+    const clozeSpan = screen.container.querySelector("span.border-dashed");
+    expect(clozeSpan).not.toBeNull();
+    expect(clozeSpan!.textContent).toContain("line1");
+    expect(clozeSpan!.textContent).toContain("line2");
+  });
+
+  it("partially matches nested braces", async () => {
+    const screen = await render(<ClozePreview content="{{c1::{{nested}}}}" />);
+    const container = screen.container.textContent;
+    expect(container).toContain("{{nested");
   });
 
   it("handles adjacent clozes", async () => {
