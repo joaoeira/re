@@ -1,6 +1,6 @@
 import { Option } from "effect";
 
-import { QA_SEPARATOR } from "@shared/state/editorStore";
+export const QA_SEPARATOR = "\n---\n";
 
 type DeckEntry = {
   readonly absolutePath: string;
