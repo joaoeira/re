@@ -27,7 +27,7 @@ export function DeckList({ snapshots }: DeckListProps) {
 
   return (
     <div>
-      <div role="list">
+      <div role="listbox" aria-label="Decks" aria-multiselectable="true">
         {rows.map((row) => (
           <DeckRow
             key={row.key}

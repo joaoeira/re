@@ -377,7 +377,7 @@ describe("renderer integration", () => {
     await expect.element(screen.getByText("Review")).toBeVisible();
   });
 
-  it("hides toolbar when no decks have reviewable cards", async () => {
+  it("disables review when no decks have reviewable cards", async () => {
     const invoke = vi.fn().mockImplementation(async (method: string) => {
       if (method === "GetSettings") {
         return {
@@ -420,6 +420,7 @@ describe("renderer integration", () => {
     const screen = await renderApp(stores);
 
     await expect.element(screen.getByText("deck", { exact: true })).toBeVisible();
-    expect(screen.getByText("Review").query()).toBeNull();
+    await expect.element(screen.getByText("nothing due")).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: /Review/ })).toBeDisabled();
   });
 });

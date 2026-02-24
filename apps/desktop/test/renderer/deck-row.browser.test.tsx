@@ -84,91 +84,77 @@ const groupDescendants = ["languages/rust.md", "languages/go.md"];
 
 describe("DeckRow", () => {
   describe("leaf deck rendering", () => {
-    it("renders name, state badges, due count, and total count for a healthy leaf", async () => {
+    it("renders name and inline metrics for a healthy leaf", async () => {
       const { screen } = await renderWithProviders(
         <DeckRow node={healthyLeaf} depth={0} descendantDeckPaths={[]} />,
       );
 
       await expect.element(screen.getByText("algorithms")).toBeVisible();
-      await expect.element(screen.getByTitle("New")).toBeVisible();
-      await expect.element(screen.getByTitle("Learning", { exact: true })).toBeVisible();
-      await expect.element(screen.getByTitle("Review")).toBeVisible();
-      await expect.element(screen.getByTitle("Relearning")).toBeVisible();
-      await expect.element(screen.getByText("2 due")).toBeVisible();
-      await expect.element(screen.getByText("5", { exact: true })).toBeVisible();
+      await expect.element(screen.getByText("1", { exact: true })).toBeVisible();
+      await expect.element(screen.getByText("2", { exact: true })).toBeVisible();
     });
   });
 
   describe("error leaf rendering", () => {
-    it("applies opacity-60 and hides stats for an error leaf", async () => {
+    it("applies opacity-60 and hides metrics for an error leaf", async () => {
       const { screen } = await renderWithProviders(
         <DeckRow node={errorLeaf} depth={0} descendantDeckPaths={[]} />,
       );
 
       await expect.element(screen.getByText("broken")).toBeVisible();
 
-      const listitem = screen.getByRole("listitem");
-      await expect.element(listitem).toHaveClass("opacity-60");
-
-      expect(screen.getByTitle("New").query()).toBeNull();
-      expect(screen.getByTitle("Learning").query()).toBeNull();
-      expect(screen.getByTitle("Review").query()).toBeNull();
-      expect(screen.getByTitle("Relearning").query()).toBeNull();
-      expect(screen.getByText("due").query()).toBeNull();
+      const row = screen.getByRole("option");
+      await expect.element(row).toHaveClass("opacity-60");
     });
   });
 
   describe("group folder rendering", () => {
-    it("renders name, collapse button, state badges, due count, and total count", async () => {
+    it("renders name, collapse button, and inline metrics", async () => {
       const { screen } = await renderWithProviders(
         <DeckRow node={groupNode} depth={0} descendantDeckPaths={groupDescendants} />,
       );
 
       await expect.element(screen.getByText("languages")).toBeVisible();
       await expect.element(screen.getByRole("button", { name: "Collapse folder" })).toBeVisible();
-      await expect.element(screen.getByTitle("New")).toBeVisible();
-      await expect.element(screen.getByTitle("Review")).toBeVisible();
-      await expect.element(screen.getByText("4 due")).toBeVisible();
-      await expect.element(screen.getByText("12", { exact: true })).toBeVisible();
+      await expect.element(screen.getByText("3", { exact: true })).toBeVisible();
     });
   });
 
-  describe("checkbox - leaf deck toggle", () => {
-    it("selects and deselects a deck via checkbox click", async () => {
+  describe("row click - leaf deck toggle", () => {
+    it("selects and deselects a deck via row click", async () => {
       const stores = createStores();
       const { screen } = await renderWithProviders(
         <DeckRow node={healthyLeaf} depth={0} descendantDeckPaths={[]} />,
         stores,
       );
 
-      const checkbox = screen.getByRole("checkbox", { name: "Select algorithms" });
-
-      (checkbox.element() as HTMLElement).click();
+      const row = screen.getByRole("option");
+      (row.element() as HTMLElement).click();
       expect(stores.deckSelection.getSnapshot().context.selected).toHaveProperty("algorithms.md");
 
-      (checkbox.element() as HTMLElement).click();
+      (row.element() as HTMLElement).click();
       expect(stores.deckSelection.getSnapshot().context.selected).not.toHaveProperty(
         "algorithms.md",
       );
     });
   });
 
-  describe("checkbox - folder toggle", () => {
-    it("selects and deselects all descendant paths", async () => {
+  describe("row click - folder toggle", () => {
+    it("selects and deselects all descendant paths via row click", async () => {
       const stores = createStores();
       const { screen } = await renderWithProviders(
         <DeckRow node={groupNode} depth={0} descendantDeckPaths={groupDescendants} />,
         stores,
       );
 
-      const checkbox = screen.getByRole("checkbox", { name: "Select languages" });
-      (checkbox.element() as HTMLElement).click();
+      const row = screen.getByRole("option");
+      (row.element() as HTMLElement).click();
 
       const selected = stores.deckSelection.getSnapshot().context.selected;
       expect(selected).toHaveProperty("languages/rust.md");
       expect(selected).toHaveProperty("languages/go.md");
 
-      (checkbox.element() as HTMLElement).click();
+      (row.element() as HTMLElement).click();
 
       const afterDeselect = stores.deckSelection.getSnapshot().context.selected;
       expect(afterDeselect).not.toHaveProperty("languages/rust.md");
@@ -176,18 +162,49 @@ describe("DeckRow", () => {
     });
   });
 
-  describe("checkbox - indeterminate state", () => {
-    it("shows indeterminate when only some descendants are selected", async () => {
+  describe("keyboard selection", () => {
+    it("toggles selection with Space key", async () => {
       const stores = createStores();
-      stores.deckSelection.send({ type: "toggleDeck", path: "languages/rust.md" });
-
       const { screen } = await renderWithProviders(
-        <DeckRow node={groupNode} depth={0} descendantDeckPaths={groupDescendants} />,
+        <DeckRow node={healthyLeaf} depth={0} descendantDeckPaths={[]} />,
         stores,
       );
 
-      const checkbox = screen.getByRole("checkbox", { name: "Select languages" });
-      await expect.element(checkbox).toHaveAttribute("data-indeterminate");
+      const row = screen.getByRole("option");
+      (row.element() as HTMLElement).focus();
+      await userEvent.keyboard(" ");
+
+      expect(stores.deckSelection.getSnapshot().context.selected).toHaveProperty("algorithms.md");
+    });
+
+    it("toggles selection with Enter key", async () => {
+      const stores = createStores();
+      const { screen } = await renderWithProviders(
+        <DeckRow node={healthyLeaf} depth={0} descendantDeckPaths={[]} />,
+        stores,
+      );
+
+      const row = screen.getByRole("option");
+      (row.element() as HTMLElement).focus();
+      await userEvent.keyboard("{Enter}");
+
+      expect(stores.deckSelection.getSnapshot().context.selected).toHaveProperty("algorithms.md");
+    });
+  });
+
+  describe("aria-selected", () => {
+    it("reflects selection state", async () => {
+      const stores = createStores();
+      const { screen } = await renderWithProviders(
+        <DeckRow node={healthyLeaf} depth={0} descendantDeckPaths={[]} />,
+        stores,
+      );
+
+      const row = screen.getByRole("option");
+      await expect.element(row).toHaveAttribute("aria-selected", "false");
+
+      (row.element() as HTMLElement).click();
+      await expect.element(row).toHaveAttribute("aria-selected", "true");
     });
   });
 
@@ -255,6 +272,22 @@ describe("DeckRow", () => {
       await userEvent.click(screen.getByText("languages"));
 
       expect(router.state.location.pathname).toBe(initialPathname);
+    });
+  });
+
+  describe("name click does not toggle selection", () => {
+    it("clicking the name navigates without toggling selection", async () => {
+      const stores = createStores();
+      const { screen } = await renderWithProviders(
+        <DeckRow node={healthyLeaf} depth={0} descendantDeckPaths={[]} />,
+        stores,
+      );
+
+      await userEvent.click(screen.getByText("algorithms"));
+
+      expect(stores.deckSelection.getSnapshot().context.selected).not.toHaveProperty(
+        "algorithms.md",
+      );
     });
   });
 });

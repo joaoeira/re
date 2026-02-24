@@ -10,7 +10,7 @@ import { Effect } from "effect";
 import type { RpcDefectError } from "electron-effect-rpc/renderer";
 
 import { DeckList } from "./deck-list";
-import { SelectionToolbar } from "./selection-toolbar";
+import { ReviewFooter } from "./review-footer";
 import { useIpc } from "../lib/ipc-context";
 
 const DEFAULT_SNAPSHOT_OPTIONS = {
@@ -159,21 +159,38 @@ export function HomeScreen() {
     decksByRelativePath.has(relativePath),
   );
 
-  const totalReviewableCards = snapshotResult.decks.reduce((total, snapshot) => {
-    if (snapshot.status !== "ok") return total;
-    return total + snapshot.dueCards + snapshot.stateCounts.new;
-  }, 0);
+  const allMetrics = snapshotResult.decks.reduce(
+    (acc, snapshot) => {
+      if (snapshot.status !== "ok") return acc;
+      return {
+        newCount: acc.newCount + snapshot.stateCounts.new,
+        dueCount: acc.dueCount + snapshot.dueCards,
+      };
+    },
+    { newCount: 0, dueCount: 0 },
+  );
 
-  const selectedReviewableCards = validSelectedDeckPaths.reduce((total, relativePath) => {
-    const snapshot = decksByRelativePath.get(relativePath);
-    if (!snapshot || snapshot.status !== "ok") return total;
-    return total + snapshot.dueCards + snapshot.stateCounts.new;
-  }, 0);
+  const selectedMetrics = validSelectedDeckPaths.reduce(
+    (acc, relativePath) => {
+      const snapshot = decksByRelativePath.get(relativePath);
+      if (!snapshot || snapshot.status !== "ok") return acc;
+      return {
+        newCount: acc.newCount + snapshot.stateCounts.new,
+        dueCount: acc.dueCount + snapshot.dueCards,
+      };
+    },
+    { newCount: 0, dueCount: 0 },
+  );
 
   const hasSelectedDecks = validSelectedDeckPaths.length > 0;
-  const toolbarVisible = totalReviewableCards > 0 || hasSelectedDecks;
-  const reviewEnabled = hasSelectedDecks ? selectedReviewableCards > 0 : totalReviewableCards > 0;
-  const toolbarReviewableCards = hasSelectedDecks ? selectedReviewableCards : totalReviewableCards;
+  const metrics = hasSelectedDecks ? selectedMetrics : allMetrics;
+  const totalReviewableCards = metrics.newCount + metrics.dueCount;
+  const reviewEnabled = totalReviewableCards > 0;
+
+  const selectedDeckNames = validSelectedDeckPaths.map((path) => {
+    const snapshot = decksByRelativePath.get(path);
+    return snapshot?.name ?? path;
+  });
 
   return (
     <>
@@ -181,24 +198,23 @@ export function HomeScreen() {
         <DeckList snapshots={snapshotResult.decks} />
       </div>
 
-      {toolbarVisible && (
-        <SelectionToolbar
-          selectedCount={validSelectedDeckPaths.length}
-          reviewableCount={toolbarReviewableCards}
-          reviewDisabled={!reviewEnabled}
-          onClearSelection={() => deckSelectionStore.send({ type: "clear" })}
-          onReview={() => {
-            if (!reviewEnabled) return;
+      <ReviewFooter
+        selectedCount={validSelectedDeckPaths.length}
+        selectedDeckNames={selectedDeckNames}
+        metrics={metrics}
+        totalReviewableCards={totalReviewableCards}
+        reviewDisabled={!reviewEnabled}
+        onReview={() => {
+          if (!reviewEnabled) return;
 
-            void navigate({
-              to: "/review",
-              search: {
-                decks: hasSelectedDecks ? validSelectedDeckPaths : "all",
-              },
-            });
-          }}
-        />
-      )}
+          void navigate({
+            to: "/review",
+            search: {
+              decks: hasSelectedDecks ? validSelectedDeckPaths : "all",
+            },
+          });
+        }}
+      />
     </>
   );
 }

@@ -1,39 +1,32 @@
 import { render } from "vitest-browser-react";
 import { describe, expect, it } from "vitest";
 
-import { DeckStateBadges } from "@/components/deck-list/deck-state-badges";
+import { DeckInlineMetrics } from "@/components/deck-list/deck-inline-metrics";
 
-describe("DeckStateBadges", () => {
-  it("renders badges only for non-zero counts", async () => {
-    const screen = await render(
-      <DeckStateBadges stateCounts={{ new: 3, learning: 0, review: 2, relearning: 0 }} />,
-    );
+describe("DeckInlineMetrics", () => {
+  it("renders counts only for non-zero values", async () => {
+    const screen = await render(<DeckInlineMetrics newCount={3} dueCount={2} />);
 
-    await expect.element(screen.getByTitle("New")).toBeVisible();
-    await expect.element(screen.getByTitle("Review")).toBeVisible();
-    expect(screen.getByTitle("Learning").query()).toBeNull();
-    expect(screen.getByTitle("Relearning").query()).toBeNull();
+    await expect.element(screen.getByText("3", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("2", { exact: true })).toBeVisible();
   });
 
-  it("displays the correct counts", async () => {
-    const screen = await render(
-      <DeckStateBadges stateCounts={{ new: 5, learning: 1, review: 10, relearning: 2 }} />,
-    );
+  it("renders only new when due is zero", async () => {
+    const screen = await render(<DeckInlineMetrics newCount={5} dueCount={0} />);
 
-    await expect.element(screen.getByTitle("New")).toHaveTextContent("5");
-    await expect.element(screen.getByTitle("Learning", { exact: true })).toHaveTextContent("1");
-    await expect.element(screen.getByTitle("Review")).toHaveTextContent("10");
-    await expect.element(screen.getByTitle("Relearning")).toHaveTextContent("2");
+    await expect.element(screen.getByText("5", { exact: true })).toBeVisible();
+    expect(screen.getByText("0").query()).toBeNull();
   });
 
   it("renders nothing when all counts are zero", async () => {
-    const screen = await render(
-      <DeckStateBadges stateCounts={{ new: 0, learning: 0, review: 0, relearning: 0 }} />,
-    );
+    const { container } = await render(<DeckInlineMetrics newCount={0} dueCount={0} />);
 
-    expect(screen.getByTitle("New").query()).toBeNull();
-    expect(screen.getByTitle("Learning").query()).toBeNull();
-    expect(screen.getByTitle("Review").query()).toBeNull();
-    expect(screen.getByTitle("Relearning").query()).toBeNull();
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("has an aria-label describing the counts", async () => {
+    const screen = await render(<DeckInlineMetrics newCount={3} dueCount={7} />);
+
+    await expect.element(screen.getByLabelText("3 new, 7 due")).toBeVisible();
   });
 });
