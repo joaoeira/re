@@ -46,8 +46,14 @@ export {
   DeckWriteError,
   CardNotFound,
   ItemValidationError,
+  InvalidDeckPathReasonSchema,
+  InvalidDeckPath,
+  DeckAlreadyExists,
+  DeckFileNotFound,
+  DeckFileOperationError,
   type ReadError,
   type WriteError,
+  type DeckLifecycleError,
 } from "./DeckManager";
 
 export {

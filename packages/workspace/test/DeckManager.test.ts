@@ -13,6 +13,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   CardNotFound,
+  DeckAlreadyExists,
+  DeckFileNotFound,
+  DeckFileOperationError,
+  InvalidDeckPath,
   DeckManager,
   DeckManagerLive,
   DeckNotFound,
@@ -602,5 +606,356 @@ describe("DeckManager atomic write", () => {
 
     await promise;
     expect(store["/deck.md.tmp"]).toBeUndefined();
+  });
+});
+
+describe("DeckManager.createDeck", () => {
+  it("creates a new deck file when parent exists", async () => {
+    const config: MockFileSystemConfig = {
+      entryTypes: {
+        "/workspace": "Directory",
+        "/workspace/books": "Directory",
+      },
+      directories: {},
+    };
+    const { promise, store } = runSuccess(config, (m) =>
+      m.createDeck("/workspace/books/book1.md", {
+        initialContent: "# Book 1\n",
+      }),
+    );
+
+    await promise;
+    expect(store["/workspace/books/book1.md"]).toBe("# Book 1\n");
+  });
+
+  it("creates a nested deck when createParents is enabled", async () => {
+    const config: MockFileSystemConfig = {
+      entryTypes: {},
+      directories: {},
+    };
+    const { promise, store } = runSuccess(config, (m) =>
+      m.createDeck("/workspace/books/book1.md", {
+        createParents: true,
+        initialContent: "",
+      }),
+    );
+
+    await promise;
+    expect(store["/workspace/books/book1.md"]).toBe("");
+  });
+
+  it("fails with DeckFileOperationError when parent directory is missing by default", async () => {
+    const { promise } = runEither(
+      {
+        entryTypes: {},
+        directories: {},
+      },
+      (m) => m.createDeck("/workspace/books/book1.md"),
+    );
+    const result = await promise;
+
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(DeckFileOperationError);
+      if (result.left instanceof DeckFileOperationError) {
+        expect(result.left.operation).toBe("create");
+      }
+    }
+  });
+
+  it("fails with DeckAlreadyExists when target deck already exists", async () => {
+    const { promise } = runEither(
+      {
+        entryTypes: {
+          "/workspace": "Directory",
+          "/workspace/books": "Directory",
+        },
+        directories: {},
+        fileContents: {
+          "/workspace/books/book1.md": "existing",
+        },
+      },
+      (m) => m.createDeck("/workspace/books/book1.md"),
+    );
+    const result = await promise;
+
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(DeckAlreadyExists);
+    }
+  });
+
+  it("maps writeFile wx AlreadyExists to DeckAlreadyExists", async () => {
+    const { promise } = runEither(
+      {
+        entryTypes: {
+          "/workspace": "Directory",
+          "/workspace/books": "Directory",
+        },
+        directories: {},
+        writeFileErrors: {
+          "/workspace/books/book1.md": "AlreadyExists",
+        },
+      },
+      (m) => m.createDeck("/workspace/books/book1.md"),
+    );
+    const result = await promise;
+
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(DeckAlreadyExists);
+    }
+  });
+
+  it("fails with InvalidDeckPath for relative paths", async () => {
+    const { promise } = runEither(
+      {
+        entryTypes: {},
+        directories: {},
+      },
+      (m) => m.createDeck("books/book1.md"),
+    );
+    const result = await promise;
+
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(InvalidDeckPath);
+      if (result.left instanceof InvalidDeckPath) {
+        expect(result.left.reason).toBe("absolute_path_required");
+      }
+    }
+  });
+
+  it("fails with InvalidDeckPath for paths containing NUL bytes", async () => {
+    const { promise } = runEither(
+      {
+        entryTypes: {},
+        directories: {},
+      },
+      (m) => m.createDeck("/workspace/books/\0book1.md"),
+    );
+    const result = await promise;
+
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(InvalidDeckPath);
+      if (result.left instanceof InvalidDeckPath) {
+        expect(result.left.reason).toBe("nul_byte_not_allowed");
+      }
+    }
+  });
+});
+
+describe("DeckManager.deleteDeck", () => {
+  it("deletes an existing deck file", async () => {
+    const config: MockFileSystemConfig = {
+      entryTypes: {
+        "/workspace/books/book1.md": "File",
+      },
+      directories: {},
+      fileContents: {
+        "/workspace/books/book1.md": "# deck",
+      },
+    };
+    const { promise, store } = runSuccess(config, (m) => m.deleteDeck("/workspace/books/book1.md"));
+
+    await promise;
+    expect(store["/workspace/books/book1.md"]).toBeUndefined();
+  });
+
+  it("fails with DeckFileNotFound when deck does not exist", async () => {
+    const { promise } = runEither(
+      {
+        entryTypes: {},
+        directories: {},
+      },
+      (m) => m.deleteDeck("/workspace/books/missing.md"),
+    );
+    const result = await promise;
+
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(DeckFileNotFound);
+    }
+  });
+
+  it("maps remove NotFound to DeckFileNotFound", async () => {
+    const { promise } = runEither(
+      {
+        entryTypes: {
+          "/workspace/books/book1.md": "File",
+        },
+        directories: {},
+        fileContents: {
+          "/workspace/books/book1.md": "# deck",
+        },
+        removeErrors: {
+          "/workspace/books/book1.md": "NotFound",
+        },
+      },
+      (m) => m.deleteDeck("/workspace/books/book1.md"),
+    );
+    const result = await promise;
+
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(DeckFileNotFound);
+    }
+  });
+
+  it("fails with DeckFileOperationError when target is not a file", async () => {
+    const { promise } = runEither(
+      {
+        entryTypes: {
+          "/workspace/books.md": "Directory",
+        },
+        directories: {},
+      },
+      (m) => m.deleteDeck("/workspace/books.md"),
+    );
+    const result = await promise;
+
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(DeckFileOperationError);
+      if (result.left instanceof DeckFileOperationError) {
+        expect(result.left.operation).toBe("delete");
+      }
+    }
+  });
+});
+
+describe("DeckManager.renameDeck", () => {
+  it("renames a deck file", async () => {
+    const config: MockFileSystemConfig = {
+      entryTypes: {
+        "/workspace/books/book1.md": "File",
+        "/workspace/books": "Directory",
+      },
+      directories: {},
+      fileContents: {
+        "/workspace/books/book1.md": "# old",
+      },
+    };
+    const { promise, store } = runSuccess(config, (m) =>
+      m.renameDeck("/workspace/books/book1.md", "/workspace/books/book-01.md"),
+    );
+
+    await promise;
+    expect(store["/workspace/books/book1.md"]).toBeUndefined();
+    expect(store["/workspace/books/book-01.md"]).toBe("# old");
+  });
+
+  it("fails with DeckAlreadyExists when destination exists", async () => {
+    const { promise } = runEither(
+      {
+        entryTypes: {
+          "/workspace/books/book1.md": "File",
+          "/workspace/books/book-01.md": "File",
+          "/workspace/books": "Directory",
+        },
+        directories: {},
+        fileContents: {
+          "/workspace/books/book1.md": "# old",
+          "/workspace/books/book-01.md": "# existing",
+        },
+      },
+      (m) => m.renameDeck("/workspace/books/book1.md", "/workspace/books/book-01.md"),
+    );
+    const result = await promise;
+
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(DeckAlreadyExists);
+    }
+  });
+
+  it("fails with DeckFileNotFound when source missing and source equals destination", async () => {
+    const { promise } = runEither(
+      {
+        entryTypes: {},
+        directories: {},
+      },
+      (m) => m.renameDeck("/workspace/books/missing.md", "/workspace/books/missing.md"),
+    );
+    const result = await promise;
+
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(DeckFileNotFound);
+    }
+  });
+
+  it("creates destination parent when createParents is enabled", async () => {
+    const config: MockFileSystemConfig = {
+      entryTypes: {
+        "/workspace/books/book1.md": "File",
+      },
+      directories: {},
+      fileContents: {
+        "/workspace/books/book1.md": "# old",
+      },
+    };
+    const { promise, store } = runSuccess(config, (m) =>
+      m.renameDeck("/workspace/books/book1.md", "/workspace/archive/book-01.md", {
+        createParents: true,
+      }),
+    );
+
+    await promise;
+    expect(store["/workspace/archive/book-01.md"]).toBe("# old");
+  });
+
+  it("maps rename AlreadyExists to DeckAlreadyExists", async () => {
+    const { promise } = runEither(
+      {
+        entryTypes: {
+          "/workspace/books/book1.md": "File",
+          "/workspace/books": "Directory",
+        },
+        directories: {},
+        fileContents: {
+          "/workspace/books/book1.md": "# old",
+        },
+        renameErrors: {
+          "/workspace/books/book1.md": "AlreadyExists",
+        },
+      },
+      (m) => m.renameDeck("/workspace/books/book1.md", "/workspace/books/book-01.md"),
+    );
+    const result = await promise;
+
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(DeckAlreadyExists);
+    }
+  });
+
+  it("maps rename NotFound to DeckFileNotFound when source disappears mid-rename", async () => {
+    const { promise } = runEither(
+      {
+        entryTypes: {
+          "/workspace/books/book1.md": "File",
+          "/workspace/books": "Directory",
+        },
+        directories: {},
+        fileContents: {
+          "/workspace/books/book1.md": "# old",
+        },
+        renameErrors: {
+          "/workspace/books/book1.md": "NotFound",
+        },
+        statErrors: {
+          "/workspace/books/book1.md": "NotFound",
+        },
+      },
+      (m) => m.renameDeck("/workspace/books/book1.md", "/workspace/books/book-01.md"),
+    );
+    const result = await promise;
+
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(DeckFileNotFound);
+    }
   });
 });

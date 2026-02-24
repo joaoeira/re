@@ -13,6 +13,8 @@ export interface MockFileSystemConfig {
   readonly readLinkErrors?: Record<string, SystemErrorReason>;
   readonly writeFileErrors?: Record<string, SystemErrorReason>;
   readonly renameErrors?: Record<string, SystemErrorReason>;
+  readonly removeErrors?: Record<string, SystemErrorReason>;
+  readonly makeDirectoryErrors?: Record<string, SystemErrorReason>;
 }
 
 export const makeSystemError = (
@@ -91,14 +93,28 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
         return yield* Effect.fail(makeSystemError("NotFound", "readFileString", targetPath));
       }),
 
-    writeFileString: (targetPath, data) =>
+    writeFileString: (targetPath, data, options) =>
       Effect.gen(function* () {
         const forced = config.writeFileErrors?.[targetPath];
         if (forced) {
           return yield* Effect.fail(makeSystemError(forced, "writeFileString", targetPath));
         }
 
+        if (options?.flag === "wx") {
+          if (store[targetPath] !== undefined || config.entryTypes[targetPath] !== undefined) {
+            return yield* Effect.fail(makeSystemError("AlreadyExists", "writeFileString", targetPath));
+          }
+        }
+
         store[targetPath] = data;
+      }),
+
+    makeDirectory: (targetPath) =>
+      Effect.gen(function* () {
+        const forced = config.makeDirectoryErrors?.[targetPath];
+        if (forced) {
+          return yield* Effect.fail(makeSystemError(forced, "makeDirectory", targetPath));
+        }
       }),
 
     rename: (oldPath, newPath) =>
@@ -118,7 +134,12 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
       }),
 
     remove: (targetPath) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
+        const forced = config.removeErrors?.[targetPath];
+        if (forced) {
+          return yield* Effect.fail(makeSystemError(forced, "remove", targetPath));
+        }
+
         delete store[targetPath];
       }),
 

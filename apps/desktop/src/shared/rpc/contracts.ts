@@ -10,6 +10,11 @@ import { defineContract, event, rpc, streamRpc } from "electron-effect-rpc/contr
 import { AiStreamChunkSchema, AiStreamErrorSchema, ModelIdSchema } from "@shared/rpc/schemas/ai";
 import { EditorOperationError } from "@shared/rpc/schemas/editor";
 import {
+  CreateDeckErrorSchema,
+  DeleteDeckErrorSchema,
+  RenameDeckErrorSchema,
+} from "@shared/rpc/schemas/workspace";
+import {
   SettingsErrorSchema,
   SettingsSchemaV1,
   SetWorkspaceRootPathInputSchema,
@@ -98,6 +103,41 @@ export const GetWorkspaceSnapshot = rpc(
   }),
   SnapshotWorkspaceResultSchema,
   SnapshotWorkspaceErrorSchema,
+);
+
+export const CreateDeck = rpc(
+  "CreateDeck",
+  Schema.Struct({
+    relativePath: Schema.String,
+    createParents: Schema.optional(Schema.Boolean),
+    initialContent: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    absolutePath: Schema.String,
+  }),
+  CreateDeckErrorSchema,
+);
+
+export const DeleteDeck = rpc(
+  "DeleteDeck",
+  Schema.Struct({
+    relativePath: Schema.String,
+  }),
+  Schema.Struct({}),
+  DeleteDeckErrorSchema,
+);
+
+export const RenameDeck = rpc(
+  "RenameDeck",
+  Schema.Struct({
+    fromRelativePath: Schema.String,
+    toRelativePath: Schema.String,
+    createParents: Schema.optional(Schema.Boolean),
+  }),
+  Schema.Struct({
+    absolutePath: Schema.String,
+  }),
+  RenameDeckErrorSchema,
 );
 
 export const GetSettings = rpc(
@@ -335,6 +375,9 @@ export const appContract = defineContract({
     ParseDeckPreview,
     ScanDecks,
     GetWorkspaceSnapshot,
+    CreateDeck,
+    DeleteDeck,
+    RenameDeck,
     GetSettings,
     SetWorkspaceRootPath,
     HasApiKey,

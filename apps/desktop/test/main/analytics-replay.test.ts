@@ -100,6 +100,9 @@ describe("analytics replay", () => {
       replaceItem: () => Effect.void,
       appendItem: () => Effect.void,
       removeItem: () => Effect.void,
+      createDeck: () => Effect.void,
+      deleteDeck: () => Effect.void,
+      renameDeck: () => Effect.void,
     };
 
     await Effect.runPromise(
@@ -151,6 +154,9 @@ describe("analytics replay", () => {
       replaceItem: () => Effect.void,
       appendItem: () => Effect.void,
       removeItem: () => Effect.void,
+      createDeck: () => Effect.void,
+      deleteDeck: () => Effect.void,
+      renameDeck: () => Effect.void,
     };
 
     await Effect.runPromise(
