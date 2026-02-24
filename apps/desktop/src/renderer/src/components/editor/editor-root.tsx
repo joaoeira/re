@@ -1,7 +1,9 @@
+import { ArrowLeft, Braces, Check } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import { CardTypeSelector } from "@/components/editor/card-type-selector";
 import { ClozeEditor } from "@/components/editor/cloze-editor";
-import { DeckSelector } from "@/components/editor/deck-selector";
+import { ClozePreview } from "@/components/editor/cloze-preview";
+import { DeckCombobox } from "@/components/editor/deck-combobox";
 import { DuplicateWarning } from "@/components/editor/duplicate-warning";
 import { QaEditor } from "@/components/editor/qa-editor";
 import { useEditorSession, type EditorSearchParams } from "@/hooks/useEditorSession";
@@ -13,77 +15,108 @@ type EditorRootProps = {
 export function EditorRoot({ search }: EditorRootProps) {
   const session = useEditorSession(search);
   const { context } = session;
-  const deckSelectorDisabled = context.mode === "edit" || context.isSubmitting;
+  const isCloze = context.cardType === "cloze";
 
   return (
     <div className="flex h-screen min-h-0 flex-col bg-background">
-      <header className="border-b border-border px-4 py-3">
-        <div className="mb-3 flex items-end gap-3">
-          <DeckSelector
-            deckPath={context.deckPath}
-            decks={session.decks}
-            disabled={deckSelectorDisabled}
-            onChange={session.setDeckPath}
-          />
-          <CardTypeSelector
-            cardType={context.cardType}
-            disabled={context.isSubmitting}
-            onChange={session.setCardType}
-          />
+      <header className="flex shrink-0 items-center justify-between border-b border-border px-5 py-2.5">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => window.close()}
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+          </button>
+          <span className="text-sm text-foreground">
+            {context.mode === "edit" ? "Edit card" : "Add card"}
+          </span>
+        </div>
+        {context.addedCount > 0 && (
+          <span className="font-mono text-xs text-muted-foreground/60">
+            {context.addedCount} added
+          </span>
+        )}
+      </header>
+
+      <main className="flex min-h-0 flex-1 justify-center overflow-y-auto">
+        {session.loading ? (
+          <div className="flex items-center text-sm text-muted-foreground">Loading editor...</div>
+        ) : (
+          <div className="flex w-full max-w-[640px] flex-col gap-7 px-6 py-8">
+            <DeckCombobox
+              deckPath={context.deckPath}
+              decks={session.decks}
+              disabled={context.mode === "edit" || context.isSubmitting}
+              onChange={session.setDeckPath}
+              onCreateDeck={session.createDeck}
+            />
+
+            {context.isDuplicate && <DuplicateWarning deckPath={context.duplicateDeckPath} />}
+
+            {isCloze ? (
+              <>
+                <ClozeEditor
+                  content={context.frontContent}
+                  frozen={context.frontFrozen}
+                  onChange={session.setFrontContent}
+                  onToggleFrozen={session.toggleFrontFrozen}
+                />
+                <ClozePreview content={context.frontContent} />
+              </>
+            ) : (
+              <QaEditor
+                frontContent={context.frontContent}
+                backContent={context.backContent}
+                frontFrozen={context.frontFrozen}
+                backFrozen={context.backFrozen}
+                onFrontChange={session.setFrontContent}
+                onBackChange={session.setBackContent}
+                onToggleFrontFrozen={session.toggleFrontFrozen}
+                onToggleBackFrozen={session.toggleBackFrozen}
+              />
+            )}
+
+            {session.flashMessage && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-1">
+                <Check className="size-3" />
+                {session.flashMessage}
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+
+      <footer className="flex shrink-0 items-center justify-between border-t border-border px-5 py-2.5">
+        <div className="text-xs text-muted-foreground">
+          {isCloze && (
+            <span className="flex items-center gap-1.5">
+              <Braces className="size-3" />
+              Cloze detected
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {context.lastError && (
+            <span className="max-w-80 truncate text-xs text-destructive">{context.lastError}</span>
+          )}
           <Button
             type="button"
+            variant="outline"
             size="sm"
             disabled={!session.canSubmit}
             onClick={() => {
               void session.submit();
             }}
+            className="gap-2 hover:border-foreground disabled:opacity-30"
           >
-            {context.mode === "edit" ? "Save" : "Add"}
+            <span className="text-xs">{context.mode === "edit" ? "Save" : "Add card"}</span>
+            <kbd className="border border-border px-1 py-0.5 text-[10px] text-muted-foreground/60">
+              ⌘⏎
+            </kbd>
           </Button>
         </div>
-        {context.isDuplicate && <DuplicateWarning deckPath={context.duplicateDeckPath} />}
-      </header>
-
-      <main className="flex min-h-0 flex-1 flex-col p-4">
-        {session.loading ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            Loading editor...
-          </div>
-        ) : context.cardType === "qa" ? (
-          <QaEditor
-            frontContent={context.frontContent}
-            backContent={context.backContent}
-            frontFrozen={context.frontFrozen}
-            backFrozen={context.backFrozen}
-            onFrontChange={session.setFrontContent}
-            onBackChange={session.setBackContent}
-            onToggleFrontFrozen={session.toggleFrontFrozen}
-            onToggleBackFrozen={session.toggleBackFrozen}
-          />
-        ) : (
-          <ClozeEditor
-            content={context.clozeContent}
-            frozen={context.clozeFrozen}
-            onChange={session.setClozeContent}
-            onToggleFrozen={session.toggleClozeFrozen}
-          />
-        )}
-      </main>
-
-      <footer className="flex min-h-9 items-center justify-between border-t border-border px-4 text-xs text-muted-foreground">
-        <span>
-          {context.mode === "edit"
-            ? "Editing existing card"
-            : `Added ${context.addedCount} card(s)`}
-        </span>
-        <span>{session.rootPath ?? "No workspace root configured"}</span>
       </footer>
-
-      {context.lastError && (
-        <div className="border-t border-destructive/40 bg-destructive/5 px-4 py-2 text-xs text-destructive">
-          {context.lastError}
-        </div>
-      )}
     </div>
   );
 }

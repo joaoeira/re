@@ -1,12 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@xstate/store-react";
 
 import type { ScanDecksResult } from "@re/workspace";
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 
 import { useIpc } from "@/lib/ipc-context";
 import { EditorNavigateRequest, WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
+import {
+  buildEditorContent,
+  isSameEditorRequest,
+  normalizeDeckPathFromSearch,
+  toDuplicateStatus,
+  toErrorMessage,
+} from "@shared/state/editor-utils";
 import { useEditorStore } from "@shared/state/stores-context";
 
 export type EditorSearchParams =
@@ -15,66 +22,9 @@ export type EditorSearchParams =
 
 type DeckEntry = ScanDecksResult["decks"][number];
 
-type DuplicateStatus = {
-  isDuplicate: boolean;
-  matchingDeckPath: string | null;
-};
-
 const DUPLICATE_CHECK_DEBOUNCE_MS = 400;
-const QA_SEPARATOR = "\n---\n";
-
-const toErrorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
-const normalizeDeckPathFromSearch = (
-  value: string | undefined,
-  decks: readonly DeckEntry[],
-): string | null => {
-  if (!value) {
-    return null;
-  }
-
-  const byAbsolute = decks.find((deck) => deck.absolutePath === value);
-  if (byAbsolute) {
-    return byAbsolute.absolutePath;
-  }
-
-  const byRelative = decks.find((deck) => deck.relativePath === value);
-  if (byRelative) {
-    return byRelative.absolutePath;
-  }
-
-  return value;
-};
-
-const buildEditorContent = (context: {
-  readonly cardType: "qa" | "cloze";
-  readonly frontContent: string;
-  readonly backContent: string;
-  readonly clozeContent: string;
-}): string | null => {
-  if (context.cardType === "qa") {
-    const front = context.frontContent.trim();
-    const back = context.backContent.trim();
-
-    if (front.length === 0 || back.length === 0) {
-      return null;
-    }
-
-    return `${front}${QA_SEPARATOR}${back}`;
-  }
-
-  const cloze = context.clozeContent.trim();
-  return cloze.length === 0 ? null : cloze;
-};
-
-const toDuplicateStatus = (value: {
-  readonly isDuplicate: boolean;
-  readonly matchingDeckPath: Option.Option<string>;
-}): DuplicateStatus => ({
-  isDuplicate: value.isDuplicate,
-  matchingDeckPath: Option.isSome(value.matchingDeckPath) ? value.matchingDeckPath.value : null,
-});
+const FLASH_DURATION_MS = 2500;
+const CLOZE_PATTERN = /\{\{c\d+::/;
 
 export function useEditorSession(search: EditorSearchParams) {
   const navigate = useNavigate();
@@ -88,6 +38,7 @@ export function useEditorSession(search: EditorSearchParams) {
   const [rootPath, setRootPath] = useState<string | null>(null);
   const [decks, setDecks] = useState<readonly DeckEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [flashMessage, setFlashMessage] = useState<string | null>(null);
 
   const refreshDecks = useCallback(
     async (workspaceRootPath: string) => {
@@ -202,16 +153,7 @@ export function useEditorSession(search: EditorSearchParams) {
         return;
       }
 
-      const sameRequest =
-        params.mode === search.mode &&
-        (params.mode === "create"
-          ? (params.deckPath ?? null) ===
-            (search.mode === "create" ? (search.deckPath ?? null) : null)
-          : search.mode === "edit" &&
-            params.deckPath === search.deckPath &&
-            params.cardId === search.cardId);
-
-      if (sameRequest) {
+      if (isSameEditorRequest(params, search)) {
         if (params.mode === "create") {
           const requestedDeckPath = normalizeDeckPathFromSearch(params.deckPath, decks);
           const selectedDeckPath = requestedDeckPath ?? decks[0]?.absolutePath ?? null;
@@ -272,7 +214,6 @@ export function useEditorSession(search: EditorSearchParams) {
     const beforeUnloadHandler = (event: BeforeUnloadEvent) => {
       if (editorStore.getSnapshot().context.dirty) {
         event.preventDefault();
-        // Electron docs recommend explicitly setting returnValue for consistent beforeunload handling.
         Reflect.set(event, "returnValue", true);
       }
     };
@@ -284,20 +225,23 @@ export function useEditorSession(search: EditorSearchParams) {
   }, [editorStore]);
 
   useEffect(() => {
-    if (!rootPath || !context.deckPath) {
+    const hasCloze = CLOZE_PATTERN.test(context.frontContent);
+    const nextCardType = hasCloze ? "cloze" : "qa";
+    if (nextCardType !== context.cardType) {
+      editorStore.send({ type: "detectCardType", cardType: nextCardType });
+    }
+  }, [context.frontContent, context.cardType, editorStore]);
+
+  useEffect(() => {
+    const shouldClear = !rootPath || !context.deckPath || !buildEditorContent(context);
+    if (shouldClear) {
       if (context.isDuplicate || context.duplicateDeckPath !== null) {
         editorStore.send({ type: "setDuplicate", isDuplicate: false, deckPath: null });
       }
       return;
     }
 
-    const content = buildEditorContent(context);
-    if (!content) {
-      if (context.isDuplicate || context.duplicateDeckPath !== null) {
-        editorStore.send({ type: "setDuplicate", isDuplicate: false, deckPath: null });
-      }
-      return;
-    }
+    const content = buildEditorContent(context)!;
 
     let cancelled = false;
     const timeoutId = window.setTimeout(() => {
@@ -314,7 +258,6 @@ export function useEditorSession(search: EditorSearchParams) {
             return;
           }
           const duplicate = toDuplicateStatus(result);
-          editorStore.send({ type: "setError", error: null });
           editorStore.send({
             type: "setDuplicate",
             isDuplicate: duplicate.isDuplicate,
@@ -336,7 +279,6 @@ export function useEditorSession(search: EditorSearchParams) {
   }, [
     context.backContent,
     context.cardType,
-    context.clozeContent,
     context.deckPath,
     context.editCardIds,
     context.frontContent,
@@ -346,8 +288,20 @@ export function useEditorSession(search: EditorSearchParams) {
     rootPath,
   ]);
 
+  useEffect(() => {
+    if (!flashMessage) return;
+    const timer = window.setTimeout(() => setFlashMessage(null), FLASH_DURATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [flashMessage]);
+
+  const submitRef = useRef<(() => Promise<void>) | undefined>(undefined);
+  const canSubmitRef = useRef(false);
+
   const submit = useCallback(async () => {
     const snapshot = editorStore.getSnapshot().context;
+
+    if (snapshot.isSubmitting) return;
+
     const content = buildEditorContent(snapshot);
 
     if (!snapshot.deckPath) {
@@ -389,6 +343,8 @@ export function useEditorSession(search: EditorSearchParams) {
       return;
     }
 
+    editorStore.send({ type: "setSubmitting", isSubmitting: true });
+
     const submitEffect = Effect.gen(function* () {
       const duplicateResult = yield* ipc.client.CheckDuplicates({
         content,
@@ -406,16 +362,17 @@ export function useEditorSession(search: EditorSearchParams) {
       });
 
       if (duplicateNow.isDuplicate) {
-        return yield* Effect.sync(() => {
+        yield* Effect.sync(() => {
+          editorStore.send({ type: "setSubmitting", isSubmitting: false });
           editorStore.send({
             type: "setError",
             error: "Duplicate content detected. Change the card before saving.",
           });
         });
+        return false as const;
       }
 
       yield* Effect.sync(() => {
-        editorStore.send({ type: "setSubmitting", isSubmitting: true });
         editorStore.send({ type: "setError", error: null });
       });
 
@@ -455,17 +412,27 @@ export function useEditorSession(search: EditorSearchParams) {
       yield* Effect.sync(() => {
         editorStore.send({ type: "itemSaved" });
       });
+
+      return true as const;
     }).pipe(
       Effect.catchAll((error) =>
         Effect.sync(() => {
           editorStore.send({ type: "setSubmitting", isSubmitting: false });
           editorStore.send({ type: "setError", error: toErrorMessage(error) });
+          return false as const;
         }),
       ),
     );
 
-    await Effect.runPromise(submitEffect);
-  }, [editorStore, ipc, rootPath]);
+    const succeeded = await Effect.runPromise(submitEffect);
+    if (succeeded) {
+      const savedDeck = decks.find((d) => d.absolutePath === deckPath);
+      const deckName = savedDeck?.name ?? "deck";
+      setFlashMessage(
+        snapshot.mode === "edit" ? `Saved to ${deckName}` : `Card added to ${deckName}`,
+      );
+    }
+  }, [decks, editorStore, ipc, rootPath]);
 
   const canSubmit = useMemo(() => {
     const content = buildEditorContent(context);
@@ -492,20 +459,51 @@ export function useEditorSession(search: EditorSearchParams) {
     return true;
   }, [context, rootPath]);
 
+  submitRef.current = submit;
+  canSubmitRef.current = canSubmit;
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        if (canSubmitRef.current) {
+          void submitRef.current?.();
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  const createDeck = useCallback(
+    async (relativePath: string) => {
+      if (!rootPath) return;
+      try {
+        const result = await Effect.runPromise(
+          ipc.client.CreateDeck({ relativePath, createParents: true }),
+        );
+        await refreshDecks(rootPath);
+        editorStore.send({ type: "setDeckPath", deckPath: result.absolutePath });
+      } catch (error) {
+        editorStore.send({ type: "setError", error: toErrorMessage(error) });
+      }
+    },
+    [editorStore, ipc, refreshDecks, rootPath],
+  );
+
   return {
     context,
     decks,
     rootPath,
     loading,
     canSubmit,
+    flashMessage,
     submit,
-    setCardType: (cardType: "qa" | "cloze") => editorStore.send({ type: "setCardType", cardType }),
+    createDeck,
     setDeckPath: (deckPath: string | null) => editorStore.send({ type: "setDeckPath", deckPath }),
     setFrontContent: (content: string) => editorStore.send({ type: "setFrontContent", content }),
     setBackContent: (content: string) => editorStore.send({ type: "setBackContent", content }),
-    setClozeContent: (content: string) => editorStore.send({ type: "setClozeContent", content }),
     toggleFrontFrozen: () => editorStore.send({ type: "toggleFrontFrozen" }),
     toggleBackFrozen: () => editorStore.send({ type: "toggleBackFrozen" }),
-    toggleClozeFrozen: () => editorStore.send({ type: "toggleClozeFrozen" }),
   };
 }

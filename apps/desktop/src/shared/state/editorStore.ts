@@ -1,6 +1,6 @@
 import { createStore } from "@xstate/store";
 
-const QA_SEPARATOR = "\n---\n";
+export const QA_SEPARATOR = "\n---\n";
 
 const splitQaContent = (content: string): { frontContent: string; backContent: string } => {
   const separatorIndex = content.indexOf(QA_SEPARATOR);
@@ -28,10 +28,8 @@ export const createEditorStore = () =>
       editCardIds: [] as readonly string[],
       frontContent: "",
       backContent: "",
-      clozeContent: "",
       frontFrozen: false,
       backFrozen: false,
-      clozeFrozen: false,
       dirty: false,
       isDuplicate: false,
       duplicateDeckPath: null as string | null,
@@ -40,24 +38,25 @@ export const createEditorStore = () =>
       isSubmitting: false,
     },
     on: {
-      loadCreate: (context, event: { deckPath: string | null }) => ({
-        ...context,
+      loadCreate: (_context, event: { deckPath: string | null }) => ({
         mode: "create" as const,
         cardType: "qa" as const,
         deckPath: event.deckPath,
         editCardId: null,
-        editCardIds: [],
+        editCardIds: [] as readonly string[],
         frontContent: "",
         backContent: "",
-        clozeContent: "",
+        frontFrozen: false,
+        backFrozen: false,
         dirty: false,
         isDuplicate: false,
-        duplicateDeckPath: null,
-        lastError: null,
+        duplicateDeckPath: null as string | null,
+        addedCount: 0,
+        lastError: null as string | null,
         isSubmitting: false,
       }),
       loadForEdit: (
-        context,
+        _context,
         event: {
           content: string;
           cardType: "qa" | "cloze";
@@ -66,30 +65,31 @@ export const createEditorStore = () =>
           deckPath: string;
         },
       ) => ({
-        ...context,
         mode: "edit" as const,
         cardType: event.cardType,
         deckPath: event.deckPath,
         editCardId: event.cardId,
         editCardIds: event.cardIds,
+        frontFrozen: false,
+        backFrozen: false,
         dirty: false,
         isDuplicate: false,
-        duplicateDeckPath: null,
-        lastError: null,
+        duplicateDeckPath: null as string | null,
+        addedCount: 0,
+        lastError: null as string | null,
         isSubmitting: false,
         ...(event.cardType === "qa"
-          ? { ...splitQaContent(event.content), clozeContent: "" }
-          : { frontContent: "", backContent: "", clozeContent: event.content.trim() }),
+          ? splitQaContent(event.content)
+          : { frontContent: event.content.trim(), backContent: "" }),
       }),
       setEditIdentity: (context, event: { cardIds: readonly string[]; cardId: string | null }) => ({
         ...context,
         editCardIds: event.cardIds,
         editCardId: event.cardId,
       }),
-      setCardType: (context, event: { cardType: "qa" | "cloze" }) => ({
+      detectCardType: (context, event: { cardType: "qa" | "cloze" }) => ({
         ...context,
         cardType: event.cardType,
-        dirty: context.dirty || context.cardType !== event.cardType,
       }),
       setDeckPath: (context, event: { deckPath: string | null }) => ({
         ...context,
@@ -105,11 +105,6 @@ export const createEditorStore = () =>
         backContent: event.content,
         dirty: true,
       }),
-      setClozeContent: (context, event: { content: string }) => ({
-        ...context,
-        clozeContent: event.content,
-        dirty: true,
-      }),
       toggleFrontFrozen: (context) => ({
         ...context,
         frontFrozen: !context.frontFrozen,
@@ -117,10 +112,6 @@ export const createEditorStore = () =>
       toggleBackFrozen: (context) => ({
         ...context,
         backFrozen: !context.backFrozen,
-      }),
-      toggleClozeFrozen: (context) => ({
-        ...context,
-        clozeFrozen: !context.clozeFrozen,
       }),
       setDuplicate: (context, event: { isDuplicate: boolean; deckPath: string | null }) => ({
         ...context,
@@ -137,10 +128,9 @@ export const createEditorStore = () =>
       }),
       itemSaved: (context) => ({
         ...context,
-        addedCount: context.addedCount + 1,
+        addedCount: context.mode === "create" ? context.addedCount + 1 : context.addedCount,
         frontContent: context.mode === "create" && !context.frontFrozen ? "" : context.frontContent,
         backContent: context.mode === "create" && !context.backFrozen ? "" : context.backContent,
-        clozeContent: context.mode === "create" && !context.clozeFrozen ? "" : context.clozeContent,
         dirty: false,
         isDuplicate: false,
         duplicateDeckPath: null,

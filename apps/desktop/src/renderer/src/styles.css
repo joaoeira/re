@@ -216,7 +216,12 @@
   }
 
   .editor-prosemirror {
-    @apply min-h-[18rem] text-sm leading-6 text-foreground outline-none;
+    @apply min-h-[6rem] text-sm leading-6 text-foreground outline-none;
+  }
+
+  .editor-prosemirror p.is-editor-empty:first-child::before {
+    @apply pointer-events-none float-left h-0 text-muted-foreground/40;
+    content: attr(data-placeholder);
   }
 
   .editor-prosemirror > :first-child {

@@ -10,7 +10,7 @@ type ClozeEditorProps = {
 export function ClozeEditor({ content, frozen, onChange, onToggleFrozen }: ClozeEditorProps) {
   return (
     <EditorField
-      label="Cloze"
+      label="Text"
       content={content}
       onContentChange={onChange}
       frozen={frozen}

@@ -40,6 +40,9 @@ export default defineConfig({
         resolve: {
           alias: sharedAliases,
         },
+        optimizeDeps: {
+          include: ["@base-ui/react/combobox"],
+        },
         test: {
           name: "browser",
           include: ["test/**/*.browser.test.tsx"],

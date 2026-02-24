@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
+import Placeholder from "@tiptap/extension-placeholder";
 import StarterKit from "@tiptap/starter-kit";
 import { Pin } from "lucide-react";
 import { Markdown } from "tiptap-markdown";
@@ -54,6 +55,8 @@ export function EditorField({
   placeholder,
   enableClozeShortcut = false,
 }: EditorFieldProps) {
+  const lastContentFromProp = useRef(content);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -62,6 +65,10 @@ export function EditorField({
             class: "editor-code-block",
           },
         },
+        hardBreak: false,
+      }),
+      Placeholder.configure({
+        placeholder: placeholder ?? "",
       }),
       Markdown.configure({
         html: false,
@@ -76,19 +83,18 @@ export function EditorField({
       },
     },
     onUpdate: ({ editor }) => {
-      onContentChange(getMarkdown(editor));
+      const md = getMarkdown(editor);
+      lastContentFromProp.current = md;
+      onContentChange(md);
     },
   });
 
   useEffect(() => {
-    if (!editor) {
+    if (!editor || content === lastContentFromProp.current) {
       return;
     }
-
-    const editorMarkdown = getMarkdown(editor);
-    if (editorMarkdown !== content) {
-      editor.commands.setContent(content, { emitUpdate: false });
-    }
+    lastContentFromProp.current = content;
+    editor.commands.setContent(content, { emitUpdate: false });
   }, [content, editor]);
 
   useEffect(() => {
@@ -126,24 +132,25 @@ export function EditorField({
   }, [editor, enableClozeShortcut]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col border border-border bg-background">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2 text-xs">
-        <span className="uppercase tracking-widest text-muted-foreground">{label}</span>
+    <div className="group/field flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center gap-2 pb-1.5">
+        <span className="text-[10px] uppercase tracking-widest text-muted-foreground/40">
+          {label}
+        </span>
         <button
           type="button"
           onClick={onToggleFreeze}
           className={cn(
-            "flex items-center gap-1 border px-2 py-0.5 text-[11px] transition-colors",
+            "flex items-center transition-opacity",
             frozen
-              ? "border-foreground text-foreground"
-              : "border-border text-muted-foreground hover:border-foreground hover:text-foreground",
+              ? "text-foreground opacity-100"
+              : "text-muted-foreground opacity-0 group-hover/field:opacity-60",
           )}
         >
-          <Pin className={cn("size-3", frozen ? "fill-current" : "")} />
-          <span>{frozen ? "Pinned" : "Pin"}</span>
+          <Pin className={cn("size-2.5", frozen ? "fill-current" : "")} />
         </button>
       </div>
-      <div className="flex-1 overflow-auto p-3">
+      <div className="flex-1 overflow-auto">
         {editor ? (
           <EditorContent editor={editor} />
         ) : (
