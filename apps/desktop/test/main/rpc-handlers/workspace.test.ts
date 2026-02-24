@@ -363,8 +363,12 @@ Answer
       );
 
       expect(result.absolutePath).toBe(path.join(workspacePath, toRelativePath));
-      await expect(fs.readFile(path.join(workspacePath, fromRelativePath), "utf8")).rejects.toBeDefined();
-      await expect(fs.readFile(path.join(workspacePath, toRelativePath), "utf8")).resolves.toBe("# old\n");
+      await expect(
+        fs.readFile(path.join(workspacePath, fromRelativePath), "utf8"),
+      ).rejects.toBeDefined();
+      await expect(fs.readFile(path.join(workspacePath, toRelativePath), "utf8")).resolves.toBe(
+        "# old\n",
+      );
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
     }

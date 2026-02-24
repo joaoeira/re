@@ -1,7 +1,53 @@
 {
   "compilerOptions": {
     // Effect Language Service
-    "plugins": [{ "name": "@effect/language-service" }],
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": {
+          "anyUnknownInErrorContext": "off",
+          "catchAllToMapError": "error",
+          "catchUnfailableEffect": "error",
+          "classSelfMismatch": "error",
+          "deterministicKeys": "off",
+          "duplicatePackage": "error",
+          "effectGenUsesAdapter": "error",
+          "effectInVoidSuccess": "warning",
+          "floatingEffect": "error",
+          "genericEffectServices": "error",
+          "globalErrorInEffectCatch": "error",
+          "globalErrorInEffectFailure": "error",
+          "importFromBarrel": "error",
+          "layerMergeAllWithDependencies": "error",
+          "leakingRequirements": "error",
+          "missedPipeableOpportunity": "off",
+          "missingEffectContext": "error",
+          "missingEffectError": "error",
+          "missingEffectServiceDependency": "error",
+          "missingLayerContext": "error",
+          "missingReturnYieldStar": "error",
+          "missingStarInYieldEffectGen": "error",
+          "multipleEffectProvide": "error",
+          "nonObjectEffectServiceType": "error",
+          "outdatedEffectCodegen": "warning",
+          "overriddenSchemaConstructor": "error",
+          "returnEffectInGen": "error",
+          "runEffectInsideEffect": "error",
+          "schemaStructWithTag": "error",
+          "schemaUnionOfLiterals": "off",
+          "scopeInLayerEffect": "error",
+          "strictBooleanExpressions": "off",
+          "strictEffectProvide": "off",
+          "tryCatchInEffectGen": "error",
+          "unknownInEffectCatch": "warning",
+          "unnecessaryEffectGen": "error",
+          "unnecessaryFailYieldableError": "error",
+          "unnecessaryPipe": "error",
+          "unnecessaryPipeChain": "error",
+          "unsupportedServiceAccessors": "warning"
+        }
+      }
+    ],
 
     // Environment setup & latest features
     "lib": ["ESNext"],

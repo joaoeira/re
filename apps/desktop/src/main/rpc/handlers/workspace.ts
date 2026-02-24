@@ -180,7 +180,10 @@ export const createWorkspaceHandlers = () =>
           const absolutePath = yield* resolveDeckPathFromRelative(rootPath, relativePath);
           const deckManager = yield* DeckManager;
 
-          yield* deckWriteCoordinator.withDeckLock(absolutePath, deckManager.deleteDeck(absolutePath));
+          yield* deckWriteCoordinator.withDeckLock(
+            absolutePath,
+            deckManager.deleteDeck(absolutePath),
+          );
 
           duplicateIndexInvalidation.markDuplicateIndexDirty();
 
@@ -208,10 +211,8 @@ export const createWorkspaceHandlers = () =>
           if (fromAbsolutePath === toAbsolutePath) {
             yield* deckWriteCoordinator.withDeckLock(fromAbsolutePath, renameEffect);
           } else {
-            const firstPath =
-              fromAbsolutePath < toAbsolutePath ? fromAbsolutePath : toAbsolutePath;
-            const secondPath =
-              firstPath === fromAbsolutePath ? toAbsolutePath : fromAbsolutePath;
+            const firstPath = fromAbsolutePath < toAbsolutePath ? fromAbsolutePath : toAbsolutePath;
+            const secondPath = firstPath === fromAbsolutePath ? toAbsolutePath : fromAbsolutePath;
             yield* deckWriteCoordinator.withDeckLock(
               firstPath,
               deckWriteCoordinator.withDeckLock(secondPath, renameEffect),

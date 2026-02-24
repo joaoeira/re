@@ -59,7 +59,7 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
       Effect.gen(function* () {
         const forced = config.readDirectoryErrors?.[targetPath];
         if (forced) {
-          return yield* Effect.fail(makeSystemError(forced, "readDirectory", targetPath));
+          return yield* makeSystemError(forced, "readDirectory", targetPath);
         }
 
         const entries = config.directories[targetPath];
@@ -68,17 +68,17 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
         }
 
         if (config.entryTypes[targetPath]) {
-          return yield* Effect.fail(makeSystemError("BadResource", "readDirectory", targetPath));
+          return yield* makeSystemError("BadResource", "readDirectory", targetPath);
         }
 
-        return yield* Effect.fail(makeSystemError("NotFound", "readDirectory", targetPath));
+        return yield* makeSystemError("NotFound", "readDirectory", targetPath);
       }),
 
     readFileString: (targetPath) =>
       Effect.gen(function* () {
         const forced = config.readFileErrors?.[targetPath];
         if (forced) {
-          return yield* Effect.fail(makeSystemError(forced, "readFileString", targetPath));
+          return yield* makeSystemError(forced, "readFileString", targetPath);
         }
 
         const content = store[targetPath];
@@ -87,22 +87,22 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
         }
 
         if (config.entryTypes[targetPath]) {
-          return yield* Effect.fail(makeSystemError("BadResource", "readFileString", targetPath));
+          return yield* makeSystemError("BadResource", "readFileString", targetPath);
         }
 
-        return yield* Effect.fail(makeSystemError("NotFound", "readFileString", targetPath));
+        return yield* makeSystemError("NotFound", "readFileString", targetPath);
       }),
 
     writeFileString: (targetPath, data, options) =>
       Effect.gen(function* () {
         const forced = config.writeFileErrors?.[targetPath];
         if (forced) {
-          return yield* Effect.fail(makeSystemError(forced, "writeFileString", targetPath));
+          return yield* makeSystemError(forced, "writeFileString", targetPath);
         }
 
         if (options?.flag === "wx") {
           if (store[targetPath] !== undefined || config.entryTypes[targetPath] !== undefined) {
-            return yield* Effect.fail(makeSystemError("AlreadyExists", "writeFileString", targetPath));
+            return yield* makeSystemError("AlreadyExists", "writeFileString", targetPath);
           }
         }
 
@@ -113,7 +113,7 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
       Effect.gen(function* () {
         const forced = config.makeDirectoryErrors?.[targetPath];
         if (forced) {
-          return yield* Effect.fail(makeSystemError(forced, "makeDirectory", targetPath));
+          return yield* makeSystemError(forced, "makeDirectory", targetPath);
         }
       }),
 
@@ -121,12 +121,12 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
       Effect.gen(function* () {
         const forced = config.renameErrors?.[oldPath];
         if (forced) {
-          return yield* Effect.fail(makeSystemError(forced, "rename", oldPath));
+          return yield* makeSystemError(forced, "rename", oldPath);
         }
 
         const content = store[oldPath];
         if (content === undefined) {
-          return yield* Effect.fail(makeSystemError("NotFound", "rename", oldPath));
+          return yield* makeSystemError("NotFound", "rename", oldPath);
         }
 
         store[newPath] = content;
@@ -137,7 +137,7 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
       Effect.gen(function* () {
         const forced = config.removeErrors?.[targetPath];
         if (forced) {
-          return yield* Effect.fail(makeSystemError(forced, "remove", targetPath));
+          return yield* makeSystemError(forced, "remove", targetPath);
         }
 
         delete store[targetPath];
@@ -147,7 +147,7 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
       Effect.gen(function* () {
         const forced = config.readLinkErrors?.[targetPath];
         if (forced) {
-          return yield* Effect.fail(makeSystemError(forced, "readLink", targetPath));
+          return yield* makeSystemError(forced, "readLink", targetPath);
         }
 
         const target = config.symlinkTargets?.[targetPath];
@@ -156,22 +156,22 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
         }
 
         if (config.entryTypes[targetPath]) {
-          return yield* Effect.fail(makeSystemError("BadResource", "readLink", targetPath));
+          return yield* makeSystemError("BadResource", "readLink", targetPath);
         }
 
-        return yield* Effect.fail(makeSystemError("NotFound", "readLink", targetPath));
+        return yield* makeSystemError("NotFound", "readLink", targetPath);
       }),
 
     stat: (targetPath) =>
       Effect.gen(function* () {
         const forced = config.statErrors?.[targetPath];
         if (forced) {
-          return yield* Effect.fail(makeSystemError(forced, "stat", targetPath));
+          return yield* makeSystemError(forced, "stat", targetPath);
         }
 
         const type = config.entryTypes[targetPath];
         if (!type) {
-          return yield* Effect.fail(makeSystemError("NotFound", "stat", targetPath));
+          return yield* makeSystemError("NotFound", "stat", targetPath);
         }
 
         return makeFileInfo(type);
