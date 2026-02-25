@@ -28,4 +28,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDefinition[] = [
 ];
 
 export const getSettingsSection = (section: SettingsSection): SettingsSectionDefinition =>
-  SETTINGS_SECTIONS.find((candidate) => candidate.id === section) ?? SETTINGS_SECTIONS[0]!;
+  SETTINGS_SECTIONS.find((candidate) => candidate.id === section) ??
+  (() => {
+    throw new Error(`Unknown settings section: ${section}`);
+  })();

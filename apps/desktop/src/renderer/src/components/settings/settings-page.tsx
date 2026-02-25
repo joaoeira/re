@@ -3,7 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import { SETTINGS_SECTIONS, getSettingsSection } from "./settings-sections";
 import type { SettingsSection } from "./settings-section";
-import { useSettingsPageSelector } from "./settings-page-context";
+import { useSettingsPageActions, useSettingsPageSelector } from "./settings-page-context";
 
 export function SettingsPage({
   section,
@@ -12,7 +12,9 @@ export function SettingsPage({
   section: SettingsSection;
   onSectionChange: (section: SettingsSection) => void;
 }) {
+  const actions = useSettingsPageActions();
   const loading = useSettingsPageSelector((s) => s.context.loading);
+  const loadError = useSettingsPageSelector((s) => s.context.loadError);
   const selectedSection = getSettingsSection(section);
   const tabRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
@@ -84,6 +86,18 @@ export function SettingsPage({
         aria-labelledby={`settings-tab-${section}`}
         className="flex-1 overflow-y-auto p-6"
       >
+        {loadError && (
+          <div className="mb-4 flex items-center justify-between border border-destructive/30 bg-destructive/5 px-3 py-2">
+            <p className="text-destructive text-xs">{loadError}</p>
+            <button
+              type="button"
+              className="text-destructive/90 text-xs underline underline-offset-2"
+              onClick={actions.reload}
+            >
+              Retry
+            </button>
+          </div>
+        )}
         {loading ? (
           <div className="text-muted-foreground flex h-full items-center justify-center text-xs">
             Loading...

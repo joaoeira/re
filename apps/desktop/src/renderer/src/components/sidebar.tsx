@@ -1,6 +1,11 @@
 import { Home, Table2, Sparkles, Settings } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 
+import {
+  DEFAULT_SETTINGS_SECTION,
+  isSettingsSection,
+  type SettingsSection,
+} from "@/components/settings/settings-section";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const navItems = [
@@ -12,6 +17,13 @@ const navItems = [
 export function Sidebar() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const settingsSection = useRouterState({
+    select: (state): SettingsSection | null => {
+      if (state.location.pathname !== "/settings") return null;
+      const section = (state.location.search as Record<string, unknown>).section;
+      return isSettingsSection(section) ? section : DEFAULT_SETTINGS_SECTION;
+    },
+  });
   const isSettings = pathname === "/settings";
 
   return (
@@ -58,7 +70,12 @@ export function Sidebar() {
             }`}
             aria-label="Settings"
             aria-current={isSettings ? "page" : undefined}
-            onClick={() => void navigate({ to: "/settings" })}
+            onClick={() =>
+              void navigate({
+                to: "/settings",
+                search: { section: settingsSection ?? DEFAULT_SETTINGS_SECTION },
+              })
+            }
           >
             <Settings size={18} />
           </TooltipTrigger>

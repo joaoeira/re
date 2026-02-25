@@ -1,6 +1,11 @@
 import { useEffect } from "react";
 import { Outlet, createRootRoute, useNavigate, useRouterState } from "@tanstack/react-router";
 
+import {
+  DEFAULT_SETTINGS_SECTION,
+  isSettingsSection,
+  type SettingsSection,
+} from "@/components/settings/settings-section";
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
 
@@ -11,6 +16,13 @@ export const Route = createRootRoute({
 function RootLayout() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const settingsSection = useRouterState({
+    select: (state): SettingsSection | null => {
+      if (state.location.pathname !== "/settings") return null;
+      const section = (state.location.search as Record<string, unknown>).section;
+      return isSettingsSection(section) ? section : DEFAULT_SETTINGS_SECTION;
+    },
+  });
   const isEditorRoute = pathname === "/editor";
 
   useEffect(() => {
@@ -19,14 +31,16 @@ function RootLayout() {
         e.preventDefault();
         void navigate({
           to: "/settings",
-          search: { section: "general" },
+          search: {
+            section: settingsSection ?? DEFAULT_SETTINGS_SECTION,
+          },
         });
       }
     };
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [navigate]);
+  }, [navigate, settingsSection]);
 
   if (isEditorRoute) {
     return <Outlet />;

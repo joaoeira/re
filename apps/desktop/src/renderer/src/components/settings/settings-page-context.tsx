@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { useSelector } from "@xstate/store-react";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 
 import type { SecretKey } from "@shared/secrets";
 import { useIpc } from "@/lib/ipc-context";
@@ -20,6 +20,34 @@ type SettingsPageContextValue = {
 };
 
 const SettingsPageContext = createContext<SettingsPageContextValue | null>(null);
+
+const errorDetails = (error: unknown): string => {
+  if (error instanceof Error && error.message.length > 0) return error.message;
+
+  if (typeof error === "object" && error !== null) {
+    const maybeError = error as { _tag?: unknown; message?: unknown };
+    const tag = typeof maybeError._tag === "string" ? maybeError._tag : null;
+    const message = typeof maybeError.message === "string" ? maybeError.message : null;
+
+    if (tag && message) return `${tag}: ${message}`;
+    if (message) return message;
+    if (tag) return tag;
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+
+  return String(error);
+};
+
+const formatError = (prefix: string, error: unknown): string => `${prefix}: ${errorDetails(error)}`;
+
+const logSettingsError = (action: string, error: unknown): void => {
+  console.error(`[settings] ${action}`, error);
+};
 
 function useSettingsPageContextValue(): SettingsPageContextValue {
   const context = useContext(SettingsPageContext);
@@ -42,18 +70,40 @@ export function useSettingsPageSelector<T>(
   return useSelector(store, selector);
 }
 
-export function SettingsPageProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function SettingsPageProvider({ children }: { children: React.ReactNode }) {
   const ipc = useIpc();
   const store = useMemo(() => createSettingsPageStore(), []);
+  const fibersRef = useRef(new Set<Fiber.RuntimeFiber<unknown, unknown>>());
+
+  const runTask = useCallback((effect: Effect.Effect<unknown>) => {
+    let fiber: Fiber.RuntimeFiber<unknown, unknown> | null = null;
+
+    const trackedEffect = effect.pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (fiber !== null) fibersRef.current.delete(fiber);
+        }),
+      ),
+    );
+
+    fiber = Effect.runFork(trackedEffect);
+    fibersRef.current.add(fiber);
+  }, []);
+
+  useEffect(
+    () => () => {
+      for (const fiber of fibersRef.current) {
+        Effect.runFork(Fiber.interrupt(fiber));
+      }
+      fibersRef.current.clear();
+    },
+    [],
+  );
 
   const reload = useCallback(() => {
     store.send({ type: "setLoading" });
 
-    void Effect.runPromise(
+    runTask(
       Effect.all(
         {
           settings: ipc.client.GetSettings(),
@@ -62,27 +112,26 @@ export function SettingsPageProvider({
         },
         { concurrency: "unbounded" },
       ).pipe(
-        Effect.tap(({ settings, openai, anthropic }) =>
-          Effect.sync(() => {
+        Effect.match({
+          onSuccess: ({ settings, openai, anthropic }) => {
             store.send({
               type: "loadSuccess",
               rootPath: settings.workspace.rootPath,
               openaiConfigured: openai.configured,
               anthropicConfigured: anthropic.configured,
             });
-          }),
-        ),
-        Effect.catchAll(() =>
-          Effect.sync(() => {
+          },
+          onFailure: (error) => {
+            logSettingsError("load", error);
             store.send({
               type: "loadError",
-              error: "Failed to load settings",
+              error: formatError("Failed to load settings", error),
             });
-          }),
-        ),
+          },
+        }),
       ),
     );
-  }, [ipc, store]);
+  }, [ipc, runTask, store]);
 
   useEffect(() => {
     reload();
@@ -91,126 +140,116 @@ export function SettingsPageProvider({
   const selectDirectory = useCallback(() => {
     store.send({ type: "setRootPathSaving" });
 
-    void Effect.runPromise(
+    runTask(
       ipc.client.SelectDirectory().pipe(
         Effect.flatMap((result) => {
           if (result.path === null) {
-            return Effect.sync(() => {
-              store.send({
-                type: "rootPathSaved",
-                rootPath: store.getSnapshot().context.rootPath,
-              });
-            });
+            return Effect.succeed({ rootPath: store.getSnapshot().context.rootPath });
           }
           return ipc.client
             .SetWorkspaceRootPath({ rootPath: result.path })
-            .pipe(
-              Effect.tap((settings) =>
-                Effect.sync(() => {
-                  store.send({
-                    type: "rootPathSaved",
-                    rootPath: settings.workspace.rootPath,
-                  });
-                }),
-              ),
-            );
+            .pipe(Effect.map((settings) => ({ rootPath: settings.workspace.rootPath })));
         }),
-        Effect.catchAll(() =>
-          Effect.sync(() => {
+        Effect.match({
+          onSuccess: ({ rootPath }) => {
+            store.send({
+              type: "rootPathSaved",
+              rootPath,
+            });
+          },
+          onFailure: (error) => {
+            logSettingsError("set workspace root", error);
             store.send({
               type: "rootPathSaveError",
-              error: "Failed to set workspace path",
+              error: formatError("Failed to set workspace path", error),
             });
-          }),
-        ),
+          },
+        }),
       ),
     );
-  }, [ipc, store]);
+  }, [ipc, runTask, store]);
 
   const clearRootPath = useCallback(() => {
     store.send({ type: "setRootPathSaving" });
 
-    void Effect.runPromise(
+    runTask(
       ipc.client.SetWorkspaceRootPath({ rootPath: null }).pipe(
-        Effect.tap((settings) =>
-          Effect.sync(() => {
+        Effect.match({
+          onSuccess: (settings) => {
             store.send({
               type: "rootPathSaved",
               rootPath: settings.workspace.rootPath,
             });
-          }),
-        ),
-        Effect.catchAll(() =>
-          Effect.sync(() => {
+          },
+          onFailure: (error) => {
+            logSettingsError("clear workspace root", error);
             store.send({
               type: "rootPathSaveError",
-              error: "Failed to clear workspace path",
+              error: formatError("Failed to clear workspace path", error),
             });
-          }),
-        ),
+          },
+        }),
       ),
     );
-  }, [ipc, store]);
+  }, [ipc, runTask, store]);
 
   const saveKey = useCallback(
     (key: SecretKey, value: string) => {
       store.send({ type: "setApiKeySaving", key });
 
-      void Effect.runPromise(
+      runTask(
         ipc.client.SetApiKey({ key, value }).pipe(
           Effect.flatMap(() => ipc.client.HasApiKey({ key })),
-          Effect.tap((result) =>
-            Effect.sync(() => {
+          Effect.match({
+            onSuccess: (result) => {
               store.send({
                 type: "apiKeySaved",
                 key,
                 configured: result.configured,
               });
-            }),
-          ),
-          Effect.catchAll(() =>
-            Effect.sync(() => {
+            },
+            onFailure: (error) => {
+              logSettingsError(`save API key (${key})`, error);
               store.send({
                 type: "apiKeySaveError",
                 key,
-                error: "Failed to save key",
+                error: formatError("Failed to save key", error),
               });
-            }),
-          ),
+            },
+          }),
         ),
       );
     },
-    [ipc, store],
+    [ipc, runTask, store],
   );
 
   const removeKey = useCallback(
     (key: SecretKey) => {
       store.send({ type: "setApiKeySaving", key });
 
-      void Effect.runPromise(
+      runTask(
         ipc.client.DeleteApiKey({ key }).pipe(
-          Effect.tap(() =>
-            Effect.sync(() => {
+          Effect.match({
+            onSuccess: () => {
               store.send({
                 type: "apiKeySaved",
                 key,
                 configured: false,
               });
-            }),
-          ),
-          Effect.catchAll(() =>
-            Effect.sync(() => {
+            },
+            onFailure: (error) => {
+              logSettingsError(`remove API key (${key})`, error);
               store.send({
                 type: "apiKeySaveError",
                 key,
-                error: "Failed to remove key",
+                error: formatError("Failed to remove key", error),
               });
-            }),
-          ),
+            },
+          }),
         ),
       );
     },
-    [ipc, store],
+    [ipc, runTask, store],
   );
 
   const actions = useMemo(

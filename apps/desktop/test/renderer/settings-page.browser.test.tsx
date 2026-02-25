@@ -239,6 +239,43 @@ describe("SettingsPage", () => {
       expect(setCalls[0]![1]).toEqual({ rootPath: "/new/workspace" });
     });
 
+    it("shows an error when setting workspace path fails", async () => {
+      const invoke = defaultInvoke();
+      invoke.mockImplementation(async (method: string) => {
+        if (method === "GetSettings") {
+          return { type: "success", data: defaultSettings };
+        }
+
+        if (method === "HasApiKey") {
+          return { type: "success", data: { configured: false } };
+        }
+
+        if (method === "SelectDirectory") {
+          return { type: "success", data: { path: "/new/workspace" } };
+        }
+
+        if (method === "SetWorkspaceRootPath") {
+          return {
+            type: "failure",
+            error: {
+              tag: "WorkspaceRootUnreadable",
+              data: {
+                _tag: "WorkspaceRootUnreadable",
+                rootPath: "/new/workspace",
+                message: "Permission denied",
+              },
+            },
+          };
+        }
+
+        return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+      });
+
+      await renderSettingsPage(invoke);
+      nativeClick(page.getByRole("button", { name: "Browse..." }));
+      await expect.element(page.getByText(/Failed to set workspace path/)).toBeVisible();
+    });
+
     it("does not call SetWorkspaceRootPath when SelectDirectory is cancelled", async () => {
       const invoke = defaultInvoke();
       invoke.mockImplementation(async (method: string) => {
@@ -359,14 +396,10 @@ describe("SettingsPage", () => {
       nativeClick(page.getByRole("tab", { name: "Secrets" }));
       await expect.element(page.getByText("API keys")).toBeVisible();
 
-      const inputs = document.querySelectorAll<HTMLInputElement>("input[type='password']");
-      const anthropicInput = inputs[1]!;
-      anthropicInput.focus();
+      const anthropicInput = page.getByRole("textbox", { name: "Anthropic API key" });
+      await userEvent.click(anthropicInput);
       await userEvent.fill(anthropicInput, "sk-ant-test-123");
-
-      const saveButtons = document.querySelectorAll<HTMLElement>("[data-slot='button']");
-      const saveBtnArray = Array.from(saveButtons).filter((btn) => btn.textContent === "Save");
-      saveBtnArray[1]!.click();
+      nativeClick(page.getByRole("button", { name: "Save Anthropic key" }));
 
       const setKeyCalls = invoke.mock.calls.filter(([method]: unknown[]) => method === "SetApiKey");
       expect(setKeyCalls).toHaveLength(1);
@@ -376,8 +409,63 @@ describe("SettingsPage", () => {
       });
     });
 
+    it("shows an error when saving API key fails", async () => {
+      const invoke = defaultInvoke();
+      invoke.mockImplementation(async (method: string) => {
+        if (method === "GetSettings") {
+          return { type: "success", data: defaultSettings };
+        }
+
+        if (method === "HasApiKey") {
+          return { type: "success", data: { configured: false } };
+        }
+
+        if (method === "SetApiKey") {
+          return {
+            type: "failure",
+            error: {
+              tag: "SecretStoreUnavailable",
+              data: {
+                _tag: "SecretStoreUnavailable",
+                message: "keychain unavailable",
+              },
+            },
+          };
+        }
+
+        return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+      });
+
+      await renderSettingsPage(invoke);
+      nativeClick(page.getByRole("tab", { name: "Secrets" }));
+      const anthropicInput = page.getByRole("textbox", { name: "Anthropic API key" });
+      await userEvent.click(anthropicInput);
+      await userEvent.fill(anthropicInput, "sk-ant-test-123");
+      nativeClick(page.getByRole("button", { name: "Save Anthropic key" }));
+
+      await expect.element(page.getByText(/Failed to save key/)).toBeVisible();
+    });
+
     it("removes an API key via DeleteApiKey after confirmation", async () => {
       const invoke = defaultInvoke();
+      invoke.mockImplementation(async (method: string, payload?: unknown) => {
+        if (method === "GetSettings") {
+          return { type: "success", data: defaultSettings };
+        }
+
+        if (method === "HasApiKey") {
+          const key = (payload as { key: string }).key;
+          if (key === "openai-api-key") return { type: "success", data: { configured: true } };
+          return { type: "success", data: { configured: false } };
+        }
+
+        if (method === "DeleteApiKey") {
+          return { type: "success", data: { success: true } };
+        }
+
+        return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+      });
+
       await renderSettingsPage(invoke);
       nativeClick(page.getByRole("tab", { name: "Secrets" }));
       await expect.element(page.getByText("Configured", { exact: true })).toBeVisible();
@@ -441,7 +529,66 @@ describe("SettingsPage", () => {
       });
 
       await renderSettingsPage(invoke);
-      await expect.element(page.getByText("Failed to load settings")).toBeVisible();
+      await expect.element(page.getByText(/Failed to load settings/)).toBeVisible();
+    });
+
+    it("shows load error even when opened on Secrets section", async () => {
+      const invoke = vi.fn().mockImplementation(async (method: string) => {
+        if (method === "GetSettings") {
+          return {
+            type: "failure",
+            error: {
+              tag: "SettingsReadFailed",
+              data: { _tag: "SettingsReadFailed", path: "/tmp", message: "bad" },
+            },
+          };
+        }
+
+        return { type: "success", data: { configured: false } };
+      });
+
+      await renderSettingsPage(invoke, defaultSubscribe, "secrets");
+      await expect.element(page.getByText(/Failed to load settings/)).toBeVisible();
+      await expect
+        .element(page.getByRole("tab", { name: "Secrets" }))
+        .toHaveAttribute("aria-selected", "true");
+    });
+
+    it("recovers after a load failure when retrying", async () => {
+      let settingsRequests = 0;
+      const invoke = vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
+        if (method === "GetSettings") {
+          settingsRequests += 1;
+          if (settingsRequests === 1) {
+            return {
+              type: "failure",
+              error: {
+                tag: "SettingsReadFailed",
+                data: { _tag: "SettingsReadFailed", path: "/tmp", message: "bad" },
+              },
+            };
+          }
+          return { type: "success", data: defaultSettings };
+        }
+
+        if (method === "HasApiKey") {
+          const key = (payload as { key: string }).key;
+          return {
+            type: "success",
+            data: { configured: key === "openai-api-key" },
+          };
+        }
+
+        return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+      });
+
+      await renderSettingsPage(invoke);
+      await expect.element(page.getByText(/Failed to load settings/)).toBeVisible();
+
+      nativeClick(page.getByRole("button", { name: "Retry" }));
+
+      await expect.element(page.getByText("/workspace")).toBeVisible();
+      expect(page.getByText(/Failed to load settings/).query()).toBeNull();
     });
   });
 
@@ -504,6 +651,44 @@ describe("SettingsPage", () => {
 
       await expect.element(page.getByRole("tablist", { name: "Settings sections" })).toBeVisible();
       await expect.poll(() => window.location.hash).toContain("/settings");
+    });
+
+    it("navigates to settings on Cmd/Ctrl + , from /editor", async () => {
+      await renderAppAt("#/editor");
+
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: ",",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+
+      await expect.element(page.getByRole("tablist", { name: "Settings sections" })).toBeVisible();
+      await expect.poll(() => window.location.hash).toContain("/settings");
+    });
+
+    it("keeps current settings section when Cmd/Ctrl + , is pressed on settings", async () => {
+      const { router } = await renderAppAt("#/settings");
+      await router.navigate({
+        to: "/settings",
+        search: { section: "secrets" },
+      });
+
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: ",",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+
+      await expect
+        .element(page.getByRole("tab", { name: "Secrets" }))
+        .toHaveAttribute("aria-selected", "true");
+      await expect.poll(() => window.location.hash).toContain("section=secrets");
     });
   });
 });

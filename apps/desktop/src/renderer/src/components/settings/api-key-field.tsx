@@ -58,6 +58,7 @@ export function ApiKeyField({
       <div className="flex items-center gap-2">
         <input
           type="password"
+          aria-label={`${label} API key`}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder={configured ? "Enter new key to update" : "Enter API key"}
@@ -66,7 +67,12 @@ export function ApiKeyField({
             if (e.key === "Enter") handleSave();
           }}
         />
-        <Button size="sm" disabled={!value.trim() || saving} onClick={handleSave}>
+        <Button
+          size="sm"
+          aria-label={`Save ${label} key`}
+          disabled={!value.trim() || saving}
+          onClick={handleSave}
+        >
           {saving ? "Saving..." : "Save"}
         </Button>
         {configured && (

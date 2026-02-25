@@ -30,6 +30,7 @@ export const createSettingsPageStore = () =>
   createStore({
     context: {
       loading: false,
+      loadError: null as string | null,
       rootPath: null as string | null,
       rootPathSaving: false,
       rootPathError: null as string | null,
@@ -39,6 +40,7 @@ export const createSettingsPageStore = () =>
       setLoading: (context) => ({
         ...context,
         loading: true,
+        loadError: null,
         rootPathError: null,
       }),
       loadSuccess: (
@@ -51,6 +53,7 @@ export const createSettingsPageStore = () =>
       ) => ({
         ...context,
         loading: false,
+        loadError: null,
         rootPath: event.rootPath,
         apiKeys: {
           "openai-api-key": {
@@ -68,7 +71,7 @@ export const createSettingsPageStore = () =>
       loadError: (context, event: { error: string }) => ({
         ...context,
         loading: false,
-        rootPathError: event.error,
+        loadError: event.error,
       }),
       setRootPathSaving: (context) => ({
         ...context,

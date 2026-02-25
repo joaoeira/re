@@ -169,7 +169,8 @@ describe("ApiKeyField", () => {
       />,
     );
 
-    await expect.element(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
+    await expect.element(screen.getByRole("button", { name: "Save OpenAI key" })).toBeDisabled();
+    await expect.element(screen.getByText("Saving...")).toBeVisible();
   });
 
   it("shows an error message", async () => {
