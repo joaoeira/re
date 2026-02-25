@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 const navItems = [
   { id: "home", label: "Home", icon: Home, to: "/" },
   { id: "browser", label: "Card Browser", icon: Table2, to: null },
-  { id: "create", label: "AI Creator", icon: Sparkles, to: null },
+  { id: "forge", label: "Forge", icon: Sparkles, to: "/forge" },
 ] as const;
 
 export function Sidebar() {

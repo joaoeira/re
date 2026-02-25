@@ -17,7 +17,8 @@
     "prebuild": "node ./scripts/ensure-local-electron.mjs",
     "build": "electron-forge package",
     "prepackage": "node ./scripts/ensure-local-electron.mjs",
-    "package": "electron-forge make"
+    "package": "electron-forge make",
+    "kill": "pkill -9 -f 're/node_modules/electron' || true"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.46",

@@ -598,7 +598,9 @@ describe("SettingsPage", () => {
       await renderAppAt("#/", invoke);
 
       await expect
-        .poll(() => invoke.mock.calls.filter(([method]: unknown[]) => method === "HasApiKey").length)
+        .poll(
+          () => invoke.mock.calls.filter(([method]: unknown[]) => method === "HasApiKey").length,
+        )
         .toBe(2);
     });
 

@@ -11,6 +11,9 @@ export function Topbar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isReview = pathname === "/review";
   const isSettings = pathname === "/settings";
+  const currentPageLabel =
+    pathname === "/forge" ? "forge" : isReview ? "review" : isSettings ? "settings" : "home";
+  const isNestedPage = currentPageLabel !== "home";
   const ipc = useIpc();
 
   useEffect(() => {
@@ -39,7 +42,7 @@ export function Topbar() {
           ~
         </button>
         <span className="text-muted-foreground/40">/</span>
-        {isReview ? (
+        {isNestedPage ? (
           <>
             <button
               type="button"
@@ -50,21 +53,7 @@ export function Topbar() {
             </button>
             <span className="text-muted-foreground/40">/</span>
             <span className="text-foreground" aria-current="page">
-              review
-            </span>
-          </>
-        ) : isSettings ? (
-          <>
-            <button
-              type="button"
-              onClick={() => void navigate({ to: "/" })}
-              className="text-muted-foreground transition-colors hover:text-foreground"
-            >
-              home
-            </button>
-            <span className="text-muted-foreground/40">/</span>
-            <span className="text-foreground" aria-current="page">
-              settings
+              {currentPageLabel}
             </span>
           </>
         ) : (
