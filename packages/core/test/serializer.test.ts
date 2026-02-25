@@ -1,4 +1,4 @@
-import { describe, it, assert } from "@effect/vitest";
+import { describe, it, assert } from "vitest";
 import { serializeFile, serializeMetadata } from "../src/serializer/index.ts";
 import type { ItemMetadata, ParsedFile, ItemId, State } from "../src/types.ts";
 

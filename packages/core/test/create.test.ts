@@ -1,4 +1,4 @@
-import { describe, it, assert } from "@effect/vitest";
+import { describe, it, assert } from "vitest";
 import { generateId, createMetadata, createMetadataWithId, numericField } from "../src/create.ts";
 import type { ItemId } from "../src/types.ts";
 

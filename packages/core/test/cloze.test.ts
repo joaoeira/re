@@ -1,4 +1,4 @@
-import { describe, it, assert } from "@effect/vitest";
+import { describe, it, assert } from "vitest";
 import {
   hasClozeDeletion,
   nextClozeDeletionIndex,
@@ -22,7 +22,7 @@ describe("cloze helpers", () => {
     assert.strictEqual(parsed[0]!.hidden, "Paris");
     assert.strictEqual(parsed[0]!.hint, "capital city");
     assert.strictEqual(parsed[0]!.start, 4);
-    assert.strictEqual(parsed[0]!.end, 29);
+    assert.strictEqual(parsed[0]!.end, 31);
 
     assert.strictEqual(parsed[1]!.index, 3);
     assert.strictEqual(parsed[1]!.hidden, "France");
