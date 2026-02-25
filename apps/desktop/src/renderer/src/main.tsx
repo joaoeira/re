@@ -7,6 +7,7 @@ import "./styles.css";
 import { IpcProvider } from "./lib/ipc-context";
 import { router } from "./lib/router";
 import { StoresProvider, createStores } from "@shared/state/stores-context";
+import { SettingsPageProvider } from "@/components/settings/settings-page-context";
 
 const stores = createStores();
 
@@ -18,9 +19,11 @@ if (!root) {
 createRoot(root).render(
   <StrictMode>
     <IpcProvider>
-      <StoresProvider stores={stores}>
-        <RouterProvider router={router} />
-      </StoresProvider>
+      <SettingsPageProvider>
+        <StoresProvider stores={stores}>
+          <RouterProvider router={router} />
+        </StoresProvider>
+      </SettingsPageProvider>
     </IpcProvider>
   </StrictMode>,
 );

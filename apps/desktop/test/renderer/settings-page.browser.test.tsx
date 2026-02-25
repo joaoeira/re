@@ -95,9 +95,11 @@ async function renderAppAt(
 
   const screen = await render(
     <IpcProvider>
-      <StoresProvider stores={stores}>
-        <RouterProvider router={router} />
-      </StoresProvider>
+      <SettingsPageProvider>
+        <StoresProvider stores={stores}>
+          <RouterProvider router={router} />
+        </StoresProvider>
+      </SettingsPageProvider>
     </IpcProvider>,
   );
 
@@ -591,6 +593,15 @@ describe("SettingsPage", () => {
   });
 
   describe("route-based section and triggers", () => {
+    it("preloads settings state on app startup before opening /settings", async () => {
+      const invoke = defaultInvoke();
+      await renderAppAt("#/", invoke);
+
+      await expect
+        .poll(() => invoke.mock.calls.filter(([method]: unknown[]) => method === "HasApiKey").length)
+        .toBe(2);
+    });
+
     it("defaults to General section on /settings", async () => {
       await renderAppAt("#/settings");
 

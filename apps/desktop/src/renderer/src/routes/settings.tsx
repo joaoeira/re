@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { SettingsPageProvider } from "@/components/settings/settings-page-context";
 import { SettingsPage } from "@/components/settings/settings-page";
 import {
   DEFAULT_SETTINGS_SECTION,
@@ -27,18 +26,16 @@ function SettingsRoute() {
   const { section } = Route.useSearch();
 
   return (
-    <SettingsPageProvider>
-      <SettingsPage
-        section={section}
-        onSectionChange={(nextSection) => {
-          void navigate({
-            search: (prev) => ({
-              ...prev,
-              section: nextSection,
-            }),
-          });
-        }}
-      />
-    </SettingsPageProvider>
+    <SettingsPage
+      section={section}
+      onSectionChange={(nextSection) => {
+        void navigate({
+          search: (prev) => ({
+            ...prev,
+            section: nextSection,
+          }),
+        });
+      }}
+    />
   );
 }
