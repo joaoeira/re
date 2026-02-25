@@ -347,7 +347,7 @@ describe("SettingsPage", () => {
   });
 
   describe("Secrets section", () => {
-    it("loads and displays API key status", async () => {
+    it("loads and displays provider rows", async () => {
       await renderSettingsPage();
       nativeClick(page.getByRole("tab", { name: "Secrets" }));
 
@@ -355,12 +355,12 @@ describe("SettingsPage", () => {
       await expect.element(page.getByText("Anthropic")).toBeVisible();
     });
 
-    it("shows configured status from HasApiKey response", async () => {
+    it("shows preview for configured keys and Add key for unconfigured providers", async () => {
       await renderSettingsPage();
       nativeClick(page.getByRole("tab", { name: "Secrets" }));
 
-      await expect.element(page.getByText("Configured", { exact: true })).toBeVisible();
-      await expect.element(page.getByText("Not configured", { exact: true })).toBeVisible();
+      await expect.element(page.getByLabelText("OpenAI key preview")).toBeVisible();
+      await expect.element(page.getByRole("button", { name: "Add Anthropic key" })).toBeVisible();
     });
 
     it("saves an API key via SetApiKey then confirms via HasApiKey", async () => {
@@ -396,6 +396,7 @@ describe("SettingsPage", () => {
       nativeClick(page.getByRole("tab", { name: "Secrets" }));
       await expect.element(page.getByText("API keys")).toBeVisible();
 
+      await userEvent.click(page.getByRole("button", { name: "Add Anthropic key" }));
       const anthropicInput = page.getByRole("textbox", { name: "Anthropic API key" });
       await userEvent.click(anthropicInput);
       await userEvent.fill(anthropicInput, "sk-ant-test-123");
@@ -438,6 +439,7 @@ describe("SettingsPage", () => {
 
       await renderSettingsPage(invoke);
       nativeClick(page.getByRole("tab", { name: "Secrets" }));
+      await userEvent.click(page.getByRole("button", { name: "Add Anthropic key" }));
       const anthropicInput = page.getByRole("textbox", { name: "Anthropic API key" });
       await userEvent.click(anthropicInput);
       await userEvent.fill(anthropicInput, "sk-ant-test-123");
@@ -468,12 +470,8 @@ describe("SettingsPage", () => {
 
       await renderSettingsPage(invoke);
       nativeClick(page.getByRole("tab", { name: "Secrets" }));
-      await expect.element(page.getByText("Configured", { exact: true })).toBeVisible();
-
-      const removeButton = document.querySelector(
-        "[data-slot='alert-dialog-trigger']",
-      ) as HTMLElement;
-      removeButton.click();
+      await userEvent.hover(page.getByRole("group", { name: "OpenAI API key" }));
+      nativeClick(page.getByRole("button", { name: "Remove OpenAI key" }));
 
       await expect.element(page.getByText("Remove API key")).toBeVisible();
 

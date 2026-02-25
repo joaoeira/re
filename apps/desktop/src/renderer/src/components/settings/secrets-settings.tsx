@@ -1,5 +1,22 @@
 import type { SecretKey } from "@shared/secrets";
-import { ApiKeyField, type ApiKeyState } from "./api-key-field";
+import { ProviderKeyRow, type ApiKeyState } from "./provider-key-row";
+
+const PROVIDERS: ReadonlyArray<{
+  key: SecretKey;
+  providerName: string;
+  preview: string;
+}> = [
+  {
+    key: "openai-api-key",
+    providerName: "OpenAI",
+    preview: "••••••••••••",
+  },
+  {
+    key: "anthropic-api-key",
+    providerName: "Anthropic",
+    preview: "••••••••••••",
+  },
+];
 
 export function SecretsSettings({
   apiKeys,
@@ -11,7 +28,7 @@ export function SecretsSettings({
   onRemoveKey: (key: SecretKey) => void;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div>
         <h3 className="text-sm font-medium">API keys</h3>
         <p className="text-muted-foreground mt-1 text-xs">
@@ -19,23 +36,20 @@ export function SecretsSettings({
         </p>
       </div>
 
-      <ApiKeyField
-        label="OpenAI"
-        configured={apiKeys["openai-api-key"].configured}
-        saving={apiKeys["openai-api-key"].saving}
-        error={apiKeys["openai-api-key"].error}
-        onSave={(value) => onSaveKey("openai-api-key", value)}
-        onRemove={() => onRemoveKey("openai-api-key")}
-      />
-
-      <ApiKeyField
-        label="Anthropic"
-        configured={apiKeys["anthropic-api-key"].configured}
-        saving={apiKeys["anthropic-api-key"].saving}
-        error={apiKeys["anthropic-api-key"].error}
-        onSave={(value) => onSaveKey("anthropic-api-key", value)}
-        onRemove={() => onRemoveKey("anthropic-api-key")}
-      />
+      <div className="space-y-2">
+        {PROVIDERS.map((provider) => (
+          <ProviderKeyRow
+            key={provider.key}
+            providerName={provider.providerName}
+            preview={provider.preview}
+            configured={apiKeys[provider.key].configured}
+            saving={apiKeys[provider.key].saving}
+            error={apiKeys[provider.key].error}
+            onSave={(value) => onSaveKey(provider.key, value)}
+            onRemove={() => onRemoveKey(provider.key)}
+          />
+        ))}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { createStore } from "@xstate/store";
 
 import type { SecretKey } from "@shared/secrets";
-import type { ApiKeyState } from "./api-key-field";
+import type { ApiKeyState } from "./provider-key-row";
 
 const createDefaultApiKeyState = (): ApiKeyState => ({
   configured: false,
