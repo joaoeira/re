@@ -2,6 +2,11 @@ import { Layer } from "effect";
 
 import type { ReviewAnalyticsRepository } from "@main/analytics";
 import {
+  makeInMemoryForgeSessionRepository,
+  type ForgeSessionRepository,
+} from "@main/forge/services/forge-session-repository";
+import { makeStubPdfExtractor, type PdfExtractor } from "@main/forge/services/pdf-extractor";
+import {
   type AppEventPublisher,
   AppEventPublisherBridgeLive,
   AppEventPublisherServiceLive,
@@ -9,6 +14,7 @@ import {
 import { AnalyticsRepositoryServiceLive } from "../services/AnalyticsRepositoryService";
 import { AiClientServiceFromSecretStoreLive } from "../services/AiClientService";
 import { DeckWriteCoordinatorServiceLive } from "../services/DeckWriteCoordinatorService";
+import { ForgeSessionRepositoryServiceLive } from "../services/ForgeSessionRepositoryService";
 import {
   DuplicateIndexInvalidationBridgeLive,
   DuplicateIndexInvalidationServiceLive,
@@ -20,6 +26,7 @@ import {
 } from "../services/EditorWindowManagerService";
 import { SecretStoreServiceLive } from "../services/SecretStoreService";
 import { SettingsRepositoryServiceLive } from "../services/SettingsRepositoryService";
+import { PdfExtractorServiceLive } from "../services/PdfExtractorService";
 import {
   WorkspaceWatcherControlBridgeLive,
   WorkspaceWatcherControlServiceLive,
@@ -34,6 +41,8 @@ type MainStaticDependencies = {
   readonly secretStore: SecretStore;
   readonly analyticsRepository: ReviewAnalyticsRepository;
   readonly deckWriteCoordinator: DeckWriteCoordinator;
+  readonly forgeSessionRepository?: ForgeSessionRepository;
+  readonly pdfExtractor?: PdfExtractor;
 };
 
 type MainDirectDependencies = MainStaticDependencies & {
@@ -47,6 +56,8 @@ const MainStaticLive = ({
   secretStore,
   analyticsRepository,
   deckWriteCoordinator,
+  forgeSessionRepository,
+  pdfExtractor,
 }: MainStaticDependencies) =>
   Layer.mergeAll(
     SettingsRepositoryServiceLive(settingsRepository),
@@ -54,6 +65,10 @@ const MainStaticLive = ({
     AiClientServiceFromSecretStoreLive(secretStore),
     AnalyticsRepositoryServiceLive(analyticsRepository),
     DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
+    ForgeSessionRepositoryServiceLive(
+      forgeSessionRepository ?? makeInMemoryForgeSessionRepository(),
+    ),
+    PdfExtractorServiceLive(pdfExtractor ?? makeStubPdfExtractor()),
   );
 
 const MainBridgeLive = Layer.mergeAll(
@@ -74,9 +89,18 @@ export const MainAppDirectLive = ({
   publish,
   watcher,
   openEditorWindow,
+  forgeSessionRepository,
+  pdfExtractor,
 }: MainDirectDependencies) =>
   Layer.mergeAll(
-    MainStaticLive({ settingsRepository, secretStore, analyticsRepository, deckWriteCoordinator }),
+    MainStaticLive({
+      settingsRepository,
+      secretStore,
+      analyticsRepository,
+      deckWriteCoordinator,
+      ...(forgeSessionRepository ? { forgeSessionRepository } : {}),
+      ...(pdfExtractor ? { pdfExtractor } : {}),
+    }),
     AppEventPublisherServiceLive(publish),
     WorkspaceWatcherControlServiceLive(watcher),
     EditorWindowManagerServiceLive(openEditorWindow),

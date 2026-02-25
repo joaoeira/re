@@ -50,6 +50,7 @@
     "highlight.js": "^11.11.1",
     "katex": "^0.16.33",
     "lucide-react": "0.564.0",
+    "pdf-parse": "^2.4.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",

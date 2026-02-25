@@ -21,6 +21,10 @@ export {
   DeckWriteCoordinatorServiceLive,
 } from "./services/DeckWriteCoordinatorService";
 export {
+  ForgeSessionRepositoryService,
+  ForgeSessionRepositoryServiceLive,
+} from "./services/ForgeSessionRepositoryService";
+export {
   DuplicateIndexInvalidationService,
   DuplicateIndexInvalidationBridgeLive,
   DuplicateIndexInvalidationServiceLive,
@@ -38,6 +42,7 @@ export {
   SettingsRepositoryService,
   SettingsRepositoryServiceLive,
 } from "./services/SettingsRepositoryService";
+export { PdfExtractorService, PdfExtractorServiceLive } from "./services/PdfExtractorService";
 export {
   WorkspaceWatcherControlService,
   WorkspaceWatcherControlBridgeLive,

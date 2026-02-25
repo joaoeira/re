@@ -6,6 +6,7 @@ import type { AppContract } from "@shared/rpc/contracts";
 
 import { createAiStreamHandlers } from "./handlers/ai";
 import { createEditorHandlers } from "./handlers/editor";
+import { createForgeHandlers } from "./handlers/forge";
 import { createReviewHandlers } from "./handlers/review";
 import { createSecretHandlers } from "./handlers/secret";
 import { createWorkspaceHandlers } from "./handlers/workspace";
@@ -14,6 +15,7 @@ export const makeAppRpcHandlersEffect = Effect.gen(function* () {
   const workspaceHandlers = yield* createWorkspaceHandlers();
   const reviewHandlers = yield* createReviewHandlers();
   const editorHandlers = yield* createEditorHandlers();
+  const forgeHandlers = yield* createForgeHandlers();
   const secretHandlers = yield* createSecretHandlers();
   const aiStreamHandlers = yield* createAiStreamHandlers();
 
@@ -21,6 +23,7 @@ export const makeAppRpcHandlersEffect = Effect.gen(function* () {
     ...workspaceHandlers,
     ...reviewHandlers,
     ...editorHandlers,
+    ...forgeHandlers,
     ...secretHandlers,
   };
 

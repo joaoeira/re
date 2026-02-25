@@ -53,6 +53,10 @@ export const contextBridge = {
   exposeInMainWorld: (_name: string, _value: unknown) => undefined,
 };
 
+export const webUtils = {
+  getPathForFile: (_file: File) => "",
+};
+
 export const ipcRenderer = {
   invoke: async (_channel: string, _payload: unknown) => ({ type: "success", data: {} }),
   on: (_channel: string, _listener: unknown) => undefined,

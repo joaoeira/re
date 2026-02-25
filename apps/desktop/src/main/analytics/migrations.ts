@@ -65,6 +65,49 @@ const REVIEW_HISTORY_MIGRATIONS = {
       WHERE undone_at IS NULL
     `;
   }),
+  "0002_create_forge_sessions": Effect.gen(function* () {
+    const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+    yield* sql`
+      CREATE TABLE IF NOT EXISTS forge_sessions (
+        id INTEGER PRIMARY KEY,
+        source_kind TEXT NOT NULL CHECK (source_kind IN ('pdf', 'web')),
+        source_file_path TEXT NOT NULL,
+        deck_path TEXT,
+        source_fingerprint TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'created' CHECK (
+          status IN (
+            'created',
+            'extracting',
+            'extracted',
+            'topics_extracting',
+            'topics_extracted',
+            'generating',
+            'ready',
+            'error'
+          )
+        ),
+        error_message TEXT,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      )
+    `;
+
+    yield* sql`
+      CREATE INDEX IF NOT EXISTS forge_sessions_created_idx
+      ON forge_sessions(created_at DESC)
+    `;
+
+    yield* sql`
+      CREATE INDEX IF NOT EXISTS forge_sessions_status_idx
+      ON forge_sessions(status)
+    `;
+
+    yield* sql`
+      CREATE INDEX IF NOT EXISTS forge_sessions_source_kind_fingerprint_idx
+      ON forge_sessions(source_kind, source_fingerprint)
+    `;
+  }),
 } satisfies Record<string, Effect.Effect<void, unknown, SqlClient.SqlClient>>;
 
 const toMigrationError = (message: string): Migrator.MigrationError =>

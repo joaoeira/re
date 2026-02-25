@@ -5,6 +5,8 @@ import type { ReviewAnalyticsRepository } from "@main/analytics";
 import { createNoopReviewAnalyticsRepository } from "@main/analytics";
 import { MainAppDirectLive, NoOpAppEventPublisher } from "@main/di";
 import type { EditorWindowParams } from "@main/editor-window";
+import type { ForgeSessionRepository } from "@main/forge/services/forge-session-repository";
+import type { PdfExtractor } from "@main/forge/services/pdf-extractor";
 import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import { NoOpDeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import { NodeServicesLive } from "@main/effect/node-services";
@@ -66,6 +68,8 @@ export type HandlerTestOverrides = {
   readonly deckWriteCoordinator?: DeckWriteCoordinator | undefined;
   readonly settingsRepository?: SettingsRepository | undefined;
   readonly secretStore?: SecretStore | undefined;
+  readonly forgeSessionRepository?: ForgeSessionRepository | undefined;
+  readonly pdfExtractor?: PdfExtractor | undefined;
 };
 
 export const createHandlersWithOverrides = async (
@@ -87,6 +91,10 @@ export const createHandlersWithOverrides = async (
           publish: overrides.publish ?? noOpPublish,
           watcher: overrides.watcher ?? stubWatcher,
           openEditorWindow: overrides.openEditorWindow ?? (() => undefined),
+          ...(overrides.forgeSessionRepository
+            ? { forgeSessionRepository: overrides.forgeSessionRepository }
+            : {}),
+          ...(overrides.pdfExtractor ? { pdfExtractor: overrides.pdfExtractor } : {}),
         }),
       ),
     );

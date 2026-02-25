@@ -10,6 +10,14 @@ import { defineContract, event, rpc, streamRpc } from "electron-effect-rpc/contr
 import { AiStreamChunkSchema, AiStreamErrorSchema, ModelIdSchema } from "@shared/rpc/schemas/ai";
 import { EditorOperationError } from "@shared/rpc/schemas/editor";
 import {
+  ForgeCreateSessionErrorSchema,
+  ForgeCreateSessionInputSchema,
+  ForgeCreateSessionResultSchema,
+  ForgeExtractTextErrorSchema,
+  ForgeExtractTextInputSchema,
+  ForgeExtractTextResultSchema,
+} from "@shared/rpc/schemas/forge";
+import {
   CreateDeckErrorSchema,
   DeleteDeckErrorSchema,
   RenameDeckErrorSchema,
@@ -347,6 +355,20 @@ export const OpenEditorWindow = rpc(
   Schema.Struct({}),
 );
 
+export const ForgeCreateSession = rpc(
+  "ForgeCreateSession",
+  ForgeCreateSessionInputSchema,
+  ForgeCreateSessionResultSchema,
+  ForgeCreateSessionErrorSchema,
+);
+
+export const ForgeExtractText = rpc(
+  "ForgeExtractText",
+  ForgeExtractTextInputSchema,
+  ForgeExtractTextResultSchema,
+  ForgeExtractTextErrorSchema,
+);
+
 export const WorkspaceSnapshotChanged = event(
   "WorkspaceSnapshotChanged",
   SnapshotWorkspaceResultSchema,
@@ -396,6 +418,8 @@ export const appContract = defineContract({
     CheckDuplicates,
     DeleteItems,
     OpenEditorWindow,
+    ForgeCreateSession,
+    ForgeExtractText,
   ] as const,
   events: [WorkspaceSnapshotChanged, CardEdited, CardsDeleted, EditorNavigateRequest] as const,
   streamMethods: [StreamCompletion] as const,

@@ -19,6 +19,8 @@ import {
   DeckWriteCoordinatorServiceLive,
   DuplicateIndexInvalidationService,
   EditorWindowManagerService,
+  ForgeSessionRepositoryServiceLive,
+  PdfExtractorServiceLive,
   SecretStoreServiceLive,
   SettingsRepositoryServiceLive,
   WorkspaceWatcherControlService,
@@ -42,6 +44,11 @@ import {
   createUnifiedQuitPipeline,
   initializeAnalyticsRuntime,
 } from "@main/lifecycle";
+import {
+  makeInMemoryForgeSessionRepository,
+  makeSqliteForgeSessionRepository,
+} from "@main/forge/services/forge-session-repository";
+import { makePdfExtractor } from "@main/forge/services/pdf-extractor";
 import { WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
 import { appIpc } from "@shared/rpc/ipc";
 
@@ -240,6 +247,7 @@ if (!gotSingleInstanceLock) {
     const userDataPath = app.getPath("userData");
     const settingsFilePath = path.join(userDataPath, "settings.json");
     const secretsFilePath = path.join(userDataPath, "secrets.json");
+    const dbPath = path.join(userDataPath, "re.db");
     const settingsRepository = Effect.runSync(
       makeSettingsRepository({ settingsFilePath }).pipe(Effect.provide(NodeServicesLive)),
     );
@@ -250,7 +258,7 @@ if (!gotSingleInstanceLock) {
     );
 
     const analyticsBundle = createSqliteReviewAnalyticsRuntimeBundle({
-      dbPath: path.join(userDataPath, "re.db"),
+      dbPath,
       journalPath: path.join(userDataPath, "analytics-compensation-intents.json"),
     });
     const initializedAnalytics = await initializeAnalyticsRuntime(analyticsBundle);
@@ -264,6 +272,11 @@ if (!gotSingleInstanceLock) {
     const workspaceWatcherControl = makeWorkspaceWatcherControlBridgeService();
     const editorWindowManagerService = makeEditorWindowManagerBridgeService();
     const duplicateIndexInvalidation = makeDuplicateIndexInvalidationBridgeService();
+    const forgeSessionRepository =
+      initializedAnalytics.runtime !== null
+        ? makeSqliteForgeSessionRepository({ runtime: initializedAnalytics.runtime })
+        : makeInMemoryForgeSessionRepository();
+    const pdfExtractor = makePdfExtractor();
 
     const mainServicesLive = Layer.mergeAll(
       SettingsRepositoryServiceLive(settingsRepository),
@@ -271,6 +284,8 @@ if (!gotSingleInstanceLock) {
       AiClientServiceFromSecretStoreLive(secretStore),
       AnalyticsRepositoryServiceLive(analyticsRepository),
       DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
+      ForgeSessionRepositoryServiceLive(forgeSessionRepository),
+      PdfExtractorServiceLive(pdfExtractor),
       Layer.succeed(AppEventPublisherService, appEventPublisher),
       Layer.succeed(WorkspaceWatcherControlService, workspaceWatcherControl),
       Layer.succeed(EditorWindowManagerService, editorWindowManagerService),

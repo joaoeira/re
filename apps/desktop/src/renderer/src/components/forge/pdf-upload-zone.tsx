@@ -7,7 +7,11 @@ const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const isPdfFile = (file: File): boolean =>
   file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 
-export function PdfUploadZone() {
+export function PdfUploadZone({
+  onFileSelected,
+}: {
+  readonly onFileSelected: (file: File | null) => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
@@ -23,17 +27,20 @@ export function PdfUploadZone() {
     if (!isPdfFile(file)) {
       setSelectedFileName(null);
       setErrorMessage("Only PDF files are supported right now.");
+      onFileSelected(null);
       return;
     }
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
       setSelectedFileName(null);
       setErrorMessage(`PDF must be smaller than ${MAX_FILE_SIZE_MB} MB.`);
+      onFileSelected(null);
       return;
     }
 
     setSelectedFileName(file.name);
     setErrorMessage(null);
+    onFileSelected(file);
   };
 
   const onFileList = (files: FileList | null) => {

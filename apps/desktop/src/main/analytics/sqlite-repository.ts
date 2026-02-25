@@ -2,6 +2,7 @@ import * as SqlClient from "@effect/sql/SqlClient";
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import { Effect, ManagedRuntime } from "effect";
 
+import { runSqlInRuntime } from "@main/sqlite/runtime-runner";
 import { toErrorMessage, toIsoOrNull } from "@main/utils/format";
 import { createCompensationIntentJournal } from "./intent-journal";
 import { reviewAnalyticsStartupEffect } from "./migrations";
@@ -72,7 +73,11 @@ export const createSqliteReviewAnalyticsRuntimeBundle = ({
 
   const runSql = <A>(
     effect: Effect.Effect<A, unknown, SqlClient.SqlClient>,
-  ): Effect.Effect<A, unknown> => Effect.tryPromise(() => runtime.runPromise(effect));
+  ): Effect.Effect<A, unknown> =>
+    runSqlInRuntime({
+      runtime,
+      effect,
+    });
 
   const ensureWorkspaceId = (
     workspaceCanonicalPath: string,
