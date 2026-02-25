@@ -1,10 +1,15 @@
+import { useState } from "react";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import { RouterProvider, createHashHistory, createRouter } from "@tanstack/react-router";
 import { describe, expect, it, vi } from "vitest";
 
 import { IpcProvider } from "@/lib/ipc-context";
 import { StoresProvider, createStores } from "@shared/state/stores-context";
-import { SettingsDialog } from "@/components/settings/settings-dialog";
+import { SettingsPageProvider } from "@/components/settings/settings-page-context";
+import { SettingsPage } from "@/components/settings/settings-page";
+import type { SettingsSection } from "@/components/settings/settings-section";
+import { routeTree } from "../../src/renderer/src/routeTree.gen";
 
 const defaultOnStreamFrame: NonNullable<Window["desktopApi"]["onStreamFrame"]> = () => {
   return () => undefined;
@@ -46,53 +51,68 @@ const defaultInvoke = (overrides: Record<string, unknown> = {}) =>
 
 const defaultSubscribe = vi.fn().mockReturnValue(() => undefined);
 
-const clickInDialog = (locator: ReturnType<typeof page.getByRole>) => {
+const nativeClick = (locator: ReturnType<typeof page.getByRole>) => {
   (locator.element() as HTMLElement).click();
 };
 
-async function renderSettingsDialog(invoke = defaultInvoke(), subscribe = defaultSubscribe) {
+function SettingsHarness({ initialSection = "general" }: { initialSection?: SettingsSection }) {
+  const [section, setSection] = useState<SettingsSection>(initialSection);
+  return (
+    <SettingsPageProvider>
+      <SettingsPage section={section} onSectionChange={setSection} />
+    </SettingsPageProvider>
+  );
+}
+
+async function renderSettingsPage(
+  invoke = defaultInvoke(),
+  subscribe = defaultSubscribe,
+  initialSection: SettingsSection = "general",
+) {
   mockDesktopApi(invoke, subscribe);
 
+  const screen = await render(
+    <IpcProvider>
+      <SettingsHarness initialSection={initialSection} />
+    </IpcProvider>,
+  );
+
+  await expect.element(page.getByRole("tablist")).toBeVisible();
+
+  return { screen, invoke };
+}
+
+async function renderAppAt(
+  hashPath: string,
+  invoke = defaultInvoke(),
+  subscribe = defaultSubscribe,
+) {
+  mockDesktopApi(invoke, subscribe);
+  window.location.hash = hashPath;
+
   const stores = createStores();
+  const router = createRouter({ routeTree, history: createHashHistory() });
+
   const screen = await render(
     <IpcProvider>
       <StoresProvider stores={stores}>
-        <SettingsDialog />
+        <RouterProvider router={router} />
       </StoresProvider>
     </IpcProvider>,
   );
 
-  stores.settings.send({ type: "openSettings" });
-
-  await expect.element(page.getByRole("tablist")).toBeVisible();
-
-  return { screen, stores, invoke };
+  return { screen, stores, invoke, router };
 }
 
-describe("SettingsDialog", () => {
-  describe("opening and navigation", () => {
-    it("renders nothing when closed", async () => {
-      mockDesktopApi(defaultInvoke(), defaultSubscribe);
-      const stores = createStores();
-
-      await render(
-        <IpcProvider>
-          <StoresProvider stores={stores}>
-            <SettingsDialog />
-          </StoresProvider>
-        </IpcProvider>,
-      );
-
-      expect(document.querySelector("[data-slot='dialog-content']")).toBeNull();
-    });
-
-    it("shows dialog when store is opened", async () => {
-      await renderSettingsDialog();
+describe("SettingsPage", () => {
+  describe("rendering and navigation", () => {
+    it("renders the settings page shell", async () => {
+      await renderSettingsPage();
       await expect.element(page.getByRole("tablist", { name: "Settings sections" })).toBeVisible();
     });
 
     it("starts on the General tab", async () => {
-      await renderSettingsDialog();
+      await renderSettingsPage();
       await expect
         .element(page.getByRole("tab", { name: "General" }))
         .toHaveAttribute("aria-selected", "true");
@@ -100,29 +120,19 @@ describe("SettingsDialog", () => {
     });
 
     it("switches to Secrets tab on click", async () => {
-      await renderSettingsDialog();
-      clickInDialog(page.getByRole("tab", { name: "Secrets" }));
+      await renderSettingsPage();
+      nativeClick(page.getByRole("tab", { name: "Secrets" }));
 
       await expect
         .element(page.getByRole("tab", { name: "Secrets" }))
         .toHaveAttribute("aria-selected", "true");
       await expect.element(page.getByText("API keys")).toBeVisible();
     });
-
-    it("closes when store receives closeSettings", async () => {
-      const { stores } = await renderSettingsDialog();
-
-      await expect.element(page.getByRole("tabpanel")).toBeVisible();
-
-      stores.settings.send({ type: "closeSettings" });
-
-      await expect.poll(() => document.querySelector("[data-slot='dialog-content']")).toBeNull();
-    });
   });
 
   describe("ARIA tab pattern", () => {
     it("links tabs to tabpanel via aria-controls and aria-labelledby", async () => {
-      await renderSettingsDialog();
+      await renderSettingsPage();
 
       const generalTab = page.getByRole("tab", { name: "General" });
       await expect.element(generalTab).toHaveAttribute("aria-controls", "settings-tabpanel");
@@ -134,8 +144,8 @@ describe("SettingsDialog", () => {
     });
 
     it("updates aria-labelledby when switching tabs", async () => {
-      await renderSettingsDialog();
-      clickInDialog(page.getByRole("tab", { name: "Secrets" }));
+      await renderSettingsPage();
+      nativeClick(page.getByRole("tab", { name: "Secrets" }));
 
       await expect
         .element(page.getByRole("tabpanel"))
@@ -143,7 +153,7 @@ describe("SettingsDialog", () => {
     });
 
     it("uses roving tabindex on tabs", async () => {
-      await renderSettingsDialog();
+      await renderSettingsPage();
 
       await expect
         .element(page.getByRole("tab", { name: "General" }))
@@ -154,7 +164,7 @@ describe("SettingsDialog", () => {
     });
 
     it("navigates tabs with arrow keys", async () => {
-      await renderSettingsDialog();
+      await renderSettingsPage();
 
       const generalTab = page.getByRole("tab", { name: "General" });
       (generalTab.element() as HTMLElement).focus();
@@ -169,7 +179,7 @@ describe("SettingsDialog", () => {
 
   describe("General section", () => {
     it("loads and displays the workspace root path", async () => {
-      await renderSettingsDialog();
+      await renderSettingsPage();
       await expect.element(page.getByText("/workspace")).toBeVisible();
     });
 
@@ -178,7 +188,7 @@ describe("SettingsDialog", () => {
         GetSettings: { settingsVersion: 1, workspace: { rootPath: null } },
       });
 
-      await renderSettingsDialog(invoke);
+      await renderSettingsPage(invoke);
       await expect.element(page.getByText("No folder selected")).toBeVisible();
     });
 
@@ -210,10 +220,10 @@ describe("SettingsDialog", () => {
         return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
       });
 
-      await renderSettingsDialog(invoke);
+      await renderSettingsPage(invoke);
       await expect.element(page.getByText("/workspace")).toBeVisible();
 
-      clickInDialog(page.getByRole("button", { name: "Browse..." }));
+      nativeClick(page.getByRole("button", { name: "Browse..." }));
 
       await expect.element(page.getByText("/new/workspace")).toBeVisible();
 
@@ -247,10 +257,10 @@ describe("SettingsDialog", () => {
         return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
       });
 
-      await renderSettingsDialog(invoke);
+      await renderSettingsPage(invoke);
       await expect.element(page.getByText("/workspace")).toBeVisible();
 
-      clickInDialog(page.getByRole("button", { name: "Browse..." }));
+      nativeClick(page.getByRole("button", { name: "Browse..." }));
 
       await expect.element(page.getByText("/workspace")).toBeVisible();
 
@@ -284,10 +294,10 @@ describe("SettingsDialog", () => {
         return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
       });
 
-      await renderSettingsDialog(invoke);
+      await renderSettingsPage(invoke);
       await expect.element(page.getByText("/workspace")).toBeVisible();
 
-      clickInDialog(page.getByRole("button", { name: "Clear workspace path" }));
+      nativeClick(page.getByRole("button", { name: "Clear workspace path" }));
 
       await expect.element(page.getByText("No folder selected")).toBeVisible();
 
@@ -301,16 +311,16 @@ describe("SettingsDialog", () => {
 
   describe("Secrets section", () => {
     it("loads and displays API key status", async () => {
-      await renderSettingsDialog();
-      clickInDialog(page.getByRole("tab", { name: "Secrets" }));
+      await renderSettingsPage();
+      nativeClick(page.getByRole("tab", { name: "Secrets" }));
 
       await expect.element(page.getByText("OpenAI")).toBeVisible();
       await expect.element(page.getByText("Anthropic")).toBeVisible();
     });
 
     it("shows configured status from HasApiKey response", async () => {
-      await renderSettingsDialog();
-      clickInDialog(page.getByRole("tab", { name: "Secrets" }));
+      await renderSettingsPage();
+      nativeClick(page.getByRole("tab", { name: "Secrets" }));
 
       await expect.element(page.getByText("Configured", { exact: true })).toBeVisible();
       await expect.element(page.getByText("Not configured", { exact: true })).toBeVisible();
@@ -345,8 +355,8 @@ describe("SettingsDialog", () => {
         return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
       });
 
-      await renderSettingsDialog(invoke);
-      clickInDialog(page.getByRole("tab", { name: "Secrets" }));
+      await renderSettingsPage(invoke);
+      nativeClick(page.getByRole("tab", { name: "Secrets" }));
       await expect.element(page.getByText("API keys")).toBeVisible();
 
       const inputs = document.querySelectorAll<HTMLInputElement>("input[type='password']");
@@ -368,8 +378,8 @@ describe("SettingsDialog", () => {
 
     it("removes an API key via DeleteApiKey after confirmation", async () => {
       const invoke = defaultInvoke();
-      await renderSettingsDialog(invoke);
-      clickInDialog(page.getByRole("tab", { name: "Secrets" }));
+      await renderSettingsPage(invoke);
+      nativeClick(page.getByRole("tab", { name: "Secrets" }));
       await expect.element(page.getByText("Configured", { exact: true })).toBeVisible();
 
       const removeButton = document.querySelector(
@@ -406,16 +416,12 @@ describe("SettingsDialog", () => {
 
       mockDesktopApi(invoke, defaultSubscribe);
 
-      const stores = createStores();
       await render(
         <IpcProvider>
-          <StoresProvider stores={stores}>
-            <SettingsDialog />
-          </StoresProvider>
+          <SettingsHarness />
         </IpcProvider>,
       );
 
-      stores.settings.send({ type: "openSettings" });
       await expect.element(page.getByText("Loading...")).toBeVisible();
     });
 
@@ -434,39 +440,70 @@ describe("SettingsDialog", () => {
         return { type: "success", data: { configured: false } };
       });
 
-      mockDesktopApi(invoke, defaultSubscribe);
-      const stores = createStores();
-      await render(
-        <IpcProvider>
-          <StoresProvider stores={stores}>
-            <SettingsDialog />
-          </StoresProvider>
-        </IpcProvider>,
-      );
-
-      stores.settings.send({ type: "openSettings" });
+      await renderSettingsPage(invoke);
       await expect.element(page.getByText("Failed to load settings")).toBeVisible();
     });
   });
 
-  describe("section routing via store", () => {
-    it("opens to a specific section via openSettingsSection", async () => {
-      mockDesktopApi(defaultInvoke(), defaultSubscribe);
+  describe("route-based section and triggers", () => {
+    it("defaults to General section on /settings", async () => {
+      await renderAppAt("#/settings");
 
-      const stores = createStores();
-      await render(
-        <IpcProvider>
-          <StoresProvider stores={stores}>
-            <SettingsDialog />
-          </StoresProvider>
-        </IpcProvider>,
-      );
+      await expect
+        .element(page.getByRole("tab", { name: "General" }))
+        .toHaveAttribute("aria-selected", "true");
+      await expect.element(page.getByText("Workspace root")).toBeVisible();
+    });
 
-      stores.settings.send({ type: "openSettingsSection", section: "secrets" });
-      await expect.element(page.getByText("API keys")).toBeVisible();
+    it("opens Secrets section from /settings?section=secrets", async () => {
+      const { router } = await renderAppAt("#/settings");
+      await router.navigate({
+        to: "/settings",
+        search: { section: "secrets" },
+      });
+
       await expect
         .element(page.getByRole("tab", { name: "Secrets" }))
         .toHaveAttribute("aria-selected", "true");
+      await expect.element(page.getByText("API keys")).toBeVisible();
+    });
+
+    it("normalizes invalid section values to General", async () => {
+      const { router } = await renderAppAt("#/settings");
+      await router.navigate({
+        to: "/settings",
+        search: { section: "invalid" as never } as never,
+      });
+
+      await expect
+        .element(page.getByRole("tab", { name: "General" }))
+        .toHaveAttribute("aria-selected", "true");
+      await expect.element(page.getByText("Workspace root")).toBeVisible();
+    });
+
+    it("navigates to settings when clicking the sidebar Settings button", async () => {
+      await renderAppAt("#/");
+
+      nativeClick(page.getByRole("button", { name: "Settings" }));
+
+      await expect.element(page.getByRole("tablist", { name: "Settings sections" })).toBeVisible();
+      await expect.poll(() => window.location.hash).toContain("/settings");
+    });
+
+    it("navigates to settings on Cmd/Ctrl + ,", async () => {
+      await renderAppAt("#/");
+
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: ",",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+
+      await expect.element(page.getByRole("tablist", { name: "Settings sections" })).toBeVisible();
+      await expect.poll(() => window.location.hash).toContain("/settings");
     });
   });
 });

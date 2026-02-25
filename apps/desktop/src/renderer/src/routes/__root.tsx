@@ -1,39 +1,35 @@
 import { useEffect } from "react";
-import { Outlet, createRootRoute, useRouterState } from "@tanstack/react-router";
+import { Outlet, createRootRoute, useNavigate, useRouterState } from "@tanstack/react-router";
 
-import { useSettingsStore } from "@shared/state/stores-context";
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
-import { SettingsDialog } from "@/components/settings/settings-dialog";
 
 export const Route = createRootRoute({
   component: RootLayout,
 });
 
 function RootLayout() {
+  const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const isEditorRoute = pathname === "/editor";
-  const settingsStore = useSettingsStore();
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "," && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        settingsStore.send({ type: "openSettings" });
+        void navigate({
+          to: "/settings",
+          search: { section: "general" },
+        });
       }
     };
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [settingsStore]);
+  }, [navigate]);
 
   if (isEditorRoute) {
-    return (
-      <>
-        <Outlet />
-        <SettingsDialog />
-      </>
-    );
+    return <Outlet />;
   }
 
   return (
@@ -43,7 +39,6 @@ function RootLayout() {
         <Topbar />
         <Outlet />
       </div>
-      <SettingsDialog />
     </div>
   );
 }

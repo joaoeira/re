@@ -10,6 +10,7 @@ export function Topbar() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isReview = pathname === "/review";
+  const isSettings = pathname === "/settings";
   const ipc = useIpc();
 
   useEffect(() => {
@@ -52,6 +53,20 @@ export function Topbar() {
               review
             </span>
           </>
+        ) : isSettings ? (
+          <>
+            <button
+              type="button"
+              onClick={() => void navigate({ to: "/" })}
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              home
+            </button>
+            <span className="text-muted-foreground/40">/</span>
+            <span className="text-foreground" aria-current="page">
+              settings
+            </span>
+          </>
         ) : (
           <span className="text-foreground" aria-current="page">
             home
@@ -70,6 +85,8 @@ export function Topbar() {
             Esc
           </kbd>
         </button>
+      ) : isSettings ? (
+        <div className="size-7" aria-hidden />
       ) : (
         <TooltipProvider>
           <Tooltip>
