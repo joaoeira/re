@@ -188,6 +188,31 @@ someEffect.pipe(Effect.mapError((e) => new ApiError({ message: toErrorMessage(e)
 
 The problem is specifically the classification variant: a function that receives `unknown` and uses an `instanceof` or `_tag` chain to sort errors into different buckets.
 
+## SQLite repository runtime boundary
+
+When a repository uses `@effect/sql` with a `ManagedRuntime`, centralize the runtime bridge in one helper module instead of re-implementing it per repository.
+
+### Why
+
+- Electron entrypoints (IPC handlers, timers, lifecycle callbacks) are Promise/JS boundaries.
+- SQL effects usually require `SqlClient` in `R`, but repository public APIs should be `R = never`.
+- Re-deriving this bridge in each repository leads to inconsistent error semantics.
+
+### Pattern
+
+- Use `apps/desktop/src/main/sqlite/runtime-runner.ts` as the single runtime bridge.
+- Run inner effects via `runtime.runPromise(Effect.either(effect))`.
+- Flatten `Either` back into Effect (`Right -> succeed`, `Left -> fail`) so typed domain errors are preserved.
+- Map only runtime-level Promise rejections (defects / setup failures) at the boundary when needed.
+
+### Rules
+
+- **Do not** classify repository errors with `instanceof` after `runPromise` / `tryPromise`.
+- **Do not** duplicate `runSql` wrappers in each repository.
+- **Do** keep SQL-operation error wrapping local with uniform `Effect.mapError(...)` when mapping all failures to one repository error.
+- **Do** use `runSqlInRuntimeOrMapRuntimeError` when the repository needs a specific runtime-boundary error type (e.g. `ForgeSessionRepositoryError`).
+- **Do** use `runSqlInRuntime` when broad runtime-boundary failures are acceptable to callers (`Effect.Effect<A, unknown>`), such as analytics with local logging + fallback behavior.
+
 ## XState stores with React context
 
 Stores use `@xstate/store` with React context injection — never module-scoped singletons. This makes components testable with fresh store instances per test.
