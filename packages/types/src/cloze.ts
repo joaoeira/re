@@ -4,6 +4,8 @@ import {
   type Grade,
   type ItemType,
   ContentParseError,
+  parseClozeDeletions,
+  replaceClozeDeletions,
   manualCardSpec,
 } from "@re/core";
 
@@ -24,58 +26,33 @@ export const ClozeContent = Schema.Struct({
 
 export type ClozeContent = typeof ClozeContent.Type;
 
-// Matches {{c1::hidden}} or {{c1::hidden::hint}}
-const CLOZE_PATTERN = /\{\{c(\d+)::([^}]*)\}\}/g;
 const CLOZE = "cloze";
 
 const parseDeletions = (text: string): ClozeDeletion[] => {
-  const deletions: ClozeDeletion[] = [];
-  let match: RegExpExecArray | null;
-
-  while ((match = CLOZE_PATTERN.exec(text)) !== null) {
-    const content = match[2]!;
-    // Split by :: to separate hidden text from optional hint
-    const parts = content.split("::");
-    const hidden = parts[0]!;
-    // Treat empty hints as no hint (Option.none)
-    const hintText = parts[1];
-    const hint = hintText ? Option.some(hintText) : Option.none();
-
-    deletions.push({
-      index: parseInt(match[1]!, 10),
-      hidden,
-      hint,
-      start: match.index,
-      end: match.index + match[0].length,
-    });
-  }
+  const deletions = parseClozeDeletions(text).map(
+    (deletion): ClozeDeletion => ({
+      index: deletion.index,
+      hidden: deletion.hidden,
+      hint: deletion.hint ? Option.some(deletion.hint) : Option.none(),
+      start: deletion.start,
+      end: deletion.end,
+    }),
+  );
 
   return deletions.sort((a, b) => a.index - b.index);
 };
 
 const generateReveal = (content: ClozeContent, targetIndex: number): string =>
-  content.text.replace(CLOZE_PATTERN, (_, indexStr, rawContent: string) => {
-    const index = parseInt(indexStr, 10);
-    const parts = rawContent.split("::");
-    const hidden = parts[0]!;
-
-    if (index === targetIndex) {
-      return `**${hidden}**`;
-    }
-    return hidden;
-  });
+  replaceClozeDeletions(content.text, (deletion) =>
+    deletion.index === targetIndex ? `**${deletion.hidden}**` : deletion.hidden,
+  );
 
 const generatePrompt = (content: ClozeContent, targetIndex: number): string =>
-  content.text.replace(CLOZE_PATTERN, (_, indexStr, rawContent: string) => {
-    const index = parseInt(indexStr, 10);
-    const parts = rawContent.split("::");
-    const hidden = parts[0]!;
-    const hint = parts[1];
-
-    if (index === targetIndex) {
-      return hint ? `[${hint}]` : "[...]";
+  replaceClozeDeletions(content.text, (deletion) => {
+    if (deletion.index === targetIndex) {
+      return deletion.hint ? `[${deletion.hint}]` : "[...]";
     }
-    return hidden;
+    return deletion.hidden;
   });
 
 /**

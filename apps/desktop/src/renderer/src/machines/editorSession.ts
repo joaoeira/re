@@ -2,6 +2,7 @@ import { assign, fromPromise, raise, setup, type SnapshotFrom } from "xstate";
 
 import type { Option } from "effect";
 import type { ScanDecksResult } from "@re/workspace";
+import { hasClozeDeletion } from "@re/core";
 
 import {
   buildEditorContent,
@@ -157,7 +158,6 @@ interface DuplicateCheckOutput {
 
 const DUPLICATE_CHECK_DEBOUNCE_MS = 400;
 const FLASH_DURATION_MS = 2500;
-const CLOZE_PATTERN = /\{\{c\d+::/;
 
 const NO_WORKSPACE_ERROR = "No workspace configured. Set a workspace root path in settings.";
 const EDIT_MODE_REQUIRES_IDS_ERROR = "Edit mode requires both deckPath and cardId.";
@@ -966,7 +966,7 @@ export const createEditorSessionMachine = (
               assign({
                 frontContent: ({ event }) => event.content,
                 dirty: () => true,
-                cardType: ({ event }) => (CLOZE_PATTERN.test(event.content) ? "cloze" : "qa"),
+                cardType: ({ event }) => (hasClozeDeletion(event.content) ? "cloze" : "qa"),
               }),
               raise({ type: "REEVALUATE_DUPLICATES" }),
             ],

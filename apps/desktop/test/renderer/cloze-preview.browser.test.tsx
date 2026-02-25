@@ -21,6 +21,13 @@ describe("ClozePreview", () => {
     await expect.element(screen.getByText("hint", { exact: false })).toBeVisible();
   });
 
+  it("keeps only the first hint segment when multiple separators are present", async () => {
+    const screen = await render(<ClozePreview content="{{c1::answer::hint-a::hint-b}}" />);
+    await expect.element(screen.getByText("answer")).toBeVisible();
+    await expect.element(screen.getByText("hint-a", { exact: false })).toBeVisible();
+    expect(screen.container.textContent).not.toContain("hint-b");
+  });
+
   it("renders multiple clozes", async () => {
     const screen = await render(<ClozePreview content="{{c1::first}} and {{c2::second}}" />);
     await expect.element(screen.getByText("first")).toBeVisible();

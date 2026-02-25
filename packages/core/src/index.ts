@@ -1,6 +1,13 @@
 export { parseFile } from "./parser/index";
 export { serializeFile, serializeMetadata } from "./serializer/index";
 export { generateId, createMetadata, createMetadataWithId, numericField } from "./create";
+export {
+  hasClozeDeletion,
+  nextClozeDeletionIndex,
+  parseClozeDeletions,
+  replaceClozeDeletions,
+} from "./cloze";
+export type { ClozeSyntaxMatch } from "./cloze";
 
 export type { Item, ItemMetadata, ParsedFile, NumericField, ItemId } from "./types";
 export { State } from "./types";

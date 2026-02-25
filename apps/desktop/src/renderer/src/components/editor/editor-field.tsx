@@ -4,6 +4,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import StarterKit from "@tiptap/starter-kit";
 import { Pin } from "lucide-react";
 import { Markdown } from "tiptap-markdown";
+import { nextClozeDeletionIndex } from "@re/core";
 
 import { cn } from "@/lib/utils";
 
@@ -29,21 +30,6 @@ const getMarkdown = (editor: NonNullable<ReturnType<typeof useEditor>>): string 
     return storage.markdown.getMarkdown();
   }
   return editor.getText();
-};
-
-const getNextClozeIndex = (markdown: string): number => {
-  const pattern = /\{\{c(\d+)::/g;
-  let max = 0;
-  let match: RegExpExecArray | null = null;
-
-  while ((match = pattern.exec(markdown)) !== null) {
-    const index = Number.parseInt(match[1]!, 10);
-    if (Number.isFinite(index)) {
-      max = Math.max(max, index);
-    }
-  }
-
-  return max + 1;
 };
 
 export function EditorField({
@@ -114,7 +100,7 @@ export function EditorField({
 
       event.preventDefault();
 
-      const nextClozeIndex = getNextClozeIndex(getMarkdown(editor));
+      const nextClozeIndex = nextClozeDeletionIndex(getMarkdown(editor));
       const selectedText = editor.state.doc.textBetween(from, to, "\n", "\n");
       editor
         .chain()

@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { createMetadata, type Item, type ItemMetadata } from "@re/core";
+import { createMetadata, hasClozeDeletion, type Item, type ItemMetadata } from "@re/core";
 import { ClozeType, QAType } from "@re/types";
 import { DeckManager, scanDecks } from "@re/workspace";
 import type { FileSystem, Path } from "@effect/platform";
@@ -111,7 +111,7 @@ const detectEditorCardType = (item: Item): Effect.Effect<EditorCardType, EditorO
     }
 
     if (qaMatches && clozeMatches) {
-      return item.content.includes("{{c") ? "cloze" : "qa";
+      return hasClozeDeletion(item.content) ? "cloze" : "qa";
     }
 
     if (Either.isRight(clozeResult) && !Either.isRight(qaResult)) {
