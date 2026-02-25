@@ -21,6 +21,30 @@ function ComboboxInput({ className, ...props }: ComboboxPrimitive.Input.Props) {
   );
 }
 
+function ComboboxTrigger({ className, ...props }: ComboboxPrimitive.Trigger.Props) {
+  return (
+    <ComboboxPrimitive.Trigger
+      data-slot="combobox-trigger"
+      className={cn("flex items-center gap-1 outline-none", className)}
+      {...props}
+    />
+  );
+}
+
+function ComboboxValue({ ...props }: ComboboxPrimitive.Value.Props) {
+  return <ComboboxPrimitive.Value data-slot="combobox-value" {...props} />;
+}
+
+function ComboboxIcon({ className, ...props }: ComboboxPrimitive.Icon.Props) {
+  return (
+    <ComboboxPrimitive.Icon
+      data-slot="combobox-icon"
+      className={cn("inline-flex items-center", className)}
+      {...props}
+    />
+  );
+}
+
 function ComboboxContent({
   align = "start",
   sideOffset = 4,
@@ -88,4 +112,14 @@ function ComboboxEmpty({ className, ...props }: ComboboxPrimitive.Empty.Props) {
   );
 }
 
-export { Combobox, ComboboxInput, ComboboxContent, ComboboxList, ComboboxItem, ComboboxEmpty };
+export {
+  Combobox,
+  ComboboxInput,
+  ComboboxTrigger,
+  ComboboxValue,
+  ComboboxIcon,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+};

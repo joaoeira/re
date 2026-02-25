@@ -1,13 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { ChevronsUpDown, Plus } from "lucide-react";
 
 import {
   Combobox,
   ComboboxContent,
   ComboboxEmpty,
+  ComboboxIcon,
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
+  ComboboxTrigger,
+  ComboboxValue,
 } from "@/components/ui/combobox";
 
 type DeckOption = {
@@ -96,12 +99,23 @@ export function DeckCombobox({
     >
       <div className="flex items-center gap-1.5">
         <span className="text-xs text-muted-foreground/60">in</span>
-        <ComboboxInput
-          placeholder="select deck"
-          className="max-w-64 font-mono text-xs text-muted-foreground"
-        />
+        <ComboboxTrigger className="ring-foreground/15 data-[placeholder]:text-muted-foreground/70 data-[popup-open]:bg-accent/40 hover:bg-accent/20 flex max-w-64 items-center gap-1 rounded-none border border-transparent px-1 py-1 text-left text-xs text-muted-foreground transition-colors focus-visible:ring-1">
+          <span className="truncate font-mono">
+            <ComboboxValue placeholder="select deck" />
+          </span>
+          <ComboboxIcon className="ml-auto text-muted-foreground/60">
+            <ChevronsUpDown className="size-3" />
+          </ComboboxIcon>
+        </ComboboxTrigger>
       </div>
       <ComboboxContent align="start" sideOffset={6}>
+        <div className="border-border/70 border-b px-2 py-1.5">
+          <ComboboxInput
+            autoFocus
+            placeholder="Search or create deck..."
+            className="font-mono text-xs text-muted-foreground"
+          />
+        </div>
         <ComboboxList>
           {filteredDecks.map((deck) => (
             <ComboboxItem key={deck.absolutePath} value={deck}>
