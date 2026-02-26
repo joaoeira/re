@@ -21,7 +21,11 @@ import type { AppContract } from "@shared/rpc/contracts";
 import { CardEdited, CardsDeleted } from "@shared/rpc/contracts";
 import { EditorOperationError } from "@shared/rpc/schemas/editor";
 
-import { provideHandlerServices, validateDeckAccessAs, validateRequestedRootPathAs } from "./shared";
+import {
+  provideHandlerServices,
+  validateDeckAccessAs,
+  validateRequestedRootPathAs,
+} from "./shared";
 
 type EditorCardType = "qa" | "cloze";
 

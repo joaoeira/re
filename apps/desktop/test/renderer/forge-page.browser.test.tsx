@@ -142,8 +142,7 @@ describe("ForgePage", () => {
     await uploadPdf();
     await userEvent.click(screen.getByText("Begin Extraction"));
 
-    await expect.element(screen.getByText("Step 2: Topic extraction")).toBeVisible();
-    await expect.element(screen.getByText("Topics were extracted per chunk.")).toBeVisible();
+    await expect.element(screen.getByText("Select topics")).toBeVisible();
     expect(consoleSpy).toHaveBeenCalledWith("[forge/topics]", [
       {
         chunkId: 101,
@@ -185,7 +184,7 @@ describe("ForgePage", () => {
       }),
     );
 
-    await expect.element(screen.getByText("Step 2: Topic extraction")).toBeVisible();
+    await expect.element(screen.getByText("Select topics")).toBeVisible();
 
     const forgeCalls = invoke.mock.calls
       .map(([method]: unknown[]) => method)
@@ -208,7 +207,7 @@ describe("ForgePage", () => {
       }),
     );
 
-    await expect.element(screen.getByText("Step 2: Topic extraction")).toBeVisible();
+    await expect.element(screen.getByText("Select topics")).toBeVisible();
 
     const forgeCalls = invoke.mock.calls
       .map(([method]: unknown[]) => method)
@@ -216,7 +215,7 @@ describe("ForgePage", () => {
     expect(forgeCalls).toEqual(["ForgeStartTopicExtraction"]);
   });
 
-  it("renders typed preview and extraction errors inline", async () => {
+  it("renders preview error inline", async () => {
     const invoke = vi.fn().mockImplementation(async (method: string) => {
       if (method === "ForgePreviewChunks") {
         return {
@@ -231,7 +230,27 @@ describe("ForgePage", () => {
           },
         };
       }
+      return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+    });
 
+    mockDesktopGlobals(invoke);
+    const screen = await renderForgePage();
+    await uploadPdf();
+
+    await expect.element(screen.getByText("Preview failed")).toBeVisible();
+    await expect
+      .element(screen.getByText("Begin Extraction").element().closest("button")!)
+      .toBeDisabled();
+  });
+
+  it("renders extraction error inline", async () => {
+    const invoke = vi.fn().mockImplementation(async (method: string) => {
+      if (method === "ForgePreviewChunks") {
+        return {
+          type: "success",
+          data: { textLength: 230, totalPages: 4, chunkCount: 2 },
+        };
+      }
       if (method === "ForgeStartTopicExtraction") {
         return {
           type: "failure",
@@ -245,17 +264,14 @@ describe("ForgePage", () => {
           },
         };
       }
-
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
     });
 
     mockDesktopGlobals(invoke);
-
     const screen = await renderForgePage();
     await uploadPdf();
 
-    await expect.element(screen.getByText("Preview failed")).toBeVisible();
-
+    await expect.element(screen.getByText("Begin Extraction")).toBeVisible();
     await userEvent.click(screen.getByText("Begin Extraction"));
     await expect.element(screen.getByText("Session write failed")).toBeVisible();
   });

@@ -115,7 +115,6 @@ describe("ForgePromptRuntime DI", () => {
           GetTopicsPromptSpec,
           {
             chunkText: "alpha beta gamma",
-            maxTopics: 2,
           },
           {
             model: "openai:gpt-4o",

@@ -6,6 +6,7 @@ import type { RpcDefectError } from "electron-effect-rpc/renderer";
 import { useIpc } from "@/lib/ipc-context";
 import {
   createForgePageStore,
+  topicKey,
   type ChunkTopics,
   type ExtractState,
   type ExtractSummary,
@@ -101,6 +102,45 @@ export function useForgeExtractSummary(): ExtractSummary | null {
 
 export function useForgeTopicsByChunk(): ReadonlyArray<ChunkTopics> {
   return useForgePageSelector((snapshot) => snapshot.context.topicsByChunk);
+}
+
+export function useForgeSelectedTopicKeys(): ReadonlySet<string> {
+  return useForgePageSelector((snapshot) => snapshot.context.selectedTopicKeys);
+}
+
+export function useForgeSelectedTopicCount(): number {
+  return useForgePageSelector((snapshot) => {
+    const { topicsByChunk, selectedTopicKeys } = snapshot.context;
+    let count = 0;
+    for (const chunk of topicsByChunk) {
+      for (let i = 0; i < chunk.topics.length; i++) {
+        if (selectedTopicKeys.has(topicKey(chunk.chunkId, i))) count++;
+      }
+    }
+    return count;
+  });
+}
+
+export type ForgeTopicActions = {
+  readonly toggleTopic: (chunkId: number, topicIndex: number) => void;
+  readonly toggleAllChunk: (chunkId: number, select: boolean) => void;
+  readonly selectAllTopics: () => void;
+  readonly deselectAllTopics: () => void;
+};
+
+export function useForgeTopicActions(): ForgeTopicActions {
+  const store = useForgePageStore();
+  return useMemo(
+    () => ({
+      toggleTopic: (chunkId: number, topicIndex: number) =>
+        store.send({ type: "toggleTopic", chunkId, topicIndex }),
+      toggleAllChunk: (chunkId: number, select: boolean) =>
+        store.send({ type: "toggleAllChunk", chunkId, select }),
+      selectAllTopics: () => store.send({ type: "selectAllTopics" }),
+      deselectAllTopics: () => store.send({ type: "deselectAllTopics" }),
+    }),
+    [store],
+  );
 }
 
 export function ForgePageProvider({ children }: { children: React.ReactNode }) {

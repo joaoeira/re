@@ -8,7 +8,6 @@ describe("GetTopicsPromptSpec", () => {
   it("renders dynamic variables with source tags", () => {
     const rendered = GetTopicsPromptSpec.render({
       chunkText: "The mitochondria is the powerhouse of the cell.",
-      maxTopics: 5,
     });
 
     expect(rendered.systemPrompt).toContain("Return JSON only");
@@ -30,7 +29,6 @@ describe("GetTopicsPromptSpec", () => {
     const rendered = GetTopicsPromptSpec.render(
       {
         chunkText: "Only required fields.",
-        maxTopics: 3,
       },
       {
         attempt: 2,
@@ -80,7 +78,6 @@ describe("GetTopicsPromptSpec", () => {
 
     const normalized = GetTopicsPromptSpec.normalize(decoded, {
       chunkText: "irrelevant",
-      maxTopics: 2,
     });
 
     expect(normalized).toEqual({

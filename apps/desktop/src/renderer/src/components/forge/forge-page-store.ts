@@ -38,6 +38,8 @@ export type SelectedPdf = {
   readonly sourceFilePath: string;
 };
 
+export const topicKey = (chunkId: number, topicIndex: number): string => `${chunkId}:${topicIndex}`;
+
 type ForgePageContext = {
   readonly currentStep: ForgeStep;
   readonly selectedPdf: SelectedPdf | null;
@@ -46,7 +48,10 @@ type ForgePageContext = {
   readonly extractState: ExtractState;
   readonly extractSummary: ExtractSummary | null;
   readonly topicsByChunk: ReadonlyArray<ChunkTopics>;
+  readonly selectedTopicKeys: ReadonlySet<string>;
 };
+
+const emptyTopicKeys: ReadonlySet<string> = new Set<string>();
 
 const initialForgePageContext = (): ForgePageContext => ({
   currentStep: "source",
@@ -56,6 +61,7 @@ const initialForgePageContext = (): ForgePageContext => ({
   extractState: { status: "idle" },
   extractSummary: null,
   topicsByChunk: [],
+  selectedTopicKeys: emptyTopicKeys,
 });
 
 export const createForgePageStore = () =>
@@ -79,6 +85,7 @@ export const createForgePageStore = () =>
         extractState: { status: "idle" as const },
         extractSummary: null,
         topicsByChunk: [],
+        selectedTopicKeys: emptyTopicKeys,
       }),
       previewReady: (context, event: { summary: PreviewSummary }) => ({
         ...context,
@@ -113,6 +120,7 @@ export const createForgePageStore = () =>
         extractSummary: event.extraction,
         topicsByChunk: event.topicsByChunk,
         extractState: { status: "idle" as const },
+        selectedTopicKeys: emptyTopicKeys,
       }),
       extractionError: (context, event: { message: string }) => ({
         ...context,
@@ -120,6 +128,35 @@ export const createForgePageStore = () =>
           status: "error" as const,
           message: event.message,
         },
+      }),
+      toggleTopic: (context, event: { chunkId: number; topicIndex: number }) => {
+        const key = topicKey(event.chunkId, event.topicIndex);
+        const next = new Set(context.selectedTopicKeys);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return { ...context, selectedTopicKeys: next };
+      },
+      toggleAllChunk: (context, event: { chunkId: number; select: boolean }) => {
+        const chunk = context.topicsByChunk.find((c) => c.chunkId === event.chunkId);
+        if (!chunk) return context;
+        const next = new Set(context.selectedTopicKeys);
+        chunk.topics.forEach((_, i) => {
+          const key = topicKey(event.chunkId, i);
+          if (event.select) next.add(key);
+          else next.delete(key);
+        });
+        return { ...context, selectedTopicKeys: next };
+      },
+      selectAllTopics: (context) => {
+        const next = new Set<string>();
+        context.topicsByChunk.forEach((chunk) => {
+          chunk.topics.forEach((_, i) => next.add(topicKey(chunk.chunkId, i)));
+        });
+        return { ...context, selectedTopicKeys: next };
+      },
+      deselectAllTopics: (context) => ({
+        ...context,
+        selectedTopicKeys: emptyTopicKeys,
       }),
     },
   });

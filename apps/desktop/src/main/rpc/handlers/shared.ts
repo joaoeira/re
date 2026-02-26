@@ -103,8 +103,7 @@ export const validateDeckAccessAs = <E>(
     deckPath,
     mapSettingsError: (error) => makeError(toErrorMessage(error)),
     makeMissingRootError: () => makeError("Workspace root path is not configured."),
-    makeOutsideRootError: () =>
-      makeError(`Deck path is outside workspace root: ${deckPath}`),
+    makeOutsideRootError: () => makeError(`Deck path is outside workspace root: ${deckPath}`),
   });
 
 export const validateRequestedRootPathAs = <E>(

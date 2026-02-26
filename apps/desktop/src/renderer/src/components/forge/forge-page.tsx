@@ -2,17 +2,18 @@ import { useEffect } from "react";
 
 import { PdfUploadZone } from "@/components/forge/pdf-upload-zone";
 import { Button } from "@/components/ui/button";
+
 import {
   ForgePageProvider,
   useForgeCurrentStep,
   useForgeDuplicateOfSessionId,
   useForgeExtractState,
-  useForgeExtractSummary,
   useForgePageActions,
   useForgePreviewState,
   useForgeSelectedPdf,
-  useForgeTopicsByChunk,
+  useForgeSelectedTopicCount,
 } from "./forge-page-context";
+import { TopicSelection } from "./topics/topic-selection";
 
 const isEditableTarget = (target: EventTarget | null): boolean => {
   if (!(target instanceof HTMLElement)) return false;
@@ -28,8 +29,7 @@ function ForgePageContent() {
   const duplicateOfSessionId = useForgeDuplicateOfSessionId();
   const previewState = useForgePreviewState();
   const extractState = useForgeExtractState();
-  const extractSummary = useForgeExtractSummary();
-  const topicsByChunk = useForgeTopicsByChunk();
+  const selectedTopicCount = useForgeSelectedTopicCount();
 
   useEffect(() => {
     if (!selectedPdf || currentStep !== "source") {
@@ -51,7 +51,7 @@ function ForgePageContent() {
   }, [actions, currentStep, selectedPdf]);
 
   return (
-    <main className="flex flex-1 flex-col bg-background">
+    <main className="flex min-h-0 flex-1 flex-col bg-background">
       <div className="flex-1 overflow-auto px-6 py-8">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
           {currentStep === "source" ? (
@@ -101,36 +101,13 @@ function ForgePageContent() {
             </>
           ) : null}
 
-          {currentStep === "topics" && extractSummary ? (
-            <section className="space-y-3 border border-border bg-muted/20 p-4">
-              <p className="text-sm font-medium text-foreground/90">Step 2: Topic extraction</p>
-              <p className="text-xs text-muted-foreground">Topics were extracted per chunk.</p>
-              <dl className="grid grid-cols-1 gap-2 text-xs text-foreground/90 sm:grid-cols-4">
-                <div className="border border-border bg-background px-2 py-1.5">
-                  <dt className="text-muted-foreground">Chunks</dt>
-                  <dd>{extractSummary.chunkCount}</dd>
-                </div>
-                <div className="border border-border bg-background px-2 py-1.5">
-                  <dt className="text-muted-foreground">Pages</dt>
-                  <dd>{extractSummary.totalPages}</dd>
-                </div>
-                <div className="border border-border bg-background px-2 py-1.5">
-                  <dt className="text-muted-foreground">Characters</dt>
-                  <dd>{extractSummary.textLength}</dd>
-                </div>
-                <div className="border border-border bg-background px-2 py-1.5">
-                  <dt className="text-muted-foreground">Topic Chunks</dt>
-                  <dd>{topicsByChunk.length}</dd>
-                </div>
-              </dl>
-            </section>
-          ) : null}
+          {currentStep === "topics" ? <TopicSelection /> : null}
         </div>
       </div>
 
       {currentStep === "source" && selectedPdf ? (
         <div className="shrink-0 border-t border-border bg-muted/30 px-6 py-2.5">
-          <div className="mx-auto flex w-full max-w-2xl items-center justify-end">
+          <div className="mx-auto flex w-full items-center justify-end">
             <Button
               type="button"
               variant="outline"
@@ -142,6 +119,37 @@ function ForgePageContent() {
               <span>
                 {extractState.status === "extracting" ? "Extracting..." : "Begin Extraction"}
               </span>
+              <kbd className="border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground/60">
+                Cmd/Ctrl+Enter
+              </kbd>
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {currentStep === "topics" ? (
+        <div className="shrink-0 border-t border-border bg-muted/30 px-6 py-2.5">
+          <div className="mx-auto flex w-full items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              {selectedTopicCount > 0 ? (
+                <>
+                  <span className="font-mono font-medium text-primary">{selectedTopicCount}</span>{" "}
+                  topic{selectedTopicCount !== 1 ? "s" : ""} selected
+                  <span className="text-muted-foreground/30"> · </span>~{selectedTopicCount * 7}{" "}
+                  cards estimated
+                </>
+              ) : (
+                "Select at least 1 topic to continue"
+              )}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled
+              className="gap-2 disabled:opacity-30"
+            >
+              <span>Continue to cards</span>
               <kbd className="border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground/60">
                 Cmd/Ctrl+Enter
               </kbd>
