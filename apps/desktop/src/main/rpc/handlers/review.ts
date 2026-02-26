@@ -32,7 +32,8 @@ import {
   canonicalizeWorkspacePath,
   provideHandlerServices,
   validateDeckAccess,
-  validateRequestedRootPath,
+  validateDeckAccessAs,
+  validateRequestedRootPathAs,
 } from "./shared";
 
 const reviewItemTypes = [QAType, ClozeType] as const;
@@ -52,9 +53,6 @@ type ReviewHandlerRuntime =
   | FileSystem.FileSystem
   | Path.Path;
 
-const toReviewOperationError = (error: unknown): ReviewOperationError =>
-  new ReviewOperationError({ message: toErrorMessage(error) });
-
 const failWithReviewOperationError = (error: unknown) =>
   Effect.fail(new ReviewOperationError({ message: toErrorMessage(error) }));
 
@@ -67,18 +65,11 @@ export const createReviewHandlers = () =>
     return provideHandlerServices({
       BuildReviewQueue: ({ deckPaths, rootPath }) =>
         Effect.gen(function* () {
-          const configuredRootPath = yield* validateRequestedRootPath(settingsRepository, {
-            requestedRootPath: rootPath,
-            mapSettingsError: toReviewOperationError,
-            makeMissingRootError: () =>
-              new ReviewOperationError({
-                message: "Workspace root path is not configured.",
-              }),
-            makeRootMismatchError: (configured, requested) =>
-              new ReviewOperationError({
-                message: `Root path mismatch. Expected ${configured}, received ${requested}.`,
-              }),
-          });
+          const configuredRootPath = yield* validateRequestedRootPathAs(
+            settingsRepository,
+            rootPath,
+            (m) => new ReviewOperationError({ message: m }),
+          );
 
           for (const deckPath of deckPaths) {
             if (!assertWithinRoot(deckPath, configuredRootPath)) {
@@ -178,18 +169,11 @@ export const createReviewHandlers = () =>
         }),
       ScheduleReview: ({ deckPath, cardId, grade }) =>
         Effect.gen(function* () {
-          const configuredRootPath = yield* validateDeckAccess(settingsRepository, {
+          const configuredRootPath = yield* validateDeckAccessAs(
+            settingsRepository,
             deckPath,
-            mapSettingsError: toReviewOperationError,
-            makeMissingRootError: () =>
-              new ReviewOperationError({
-                message: "Workspace root path is not configured.",
-              }),
-            makeOutsideRootError: (invalidDeckPath) =>
-              new ReviewOperationError({
-                message: `Deck path is outside workspace root: ${invalidDeckPath}`,
-              }),
-          });
+            (m) => new ReviewOperationError({ message: m }),
+          );
 
           const deckManager = yield* DeckManager;
           const scheduler = yield* Scheduler;
@@ -290,18 +274,11 @@ export const createReviewHandlers = () =>
         previousCardFingerprint,
       }) =>
         Effect.gen(function* () {
-          yield* validateDeckAccess(settingsRepository, {
+          yield* validateDeckAccessAs(
+            settingsRepository,
             deckPath,
-            mapSettingsError: toReviewOperationError,
-            makeMissingRootError: () =>
-              new ReviewOperationError({
-                message: "Workspace root path is not configured.",
-              }),
-            makeOutsideRootError: (invalidDeckPath) =>
-              new ReviewOperationError({
-                message: `Deck path is outside workspace root: ${invalidDeckPath}`,
-              }),
-          });
+            (m) => new ReviewOperationError({ message: m }),
+          );
 
           const intent =
             reviewEntryId === null
@@ -410,18 +387,11 @@ export const createReviewHandlers = () =>
         }),
       GetReviewStats: ({ rootPath, includeUndone }) =>
         Effect.gen(function* () {
-          const configuredRootPath = yield* validateRequestedRootPath(settingsRepository, {
-            requestedRootPath: rootPath,
-            mapSettingsError: toReviewOperationError,
-            makeMissingRootError: () =>
-              new ReviewOperationError({
-                message: "Workspace root path is not configured.",
-              }),
-            makeRootMismatchError: (configured, requested) =>
-              new ReviewOperationError({
-                message: `Root path mismatch. Expected ${configured}, received ${requested}.`,
-              }),
-          });
+          const configuredRootPath = yield* validateRequestedRootPathAs(
+            settingsRepository,
+            rootPath,
+            (m) => new ReviewOperationError({ message: m }),
+          );
 
           const workspaceCanonicalPath = yield* canonicalizeWorkspacePath(configuredRootPath).pipe(
             Effect.mapError(
@@ -439,18 +409,11 @@ export const createReviewHandlers = () =>
         }).pipe(Effect.mapError((e) => new ReviewOperationError({ message: toErrorMessage(e) }))),
       ListReviewHistory: ({ rootPath, includeUndone, limit, offset }) =>
         Effect.gen(function* () {
-          const configuredRootPath = yield* validateRequestedRootPath(settingsRepository, {
-            requestedRootPath: rootPath,
-            mapSettingsError: toReviewOperationError,
-            makeMissingRootError: () =>
-              new ReviewOperationError({
-                message: "Workspace root path is not configured.",
-              }),
-            makeRootMismatchError: (configured, requested) =>
-              new ReviewOperationError({
-                message: `Root path mismatch. Expected ${configured}, received ${requested}.`,
-              }),
-          });
+          const configuredRootPath = yield* validateRequestedRootPathAs(
+            settingsRepository,
+            rootPath,
+            (m) => new ReviewOperationError({ message: m }),
+          );
 
           const workspaceCanonicalPath = yield* canonicalizeWorkspacePath(configuredRootPath).pipe(
             Effect.mapError(

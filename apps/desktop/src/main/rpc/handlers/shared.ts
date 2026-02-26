@@ -11,6 +11,7 @@ import { Effect, Layer } from "effect";
 
 import { NodeServicesLive } from "@main/effect/node-services";
 import type { SettingsRepository } from "@main/settings/repository";
+import { toErrorMessage } from "@main/utils/format";
 
 export const DeckManagerServicesLive = DeckManagerLive.pipe(Layer.provide(NodeServicesLive));
 
@@ -92,6 +93,32 @@ export const validateRequestedRootPath = <E>(
         options.makeRootMismatchError(configuredRootPath, options.requestedRootPath),
     ),
   );
+
+export const validateDeckAccessAs = <E>(
+  settingsRepository: SettingsRepository,
+  deckPath: string,
+  makeError: (message: string) => E,
+): Effect.Effect<string, E> =>
+  validateDeckAccess(settingsRepository, {
+    deckPath,
+    mapSettingsError: (error) => makeError(toErrorMessage(error)),
+    makeMissingRootError: () => makeError("Workspace root path is not configured."),
+    makeOutsideRootError: () =>
+      makeError(`Deck path is outside workspace root: ${deckPath}`),
+  });
+
+export const validateRequestedRootPathAs = <E>(
+  settingsRepository: SettingsRepository,
+  requestedRootPath: string,
+  makeError: (message: string) => E,
+): Effect.Effect<string, E> =>
+  validateRequestedRootPath(settingsRepository, {
+    requestedRootPath,
+    mapSettingsError: (error) => makeError(toErrorMessage(error)),
+    makeMissingRootError: () => makeError("Workspace root path is not configured."),
+    makeRootMismatchError: (configured, requested) =>
+      makeError(`Root path mismatch. Expected ${configured}, received ${requested}.`),
+  });
 
 export const canonicalizeWorkspacePath = (
   rootPath: string,

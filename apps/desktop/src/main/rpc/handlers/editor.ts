@@ -21,7 +21,7 @@ import type { AppContract } from "@shared/rpc/contracts";
 import { CardEdited, CardsDeleted } from "@shared/rpc/contracts";
 import { EditorOperationError } from "@shared/rpc/schemas/editor";
 
-import { provideHandlerServices, validateDeckAccess, validateRequestedRootPath } from "./shared";
+import { provideHandlerServices, validateDeckAccessAs, validateRequestedRootPathAs } from "./shared";
 
 type EditorCardType = "qa" | "cloze";
 
@@ -257,16 +257,11 @@ export const createEditorHandlers = () =>
     const handlers: Pick<Implementations<AppContract, EditorHandlerRuntime>, EditorHandlerKeys> = {
       AppendItem: ({ deckPath, content, cardType }) =>
         Effect.gen(function* () {
-          yield* validateDeckAccess(settingsRepository, {
+          yield* validateDeckAccessAs(
+            settingsRepository,
             deckPath,
-            mapSettingsError: toEditorError,
-            makeMissingRootError: () =>
-              new EditorOperationError({ message: "Workspace root path is not configured." }),
-            makeOutsideRootError: (invalidDeckPath) =>
-              new EditorOperationError({
-                message: `Deck path is outside workspace root: ${invalidDeckPath}`,
-              }),
-          });
+            (m) => new EditorOperationError({ message: m }),
+          );
 
           const itemType = resolveEditorItemType(cardType);
           const cardCount = yield* parseEditorContent(cardType, content);
@@ -286,16 +281,11 @@ export const createEditorHandlers = () =>
         }).pipe(Effect.mapError(toEditorError)),
       ReplaceItem: ({ deckPath, cardId, content, cardType }) =>
         Effect.gen(function* () {
-          yield* validateDeckAccess(settingsRepository, {
+          yield* validateDeckAccessAs(
+            settingsRepository,
             deckPath,
-            mapSettingsError: toEditorError,
-            makeMissingRootError: () =>
-              new EditorOperationError({ message: "Workspace root path is not configured." }),
-            makeOutsideRootError: (invalidDeckPath) =>
-              new EditorOperationError({
-                message: `Deck path is outside workspace root: ${invalidDeckPath}`,
-              }),
-          });
+            (m) => new EditorOperationError({ message: m }),
+          );
 
           const newItemType = resolveEditorItemType(cardType);
           const expectedNewCardCount = yield* parseEditorContent(cardType, content);
@@ -363,16 +353,11 @@ export const createEditorHandlers = () =>
         }).pipe(Effect.mapError(toEditorError)),
       GetItemForEdit: ({ deckPath, cardId }) =>
         Effect.gen(function* () {
-          yield* validateDeckAccess(settingsRepository, {
+          yield* validateDeckAccessAs(
+            settingsRepository,
             deckPath,
-            mapSettingsError: toEditorError,
-            makeMissingRootError: () =>
-              new EditorOperationError({ message: "Workspace root path is not configured." }),
-            makeOutsideRootError: (invalidDeckPath) =>
-              new EditorOperationError({
-                message: `Deck path is outside workspace root: ${invalidDeckPath}`,
-              }),
-          });
+            (m) => new EditorOperationError({ message: m }),
+          );
 
           const deckManager = yield* DeckManager;
           const parsed = yield* deckManager.readDeck(deckPath);
@@ -396,16 +381,11 @@ export const createEditorHandlers = () =>
         }).pipe(Effect.mapError(toEditorError)),
       CheckDuplicates: ({ content, cardType, rootPath, excludeCardIds }) =>
         Effect.gen(function* () {
-          const configuredRootPath = yield* validateRequestedRootPath(settingsRepository, {
-            requestedRootPath: rootPath,
-            mapSettingsError: toEditorError,
-            makeMissingRootError: () =>
-              new EditorOperationError({ message: "Workspace root path is not configured." }),
-            makeRootMismatchError: (configured, requested) =>
-              new EditorOperationError({
-                message: `Root path mismatch. Expected ${configured}, received ${requested}.`,
-              }),
-          });
+          const configuredRootPath = yield* validateRequestedRootPathAs(
+            settingsRepository,
+            rootPath,
+            (m) => new EditorOperationError({ message: m }),
+          );
           const resolvedConfiguredRoot = path.resolve(configuredRootPath);
 
           const parseResult = yield* Effect.either(parseEditorContent(cardType, content));
@@ -441,16 +421,11 @@ export const createEditorHandlers = () =>
           }
 
           for (const [deckPath, cardIds] of byDeck) {
-            yield* validateDeckAccess(settingsRepository, {
+            yield* validateDeckAccessAs(
+              settingsRepository,
               deckPath,
-              mapSettingsError: toEditorError,
-              makeMissingRootError: () =>
-                new EditorOperationError({ message: "Workspace root path is not configured." }),
-              makeOutsideRootError: (invalidDeckPath) =>
-                new EditorOperationError({
-                  message: `Deck path is outside workspace root: ${invalidDeckPath}`,
-                }),
-            });
+              (m) => new EditorOperationError({ message: m }),
+            );
 
             yield* deckWriteCoordinator.withDeckLock(
               deckPath,
