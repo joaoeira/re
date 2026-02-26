@@ -20,6 +20,7 @@ import { AiClientServiceFromSecretStoreLive } from "../services/AiClientService"
 import { DeckWriteCoordinatorServiceLive } from "../services/DeckWriteCoordinatorService";
 import { ChunkServiceLive } from "../services/ChunkService";
 import { ForgeSessionRepositoryServiceLive } from "../services/ForgeSessionRepositoryService";
+import { ForgePromptRuntimeServiceLive } from "../services/ForgePromptRuntimeService";
 import {
   DuplicateIndexInvalidationBridgeLive,
   DuplicateIndexInvalidationServiceLive,
@@ -65,19 +66,23 @@ const MainStaticLive = ({
   forgeSessionRepository,
   pdfExtractor,
   chunkService,
-}: MainStaticDependencies) =>
-  Layer.mergeAll(
+}: MainStaticDependencies) => {
+  const aiClientLayer = AiClientServiceFromSecretStoreLive(secretStore);
+
+  return Layer.mergeAll(
     SettingsRepositoryServiceLive(settingsRepository),
     SecretStoreServiceLive(secretStore),
-    AiClientServiceFromSecretStoreLive(secretStore),
+    aiClientLayer,
     AnalyticsRepositoryServiceLive(analyticsRepository),
     DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
     ForgeSessionRepositoryServiceLive(
       forgeSessionRepository ?? makeInMemoryForgeSessionRepository(),
     ),
+    ForgePromptRuntimeServiceLive.pipe(Layer.provide(aiClientLayer)),
     PdfExtractorServiceLive(pdfExtractor ?? makeStubPdfExtractor()),
     ChunkServiceLive(chunkService ?? makeChunkService()),
   );
+};
 
 const MainBridgeLive = Layer.mergeAll(
   AppEventPublisherBridgeLive,

@@ -26,6 +26,11 @@ export {
   ForgeSessionRepositoryServiceLive,
 } from "./services/ForgeSessionRepositoryService";
 export {
+  ForgePromptRuntimeService,
+  ForgePromptRuntimeServiceLive,
+  type ForgePromptRuntimeService as ForgePromptRuntime,
+} from "./services/ForgePromptRuntimeService";
+export {
   DuplicateIndexInvalidationService,
   DuplicateIndexInvalidationBridgeLive,
   DuplicateIndexInvalidationServiceLive,

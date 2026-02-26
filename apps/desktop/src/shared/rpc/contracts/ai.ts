@@ -1,35 +1,24 @@
-import { Schema } from "@effect/schema";
 import { rpc, streamRpc } from "electron-effect-rpc/contract";
 
 import {
-  AiGenerateCompletionErrorSchema,
+  AiGenerateTextErrorSchema,
+  AiGenerateTextInputSchema,
+  AiGenerateTextResultSchema,
   AiStreamChunkSchema,
   AiStreamErrorSchema,
-  ModelIdSchema,
+  AiStreamTextInputSchema,
 } from "@shared/rpc/schemas/ai";
 
-export const StreamCompletion = streamRpc(
-  "StreamCompletion",
-  Schema.Struct({
-    model: ModelIdSchema,
-    prompt: Schema.String,
-    systemPrompt: Schema.optional(Schema.String),
-  }),
+export const AiStreamText = streamRpc(
+  "AiStreamText",
+  AiStreamTextInputSchema,
   AiStreamChunkSchema,
   AiStreamErrorSchema,
 );
 
-export const GenerateCompletion = rpc(
-  "GenerateCompletion",
-  Schema.Struct({
-    model: ModelIdSchema,
-    prompt: Schema.String,
-    systemPrompt: Schema.optional(Schema.String),
-    temperature: Schema.optional(Schema.Number.pipe(Schema.nonNegative())),
-    maxTokens: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.positive())),
-  }),
-  Schema.Struct({
-    text: Schema.String,
-  }),
-  AiGenerateCompletionErrorSchema,
+export const AiGenerateText = rpc(
+  "AiGenerateText",
+  AiGenerateTextInputSchema,
+  AiGenerateTextResultSchema,
+  AiGenerateTextErrorSchema,
 );

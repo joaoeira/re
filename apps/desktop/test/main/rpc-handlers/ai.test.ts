@@ -7,10 +7,20 @@ import { createAiHandlers, createAiStreamHandlers } from "@main/rpc/handlers/ai"
 import { AiProviderNotSupportedError, AiRateLimitError } from "@shared/rpc/schemas/ai";
 
 describe("AI handlers", () => {
-  it("maps generateCompletion result into response payload", async () => {
+  it("maps generateText result into structured response payload", async () => {
     const mockAiClient: AiClient = {
-      generateCompletion: () => Effect.succeed("hello world"),
-      streamCompletion: () => Stream.empty,
+      generateText: () =>
+        Effect.succeed({
+          text: "hello world",
+          finishReason: "stop",
+          model: "gpt-4o",
+          usage: {
+            inputTokens: 10,
+            outputTokens: 4,
+            totalTokens: 14,
+          },
+        }),
+      streamText: () => Stream.empty,
     };
 
     const handlers = Effect.runSync(
@@ -18,20 +28,29 @@ describe("AI handlers", () => {
     );
 
     const result = await Effect.runPromise(
-      handlers.GenerateCompletion({
+      handlers.AiGenerateText({
         model: "anthropic:claude-sonnet-4-20250514",
-        prompt: "hello world",
+        messages: [{ role: "user", content: "hello world" }],
       }),
     );
 
-    expect(result).toEqual({ text: "hello world" });
+    expect(result).toEqual({
+      text: "hello world",
+      finishReason: "stop",
+      model: "gpt-4o",
+      usage: {
+        inputTokens: 10,
+        outputTokens: 4,
+        totalTokens: 14,
+      },
+    });
   });
 
-  it("preserves typed GenerateCompletion errors", async () => {
+  it("preserves typed AiGenerateText errors", async () => {
     const mockAiClient: AiClient = {
-      generateCompletion: () =>
+      generateText: () =>
         Effect.fail(new AiRateLimitError({ message: "rate limited", retryAfterMs: 1000 })),
-      streamCompletion: () => Stream.empty,
+      streamText: () => Stream.empty,
     };
 
     const handlers = Effect.runSync(
@@ -39,14 +58,14 @@ describe("AI handlers", () => {
     );
 
     const exit = await Effect.runPromiseExit(
-      handlers.GenerateCompletion({
+      handlers.AiGenerateText({
         model: "anthropic:claude-sonnet-4-20250514",
-        prompt: "hello",
+        messages: [{ role: "user", content: "hello" }],
       }),
     );
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
-      throw new Error("Expected GenerateCompletion handler to fail.");
+      throw new Error("Expected AiGenerateText handler to fail.");
     }
 
     const failure = Cause.failureOption(exit.cause);
@@ -60,8 +79,19 @@ describe("AI handlers", () => {
 describe("AI stream handlers", () => {
   it("maps string deltas from AiClient into chunk objects", async () => {
     const mockAiClient: AiClient = {
-      generateCompletion: () => Effect.succeed("unused"),
-      streamCompletion: ({ prompt }) => Stream.fromIterable(prompt.split(" ")),
+      generateText: () =>
+        Effect.succeed({
+          text: "unused",
+          finishReason: "stop",
+          model: "unused",
+          usage: {},
+        }),
+      streamText: ({ messages }) => {
+        const firstMessage = messages[0];
+        const content =
+          firstMessage && typeof firstMessage.content === "string" ? firstMessage.content : "";
+        return Stream.fromIterable(content.split(" "));
+      },
     };
 
     const streamHandlers = Effect.runSync(
@@ -70,9 +100,9 @@ describe("AI stream handlers", () => {
 
     const chunks = await Effect.runPromise(
       streamHandlers
-        .StreamCompletion({
+        .AiStreamText({
           model: "anthropic:claude-sonnet-4-20250514",
-          prompt: "hello world",
+          messages: [{ role: "user", content: "hello world" }],
         })
         .pipe(Stream.runCollect),
     );
@@ -82,8 +112,14 @@ describe("AI stream handlers", () => {
 
   it("preserves typed stream errors", async () => {
     const mockAiClient: AiClient = {
-      generateCompletion: () => Effect.succeed("unused"),
-      streamCompletion: () =>
+      generateText: () =>
+        Effect.succeed({
+          text: "unused",
+          finishReason: "stop",
+          model: "unused",
+          usage: {},
+        }),
+      streamText: () =>
         Stream.fail(new AiRateLimitError({ message: "rate limited", retryAfterMs: 1000 })),
     };
 
@@ -93,9 +129,9 @@ describe("AI stream handlers", () => {
 
     const exit = await Effect.runPromiseExit(
       streamHandlers
-        .StreamCompletion({
+        .AiStreamText({
           model: "anthropic:claude-sonnet-4-20250514",
-          prompt: "hello",
+          messages: [{ role: "user", content: "hello" }],
         })
         .pipe(Stream.runCollect),
     );
@@ -113,8 +149,14 @@ describe("AI stream handlers", () => {
 
   it("preserves ai_provider_not_supported stream errors", async () => {
     const mockAiClient: AiClient = {
-      generateCompletion: () => Effect.succeed("unused"),
-      streamCompletion: () =>
+      generateText: () =>
+        Effect.succeed({
+          text: "unused",
+          finishReason: "stop",
+          model: "unused",
+          usage: {},
+        }),
+      streamText: () =>
         Stream.fail(new AiProviderNotSupportedError({ model: "constructor:gpt-4o" })),
     };
 
@@ -124,9 +166,9 @@ describe("AI stream handlers", () => {
 
     const exit = await Effect.runPromiseExit(
       streamHandlers
-        .StreamCompletion({
+        .AiStreamText({
           model: "constructor:gpt-4o",
-          prompt: "hello",
+          messages: [{ role: "user", content: "hello" }],
         })
         .pipe(Stream.runCollect),
     );

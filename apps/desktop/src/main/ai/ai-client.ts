@@ -1,4 +1,4 @@
-import { generateText, streamText } from "ai";
+import { RetryError, generateText, streamText, type ModelMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { APICallError, type LanguageModelV3 } from "@ai-sdk/provider";
@@ -7,12 +7,14 @@ import { Effect, Stream } from "effect";
 import type { SecretStore } from "@main/secrets/secret-store";
 import type { SecretKey } from "@shared/secrets";
 import {
+  type AiMessage,
   AiCompletionError,
+  type AiGenerateTextResult,
   AiKeyMissingError,
   AiOfflineError,
   AiProviderNotSupportedError,
   AiRateLimitError,
-  type AiGenerateCompletionError,
+  type AiGenerateTextError,
   type AiStreamError,
 } from "@shared/rpc/schemas/ai";
 
@@ -61,19 +63,31 @@ const retryAfterMs = (
   return seconds * 1000;
 };
 
+const unwrapRetryError = (error: unknown): unknown => {
+  let current = error;
+
+  while (RetryError.isInstance(current) && current.lastError !== current) {
+    current = current.lastError;
+  }
+
+  return current;
+};
+
 const mapProviderInvocationError = (error: unknown): AiProviderInvocationError => {
-  if (APICallError.isInstance(error) && error.statusCode === 429) {
+  const sourceError = unwrapRetryError(error);
+
+  if (APICallError.isInstance(sourceError) && sourceError.statusCode === 429) {
     return new AiRateLimitError({
-      message: error.message,
-      retryAfterMs: retryAfterMs(error.responseHeaders),
+      message: sourceError.message,
+      retryAfterMs: retryAfterMs(sourceError.responseHeaders),
     });
   }
 
-  if (error instanceof TypeError) {
+  if (sourceError instanceof TypeError) {
     return new AiOfflineError({ message: "Network request failed." });
   }
 
-  return new AiCompletionError({ message: toMessage(error) });
+  return new AiCompletionError({ message: toMessage(sourceError) });
 };
 
 const resolveProvider = (
@@ -127,50 +141,85 @@ const resolveLanguageModel = (
     return config.createModel(apiKey, modelId);
   });
 
+export interface AiGenerateTextInput {
+  readonly model: string;
+  readonly messages: ReadonlyArray<AiMessage>;
+  readonly systemPrompt?: string | undefined;
+  readonly temperature?: number | undefined;
+  readonly maxTokens?: number | undefined;
+  readonly maxRetries?: number | undefined;
+}
+
 export interface AiClient {
-  readonly generateCompletion: (input: {
-    readonly model: string;
-    readonly prompt: string;
-    readonly systemPrompt?: string | undefined;
-    readonly temperature?: number | undefined;
-    readonly maxTokens?: number | undefined;
-  }) => Effect.Effect<string, AiGenerateCompletionError>;
-  readonly streamCompletion: (input: {
-    readonly model: string;
-    readonly prompt: string;
-    readonly systemPrompt?: string | undefined;
-  }) => Stream.Stream<string, AiStreamError>;
+  readonly generateText: (
+    input: AiGenerateTextInput,
+  ) => Effect.Effect<AiGenerateTextResult, AiGenerateTextError>;
+  readonly streamText: (input: AiGenerateTextInput) => Stream.Stream<string, AiStreamError>;
 }
 
 export interface MakeAiClientOptions {
   readonly secretStore: SecretStore;
 }
 
+const mapMessagesToAiSdk = (messages: ReadonlyArray<AiMessage>): Array<ModelMessage> =>
+  messages.map((message) => ({
+    role: message.role,
+    content:
+      typeof message.content === "string"
+        ? message.content
+        : message.content.map((part) => ({ type: "text", text: part.text })),
+  }));
+
+const ensureNonEmptyMessages = (
+  messages: ReadonlyArray<AiMessage>,
+): Effect.Effect<void, AiCompletionError> =>
+  messages.length === 0
+    ? Effect.fail(new AiCompletionError({ message: "messages must contain at least one entry." }))
+    : Effect.void;
+
 export const makeAiClient = ({ secretStore }: MakeAiClientOptions): AiClient => ({
-  generateCompletion: ({ model, prompt, systemPrompt, temperature, maxTokens }) =>
+  generateText: ({ model, messages, systemPrompt, temperature, maxTokens, maxRetries }) =>
     Effect.gen(function* () {
+      yield* ensureNonEmptyMessages(messages);
       const languageModel = yield* resolveLanguageModel(secretStore, model);
+      const modelMessages = mapMessagesToAiSdk(messages);
+      const resolvedMaxRetries = maxRetries ?? 0;
 
       const result = yield* Effect.tryPromise({
         try: (abortSignal) =>
           generateText({
             model: languageModel,
-            prompt,
+            messages: modelMessages,
             ...(systemPrompt !== undefined ? { system: systemPrompt } : {}),
             ...(temperature !== undefined ? { temperature } : {}),
             ...(maxTokens !== undefined ? { maxOutputTokens: maxTokens } : {}),
+            maxRetries: resolvedMaxRetries,
             abortSignal,
           }),
         catch: mapProviderInvocationError,
       });
 
-      return result.text;
+      return {
+        text: result.text,
+        finishReason: result.finishReason,
+        model: result.response.modelId,
+        usage: {
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+          totalTokens: result.usage.totalTokens,
+          reasoningTokens: result.usage.outputTokenDetails?.reasoningTokens,
+          cachedInputTokens: result.usage.inputTokenDetails?.cacheReadTokens,
+        },
+      };
     }),
-  streamCompletion: ({ model, prompt, systemPrompt }) =>
+  streamText: ({ model, messages, systemPrompt, temperature, maxTokens, maxRetries }) =>
     Stream.unwrap(
       Effect.gen(function* () {
+        yield* ensureNonEmptyMessages(messages);
         const controller = new AbortController();
         const languageModel = yield* resolveLanguageModel(secretStore, model);
+        const modelMessages = mapMessagesToAiSdk(messages);
+        const resolvedMaxRetries = maxRetries ?? 0;
 
         return Stream.asyncPush<string, AiProviderInvocationError>(
           (emit) =>
@@ -181,8 +230,11 @@ export const makeAiClient = ({ secretStore }: MakeAiClientOptions): AiClient => 
                 try {
                   const result = streamText({
                     model: languageModel,
-                    prompt,
+                    messages: modelMessages,
                     ...(systemPrompt !== undefined ? { system: systemPrompt } : {}),
+                    ...(temperature !== undefined ? { temperature } : {}),
+                    ...(maxTokens !== undefined ? { maxOutputTokens: maxTokens } : {}),
+                    maxRetries: resolvedMaxRetries,
                     abortSignal: controller.signal,
                   });
 

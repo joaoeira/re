@@ -1,6 +1,5 @@
 import { Cause, Effect, Exit, Fiber, Stream } from "effect";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { generateText as generateTextFn } from "ai";
 
 import { makeAiClient } from "@main/ai/ai-client";
 import type { SecretStore } from "@main/secrets/secret-store";
@@ -16,22 +15,70 @@ import { SecretNotFound, SecretStoreUnavailable } from "@shared/secrets";
 const ANTHROPIC_MODEL = "anthropic:claude-sonnet-4-20250514";
 const OPENAI_MODEL = "openai:gpt-4o";
 
-type StreamTextInput = {
+const DEFAULT_MESSAGES = [{ role: "user", content: "hello" }] as const;
+
+type MockGenerateTextInput = {
   readonly model?: unknown;
-  readonly prompt: string;
+  readonly messages: ReadonlyArray<unknown>;
   readonly system?: string;
+  readonly temperature?: number;
+  readonly maxOutputTokens?: number;
+  readonly maxRetries?: number;
   readonly abortSignal?: AbortSignal;
 };
 
-type StreamTextResult = {
+type MockStreamTextInput = MockGenerateTextInput;
+
+type MockGenerateTextResult = {
+  readonly text: string;
+  readonly finishReason: string;
+  readonly response: {
+    readonly modelId: string;
+  };
+  readonly usage: {
+    readonly inputTokens?: number;
+    readonly inputTokenDetails?: {
+      readonly noCacheTokens?: number;
+      readonly cacheReadTokens?: number;
+      readonly cacheWriteTokens?: number;
+    };
+    readonly outputTokens?: number;
+    readonly outputTokenDetails?: {
+      readonly textTokens?: number;
+      readonly reasoningTokens?: number;
+    };
+    readonly totalTokens?: number;
+  };
+};
+
+type MockStreamTextResult = {
   readonly textStream: AsyncIterable<string>;
 };
 
-type GenerateTextInput = Parameters<typeof generateTextFn>[0];
-
-type GenerateTextResult = {
-  readonly text: string;
-};
+const makeGenerateResult = (
+  overrides: Partial<MockGenerateTextResult> = {},
+): MockGenerateTextResult => ({
+  text: "generated text",
+  finishReason: "stop",
+  response: {
+    modelId: "gpt-4o",
+  },
+  usage: {
+    inputTokens: 10,
+    inputTokenDetails: {
+      noCacheTokens: 10,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    },
+    outputTokens: 5,
+    outputTokenDetails: {
+      textTokens: 5,
+      reasoningTokens: 0,
+    },
+    totalTokens: 15,
+  },
+  ...overrides,
+});
 
 const mocks = vi.hoisted(() => {
   class MockAPICallError extends Error {
@@ -56,10 +103,25 @@ const mocks = vi.hoisted(() => {
     }
   }
 
+  class MockRetryError extends Error {
+    readonly lastError: unknown;
+
+    constructor(lastError: unknown) {
+      super("Retry failed");
+      this.name = "RetryError";
+      this.lastError = lastError;
+    }
+
+    static isInstance(value: unknown): value is MockRetryError {
+      return value instanceof MockRetryError;
+    }
+  }
+
   return {
     APICallError: MockAPICallError,
-    generateText: vi.fn<(input: GenerateTextInput) => Promise<GenerateTextResult>>(),
-    streamText: vi.fn<(input: StreamTextInput) => StreamTextResult>(),
+    RetryError: MockRetryError,
+    generateText: vi.fn<(input: MockGenerateTextInput) => Promise<MockGenerateTextResult>>(),
+    streamText: vi.fn<(input: MockStreamTextInput) => MockStreamTextResult>(),
     createAnthropic: vi.fn((_options: { readonly apiKey: string }) => (model: string) => ({
       provider: "anthropic",
       model,
@@ -72,6 +134,7 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("ai", () => ({
+  RetryError: mocks.RetryError,
   generateText: mocks.generateText,
   streamText: mocks.streamText,
 }));
@@ -95,6 +158,13 @@ const makeSecretStore = (getSecret: SecretStore["getSecret"]): SecretStore => ({
   hasSecret: () => Effect.succeed(false),
 });
 
+const makeServiceWithKey = () =>
+  makeAiClient({
+    secretStore: makeSecretStore((key) =>
+      Effect.succeed(key === "openai-api-key" ? "sk-openai-test" : "sk-anthropic-test"),
+    ),
+  });
+
 const getFailure = <A, E>(exit: Exit.Exit<A, E>): E => {
   if (Exit.isSuccess(exit)) {
     throw new Error("Expected failure exit.");
@@ -108,13 +178,6 @@ const getFailure = <A, E>(exit: Exit.Exit<A, E>): E => {
   return failure.value;
 };
 
-const makeServiceWithKey = () =>
-  makeAiClient({
-    secretStore: makeSecretStore((key) =>
-      Effect.succeed(key === "openai-api-key" ? "sk-openai-test" : "sk-anthropic-test"),
-    ),
-  });
-
 describe("makeAiClient", () => {
   beforeEach(() => {
     mocks.generateText.mockReset();
@@ -123,7 +186,7 @@ describe("makeAiClient", () => {
     mocks.createOpenAI.mockClear();
   });
 
-  it("routes anthropic models to anthropic provider with anthropic key", async () => {
+  it("routes anthropic stream requests to anthropic provider with anthropic key", async () => {
     const requestedKeys: string[] = [];
     const service = makeAiClient({
       secretStore: makeSecretStore((key) =>
@@ -143,7 +206,9 @@ describe("makeAiClient", () => {
     }));
 
     const chunks = await Effect.runPromise(
-      service.streamCompletion({ model: ANTHROPIC_MODEL, prompt: "hello" }).pipe(Stream.runCollect),
+      service
+        .streamText({ model: ANTHROPIC_MODEL, messages: DEFAULT_MESSAGES })
+        .pipe(Stream.runCollect),
     );
 
     expect(Array.from(chunks)).toEqual(["ok"]);
@@ -153,11 +218,13 @@ describe("makeAiClient", () => {
     expect(mocks.streamText).toHaveBeenCalledWith(
       expect.objectContaining({
         model: { provider: "anthropic", model: "claude-sonnet-4-20250514" },
+        messages: [{ role: "user", content: "hello" }],
+        maxRetries: 0,
       }),
     );
   });
 
-  it("routes openai models to openai provider with openai key", async () => {
+  it("routes openai stream requests to openai provider with openai key", async () => {
     const requestedKeys: string[] = [];
     const service = makeAiClient({
       secretStore: makeSecretStore((key) =>
@@ -177,7 +244,7 @@ describe("makeAiClient", () => {
     }));
 
     const chunks = await Effect.runPromise(
-      service.streamCompletion({ model: OPENAI_MODEL, prompt: "hello" }).pipe(Stream.runCollect),
+      service.streamText({ model: OPENAI_MODEL, messages: DEFAULT_MESSAGES }).pipe(Stream.runCollect),
     );
 
     expect(Array.from(chunks)).toEqual(["ok"]);
@@ -187,96 +254,12 @@ describe("makeAiClient", () => {
     expect(mocks.streamText).toHaveBeenCalledWith(
       expect.objectContaining({
         model: { provider: "openai", model: "gpt-4o" },
+        maxRetries: 0,
       }),
     );
   });
 
-  it("fails with ai_provider_not_supported before fetching secrets", async () => {
-    const getSecret = vi.fn<SecretStore["getSecret"]>((_key) => Effect.succeed("unused"));
-    const service = makeAiClient({
-      secretStore: makeSecretStore(getSecret),
-    });
-
-    const exit = await Effect.runPromiseExit(
-      service
-        .streamCompletion({ model: "mistral:mixtral-8x7b", prompt: "hello" })
-        .pipe(Stream.runCollect),
-    );
-    const failure = getFailure(exit);
-
-    expect(failure).toBeInstanceOf(AiProviderNotSupportedError);
-    if (failure instanceof AiProviderNotSupportedError) {
-      expect(failure.model).toBe("mistral:mixtral-8x7b");
-    }
-    expect(getSecret).not.toHaveBeenCalled();
-    expect(mocks.streamText).not.toHaveBeenCalled();
-    expect(mocks.createAnthropic).not.toHaveBeenCalled();
-    expect(mocks.createOpenAI).not.toHaveBeenCalled();
-  });
-
-  it("fails with ai_provider_not_supported for model ids without colon", async () => {
-    const getSecret = vi.fn<SecretStore["getSecret"]>((_key) => Effect.succeed("unused"));
-    const service = makeAiClient({
-      secretStore: makeSecretStore(getSecret),
-    });
-
-    const exit = await Effect.runPromiseExit(
-      service.streamCompletion({ model: "openai", prompt: "hello" }).pipe(Stream.runCollect),
-    );
-    const failure = getFailure(exit);
-
-    expect(failure).toBeInstanceOf(AiProviderNotSupportedError);
-    if (failure instanceof AiProviderNotSupportedError) {
-      expect(failure.model).toBe("openai");
-    }
-    expect(getSecret).not.toHaveBeenCalled();
-    expect(mocks.streamText).not.toHaveBeenCalled();
-    expect(mocks.createAnthropic).not.toHaveBeenCalled();
-    expect(mocks.createOpenAI).not.toHaveBeenCalled();
-  });
-
-  it("blocks prototype-pollution provider ids like constructor", async () => {
-    const getSecret = vi.fn<SecretStore["getSecret"]>((_key) => Effect.succeed("unused"));
-    const service = makeAiClient({
-      secretStore: makeSecretStore(getSecret),
-    });
-
-    const exit = await Effect.runPromiseExit(
-      service
-        .streamCompletion({ model: "constructor:gpt-4o", prompt: "hello" })
-        .pipe(Stream.runCollect),
-    );
-    const failure = getFailure(exit);
-
-    expect(failure).toBeInstanceOf(AiProviderNotSupportedError);
-    if (failure instanceof AiProviderNotSupportedError) {
-      expect(failure.model).toBe("constructor:gpt-4o");
-    }
-    expect(getSecret).not.toHaveBeenCalled();
-    expect(mocks.streamText).not.toHaveBeenCalled();
-    expect(mocks.createAnthropic).not.toHaveBeenCalled();
-    expect(mocks.createOpenAI).not.toHaveBeenCalled();
-  });
-
-  it("maps missing provider key to ai_key_missing before calling the provider", async () => {
-    const service = makeAiClient({
-      secretStore: makeSecretStore((key) => Effect.fail(new SecretNotFound({ key }))),
-    });
-
-    const exit = await Effect.runPromiseExit(
-      service.streamCompletion({ model: OPENAI_MODEL, prompt: "hello" }).pipe(Stream.runCollect),
-    );
-    const failure = getFailure(exit);
-
-    expect(failure).toBeInstanceOf(AiKeyMissingError);
-    if (failure instanceof AiKeyMissingError) {
-      expect(failure.key).toBe("openai-api-key");
-    }
-    expect(mocks.streamText).not.toHaveBeenCalled();
-    expect(mocks.createOpenAI).not.toHaveBeenCalled();
-  });
-
-  it("generateCompletion routes provider, passes options through, and returns generated text", async () => {
+  it("generateText routes provider, forwards options, and returns structured output", async () => {
     const requestedKeys: string[] = [];
     const service = makeAiClient({
       secretStore: makeSecretStore((key) =>
@@ -287,61 +270,90 @@ describe("makeAiClient", () => {
       ),
     });
 
-    mocks.generateText.mockResolvedValue({ text: "generated text" });
-
-    const text = await Effect.runPromise(
-      service.generateCompletion({
-        model: OPENAI_MODEL,
-        prompt: "hello",
-        systemPrompt: "Be concise",
-        temperature: 0.2,
-        maxTokens: 128,
+    mocks.generateText.mockResolvedValue(
+      makeGenerateResult({
+        text: "generated text",
+        finishReason: "stop",
+        response: { modelId: "gpt-4o" },
+        usage: {
+          inputTokens: 12,
+          inputTokenDetails: {
+            noCacheTokens: 10,
+            cacheReadTokens: 2,
+            cacheWriteTokens: 0,
+          },
+          outputTokens: 8,
+          outputTokenDetails: {
+            textTokens: 7,
+            reasoningTokens: 1,
+          },
+          totalTokens: 20,
+        },
       }),
     );
 
-    expect(text).toBe("generated text");
+    const result = await Effect.runPromise(
+      service.generateText({
+        model: OPENAI_MODEL,
+        messages: DEFAULT_MESSAGES,
+        systemPrompt: "Be concise",
+        temperature: 0.2,
+        maxTokens: 128,
+        maxRetries: 1,
+      }),
+    );
+
+    expect(result).toEqual({
+      text: "generated text",
+      finishReason: "stop",
+      model: "gpt-4o",
+      usage: {
+        inputTokens: 12,
+        outputTokens: 8,
+        totalTokens: 20,
+        reasoningTokens: 1,
+        cachedInputTokens: 2,
+      },
+    });
     expect(requestedKeys).toEqual(["openai-api-key"]);
-    expect(mocks.createOpenAI).toHaveBeenCalledWith({ apiKey: "sk-openai-test" });
-    expect(mocks.createAnthropic).not.toHaveBeenCalled();
     expect(mocks.generateText).toHaveBeenCalledWith({
       model: { provider: "openai", model: "gpt-4o" },
-      prompt: "hello",
+      messages: [{ role: "user", content: "hello" }],
       system: "Be concise",
       temperature: 0.2,
       maxOutputTokens: 128,
+      maxRetries: 1,
       abortSignal: expect.any(AbortSignal),
     });
   });
 
-  it("generateCompletion routes anthropic models and omits optional provider settings when unset", async () => {
-    const requestedKeys: string[] = [];
+  it("generateText defaults maxRetries to 0 and omits optional provider settings when unset", async () => {
     const service = makeAiClient({
-      secretStore: makeSecretStore((key) =>
-        Effect.sync(() => {
-          requestedKeys.push(key);
-          return "sk-anthropic-test";
-        }),
-      ),
+      secretStore: makeSecretStore((_key) => Effect.succeed("sk-anthropic-test")),
     });
 
-    mocks.generateText.mockResolvedValue({ text: "anthropic text" });
-
-    const text = await Effect.runPromise(
-      service.generateCompletion({
-        model: ANTHROPIC_MODEL,
-        prompt: "hello",
+    mocks.generateText.mockResolvedValue(
+      makeGenerateResult({
+        text: "anthropic text",
+        response: { modelId: "claude-sonnet-4-20250514" },
       }),
     );
 
-    expect(text).toBe("anthropic text");
-    expect(requestedKeys).toEqual(["anthropic-api-key"]);
+    const result = await Effect.runPromise(
+      service.generateText({
+        model: ANTHROPIC_MODEL,
+        messages: DEFAULT_MESSAGES,
+      }),
+    );
+
+    expect(result.text).toBe("anthropic text");
     expect(mocks.createAnthropic).toHaveBeenCalledWith({ apiKey: "sk-anthropic-test" });
-    expect(mocks.createOpenAI).not.toHaveBeenCalled();
 
     const call = mocks.generateText.mock.calls[0]?.[0];
     expect(call).toMatchObject({
       model: { provider: "anthropic", model: "claude-sonnet-4-20250514" },
-      prompt: "hello",
+      messages: [{ role: "user", content: "hello" }],
+      maxRetries: 0,
       abortSignal: expect.any(AbortSignal),
     });
     expect(call).not.toHaveProperty("system");
@@ -349,14 +361,45 @@ describe("makeAiClient", () => {
     expect(call).not.toHaveProperty("maxOutputTokens");
   });
 
-  it("generateCompletion fails with ai_provider_not_supported before fetching secrets", async () => {
+  it("forwards text-part arrays in messages", async () => {
+    const service = makeServiceWithKey();
+    mocks.generateText.mockResolvedValue(makeGenerateResult());
+
+    await Effect.runPromise(
+      service.generateText({
+        model: OPENAI_MODEL,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "first" },
+              { type: "text", text: "second" },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const call = mocks.generateText.mock.calls[0]?.[0];
+    expect(call?.messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "first" },
+          { type: "text", text: "second" },
+        ],
+      },
+    ]);
+  });
+
+  it("fails with ai_provider_not_supported before fetching secrets", async () => {
     const getSecret = vi.fn<SecretStore["getSecret"]>((_key) => Effect.succeed("unused"));
     const service = makeAiClient({
       secretStore: makeSecretStore(getSecret),
     });
 
     const exit = await Effect.runPromiseExit(
-      service.generateCompletion({ model: "mistral:mixtral-8x7b", prompt: "hello" }),
+      service.generateText({ model: "mistral:mixtral-8x7b", messages: DEFAULT_MESSAGES }),
     );
     const failure = getFailure(exit);
 
@@ -366,18 +409,35 @@ describe("makeAiClient", () => {
     }
     expect(getSecret).not.toHaveBeenCalled();
     expect(mocks.generateText).not.toHaveBeenCalled();
-    expect(mocks.createAnthropic).not.toHaveBeenCalled();
-    expect(mocks.createOpenAI).not.toHaveBeenCalled();
   });
 
-  it("generateCompletion blocks prototype-pollution provider ids like constructor", async () => {
+  it("fails with ai_provider_not_supported for model ids without colon", async () => {
     const getSecret = vi.fn<SecretStore["getSecret"]>((_key) => Effect.succeed("unused"));
     const service = makeAiClient({
       secretStore: makeSecretStore(getSecret),
     });
 
     const exit = await Effect.runPromiseExit(
-      service.generateCompletion({ model: "constructor:gpt-4o", prompt: "hello" }),
+      service.streamText({ model: "openai", messages: DEFAULT_MESSAGES }).pipe(Stream.runCollect),
+    );
+    const failure = getFailure(exit);
+
+    expect(failure).toBeInstanceOf(AiProviderNotSupportedError);
+    if (failure instanceof AiProviderNotSupportedError) {
+      expect(failure.model).toBe("openai");
+    }
+    expect(getSecret).not.toHaveBeenCalled();
+    expect(mocks.streamText).not.toHaveBeenCalled();
+  });
+
+  it("blocks prototype-pollution provider ids like constructor", async () => {
+    const getSecret = vi.fn<SecretStore["getSecret"]>((_key) => Effect.succeed("unused"));
+    const service = makeAiClient({
+      secretStore: makeSecretStore(getSecret),
+    });
+
+    const exit = await Effect.runPromiseExit(
+      service.generateText({ model: "constructor:gpt-4o", messages: DEFAULT_MESSAGES }),
     );
     const failure = getFailure(exit);
 
@@ -387,17 +447,15 @@ describe("makeAiClient", () => {
     }
     expect(getSecret).not.toHaveBeenCalled();
     expect(mocks.generateText).not.toHaveBeenCalled();
-    expect(mocks.createAnthropic).not.toHaveBeenCalled();
-    expect(mocks.createOpenAI).not.toHaveBeenCalled();
   });
 
-  it("generateCompletion maps missing provider key to ai_key_missing before calling provider", async () => {
+  it("maps missing provider key to ai_key_missing before calling provider", async () => {
     const service = makeAiClient({
       secretStore: makeSecretStore((key) => Effect.fail(new SecretNotFound({ key }))),
     });
 
     const exit = await Effect.runPromiseExit(
-      service.generateCompletion({ model: OPENAI_MODEL, prompt: "hello" }),
+      service.generateText({ model: OPENAI_MODEL, messages: DEFAULT_MESSAGES }),
     );
     const failure = getFailure(exit);
 
@@ -409,7 +467,7 @@ describe("makeAiClient", () => {
     expect(mocks.createOpenAI).not.toHaveBeenCalled();
   });
 
-  it("generateCompletion maps SecretStoreUnavailable to ai_completion_error", async () => {
+  it("maps SecretStoreUnavailable to ai_completion_error", async () => {
     const service = makeAiClient({
       secretStore: makeSecretStore((_key) =>
         Effect.fail(new SecretStoreUnavailable({ message: "Secret store is unavailable." })),
@@ -417,7 +475,7 @@ describe("makeAiClient", () => {
     });
 
     const exit = await Effect.runPromiseExit(
-      service.generateCompletion({ model: OPENAI_MODEL, prompt: "hello" }),
+      service.generateText({ model: OPENAI_MODEL, messages: DEFAULT_MESSAGES }),
     );
     const failure = getFailure(exit);
 
@@ -428,7 +486,7 @@ describe("makeAiClient", () => {
     expect(mocks.generateText).not.toHaveBeenCalled();
   });
 
-  it("generateCompletion maps APICallError 429 to ai_rate_limit and parses retry-after", async () => {
+  it("maps APICallError 429 to ai_rate_limit and parses retry-after", async () => {
     mocks.generateText.mockRejectedValue(
       new mocks.APICallError({
         message: "rate limited",
@@ -439,7 +497,7 @@ describe("makeAiClient", () => {
 
     const service = makeServiceWithKey();
     const exit = await Effect.runPromiseExit(
-      service.generateCompletion({ model: OPENAI_MODEL, prompt: "hello" }),
+      service.generateText({ model: OPENAI_MODEL, messages: DEFAULT_MESSAGES }),
     );
     const failure = getFailure(exit);
 
@@ -450,7 +508,31 @@ describe("makeAiClient", () => {
     }
   });
 
-  it("generateCompletion maps non-429 APICallError to ai_completion_error", async () => {
+  it("maps RetryError(lastError=429) to ai_rate_limit", async () => {
+    mocks.generateText.mockRejectedValue(
+      new mocks.RetryError(
+        new mocks.APICallError({
+          message: "still rate limited",
+          statusCode: 429,
+          responseHeaders: { "Retry-After": "3" },
+        }),
+      ),
+    );
+
+    const service = makeServiceWithKey();
+    const exit = await Effect.runPromiseExit(
+      service.generateText({ model: OPENAI_MODEL, messages: DEFAULT_MESSAGES }),
+    );
+    const failure = getFailure(exit);
+
+    expect(failure).toBeInstanceOf(AiRateLimitError);
+    if (failure instanceof AiRateLimitError) {
+      expect(failure.retryAfterMs).toBe(3000);
+      expect(failure.message).toBe("still rate limited");
+    }
+  });
+
+  it("maps non-429 APICallError to ai_completion_error", async () => {
     mocks.generateText.mockRejectedValue(
       new mocks.APICallError({
         message: "upstream failed",
@@ -460,7 +542,7 @@ describe("makeAiClient", () => {
 
     const service = makeServiceWithKey();
     const exit = await Effect.runPromiseExit(
-      service.generateCompletion({ model: OPENAI_MODEL, prompt: "hello" }),
+      service.generateText({ model: OPENAI_MODEL, messages: DEFAULT_MESSAGES }),
     );
     const failure = getFailure(exit);
 
@@ -470,12 +552,12 @@ describe("makeAiClient", () => {
     }
   });
 
-  it("generateCompletion maps network TypeError to ai_offline", async () => {
+  it("maps network TypeError to ai_offline", async () => {
     mocks.generateText.mockRejectedValue(new TypeError("fetch failed"));
 
     const service = makeServiceWithKey();
     const exit = await Effect.runPromiseExit(
-      service.generateCompletion({ model: ANTHROPIC_MODEL, prompt: "hello" }),
+      service.generateText({ model: ANTHROPIC_MODEL, messages: DEFAULT_MESSAGES }),
     );
     const failure = getFailure(exit);
 
@@ -485,7 +567,26 @@ describe("makeAiClient", () => {
     }
   });
 
-  it("aborts generateCompletion provider request when effect fiber is interrupted", async () => {
+  it("fails fast on empty messages before provider invocation", async () => {
+    const service = makeServiceWithKey();
+
+    const exit = await Effect.runPromiseExit(
+      service.generateText({
+        model: OPENAI_MODEL,
+        messages: [],
+      }),
+    );
+    const failure = getFailure(exit);
+
+    expect(failure).toBeInstanceOf(AiCompletionError);
+    if (failure instanceof AiCompletionError) {
+      expect(failure.message).toContain("messages must contain at least one entry");
+    }
+    expect(mocks.generateText).not.toHaveBeenCalled();
+    expect(mocks.streamText).not.toHaveBeenCalled();
+  });
+
+  it("aborts generateText provider request when effect fiber is interrupted", async () => {
     let capturedSignal: AbortSignal | undefined;
 
     mocks.generateText.mockImplementation(async (input) => {
@@ -498,12 +599,16 @@ describe("makeAiClient", () => {
 
         input.abortSignal.addEventListener("abort", () => resolve(), { once: true });
       });
-      return { text: "unreachable" };
+
+      return makeGenerateResult();
     });
 
     const service = makeServiceWithKey();
     const fiber = Effect.runFork(
-      service.generateCompletion({ model: ANTHROPIC_MODEL, prompt: "hello" }),
+      service.generateText({
+        model: ANTHROPIC_MODEL,
+        messages: DEFAULT_MESSAGES,
+      }),
     );
 
     await vi.waitFor(() => {
@@ -515,10 +620,64 @@ describe("makeAiClient", () => {
     expect(capturedSignal?.aborted).toBe(true);
   });
 
-  it("maps APICallError 429 to ai_rate_limit and parses retry-after", async () => {
+  it("streamText emits deltas in order and forwards explicit generation options", async () => {
     mocks.streamText.mockImplementation(() => ({
       textStream: {
-        // async generator required to match textStream's AsyncIterable interface
+        async *[Symbol.asyncIterator]() {
+          yield "hello";
+          yield "world";
+        },
+      },
+    }));
+
+    const service = makeServiceWithKey();
+    const chunks = await Effect.runPromise(
+      service
+        .streamText({
+          model: OPENAI_MODEL,
+          messages: DEFAULT_MESSAGES,
+          systemPrompt: "stream",
+          temperature: 0.1,
+          maxTokens: 64,
+          maxRetries: 4,
+        })
+        .pipe(Stream.runCollect),
+    );
+
+    expect(Array.from(chunks)).toEqual(["hello", "world"]);
+    expect(mocks.streamText).toHaveBeenCalledWith({
+      model: { provider: "openai", model: "gpt-4o" },
+      messages: [{ role: "user", content: "hello" }],
+      system: "stream",
+      temperature: 0.1,
+      maxOutputTokens: 64,
+      maxRetries: 4,
+      abortSignal: expect.any(AbortSignal),
+    });
+  });
+
+  it("streamText defaults maxRetries to 0", async () => {
+    mocks.streamText.mockImplementation(() => ({
+      textStream: {
+        async *[Symbol.asyncIterator]() {
+          yield "token";
+        },
+      },
+    }));
+
+    const service = makeServiceWithKey();
+    await Effect.runPromise(
+      service.streamText({ model: ANTHROPIC_MODEL, messages: DEFAULT_MESSAGES }).pipe(Stream.runCollect),
+    );
+
+    const call = mocks.streamText.mock.calls[0]?.[0];
+    expect(call?.maxRetries).toBe(0);
+  });
+
+  it("streamText preserves typed stream errors", async () => {
+    const service = makeServiceWithKey();
+    mocks.streamText.mockImplementation(() => ({
+      textStream: {
         async *[Symbol.asyncIterator]() {
           yield* [];
           throw new mocks.APICallError({
@@ -530,9 +689,8 @@ describe("makeAiClient", () => {
       },
     }));
 
-    const service = makeServiceWithKey();
     const exit = await Effect.runPromiseExit(
-      service.streamCompletion({ model: OPENAI_MODEL, prompt: "hello" }).pipe(Stream.runCollect),
+      service.streamText({ model: OPENAI_MODEL, messages: DEFAULT_MESSAGES }).pipe(Stream.runCollect),
     );
     const failure = getFailure(exit);
 
@@ -543,10 +701,10 @@ describe("makeAiClient", () => {
     }
   });
 
-  it("maps network TypeError to ai_offline", async () => {
+  it("streamText maps network TypeError to ai_offline", async () => {
+    const service = makeServiceWithKey();
     mocks.streamText.mockImplementation(() => ({
       textStream: {
-        // async generator required to match textStream's AsyncIterable interface
         async *[Symbol.asyncIterator]() {
           yield* [];
           throw new TypeError("fetch failed");
@@ -554,9 +712,10 @@ describe("makeAiClient", () => {
       },
     }));
 
-    const service = makeServiceWithKey();
     const exit = await Effect.runPromiseExit(
-      service.streamCompletion({ model: ANTHROPIC_MODEL, prompt: "hello" }).pipe(Stream.runCollect),
+      service
+        .streamText({ model: ANTHROPIC_MODEL, messages: DEFAULT_MESSAGES })
+        .pipe(Stream.runCollect),
     );
     const failure = getFailure(exit);
 
@@ -571,22 +730,21 @@ describe("makeAiClient", () => {
 
     mocks.streamText.mockImplementation((input) => {
       capturedSignal = input.abortSignal;
-      return {
-        textStream: {
-          // async generator required to match textStream's AsyncIterable interface
-          async *[Symbol.asyncIterator]() {
-            yield* [];
-            while (!(input.abortSignal?.aborted ?? true)) {
-              await new Promise((resolve) => setTimeout(resolve, 5));
-            }
-          },
+        return {
+          textStream: {
+            async *[Symbol.asyncIterator]() {
+              yield* [];
+              while (!(input.abortSignal?.aborted ?? true)) {
+                await new Promise((resolve) => setTimeout(resolve, 5));
+              }
+            },
         },
       };
     });
 
     const service = makeServiceWithKey();
     const fiber = Effect.runFork(
-      service.streamCompletion({ model: ANTHROPIC_MODEL, prompt: "hello" }).pipe(Stream.runDrain),
+      service.streamText({ model: ANTHROPIC_MODEL, messages: DEFAULT_MESSAGES }).pipe(Stream.runDrain),
     );
 
     await vi.waitFor(() => {
@@ -596,62 +754,5 @@ describe("makeAiClient", () => {
 
     await Effect.runPromise(Fiber.interrupt(fiber));
     expect(capturedSignal?.aborted).toBe(true);
-  });
-
-  it("stops token pull loop when downstream ends (emit.single returns false)", async () => {
-    const pulled: string[] = [];
-
-    mocks.streamText.mockImplementation(() => ({
-      textStream: {
-        async *[Symbol.asyncIterator]() {
-          for (const token of ["a", "b", "c"]) {
-            pulled.push(token);
-            yield token;
-            await new Promise((resolve) => setTimeout(resolve, 2));
-          }
-        },
-      },
-    }));
-
-    const service = makeServiceWithKey();
-    const firstChunk = await Effect.runPromise(
-      service
-        .streamCompletion({ model: ANTHROPIC_MODEL, prompt: "hello" })
-        .pipe(Stream.take(1), Stream.runCollect),
-    );
-
-    expect(Array.from(firstChunk)).toEqual(["a"]);
-    expect(pulled).not.toContain("c");
-  });
-
-  it("surfaces mid-stream failures as ai_completion_error after partial output", async () => {
-    const deltas: string[] = [];
-
-    mocks.streamText.mockImplementation(() => ({
-      textStream: {
-        async *[Symbol.asyncIterator]() {
-          yield "first";
-          throw new Error("boom");
-        },
-      },
-    }));
-
-    const service = makeServiceWithKey();
-    const exit = await Effect.runPromiseExit(
-      service.streamCompletion({ model: ANTHROPIC_MODEL, prompt: "hello" }).pipe(
-        Stream.runForEach((delta) =>
-          Effect.sync(() => {
-            deltas.push(delta);
-          }),
-        ),
-      ),
-    );
-    const failure = getFailure(exit);
-
-    expect(deltas).toEqual(["first"]);
-    expect(failure).toBeInstanceOf(AiCompletionError);
-    if (failure instanceof AiCompletionError) {
-      expect(failure.message).toBe("boom");
-    }
   });
 });

@@ -4,18 +4,23 @@ import type { Implementations, StreamImplementations } from "electron-effect-rpc
 import { AiClientService } from "@main/di";
 import type { AppContract } from "@shared/rpc/contracts";
 
-type AiHandlerKeys = "GenerateCompletion";
-type AiStreamHandlerKeys = "StreamCompletion";
+type AiHandlerKeys = "AiGenerateText";
+type AiStreamHandlerKeys = "AiStreamText";
 
 export const createAiHandlers = () =>
   Effect.gen(function* () {
     const aiClient = yield* AiClientService;
 
     const handlers: Pick<Implementations<AppContract, never>, AiHandlerKeys> = {
-      GenerateCompletion: ({ model, prompt, systemPrompt, temperature, maxTokens }) =>
-        aiClient
-          .generateCompletion({ model, prompt, systemPrompt, temperature, maxTokens })
-          .pipe(Effect.map((text) => ({ text }))),
+      AiGenerateText: ({ model, messages, systemPrompt, temperature, maxTokens, maxRetries }) =>
+        aiClient.generateText({
+          model,
+          messages,
+          systemPrompt,
+          temperature,
+          maxTokens,
+          maxRetries,
+        }),
     };
 
     return handlers;
@@ -26,9 +31,16 @@ export const createAiStreamHandlers = () =>
     const aiClient = yield* AiClientService;
 
     const streamHandlers: Pick<StreamImplementations<AppContract, never>, AiStreamHandlerKeys> = {
-      StreamCompletion: ({ model, prompt, systemPrompt }) =>
+      AiStreamText: ({ model, messages, systemPrompt, temperature, maxTokens, maxRetries }) =>
         aiClient
-          .streamCompletion({ model, prompt, systemPrompt })
+          .streamText({
+            model,
+            messages,
+            systemPrompt,
+            temperature,
+            maxTokens,
+            maxRetries,
+          })
           .pipe(Stream.map((delta) => ({ delta }))),
     };
 

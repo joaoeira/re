@@ -1,6 +1,6 @@
 import { defineContract } from "electron-effect-rpc/contract";
 
-import { GenerateCompletion, StreamCompletion } from "./contracts/ai";
+import { AiGenerateText, AiStreamText } from "./contracts/ai";
 import {
   AppendItem,
   CardEdited,
@@ -45,7 +45,7 @@ export * from "./contracts/workspace";
 
 export const appContract = defineContract({
   methods: [
-    GenerateCompletion,
+    AiGenerateText,
     GetBootstrapData,
     ParseDeckPreview,
     ScanDecks,
@@ -75,7 +75,7 @@ export const appContract = defineContract({
     ForgeExtractText,
   ] as const,
   events: [WorkspaceSnapshotChanged, CardEdited, CardsDeleted, EditorNavigateRequest] as const,
-  streamMethods: [StreamCompletion] as const,
+  streamMethods: [AiStreamText] as const,
 });
 
 export type AppContract = typeof appContract;
