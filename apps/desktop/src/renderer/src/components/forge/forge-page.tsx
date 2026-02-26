@@ -135,7 +135,7 @@ function ForgePageContent() {
               variant="outline"
               size="sm"
               onClick={actions.beginExtraction}
-              disabled={extractState.status === "extracting"}
+              disabled={extractState.status === "extracting" || previewState.status !== "ready"}
               className="gap-2 hover:border-foreground disabled:opacity-30"
             >
               <span>{extractState.status === "extracting" ? "Extracting..." : "Begin Extraction"}</span>
