@@ -190,28 +190,42 @@ The problem is specifically the classification variant: a function that receives
 
 ## SQLite repository runtime boundary
 
-When a repository uses `@effect/sql` with a `ManagedRuntime`, centralize the runtime bridge in one helper module instead of re-implementing it per repository.
+Repository methods use `@effect/sql`, which requires `SqlClient` in the Effect `R` channel. But repository public APIs must be `R = never` because callers (IPC handlers, lifecycle callbacks) are plain JS/Promise boundaries with no Effect runtime context. The bridge between these two worlds — running a `SqlClient`-dependent effect through a `ManagedRuntime` while preserving typed domain errors — is already solved in `apps/desktop/src/main/sqlite/runtime-runner.ts`. Use it directly — do not rewrite or wrap it.
 
-### Why
+### What exists
 
-- Electron entrypoints (IPC handlers, timers, lifecycle callbacks) are Promise/JS boundaries.
-- SQL effects usually require `SqlClient` in `R`, but repository public APIs should be `R = never`.
-- Re-deriving this bridge in each repository leads to inconsistent error semantics.
+`runtime-runner.ts` exports two functions:
 
-### Pattern
+- `runSqlInRuntime({ runtime, effect })` — returns `Effect<A, unknown>`. Use when broad runtime failures are acceptable (e.g. analytics with local logging + fallback).
+- `runSqlInRuntimeOrMapRuntimeError({ runtime, effect, mapRuntimeError })` — returns `Effect<A, E | E2>`. Use when the repository needs a specific runtime-boundary error type (e.g. `ForgeSessionRepositoryError`).
 
-- Use `apps/desktop/src/main/sqlite/runtime-runner.ts` as the single runtime bridge.
-- Run inner effects via `runtime.runPromise(Effect.either(effect))`.
-- Flatten `Either` back into Effect (`Right -> succeed`, `Left -> fail`) so typed domain errors are preserved.
-- Map only runtime-level Promise rejections (defects / setup failures) at the boundary when needed.
+Both preserve typed domain errors via `Effect.either` + `flattenEither` internally.
+
+### How to use in a repository
+
+Each repository should define **one** local `runSql` that closes over its `runtime` and `mapRuntimeError`:
+
+```ts
+const runSql = <A, E>(
+  operation: string,
+  effect: Effect.Effect<A, E, SqlClient.SqlClient>,
+): Effect.Effect<A, E | MyRepositoryError> =>
+  runSqlInRuntimeOrMapRuntimeError({
+    runtime,
+    effect,
+    mapRuntimeError: (error) =>
+      new MyRepositoryError({ operation, message: toErrorMessage(error) }),
+  });
+```
+
+Then call `runSql(operationName, effect)` at every site. TypeScript infers the correct error union from the `effect` parameter — no additional type-narrowing wrappers (e.g. `runSqlRead`, `runSqlWrite`) are needed or wanted.
 
 ### Rules
 
+- **Do not** create wrapper functions on top of `runSql` that only narrow the error type — `runSql` is already generic over `E` and inference handles this.
 - **Do not** classify repository errors with `instanceof` after `runPromise` / `tryPromise`.
-- **Do not** duplicate `runSql` wrappers in each repository.
-- **Do** keep SQL-operation error wrapping local with uniform `Effect.mapError(...)` when mapping all failures to one repository error.
-- **Do** use `runSqlInRuntimeOrMapRuntimeError` when the repository needs a specific runtime-boundary error type (e.g. `ForgeSessionRepositoryError`).
-- **Do** use `runSqlInRuntime` when broad runtime-boundary failures are acceptable to callers (`Effect.Effect<A, unknown>`), such as analytics with local logging + fallback behavior.
+- **Do** keep SQL-operation error wrapping local with uniform `Effect.mapError(...)` when mapping all SQL failures to one repository error type.
+- **Do** use `runSqlInRuntime` (not `runSqlInRuntimeOrMapRuntimeError`) when broad runtime failures are acceptable to callers.
 
 ## XState stores with React context
 
