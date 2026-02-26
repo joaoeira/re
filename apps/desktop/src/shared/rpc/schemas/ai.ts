@@ -35,7 +35,7 @@ export class AiProviderNotSupportedError extends Schema.TaggedError<AiProviderNo
 
 export const ModelIdSchema = Schema.String.pipe(Schema.pattern(/^[a-z][\w-]*:.+$/));
 
-export const AiStreamErrorSchema = Schema.Union(
+const AiClientErrorSchema = Schema.Union(
   AiCompletionError,
   AiRateLimitError,
   AiKeyMissingError,
@@ -43,7 +43,11 @@ export const AiStreamErrorSchema = Schema.Union(
   AiProviderNotSupportedError,
 );
 
+export const AiStreamErrorSchema = AiClientErrorSchema;
 export type AiStreamError = typeof AiStreamErrorSchema.Type;
+
+export const AiGenerateCompletionErrorSchema = AiClientErrorSchema;
+export type AiGenerateCompletionError = typeof AiGenerateCompletionErrorSchema.Type;
 
 export const AiStreamChunkSchema = Schema.Struct({
   delta: Schema.String,

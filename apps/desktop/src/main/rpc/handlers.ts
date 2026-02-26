@@ -4,7 +4,7 @@ import type { Implementations, StreamImplementations } from "electron-effect-rpc
 import { AppRpcHandlersService } from "@main/di";
 import type { AppContract } from "@shared/rpc/contracts";
 
-import { createAiStreamHandlers } from "./handlers/ai";
+import { createAiHandlers, createAiStreamHandlers } from "./handlers/ai";
 import { createEditorHandlers } from "./handlers/editor";
 import { createForgeHandlers } from "./handlers/forge";
 import { createReviewHandlers } from "./handlers/review";
@@ -12,6 +12,7 @@ import { createSecretHandlers } from "./handlers/secret";
 import { createWorkspaceHandlers } from "./handlers/workspace";
 
 export const makeAppRpcHandlersEffect = Effect.gen(function* () {
+  const aiHandlers = yield* createAiHandlers();
   const workspaceHandlers = yield* createWorkspaceHandlers();
   const reviewHandlers = yield* createReviewHandlers();
   const editorHandlers = yield* createEditorHandlers();
@@ -20,6 +21,7 @@ export const makeAppRpcHandlersEffect = Effect.gen(function* () {
   const aiStreamHandlers = yield* createAiStreamHandlers();
 
   const handlers: Implementations<AppContract, never> = {
+    ...aiHandlers,
     ...workspaceHandlers,
     ...reviewHandlers,
     ...editorHandlers,

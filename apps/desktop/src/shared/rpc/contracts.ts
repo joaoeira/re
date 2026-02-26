@@ -7,7 +7,12 @@ import {
   SnapshotWorkspaceResultSchema,
 } from "@re/workspace";
 import { defineContract, event, rpc, streamRpc } from "electron-effect-rpc/contract";
-import { AiStreamChunkSchema, AiStreamErrorSchema, ModelIdSchema } from "@shared/rpc/schemas/ai";
+import {
+  AiGenerateCompletionErrorSchema,
+  AiStreamChunkSchema,
+  AiStreamErrorSchema,
+  ModelIdSchema,
+} from "@shared/rpc/schemas/ai";
 import { EditorOperationError } from "@shared/rpc/schemas/editor";
 import {
   ForgeCreateSessionErrorSchema,
@@ -67,6 +72,21 @@ export const StreamCompletion = streamRpc(
   }),
   AiStreamChunkSchema,
   AiStreamErrorSchema,
+);
+
+export const GenerateCompletion = rpc(
+  "GenerateCompletion",
+  Schema.Struct({
+    model: ModelIdSchema,
+    prompt: Schema.String,
+    systemPrompt: Schema.optional(Schema.String),
+    temperature: Schema.optional(Schema.Number.pipe(Schema.nonNegative())),
+    maxTokens: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.positive())),
+  }),
+  Schema.Struct({
+    text: Schema.String,
+  }),
+  AiGenerateCompletionErrorSchema,
 );
 
 export const GetBootstrapData = rpc(
@@ -393,6 +413,7 @@ export const EditorNavigateRequest = event("EditorNavigateRequest", EditorWindow
 
 export const appContract = defineContract({
   methods: [
+    GenerateCompletion,
     GetBootstrapData,
     ParseDeckPreview,
     ScanDecks,
