@@ -83,6 +83,8 @@ const createSuccessInvoke = () =>
           sessionId,
           textLength: 23,
           preview: "sample extracted preview",
+          totalPages: 4,
+          chunkCount: 2,
         },
       };
     }
@@ -116,7 +118,8 @@ describe("ForgePage", () => {
     await uploadPdf();
     await userEvent.click(screen.getByText("Begin Extraction"));
 
-    await expect.element(screen.getByText(/Extraction complete/)).toBeVisible();
+    await expect.element(screen.getByText("Step 2: Topic extraction")).toBeVisible();
+    await expect.element(screen.getByText("Topic extraction is next.")).toBeVisible();
 
     const forgeCalls = invoke.mock.calls
       .map(([method]: unknown[]) => method)
@@ -125,7 +128,7 @@ describe("ForgePage", () => {
     expect(forgeCalls).toEqual(["ForgeCreateSession", "ForgeExtractText"]);
   });
 
-  it("runs the same RPC sequence for Cmd+Enter and Ctrl+Enter", async () => {
+  it("runs the same RPC sequence for Cmd+Enter", async () => {
     const invoke = createSuccessInvoke();
     mockDesktopGlobals(invoke);
 
@@ -140,7 +143,21 @@ describe("ForgePage", () => {
       }),
     );
 
-    await expect.element(screen.getByText(/Extraction complete/)).toBeVisible();
+    await expect.element(screen.getByText("Step 2: Topic extraction")).toBeVisible();
+
+    const forgeCalls = invoke.mock.calls
+      .map(([method]: unknown[]) => method)
+      .filter((method) => method === "ForgeCreateSession" || method === "ForgeExtractText");
+
+    expect(forgeCalls).toEqual(["ForgeCreateSession", "ForgeExtractText"]);
+  });
+
+  it("runs the same RPC sequence for Ctrl+Enter", async () => {
+    const invoke = createSuccessInvoke();
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderForgePage();
+    await uploadPdf();
 
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -150,21 +167,16 @@ describe("ForgePage", () => {
       }),
     );
 
-    await vi.waitFor(() => {
-      const forgeCalls = invoke.mock.calls
-        .map(([method]: unknown[]) => method)
-        .filter((method) => method === "ForgeCreateSession" || method === "ForgeExtractText");
+    await expect.element(screen.getByText("Step 2: Topic extraction")).toBeVisible();
 
-      expect(forgeCalls).toEqual([
-        "ForgeCreateSession",
-        "ForgeExtractText",
-        "ForgeCreateSession",
-        "ForgeExtractText",
-      ]);
-    });
+    const forgeCalls = invoke.mock.calls
+      .map(([method]: unknown[]) => method)
+      .filter((method) => method === "ForgeCreateSession" || method === "ForgeExtractText");
+
+    expect(forgeCalls).toEqual(["ForgeCreateSession", "ForgeExtractText"]);
   });
 
-  it("renders success and error states from extraction outcomes", async () => {
+  it("renders typed extraction errors inline", async () => {
     const invoke = vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
       if (method === "ForgeCreateSession") {
         const sourceFilePath = (payload as { sourceFilePath: string }).sourceFilePath;
@@ -191,10 +203,11 @@ describe("ForgePage", () => {
         return {
           type: "failure",
           error: {
-            tag: "forge_operation_error",
+            tag: "session_busy",
             data: {
-              _tag: "forge_operation_error",
-              message: "Extraction failed in test",
+              _tag: "session_busy",
+              sessionId: 11,
+              status: "extracting",
             },
           },
         };
@@ -211,6 +224,6 @@ describe("ForgePage", () => {
 
     await expect.element(screen.getByText(/existing session id: 5/)).toBeVisible();
     await expect.element(screen.getByRole("alert")).toBeVisible();
-    await expect.element(screen.getByText("Extraction failed in test")).toBeVisible();
+    await expect.element(screen.getByText("Session 11 is currently extracting.")).toBeVisible();
   });
 });

@@ -20,6 +20,7 @@ export {
   DeckWriteCoordinatorService,
   DeckWriteCoordinatorServiceLive,
 } from "./services/DeckWriteCoordinatorService";
+export { ChunkService, ChunkServiceLive } from "./services/ChunkService";
 export {
   ForgeSessionRepositoryService,
   ForgeSessionRepositoryServiceLive,

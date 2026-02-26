@@ -9,13 +9,17 @@ import { useIpc } from "@/lib/ipc-context";
 type ExtractState =
   | { readonly status: "idle" }
   | { readonly status: "extracting" }
-  | {
-      readonly status: "success";
-      readonly sessionId: number;
-      readonly textLength: number;
-      readonly preview: string;
-    }
   | { readonly status: "error"; readonly message: string };
+
+type ExtractSummary = {
+  readonly sessionId: number;
+  readonly textLength: number;
+  readonly preview: string;
+  readonly totalPages: number;
+  readonly chunkCount: number;
+};
+
+type ForgeStep = "source" | "topics";
 
 type SelectedPdf = {
   readonly fileName: string;
@@ -34,16 +38,20 @@ const toRpcDefectMessage = (error: RpcDefectError): string =>
 
 export function ForgePage() {
   const ipc = useIpc();
+  const [currentStep, setCurrentStep] = useState<ForgeStep>("source");
   const [selectedPdf, setSelectedPdf] = useState<SelectedPdf | null>(null);
   const [duplicateOfSessionId, setDuplicateOfSessionId] = useState<number | null>(null);
   const [extractState, setExtractState] = useState<ExtractState>({ status: "idle" });
+  const [extractSummary, setExtractSummary] = useState<ExtractSummary | null>(null);
   const extractionTokenRef = useRef(0);
 
   const handleFileSelected = useCallback((file: File | null) => {
     if (!file) {
       extractionTokenRef.current += 1;
+      setCurrentStep("source");
       setSelectedPdf(null);
       setDuplicateOfSessionId(null);
+      setExtractSummary(null);
       setExtractState({ status: "idle" });
       return;
     }
@@ -52,8 +60,10 @@ export function ForgePage() {
 
     if (sourceFilePath.length === 0) {
       extractionTokenRef.current += 1;
+      setCurrentStep("source");
       setSelectedPdf(null);
       setDuplicateOfSessionId(null);
+      setExtractSummary(null);
       setExtractState({
         status: "error",
         message: "Unable to resolve a local file path for the selected PDF.",
@@ -62,11 +72,13 @@ export function ForgePage() {
     }
 
     extractionTokenRef.current += 1;
+    setCurrentStep("source");
     setSelectedPdf({
       fileName: file.name,
       sourceFilePath,
     });
     setDuplicateOfSessionId(null);
+    setExtractSummary(null);
     setExtractState({ status: "idle" });
   }, []);
 
@@ -100,32 +112,61 @@ export function ForgePage() {
           Effect.tap((extracted) =>
             Effect.sync(() => {
               if (extractionTokenRef.current !== extractionToken) return;
-              setExtractState({
-                status: "success",
-                sessionId: extracted.sessionId,
-                textLength: extracted.textLength,
-                preview: extracted.preview,
-              });
+              setExtractSummary(extracted);
+              setExtractState({ status: "idle" });
+              setCurrentStep("topics");
             }),
           ),
-          Effect.catchTag("session_not_found", (error) =>
-            Effect.sync(() => {
-              if (extractionTokenRef.current !== extractionToken) return;
-              setExtractState({
-                status: "error",
-                message: `Forge session was not found (id: ${error.sessionId}).`,
-              });
-            }),
-          ),
-          Effect.catchTag("forge_operation_error", (error) =>
-            Effect.sync(() => {
-              if (extractionTokenRef.current !== extractionToken) return;
-              setExtractState({
-                status: "error",
-                message: error.message,
-              });
-            }),
-          ),
+          Effect.catchTags({
+            session_not_found: (error) =>
+              Effect.sync(() => {
+                if (extractionTokenRef.current !== extractionToken) return;
+                setExtractState({
+                  status: "error",
+                  message: `Forge session was not found (id: ${error.sessionId}).`,
+                });
+              }),
+            already_chunked: (error) =>
+              Effect.sync(() => {
+                if (extractionTokenRef.current !== extractionToken) return;
+                setExtractState({
+                  status: "error",
+                  message: error.message,
+                });
+              }),
+            session_busy: (error) =>
+              Effect.sync(() => {
+                if (extractionTokenRef.current !== extractionToken) return;
+                setExtractState({
+                  status: "error",
+                  message: `Session ${error.sessionId} is currently ${error.status}.`,
+                });
+              }),
+            empty_text: (error) =>
+              Effect.sync(() => {
+                if (extractionTokenRef.current !== extractionToken) return;
+                setExtractState({
+                  status: "error",
+                  message: error.message,
+                });
+              }),
+            pdf_extraction_error: (error) =>
+              Effect.sync(() => {
+                if (extractionTokenRef.current !== extractionToken) return;
+                setExtractState({
+                  status: "error",
+                  message: error.message,
+                });
+              }),
+            forge_operation_error: (error) =>
+              Effect.sync(() => {
+                if (extractionTokenRef.current !== extractionToken) return;
+                setExtractState({
+                  status: "error",
+                  message: error.message,
+                });
+              }),
+          }),
           Effect.catchTag("RpcDefectError", (rpcDefect) =>
             Effect.sync(() => {
               if (extractionTokenRef.current !== extractionToken) return;
@@ -149,7 +190,7 @@ export function ForgePage() {
   }, [extractState.status, ipc.client, selectedPdf]);
 
   useEffect(() => {
-    if (!selectedPdf) {
+    if (!selectedPdf || currentStep !== "source") {
       return;
     }
 
@@ -165,52 +206,65 @@ export function ForgePage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [beginExtraction, selectedPdf]);
+  }, [beginExtraction, currentStep, selectedPdf]);
 
   return (
     <main className="flex flex-1 flex-col bg-background">
       <div className="flex-1 overflow-auto px-6 py-8">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-          <PdfUploadZone onFileSelected={handleFileSelected} />
+          {currentStep === "source" ? (
+            <>
+              <PdfUploadZone onFileSelected={handleFileSelected} />
 
-          {selectedPdf ? (
-            <p className="text-xs text-muted-foreground">Selected: {selectedPdf.fileName}</p>
+              {selectedPdf ? (
+                <p className="text-xs text-muted-foreground">Selected: {selectedPdf.fileName}</p>
+              ) : null}
+
+              {duplicateOfSessionId !== null ? (
+                <p className="text-xs text-amber-600">
+                  Duplicate source detected. Continuing with new session (existing session id:{" "}
+                  {duplicateOfSessionId}).
+                </p>
+              ) : null}
+
+              {extractState.status === "extracting" ? (
+                <p className="text-xs text-muted-foreground">
+                  Extracting text from the selected PDF...
+                </p>
+              ) : null}
+
+              {extractState.status === "error" ? (
+                <p role="alert" className="text-xs text-destructive">
+                  {extractState.message}
+                </p>
+              ) : null}
+            </>
           ) : null}
 
-          {duplicateOfSessionId !== null ? (
-            <p className="text-xs text-amber-600">
-              Duplicate source detected. Continuing with new session (existing session id:{" "}
-              {duplicateOfSessionId}).
-            </p>
-          ) : null}
-
-          {extractState.status === "extracting" ? (
-            <p className="text-xs text-muted-foreground">
-              Extracting text from the selected PDF...
-            </p>
-          ) : null}
-
-          {extractState.status === "success" ? (
-            <section className="space-y-2 border border-border bg-muted/20 p-3">
-              <p className="text-xs text-foreground/85">
-                Extraction complete for session {extractState.sessionId}. Characters extracted:{" "}
-                {extractState.textLength}.
-              </p>
-              <pre className="max-h-60 overflow-auto border border-border bg-background p-2 text-[11px] leading-relaxed whitespace-pre-wrap">
-                {extractState.preview}
-              </pre>
+          {currentStep === "topics" && extractSummary ? (
+            <section className="space-y-3 border border-border bg-muted/20 p-4">
+              <p className="text-sm font-medium text-foreground/90">Step 2: Topic extraction</p>
+              <p className="text-xs text-muted-foreground">Topic extraction is next.</p>
+              <dl className="grid grid-cols-1 gap-2 text-xs text-foreground/90 sm:grid-cols-3">
+                <div className="border border-border bg-background px-2 py-1.5">
+                  <dt className="text-muted-foreground">Chunks</dt>
+                  <dd>{extractSummary.chunkCount}</dd>
+                </div>
+                <div className="border border-border bg-background px-2 py-1.5">
+                  <dt className="text-muted-foreground">Pages</dt>
+                  <dd>{extractSummary.totalPages}</dd>
+                </div>
+                <div className="border border-border bg-background px-2 py-1.5">
+                  <dt className="text-muted-foreground">Characters</dt>
+                  <dd>{extractSummary.textLength}</dd>
+                </div>
+              </dl>
             </section>
-          ) : null}
-
-          {extractState.status === "error" ? (
-            <p role="alert" className="text-xs text-destructive">
-              {extractState.message}
-            </p>
           ) : null}
         </div>
       </div>
 
-      {selectedPdf ? (
+      {currentStep === "source" && selectedPdf ? (
         <div className="shrink-0 border-t border-border bg-muted/30 px-6 py-2.5">
           <div className="mx-auto flex w-full max-w-2xl items-center justify-end">
             <Button
@@ -221,9 +275,7 @@ export function ForgePage() {
               disabled={extractState.status === "extracting"}
               className="gap-2 hover:border-foreground disabled:opacity-30"
             >
-              <span>
-                {extractState.status === "extracting" ? "Extracting..." : "Begin Extraction"}
-              </span>
+              <span>{extractState.status === "extracting" ? "Extracting..." : "Begin Extraction"}</span>
               <kbd className="border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground/60">
                 Cmd/Ctrl+Enter
               </kbd>

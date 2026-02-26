@@ -2,6 +2,10 @@ import { Layer } from "effect";
 
 import type { ReviewAnalyticsRepository } from "@main/analytics";
 import {
+  makeChunkService,
+  type ChunkService,
+} from "@main/forge/services/chunk-service";
+import {
   makeInMemoryForgeSessionRepository,
   type ForgeSessionRepository,
 } from "@main/forge/services/forge-session-repository";
@@ -14,6 +18,7 @@ import {
 import { AnalyticsRepositoryServiceLive } from "../services/AnalyticsRepositoryService";
 import { AiClientServiceFromSecretStoreLive } from "../services/AiClientService";
 import { DeckWriteCoordinatorServiceLive } from "../services/DeckWriteCoordinatorService";
+import { ChunkServiceLive } from "../services/ChunkService";
 import { ForgeSessionRepositoryServiceLive } from "../services/ForgeSessionRepositoryService";
 import {
   DuplicateIndexInvalidationBridgeLive,
@@ -43,6 +48,7 @@ type MainStaticDependencies = {
   readonly deckWriteCoordinator: DeckWriteCoordinator;
   readonly forgeSessionRepository?: ForgeSessionRepository;
   readonly pdfExtractor?: PdfExtractor;
+  readonly chunkService?: ChunkService;
 };
 
 type MainDirectDependencies = MainStaticDependencies & {
@@ -58,6 +64,7 @@ const MainStaticLive = ({
   deckWriteCoordinator,
   forgeSessionRepository,
   pdfExtractor,
+  chunkService,
 }: MainStaticDependencies) =>
   Layer.mergeAll(
     SettingsRepositoryServiceLive(settingsRepository),
@@ -69,6 +76,7 @@ const MainStaticLive = ({
       forgeSessionRepository ?? makeInMemoryForgeSessionRepository(),
     ),
     PdfExtractorServiceLive(pdfExtractor ?? makeStubPdfExtractor()),
+    ChunkServiceLive(chunkService ?? makeChunkService()),
   );
 
 const MainBridgeLive = Layer.mergeAll(
@@ -91,6 +99,7 @@ export const MainAppDirectLive = ({
   openEditorWindow,
   forgeSessionRepository,
   pdfExtractor,
+  chunkService,
 }: MainDirectDependencies) =>
   Layer.mergeAll(
     MainStaticLive({
@@ -100,6 +109,7 @@ export const MainAppDirectLive = ({
       deckWriteCoordinator,
       ...(forgeSessionRepository ? { forgeSessionRepository } : {}),
       ...(pdfExtractor ? { pdfExtractor } : {}),
+      ...(chunkService ? { chunkService } : {}),
     }),
     AppEventPublisherServiceLive(publish),
     WorkspaceWatcherControlServiceLive(watcher),

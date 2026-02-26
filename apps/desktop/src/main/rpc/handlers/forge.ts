@@ -3,18 +3,26 @@ import path from "node:path";
 import { Effect } from "effect";
 import type { Implementations } from "electron-effect-rpc/types";
 
-import { ForgeSessionRepositoryService, PdfExtractorService } from "@main/di";
+import { ChunkService, ForgeSessionRepositoryService, PdfExtractorService } from "@main/di";
 import type {
   ForgeSessionRepositoryError,
   ForgeSessionStatusTransitionError,
 } from "@main/forge/services/forge-session-repository";
+import type { PdfTextExtractError } from "@main/forge/services/pdf-extractor";
 import { toErrorMessage } from "@main/utils/format";
 import type { AppContract } from "@shared/rpc/contracts";
-import { ForgeOperationError, ForgeSessionNotFoundError } from "@shared/rpc/schemas/forge";
+import {
+  ForgeEmptySourceTextError,
+  ForgeOperationError,
+  ForgeSessionAlreadyChunkedError,
+  ForgeSessionBusyError,
+  ForgeSessionNotFoundError,
+  PdfExtractionError,
+} from "@shared/rpc/schemas/forge";
 
 type ForgeHandlerKeys = "ForgeCreateSession" | "ForgeExtractText";
 
-const PREVIEW_LENGTH = 2000;
+const PREVIEW_LENGTH = 500;
 
 const toForgeOperationError = (error: unknown): ForgeOperationError =>
   new ForgeOperationError({ message: toErrorMessage(error) });
@@ -25,10 +33,15 @@ const mapOperationError = <A, E>(
 
 const mapRepositoryStatusUpdateError = <A>(
   effect: Effect.Effect<A, ForgeSessionRepositoryError | ForgeSessionStatusTransitionError>,
-): Effect.Effect<A, ForgeOperationError | ForgeSessionStatusTransitionError> =>
+): Effect.Effect<A, ForgeOperationError> =>
   effect.pipe(
-    Effect.catchTag("ForgeSessionRepositoryError", (error) =>
-      Effect.fail(toForgeOperationError(error)),
+    Effect.catchTag("ForgeSessionRepositoryError", (error) => Effect.fail(toForgeOperationError(error))),
+    Effect.catchTag("ForgeSessionStatusTransitionError", (error) =>
+      Effect.fail(
+        new ForgeOperationError({
+          message: `Invalid Forge status transition for session ${error.sessionId}: ${error.fromStatus} -> ${error.toStatus}`,
+        }),
+      ),
     ),
   );
 
@@ -37,10 +50,74 @@ const ensureSessionExists = <T>(session: T | null, sessionId: number) =>
     ? Effect.fail(new ForgeSessionNotFoundError({ sessionId }))
     : Effect.succeed(session);
 
+const toPdfExtractionError = (sessionId: number, error: PdfTextExtractError): PdfExtractionError =>
+  new PdfExtractionError({
+    sessionId,
+    sourceFilePath: error.sourceFilePath,
+    message: error.message,
+  });
+
 export const createForgeHandlers = () =>
   Effect.gen(function* () {
     const forgeSessionRepository = yield* ForgeSessionRepositoryService;
     const pdfExtractor = yield* PdfExtractorService;
+    const chunkService = yield* ChunkService;
+
+    const setSessionErrorBestEffort = (sessionId: number, message: string) =>
+      mapRepositoryStatusUpdateError(
+        forgeSessionRepository.setSessionStatus({
+          sessionId,
+          status: "error",
+          errorMessage: message,
+        }),
+      ).pipe(
+        Effect.tapError((error) =>
+          Effect.sync(() => {
+            console.error("[forge/extract] failed to mark session as error", {
+              sessionId,
+              originalMessage: message,
+              error: toErrorMessage(error),
+            });
+          }),
+        ),
+        Effect.catchAll(() => Effect.void),
+        Effect.asVoid,
+      );
+
+    const failBeginExtractionConflict = (sessionId: number) =>
+      Effect.gen(function* () {
+        const latestSession = yield* mapOperationError(
+          forgeSessionRepository.getSession(sessionId),
+        ).pipe(Effect.flatMap((session) => ensureSessionExists(session, sessionId)));
+
+        const alreadyHasChunks = yield* mapOperationError(
+          forgeSessionRepository.hasChunks(sessionId),
+        );
+
+        if (latestSession.status === "extracting") {
+          return yield* Effect.fail(
+            new ForgeSessionBusyError({
+              sessionId,
+              status: latestSession.status,
+            }),
+          );
+        }
+
+        if (alreadyHasChunks) {
+          return yield* Effect.fail(
+            new ForgeSessionAlreadyChunkedError({
+              sessionId,
+              message: `Session ${sessionId} already has persisted chunks.`,
+            }),
+          );
+        }
+
+        return yield* Effect.fail(
+          new ForgeOperationError({
+            message: `Session ${sessionId} cannot begin extraction from status ${latestSession.status}.`,
+          }),
+        );
+      });
 
     const handlers: Pick<Implementations<AppContract, never>, ForgeHandlerKeys> = {
       ForgeCreateSession: ({ sourceFilePath }) =>
@@ -80,66 +157,88 @@ export const createForgeHandlers = () =>
         }),
       ForgeExtractText: ({ sessionId }) =>
         Effect.gen(function* () {
-          const existingSession = yield* mapOperationError(
-            forgeSessionRepository.getSessionById(sessionId),
-          ).pipe(Effect.flatMap((session) => ensureSessionExists(session, sessionId)));
+          const begunSession = yield* mapOperationError(
+            forgeSessionRepository.tryBeginExtraction(sessionId),
+          );
+
+          if (begunSession === null) {
+            return yield* failBeginExtractionConflict(sessionId);
+          }
 
           const extractionEffect = Effect.gen(function* () {
-            yield* mapRepositoryStatusUpdateError(
-              forgeSessionRepository.updateSessionStatus({
-                sessionId,
-                status: "extracting",
-                errorMessage: null,
-              }),
-            ).pipe(Effect.flatMap((session) => ensureSessionExists(session, sessionId)));
-
-            const extractedText = yield* mapOperationError(
-              pdfExtractor.extractText(existingSession.sourceFilePath),
+            const extracted = yield* pdfExtractor.extractText(begunSession.sourceFilePath).pipe(
+              Effect.mapError((error) => toPdfExtractionError(sessionId, error)),
             );
 
-            const preview = extractedText.slice(0, PREVIEW_LENGTH);
-            const textLength = extractedText.length;
+            if (extracted.text.trim().length === 0) {
+              const message = `No extractable text found in PDF source: ${begunSession.sourceFilePath}`;
+              yield* mapRepositoryStatusUpdateError(
+                forgeSessionRepository.setSessionStatus({
+                  sessionId,
+                  status: "error",
+                  errorMessage: message,
+                }),
+              );
 
-            yield* Effect.sync(() => {
-              console.log("[forge/extract]", {
-                sessionId,
-                textLength,
-              });
+              yield* Effect.fail(
+                new ForgeEmptySourceTextError({
+                  sessionId,
+                  sourceFilePath: begunSession.sourceFilePath,
+                  message,
+                }),
+              );
+            }
+
+            const chunkResult = yield* chunkService.chunkText({
+              text: extracted.text,
+              pageBreaks: extracted.pageBreaks,
             });
 
+            yield* mapOperationError(
+              forgeSessionRepository.saveChunks(sessionId, chunkResult.chunks),
+            );
+
             yield* mapRepositoryStatusUpdateError(
-              forgeSessionRepository.updateSessionStatus({
+              forgeSessionRepository.setSessionStatus({
                 sessionId,
                 status: "extracted",
                 errorMessage: null,
               }),
             ).pipe(Effect.flatMap((session) => ensureSessionExists(session, sessionId)));
 
+            const chunkCount = chunkResult.chunkCount;
+
+            const preview = extracted.text.slice(0, PREVIEW_LENGTH);
+            const textLength = extracted.text.length;
+
+            yield* Effect.sync(() => {
+              console.log("[forge/extract]", {
+                sessionId,
+                textLength,
+                chunkCount,
+                totalPages: extracted.totalPages,
+              });
+            });
+
             return {
               sessionId,
               textLength,
               preview,
+              totalPages: extracted.totalPages,
+              chunkCount,
             };
           });
 
           return yield* extractionEffect.pipe(
             Effect.catchTags({
               session_not_found: (error) => Effect.fail(error),
-              ForgeSessionStatusTransitionError: (error) =>
-                Effect.fail(
-                  new ForgeOperationError({
-                    message: `Invalid Forge status transition for session ${error.sessionId}: ${error.fromStatus} -> ${error.toStatus}`,
-                  }),
+              empty_text: (error) => Effect.fail(error),
+              pdf_extraction_error: (error) =>
+                setSessionErrorBestEffort(sessionId, error.message).pipe(
+                  Effect.zipRight(Effect.fail(error)),
                 ),
               forge_operation_error: (error) =>
-                mapOperationError(
-                  forgeSessionRepository.updateSessionStatus({
-                    sessionId,
-                    status: "error",
-                    errorMessage: error.message,
-                  }),
-                ).pipe(
-                  Effect.catchAll(() => Effect.void),
+                setSessionErrorBestEffort(sessionId, error.message).pipe(
                   Effect.zipRight(Effect.fail(error)),
                 ),
             }),

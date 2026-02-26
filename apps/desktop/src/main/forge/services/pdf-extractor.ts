@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 
 import { Data, Effect } from "effect";
 import { PDFParse } from "pdf-parse";
+
+import type { ForgeChunkPageBoundary } from "@shared/rpc/schemas/forge";
 import { toErrorMessage } from "@main/utils/format";
 
 export class PdfFingerprintResolveError extends Data.TaggedError("PdfFingerprintResolveError")<{
@@ -15,11 +17,20 @@ export class PdfTextExtractError extends Data.TaggedError("PdfTextExtractError")
   readonly message: string;
 }> {}
 
+export type PdfExtractorResult = {
+  readonly text: string;
+  readonly pageBreaks: ReadonlyArray<ForgeChunkPageBoundary>;
+  readonly totalPages: number;
+  readonly sourceFingerprint: string;
+};
+
 export interface PdfExtractor {
   readonly resolveFingerprint: (
     sourceFilePath: string,
   ) => Effect.Effect<string, PdfFingerprintResolveError>;
-  readonly extractText: (sourceFilePath: string) => Effect.Effect<string, PdfTextExtractError>;
+  readonly extractText: (
+    sourceFilePath: string,
+  ) => Effect.Effect<PdfExtractorResult, PdfTextExtractError>;
 }
 
 const withPdfParser = async <A>(
@@ -55,6 +66,24 @@ const firstNonEmptyFingerprint = (
   return null;
 };
 
+const toPageBreaks = (
+  pages: ReadonlyArray<{ readonly num: number; readonly text: string }>,
+): ReadonlyArray<ForgeChunkPageBoundary> => {
+  let offset = 0;
+  const pageBreaks: ForgeChunkPageBoundary[] = [];
+
+  for (const page of pages) {
+    pageBreaks.push({
+      offset,
+      page: page.num,
+    });
+
+    offset += page.text.length + 2;
+  }
+
+  return pageBreaks;
+};
+
 export const makePdfExtractor = (): PdfExtractor => ({
   resolveFingerprint: (sourceFilePath) =>
     Effect.tryPromise({
@@ -81,9 +110,28 @@ export const makePdfExtractor = (): PdfExtractor => ({
       try: async () => {
         const fileBuffer = await readFile(sourceFilePath);
         const sourceBytes = new Uint8Array(fileBuffer);
-        const textResult = await withPdfParser(sourceBytes, (parser) => parser.getText());
+        const fallbackFingerprint = toSha256(sourceBytes);
 
-        return textResult.text;
+        const result = await withPdfParser(sourceBytes, async (parser) => {
+          const textResult = await parser.getText();
+
+          let sourceFingerprint = fallbackFingerprint;
+          try {
+            const info = await parser.getInfo();
+            sourceFingerprint = firstNonEmptyFingerprint(info.fingerprints) ?? fallbackFingerprint;
+          } catch {
+            sourceFingerprint = fallbackFingerprint;
+          }
+
+          return {
+            text: textResult.text,
+            pageBreaks: toPageBreaks(textResult.pages),
+            totalPages: textResult.total,
+            sourceFingerprint,
+          } satisfies PdfExtractorResult;
+        });
+
+        return result;
       },
       catch: (error) =>
         new PdfTextExtractError({
@@ -95,5 +143,11 @@ export const makePdfExtractor = (): PdfExtractor => ({
 
 export const makeStubPdfExtractor = (): PdfExtractor => ({
   resolveFingerprint: (sourceFilePath) => Effect.succeed(`stub:${sourceFilePath}`),
-  extractText: () => Effect.succeed(""),
+  extractText: (sourceFilePath) =>
+    Effect.succeed({
+      text: "",
+      pageBreaks: [],
+      totalPages: 1,
+      sourceFingerprint: `stub:${sourceFilePath}`,
+    }),
 });

@@ -16,6 +16,7 @@ import {
   AppEventPublisherService,
   AnalyticsRepositoryServiceLive,
   AiClientServiceFromSecretStoreLive,
+  ChunkServiceLive,
   DeckWriteCoordinatorServiceLive,
   DuplicateIndexInvalidationService,
   EditorWindowManagerService,
@@ -49,6 +50,7 @@ import {
   makeSqliteForgeSessionRepository,
 } from "@main/forge/services/forge-session-repository";
 import { makePdfExtractor } from "@main/forge/services/pdf-extractor";
+import { makeChunkService } from "@main/forge/services/chunk-service";
 import { WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
 import { appIpc } from "@shared/rpc/ipc";
 
@@ -277,6 +279,7 @@ if (!gotSingleInstanceLock) {
         ? makeSqliteForgeSessionRepository({ runtime: initializedAnalytics.runtime })
         : makeInMemoryForgeSessionRepository();
     const pdfExtractor = makePdfExtractor();
+    const chunkService = makeChunkService();
 
     const mainServicesLive = Layer.mergeAll(
       SettingsRepositoryServiceLive(settingsRepository),
@@ -286,6 +289,7 @@ if (!gotSingleInstanceLock) {
       DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
       ForgeSessionRepositoryServiceLive(forgeSessionRepository),
       PdfExtractorServiceLive(pdfExtractor),
+      ChunkServiceLive(chunkService),
       Layer.succeed(AppEventPublisherService, appEventPublisher),
       Layer.succeed(WorkspaceWatcherControlService, workspaceWatcherControl),
       Layer.succeed(EditorWindowManagerService, editorWindowManagerService),

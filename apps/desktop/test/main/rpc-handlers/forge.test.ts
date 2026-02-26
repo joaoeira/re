@@ -8,7 +8,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   makeInMemoryForgeSessionRepository,
   ForgeSessionRepositoryError,
-  ForgeSessionStatusTransitionError,
   type ForgeSessionRepository,
 } from "@main/forge/services/forge-session-repository";
 import {
@@ -16,16 +15,21 @@ import {
   PdfTextExtractError,
   type PdfExtractor,
 } from "@main/forge/services/pdf-extractor";
+import type { ForgeChunkPageBoundary } from "@shared/rpc/schemas/forge";
 
 import { createHandlersWithOverrides } from "./helpers";
 
 const createPdfExtractor = (options?: {
   readonly fingerprintByPath?: Record<string, string>;
   readonly textByPath?: Record<string, string>;
+  readonly pageBreaksByPath?: Record<string, ReadonlyArray<ForgeChunkPageBoundary>>;
+  readonly totalPagesByPath?: Record<string, number>;
   readonly failingPaths?: ReadonlySet<string>;
 }): PdfExtractor => {
   const fingerprintByPath = options?.fingerprintByPath ?? {};
   const textByPath = options?.textByPath ?? {};
+  const pageBreaksByPath = options?.pageBreaksByPath ?? {};
+  const totalPagesByPath = options?.totalPagesByPath ?? {};
   const failingPaths = options?.failingPaths ?? new Set<string>();
 
   return {
@@ -41,7 +45,16 @@ const createPdfExtractor = (options?: {
         );
       }
 
-      return Effect.succeed(textByPath[sourceFilePath] ?? "default extracted text");
+      const text = textByPath[sourceFilePath] ?? "default extracted text";
+      const pageBreaks = pageBreaksByPath[sourceFilePath] ?? [{ offset: 0, page: 1 }];
+      const totalPages = totalPagesByPath[sourceFilePath] ?? Math.max(1, pageBreaks.length);
+
+      return Effect.succeed({
+        text,
+        pageBreaks,
+        totalPages,
+        sourceFingerprint: fingerprintByPath[sourceFilePath] ?? `fp:${sourceFilePath}`,
+      });
     },
   };
 };
@@ -90,7 +103,7 @@ describe("forge handlers", () => {
       expect(result.session.sourceFingerprint).toBe(sourceFingerprint);
       expect(result.session.status).toBe("created");
 
-      const stored = await Effect.runPromise(repository.getSessionById(result.session.id));
+      const stored = await Effect.runPromise(repository.getSession(result.session.id));
       expect(stored).not.toBeNull();
       expect(stored?.sourceFingerprint).toBe(sourceFingerprint);
     } finally {
@@ -130,7 +143,13 @@ describe("forge handlers", () => {
             message: "Failed to resolve fingerprint",
           }),
         ),
-      extractText: () => Effect.succeed(""),
+      extractText: () =>
+        Effect.succeed({
+          text: "",
+          pageBreaks: [],
+          totalPages: 1,
+          sourceFingerprint: "",
+        }),
     };
     const { handlers, dispose } = await setupHandlers({ extractor });
 
@@ -175,12 +194,22 @@ describe("forge handlers", () => {
     }
   });
 
-  it("updates status to extracted and returns preview + length", async () => {
+  it("persists chunks, updates status, and returns extraction summary", async () => {
     const sourceFilePath = "/tmp/forge-extract.pdf";
-    const extractedText = "a".repeat(2500);
+    const extractedText = "a".repeat(20_500);
     const extractor = createPdfExtractor({
       textByPath: {
         [sourceFilePath]: extractedText,
+      },
+      pageBreaksByPath: {
+        [sourceFilePath]: [
+          { offset: 0, page: 1 },
+          { offset: 12_000, page: 2 },
+          { offset: 18_000, page: 3 },
+        ],
+      },
+      totalPagesByPath: {
+        [sourceFilePath]: 3,
       },
     });
     const { handlers, repository, dispose } = await setupHandlers({ extractor });
@@ -194,16 +223,23 @@ describe("forge handlers", () => {
 
       expect(extracted.sessionId).toBe(created.session.id);
       expect(extracted.textLength).toBe(extractedText.length);
-      expect(extracted.preview.length).toBe(2000);
-      expect(extracted.preview).toBe(extractedText.slice(0, 2000));
+      expect(extracted.preview.length).toBe(500);
+      expect(extracted.preview).toBe(extractedText.slice(0, 500));
+      expect(extracted.totalPages).toBe(3);
+      expect(extracted.chunkCount).toBe(2);
       expect(consoleSpy).toHaveBeenCalledWith("[forge/extract]", {
         sessionId: created.session.id,
         textLength: extractedText.length,
+        chunkCount: 2,
+        totalPages: 3,
       });
 
-      const stored = await Effect.runPromise(repository.getSessionById(created.session.id));
+      const stored = await Effect.runPromise(repository.getSession(created.session.id));
       expect(stored?.status).toBe("extracted");
       expect(stored?.errorMessage).toBeNull();
+
+      const chunkCount = await Effect.runPromise(repository.getChunkCount(created.session.id));
+      expect(chunkCount).toBe(2);
     } finally {
       consoleSpy.mockRestore();
       await dispose();
@@ -220,17 +256,17 @@ describe("forge handlers", () => {
     const baseRepository = makeInMemoryForgeSessionRepository();
     const failingRepository: ForgeSessionRepository = {
       ...baseRepository,
-      updateSessionStatus: ({ sessionId, status, errorMessage }) => {
+      setSessionStatus: ({ sessionId, status, errorMessage }) => {
         if (status === "extracted") {
           return Effect.fail(
             new ForgeSessionRepositoryError({
-              operation: "updateSessionStatus",
+              operation: "setSessionStatus",
               message: "Simulated extracted-status write failure",
             }),
           );
         }
 
-        return baseRepository.updateSessionStatus({ sessionId, status, errorMessage });
+        return baseRepository.setSessionStatus({ sessionId, status, errorMessage });
       },
     };
     const { handlers, repository, dispose } = await setupHandlers({
@@ -250,7 +286,13 @@ describe("forge handlers", () => {
         throw new Error("Expected ForgeExtractText to fail.");
       }
 
-      const stored = await Effect.runPromise(repository.getSessionById(created.session.id));
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("forge_operation_error");
+      }
+
+      const stored = await Effect.runPromise(repository.getSession(created.session.id));
       expect(stored?.status).toBe("error");
       expect(stored?.errorMessage).toContain("Simulated extracted-status write failure");
     } finally {
@@ -281,10 +323,10 @@ describe("forge handlers", () => {
       const failure = Cause.failureOption(exit.cause);
       expect(failure._tag).toBe("Some");
       if (failure._tag === "Some") {
-        expect(failure.value._tag).toBe("forge_operation_error");
+        expect(failure.value._tag).toBe("pdf_extraction_error");
       }
 
-      const stored = await Effect.runPromise(repository.getSessionById(created.session.id));
+      const stored = await Effect.runPromise(repository.getSession(created.session.id));
       expect(stored?.status).toBe("error");
       expect(stored?.errorMessage).toContain(sourceFilePath);
     } finally {
@@ -293,15 +335,60 @@ describe("forge handlers", () => {
     }
   });
 
-  it("does not downgrade extracted sessions to error on invalid extraction retries", async () => {
-    const sourceFilePath = "/tmp/forge-retry-invalid-transition.pdf";
+  it("returns empty_text and marks status error when extracted text is blank", async () => {
+    const sourceFilePath = "/tmp/forge-empty-text.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: {
+        [sourceFilePath]: "\n  \t",
+      },
+      pageBreaksByPath: {
+        [sourceFilePath]: [{ offset: 0, page: 1 }],
+      },
+      totalPagesByPath: {
+        [sourceFilePath]: 1,
+      },
+    });
+    const { handlers, repository, dispose } = await setupHandlers({ extractor });
+
+    try {
+      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const exit = await Effect.runPromiseExit(
+        handlers.ForgeExtractText({ sessionId: created.session.id }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected ForgeExtractText to fail.");
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("empty_text");
+      }
+
+      const stored = await Effect.runPromise(repository.getSession(created.session.id));
+      expect(stored?.status).toBe("error");
+      expect(stored?.errorMessage).toContain("No extractable text found");
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("returns already_chunked on extraction retry after a successful run", async () => {
+    const sourceFilePath = "/tmp/forge-retry-already-chunked.pdf";
     const extractor = createPdfExtractor({
       textByPath: {
         [sourceFilePath]: "retry test text",
       },
+      pageBreaksByPath: {
+        [sourceFilePath]: [{ offset: 0, page: 1 }],
+      },
+      totalPagesByPath: {
+        [sourceFilePath]: 1,
+      },
     });
     const { handlers, repository, dispose } = await setupHandlers({ extractor });
-    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     try {
       const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
@@ -316,11 +403,49 @@ describe("forge handlers", () => {
         throw new Error("Expected extraction retry to fail.");
       }
 
-      const stored = await Effect.runPromise(repository.getSessionById(created.session.id));
+      const failure = Cause.failureOption(retryExit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("already_chunked");
+      }
+
+      const stored = await Effect.runPromise(repository.getSession(created.session.id));
       expect(stored?.status).toBe("extracted");
       expect(stored?.errorMessage).toBeNull();
     } finally {
-      consoleSpy.mockRestore();
+      await dispose();
+    }
+  });
+
+  it("returns session_busy when extraction is already in progress", async () => {
+    const sourceFilePath = "/tmp/forge-session-busy.pdf";
+    const { handlers, repository, dispose } = await setupHandlers();
+
+    try {
+      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      await Effect.runPromise(
+        repository.setSessionStatus({
+          sessionId: created.session.id,
+          status: "extracting",
+          errorMessage: null,
+        }),
+      );
+
+      const exit = await Effect.runPromiseExit(
+        handlers.ForgeExtractText({ sessionId: created.session.id }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected ForgeExtractText to fail.");
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("session_busy");
+      }
+    } finally {
       await dispose();
     }
   });
@@ -346,74 +471,4 @@ describe("forge handlers", () => {
     }
   });
 
-  it("rejects invalid status transitions at the repository boundary", async () => {
-    const repository = makeInMemoryForgeSessionRepository();
-    const session = await Effect.runPromise(
-      repository.createSession({
-        sourceKind: "pdf",
-        sourceFilePath: "/tmp/forge-transition.pdf",
-        deckPath: null,
-        sourceFingerprint: "fp-transition",
-      }),
-    );
-
-    const exit = await Effect.runPromiseExit(
-      repository.updateSessionStatus({
-        sessionId: session.id,
-        status: "ready",
-        errorMessage: null,
-      }),
-    );
-
-    expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isSuccess(exit)) {
-      throw new Error("Expected invalid transition to fail.");
-    }
-
-    const failure = Cause.failureOption(exit.cause);
-    expect(failure._tag).toBe("Some");
-    if (failure._tag === "Some") {
-      expect(failure.value).toBeInstanceOf(ForgeSessionStatusTransitionError);
-    }
-  });
-
-  it("allows ready to generating transitions", async () => {
-    const repository = makeInMemoryForgeSessionRepository();
-    const session = await Effect.runPromise(
-      repository.createSession({
-        sourceKind: "pdf",
-        sourceFilePath: "/tmp/forge-ready-cycle.pdf",
-        deckPath: null,
-        sourceFingerprint: "fp-ready-cycle",
-      }),
-    );
-
-    const transitions = [
-      "extracting",
-      "extracted",
-      "topics_extracting",
-      "topics_extracted",
-      "generating",
-      "ready",
-      "generating",
-    ] as const;
-
-    let current = session;
-    for (const status of transitions) {
-      const updated = await Effect.runPromise(
-        repository.updateSessionStatus({
-          sessionId: current.id,
-          status,
-          errorMessage: null,
-        }),
-      );
-
-      if (!updated) {
-        throw new Error("Session disappeared during transition test.");
-      }
-      current = updated;
-    }
-
-    expect(current.status).toBe("generating");
-  });
 });

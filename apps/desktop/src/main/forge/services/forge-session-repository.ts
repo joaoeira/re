@@ -2,7 +2,12 @@ import * as SqlClient from "@effect/sql/SqlClient";
 import type * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import { Data, Effect, ManagedRuntime } from "effect";
 
-import type { ForgeSession, ForgeSessionStatus, ForgeSourceKind } from "@shared/rpc/schemas/forge";
+import type {
+  ForgeChunkPageBoundary,
+  ForgeSession,
+  ForgeSessionStatus,
+  ForgeSourceKind,
+} from "@shared/rpc/schemas/forge";
 import { runSqlInRuntimeOrMapRuntimeError } from "@main/sqlite/runtime-runner";
 import { toErrorMessage } from "@main/utils/format";
 
@@ -19,6 +24,12 @@ export class ForgeSessionStatusTransitionError extends Data.TaggedError(
   readonly toStatus: ForgeSessionStatus;
 }> {}
 
+export type ForgeChunkInsert = {
+  readonly text: string;
+  readonly sequenceOrder: number;
+  readonly pageBoundaries: ReadonlyArray<ForgeChunkPageBoundary>;
+};
+
 export interface ForgeSessionRepository {
   readonly createSession: (input: {
     readonly sourceKind: ForgeSourceKind;
@@ -30,10 +41,13 @@ export interface ForgeSessionRepository {
     readonly sourceKind: ForgeSourceKind;
     readonly sourceFingerprint: string;
   }) => Effect.Effect<ForgeSession | null, ForgeSessionRepositoryError>;
-  readonly getSessionById: (
+  readonly getSession: (
     sessionId: number,
   ) => Effect.Effect<ForgeSession | null, ForgeSessionRepositoryError>;
-  readonly updateSessionStatus: (input: {
+  readonly tryBeginExtraction: (
+    sessionId: number,
+  ) => Effect.Effect<ForgeSession | null, ForgeSessionRepositoryError>;
+  readonly setSessionStatus: (input: {
     readonly sessionId: number;
     readonly status: ForgeSessionStatus;
     readonly errorMessage: string | null;
@@ -41,6 +55,12 @@ export interface ForgeSessionRepository {
     ForgeSession | null,
     ForgeSessionRepositoryError | ForgeSessionStatusTransitionError
   >;
+  readonly hasChunks: (sessionId: number) => Effect.Effect<boolean, ForgeSessionRepositoryError>;
+  readonly saveChunks: (
+    sessionId: number,
+    chunks: ReadonlyArray<ForgeChunkInsert>,
+  ) => Effect.Effect<void, ForgeSessionRepositoryError>;
+  readonly getChunkCount: (sessionId: number) => Effect.Effect<number, ForgeSessionRepositoryError>;
 }
 
 type ForgeSessionRow = {
@@ -77,13 +97,21 @@ const ALLOWED_TRANSITIONS: Record<ForgeSessionStatus, ReadonlySet<ForgeSessionSt
   topics_extracted: new Set(["generating", "error"]),
   generating: new Set(["ready", "error"]),
   ready: new Set(["generating", "error"]),
-  error: new Set(["extracting", "error"]),
+  error: new Set(["error"]),
 };
 
 const canTransitionStatus = (
   fromStatus: ForgeSessionStatus,
   toStatus: ForgeSessionStatus,
 ): boolean => fromStatus === toStatus || ALLOWED_TRANSITIONS[fromStatus].has(toStatus);
+
+const toPageBoundariesJson = (boundaries: ReadonlyArray<ForgeChunkPageBoundary>): string =>
+  JSON.stringify(
+    boundaries.map((boundary) => ({
+      offset: boundary.offset,
+      page: boundary.page,
+    })),
+  );
 
 export const makeSqliteForgeSessionRepository = ({
   runtime,
@@ -252,13 +280,43 @@ export const makeSqliteForgeSessionRepository = ({
           return row ? fromRow(row) : null;
         }),
       ),
-    getSessionById: (sessionId) =>
-      runSqlRead("getSessionById.runtime", loadSessionByIdSql(sessionId)),
-    updateSessionStatus: ({ sessionId, status, errorMessage }) =>
-      runSqlWrite(
-        "updateSessionStatus.runtime",
+    getSession: (sessionId) => runSqlRead("getSession.runtime", loadSessionByIdSql(sessionId)),
+    tryBeginExtraction: (sessionId) =>
+      runSqlRead(
+        "tryBeginExtraction.runtime",
         Effect.gen(function* () {
           const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const rows = yield* withSqlError(
+            "tryBeginExtraction.update",
+            sql<ForgeSessionRow>`
+              UPDATE forge_sessions
+              SET
+                status = 'extracting',
+                error_message = null,
+                updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+              WHERE id = ${sessionId}
+                AND status = 'created'
+              RETURNING
+                id,
+                source_kind,
+                source_file_path,
+                deck_path,
+                source_fingerprint,
+                status,
+                error_message,
+                created_at,
+                updated_at
+            `,
+          );
+
+          const row = rows[0];
+          return row ? fromRow(row) : null;
+        }),
+      ),
+    setSessionStatus: ({ sessionId, status, errorMessage }) =>
+      runSqlWrite(
+        "setSessionStatus.runtime",
+        Effect.gen(function* () {
           const existing = yield* loadSessionByIdSql(sessionId);
           if (!existing) {
             return null;
@@ -274,27 +332,136 @@ export const makeSqliteForgeSessionRepository = ({
             );
           }
 
-          yield* withSqlError(
-            "updateSessionStatus.update",
-            sql`
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const rows = yield* withSqlError(
+            "setSessionStatus.update",
+            sql<ForgeSessionRow>`
               UPDATE forge_sessions
               SET
                 status = ${status},
                 error_message = ${errorMessage},
                 updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
               WHERE id = ${sessionId}
+                AND status = ${existing.status}
+              RETURNING
+                id,
+                source_kind,
+                source_file_path,
+                deck_path,
+                source_fingerprint,
+                status,
+                error_message,
+                created_at,
+                updated_at
             `,
           );
 
-          return yield* loadSessionByIdSql(sessionId);
+          const row = rows[0];
+          if (!row) {
+            const latest = yield* loadSessionByIdSql(sessionId);
+            if (!latest) return null;
+
+            return yield* Effect.fail(
+              new ForgeSessionStatusTransitionError({
+                sessionId,
+                fromStatus: latest.status,
+                toStatus: status,
+              }),
+            );
+          }
+
+          return fromRow(row);
+        }),
+      ),
+    hasChunks: (sessionId) =>
+      runSqlRead(
+        "hasChunks.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const rows = yield* withSqlError(
+            "hasChunks.select",
+            sql<{ present: number }>`
+              SELECT 1 AS present
+              FROM forge_chunks
+              WHERE session_id = ${sessionId}
+              LIMIT 1
+            `,
+          );
+
+          return rows.length > 0;
+        }),
+      ),
+    saveChunks: (sessionId, chunks) =>
+      runSqlRead(
+        "saveChunks.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+          const insertEffect = Effect.forEach(
+            chunks,
+            (chunk) =>
+              sql`
+                INSERT INTO forge_chunks (
+                  session_id,
+                  text,
+                  sequence_order,
+                  page_boundaries
+                ) VALUES (
+                  ${sessionId},
+                  ${chunk.text},
+                  ${chunk.sequenceOrder},
+                  ${toPageBoundariesJson(chunk.pageBoundaries)}
+                )
+              `,
+            { discard: true },
+          );
+
+          yield* sql.withTransaction(insertEffect).pipe(
+            Effect.mapError(
+              (error) =>
+                new ForgeSessionRepositoryError({
+                  operation: "saveChunks.transaction",
+                  message: toErrorMessage(error),
+                }),
+            ),
+          );
+        }),
+      ),
+    getChunkCount: (sessionId) =>
+      runSqlRead(
+        "getChunkCount.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const rows = yield* withSqlError(
+            "getChunkCount.select",
+            sql<{ count: number }>`
+              SELECT COUNT(*) AS count
+              FROM forge_chunks
+              WHERE session_id = ${sessionId}
+            `,
+          );
+
+          const count = Number(rows[0]?.count ?? 0);
+          return Number.isFinite(count) && count >= 0 ? count : 0;
         }),
       ),
   };
 };
 
+type InMemoryChunk = {
+  readonly id: number;
+  readonly sessionId: number;
+  readonly text: string;
+  readonly sequenceOrder: number;
+  readonly pageBoundaries: ReadonlyArray<ForgeChunkPageBoundary>;
+  readonly createdAt: string;
+};
+
 export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => {
-  let nextId = 1;
+  let nextSessionId = 1;
+  let nextChunkId = 1;
   const sessions: ForgeSession[] = [];
+  const chunks: InMemoryChunk[] = [];
 
   const nowIso = (): string => new Date().toISOString();
 
@@ -303,7 +470,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
       Effect.sync(() => {
         const timestamp = nowIso();
         const session: ForgeSession = {
-          id: nextId,
+          id: nextSessionId,
           sourceKind: input.sourceKind,
           sourceFilePath: input.sourceFilePath,
           deckPath: input.deckPath,
@@ -314,7 +481,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           updatedAt: timestamp,
         };
 
-        nextId += 1;
+        nextSessionId += 1;
         sessions.push(session);
 
         return cloneSession(session);
@@ -335,12 +502,34 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
 
         return null;
       }),
-    getSessionById: (sessionId) =>
+    getSession: (sessionId) =>
       Effect.sync(() => {
         const session = sessions.find((entry) => entry.id === sessionId);
         return session ? cloneSession(session) : null;
       }),
-    updateSessionStatus: ({ sessionId, status, errorMessage }) =>
+    tryBeginExtraction: (sessionId) =>
+      Effect.sync(() => {
+        const index = sessions.findIndex((entry) => entry.id === sessionId);
+        if (index < 0) {
+          return null;
+        }
+
+        const existing = sessions[index]!;
+        if (existing.status !== "created") {
+          return null;
+        }
+
+        const next: ForgeSession = {
+          ...existing,
+          status: "extracting",
+          errorMessage: null,
+          updatedAt: nowIso(),
+        };
+
+        sessions[index] = next;
+        return cloneSession(next);
+      }),
+    setSessionStatus: ({ sessionId, status, errorMessage }) =>
       Effect.suspend(() => {
         const index = sessions.findIndex((entry) => entry.id === sessionId);
         if (index < 0) return Effect.succeed(null);
@@ -355,6 +544,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
             }),
           );
         }
+
         const next: ForgeSession = {
           ...existing,
           status,
@@ -365,5 +555,56 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
 
         return Effect.succeed(cloneSession(next));
       }),
+    hasChunks: (sessionId) => Effect.sync(() => chunks.some((entry) => entry.sessionId === sessionId)),
+    saveChunks: (sessionId, chunkRows) =>
+      Effect.suspend(() => {
+        const sessionExists = sessions.some((entry) => entry.id === sessionId);
+        if (!sessionExists) {
+          return Effect.fail(
+            new ForgeSessionRepositoryError({
+              operation: "saveChunks.insert",
+              message: `Forge session ${sessionId} does not exist.`,
+            }),
+          );
+        }
+
+        const existingSequences = new Set(
+          chunks
+            .filter((entry) => entry.sessionId === sessionId)
+            .map((entry) => entry.sequenceOrder),
+        );
+
+        const batchSequences = new Set<number>();
+        const stagedRows: InMemoryChunk[] = [];
+
+        for (const row of chunkRows) {
+          if (existingSequences.has(row.sequenceOrder) || batchSequences.has(row.sequenceOrder)) {
+            return Effect.fail(
+              new ForgeSessionRepositoryError({
+                operation: "saveChunks.insert",
+                message: `Duplicate sequence order ${row.sequenceOrder} for session ${sessionId}.`,
+              }),
+            );
+          }
+
+          batchSequences.add(row.sequenceOrder);
+
+          stagedRows.push({
+            id: nextChunkId + stagedRows.length,
+            sessionId,
+            text: row.text,
+            sequenceOrder: row.sequenceOrder,
+            pageBoundaries: row.pageBoundaries.map((boundary) => ({ ...boundary })),
+            createdAt: nowIso(),
+          });
+        }
+
+        nextChunkId += stagedRows.length;
+        chunks.push(...stagedRows);
+
+        return Effect.void;
+      }),
+    getChunkCount: (sessionId) =>
+      Effect.sync(() => chunks.filter((entry) => entry.sessionId === sessionId).length),
   };
 };

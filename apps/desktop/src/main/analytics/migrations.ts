@@ -108,6 +108,25 @@ const REVIEW_HISTORY_MIGRATIONS = {
       ON forge_sessions(source_kind, source_fingerprint)
     `;
   }),
+  "0003_create_forge_chunks": Effect.gen(function* () {
+    const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+    yield* sql`
+      CREATE TABLE IF NOT EXISTS forge_chunks (
+        id INTEGER PRIMARY KEY,
+        session_id INTEGER NOT NULL REFERENCES forge_sessions(id) ON DELETE CASCADE,
+        text TEXT NOT NULL,
+        sequence_order INTEGER NOT NULL CHECK (sequence_order >= 0),
+        page_boundaries TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      )
+    `;
+
+    yield* sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS forge_chunks_session_sequence_idx
+      ON forge_chunks(session_id, sequence_order)
+    `;
+  }),
 } satisfies Record<string, Effect.Effect<void, unknown, SqlClient.SqlClient>>;
 
 const toMigrationError = (message: string): Migrator.MigrationError =>
