@@ -1,5 +1,6 @@
 import { RetryError, generateText, streamText, type ModelMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { APICallError, type LanguageModelV3 } from "@ai-sdk/provider";
 import { Effect, Stream } from "effect";
@@ -27,6 +28,10 @@ const providers = {
   anthropic: {
     secretKey: "anthropic-api-key",
     createModel: (apiKey, modelId) => createAnthropic({ apiKey })(modelId),
+  },
+  gemini: {
+    secretKey: "gemini-api-key",
+    createModel: (apiKey, modelId) => createGoogleGenerativeAI({ apiKey })(modelId),
   },
   openai: {
     secretKey: "openai-api-key",

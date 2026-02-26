@@ -16,6 +16,11 @@ const PROVIDERS: ReadonlyArray<{
     providerName: "Anthropic",
     preview: "••••••••••••",
   },
+  {
+    key: "gemini-api-key",
+    providerName: "Gemini",
+    preview: "••••••••••••",
+  },
 ];
 
 export function SecretsSettings({

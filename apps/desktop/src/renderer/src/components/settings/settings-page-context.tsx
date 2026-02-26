@@ -109,16 +109,18 @@ export function SettingsPageProvider({ children }: { children: React.ReactNode }
           settings: ipc.client.GetSettings(),
           openai: ipc.client.HasApiKey({ key: "openai-api-key" }),
           anthropic: ipc.client.HasApiKey({ key: "anthropic-api-key" }),
+          gemini: ipc.client.HasApiKey({ key: "gemini-api-key" }),
         },
         { concurrency: "unbounded" },
       ).pipe(
         Effect.match({
-          onSuccess: ({ settings, openai, anthropic }) => {
+          onSuccess: ({ settings, openai, anthropic, gemini }) => {
             store.send({
               type: "loadSuccess",
               rootPath: settings.workspace.rootPath,
               openaiConfigured: openai.configured,
               anthropicConfigured: anthropic.configured,
+              geminiConfigured: gemini.configured,
             });
           },
           onFailure: (error) => {

@@ -17,6 +17,10 @@ const mocks = vi.hoisted(() => ({
     provider: "anthropic",
     model,
   })),
+  createGoogleGenerativeAI: vi.fn((_options: { readonly apiKey: string }) => (model: string) => ({
+    provider: "gemini",
+    model,
+  })),
   createOpenAI: vi.fn((_options: { readonly apiKey: string }) => (model: string) => ({
     provider: "openai",
     model,
@@ -41,6 +45,10 @@ vi.mock("ai", () => ({
 
 vi.mock("@ai-sdk/anthropic", () => ({
   createAnthropic: mocks.createAnthropic,
+}));
+
+vi.mock("@ai-sdk/google", () => ({
+  createGoogleGenerativeAI: mocks.createGoogleGenerativeAI,
 }));
 
 vi.mock("@ai-sdk/openai", () => ({

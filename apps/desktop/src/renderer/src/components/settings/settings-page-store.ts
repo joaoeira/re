@@ -12,6 +12,7 @@ const createDefaultApiKeyState = (): ApiKeyState => ({
 const createDefaultApiKeys = (): Record<SecretKey, ApiKeyState> => ({
   "openai-api-key": createDefaultApiKeyState(),
   "anthropic-api-key": createDefaultApiKeyState(),
+  "gemini-api-key": createDefaultApiKeyState(),
 });
 
 const updateApiKey = (
@@ -49,6 +50,7 @@ export const createSettingsPageStore = () =>
           rootPath: string | null;
           openaiConfigured: boolean;
           anthropicConfigured: boolean;
+          geminiConfigured: boolean;
         },
       ) => ({
         ...context,
@@ -63,6 +65,11 @@ export const createSettingsPageStore = () =>
           },
           "anthropic-api-key": {
             configured: event.anthropicConfigured,
+            saving: false,
+            error: null,
+          },
+          "gemini-api-key": {
+            configured: event.geminiConfigured,
             saving: false,
             error: null,
           },

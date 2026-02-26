@@ -13,6 +13,7 @@ import {
 import { SecretNotFound, SecretStoreUnavailable } from "@shared/secrets";
 
 const ANTHROPIC_MODEL = "anthropic:claude-sonnet-4-20250514";
+const GEMINI_MODEL = "gemini:gemini-2.5-flash";
 const OPENAI_MODEL = "openai:gpt-4o";
 
 const DEFAULT_MESSAGES = [{ role: "user", content: "hello" }] as const;
@@ -126,6 +127,10 @@ const mocks = vi.hoisted(() => {
       provider: "anthropic",
       model,
     })),
+    createGoogleGenerativeAI: vi.fn((_options: { readonly apiKey: string }) => (model: string) => ({
+      provider: "gemini",
+      model,
+    })),
     createOpenAI: vi.fn((_options: { readonly apiKey: string }) => (model: string) => ({
       provider: "openai",
       model,
@@ -141,6 +146,10 @@ vi.mock("ai", () => ({
 
 vi.mock("@ai-sdk/anthropic", () => ({
   createAnthropic: mocks.createAnthropic,
+}));
+
+vi.mock("@ai-sdk/google", () => ({
+  createGoogleGenerativeAI: mocks.createGoogleGenerativeAI,
 }));
 
 vi.mock("@ai-sdk/openai", () => ({
@@ -160,9 +169,16 @@ const makeSecretStore = (getSecret: SecretStore["getSecret"]): SecretStore => ({
 
 const makeServiceWithKey = () =>
   makeAiClient({
-    secretStore: makeSecretStore((key) =>
-      Effect.succeed(key === "openai-api-key" ? "sk-openai-test" : "sk-anthropic-test"),
-    ),
+    secretStore: makeSecretStore((key) => {
+      switch (key) {
+        case "openai-api-key":
+          return Effect.succeed("sk-openai-test");
+        case "anthropic-api-key":
+          return Effect.succeed("sk-anthropic-test");
+        case "gemini-api-key":
+          return Effect.succeed("sk-gemini-test");
+      }
+    }),
   });
 
 const getFailure = <A, E>(exit: Exit.Exit<A, E>): E => {
@@ -183,6 +199,7 @@ describe("makeAiClient", () => {
     mocks.generateText.mockReset();
     mocks.streamText.mockReset();
     mocks.createAnthropic.mockClear();
+    mocks.createGoogleGenerativeAI.mockClear();
     mocks.createOpenAI.mockClear();
   });
 
@@ -214,6 +231,7 @@ describe("makeAiClient", () => {
     expect(Array.from(chunks)).toEqual(["ok"]);
     expect(requestedKeys).toEqual(["anthropic-api-key"]);
     expect(mocks.createAnthropic).toHaveBeenCalledWith({ apiKey: "sk-anthropic-test" });
+    expect(mocks.createGoogleGenerativeAI).not.toHaveBeenCalled();
     expect(mocks.createOpenAI).not.toHaveBeenCalled();
     expect(mocks.streamText).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -253,9 +271,48 @@ describe("makeAiClient", () => {
     expect(requestedKeys).toEqual(["openai-api-key"]);
     expect(mocks.createOpenAI).toHaveBeenCalledWith({ apiKey: "sk-openai-test" });
     expect(mocks.createAnthropic).not.toHaveBeenCalled();
+    expect(mocks.createGoogleGenerativeAI).not.toHaveBeenCalled();
     expect(mocks.streamText).toHaveBeenCalledWith(
       expect.objectContaining({
         model: { provider: "openai", model: "gpt-4o" },
+        maxRetries: 0,
+      }),
+    );
+  });
+
+  it("routes gemini stream requests to gemini provider with gemini key", async () => {
+    const requestedKeys: string[] = [];
+    const service = makeAiClient({
+      secretStore: makeSecretStore((key) =>
+        Effect.sync(() => {
+          requestedKeys.push(key);
+          return "sk-gemini-test";
+        }),
+      ),
+    });
+
+    mocks.streamText.mockImplementation(() => ({
+      textStream: {
+        async *[Symbol.asyncIterator]() {
+          yield "ok";
+        },
+      },
+    }));
+
+    const chunks = await Effect.runPromise(
+      service
+        .streamText({ model: GEMINI_MODEL, messages: DEFAULT_MESSAGES })
+        .pipe(Stream.runCollect),
+    );
+
+    expect(Array.from(chunks)).toEqual(["ok"]);
+    expect(requestedKeys).toEqual(["gemini-api-key"]);
+    expect(mocks.createGoogleGenerativeAI).toHaveBeenCalledWith({ apiKey: "sk-gemini-test" });
+    expect(mocks.createAnthropic).not.toHaveBeenCalled();
+    expect(mocks.createOpenAI).not.toHaveBeenCalled();
+    expect(mocks.streamText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: { provider: "gemini", model: "gemini-2.5-flash" },
         maxRetries: 0,
       }),
     );
@@ -408,6 +465,25 @@ describe("makeAiClient", () => {
     expect(failure).toBeInstanceOf(AiProviderNotSupportedError);
     if (failure instanceof AiProviderNotSupportedError) {
       expect(failure.model).toBe("mistral:mixtral-8x7b");
+    }
+    expect(getSecret).not.toHaveBeenCalled();
+    expect(mocks.generateText).not.toHaveBeenCalled();
+  });
+
+  it("rejects google model prefix now that only gemini is supported", async () => {
+    const getSecret = vi.fn<SecretStore["getSecret"]>((_key) => Effect.succeed("unused"));
+    const service = makeAiClient({
+      secretStore: makeSecretStore(getSecret),
+    });
+
+    const exit = await Effect.runPromiseExit(
+      service.generateText({ model: "google:gemini-2.5-flash", messages: DEFAULT_MESSAGES }),
+    );
+    const failure = getFailure(exit);
+
+    expect(failure).toBeInstanceOf(AiProviderNotSupportedError);
+    if (failure instanceof AiProviderNotSupportedError) {
+      expect(failure.model).toBe("google:gemini-2.5-flash");
     }
     expect(getSecret).not.toHaveBeenCalled();
     expect(mocks.generateText).not.toHaveBeenCalled();
