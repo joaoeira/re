@@ -78,6 +78,7 @@ const log = (...args: Array<unknown>): void => {
 };
 
 const setupApplicationMenu = (openNewCard: () => void): void => {
+  const isDev = Boolean(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   const template: MenuItemConstructorOptions[] = [];
 
   if (process.platform === "darwin") {
@@ -96,6 +97,9 @@ const setupApplicationMenu = (openNewCard: () => void): void => {
     ],
   });
   template.push({ role: "editMenu" });
+  if (isDev) {
+    template.push({ role: "viewMenu" });
+  }
   template.push({ role: "windowMenu" });
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
