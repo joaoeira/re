@@ -38,7 +38,8 @@ type ForgeHandlerKeys =
   | "ForgeStartTopicExtraction";
 
 const PREVIEW_LENGTH = 500;
-const DEFAULT_MAX_TOPICS_PER_CHUNK = 10;
+
+const MAX_REQUEST_CONCURRENCY = 8;
 
 const toForgeOperationError = (error: unknown): ForgeOperationError =>
   new ForgeOperationError({ message: toErrorMessage(error) });
@@ -69,7 +70,9 @@ const mapRepositoryStatusUpdateError = <A>(
   effect: Effect.Effect<A, ForgeSessionRepositoryError | ForgeSessionStatusTransitionError>,
 ): Effect.Effect<A, ForgeOperationError> =>
   effect.pipe(
-    Effect.catchTag("ForgeSessionRepositoryError", (error) => Effect.fail(toForgeOperationError(error))),
+    Effect.catchTag("ForgeSessionRepositoryError", (error) =>
+      Effect.fail(toForgeOperationError(error)),
+    ),
     Effect.catchTag("ForgeSessionStatusTransitionError", (error) =>
       Effect.fail(
         new ForgeOperationError({
@@ -248,9 +251,9 @@ export const createForgeHandlers = () =>
 
     const extractAndChunkForSession = (sessionId: number, sourceFilePath: string) =>
       Effect.gen(function* () {
-        const extracted = yield* pdfExtractor.extractText(sourceFilePath).pipe(
-          Effect.mapError((error) => toPdfExtractionError(sessionId, error)),
-        );
+        const extracted = yield* pdfExtractor
+          .extractText(sourceFilePath)
+          .pipe(Effect.mapError((error) => toPdfExtractionError(sessionId, error)));
 
         if (extracted.text.trim().length === 0) {
           const message = `No extractable text found in PDF source: ${sourceFilePath}`;
@@ -359,9 +362,9 @@ export const createForgeHandlers = () =>
             );
           }
 
-          const extracted = yield* pdfExtractor.extractText(sourceFilePath).pipe(
-            Effect.mapError((error) => toPreviewPdfExtractionError(sourceFilePath, error)),
-          );
+          const extracted = yield* pdfExtractor
+            .extractText(sourceFilePath)
+            .pipe(Effect.mapError((error) => toPreviewPdfExtractionError(sourceFilePath, error)));
 
           if (extracted.text.trim().length === 0) {
             return yield* Effect.fail(
@@ -383,12 +386,10 @@ export const createForgeHandlers = () =>
             chunkCount: chunkResult.chunkCount,
           };
         }),
-      ForgeStartTopicExtraction: ({ sourceFilePath, maxTopicsPerChunk, model }) =>
+      ForgeStartTopicExtraction: ({ sourceFilePath, model }) =>
         createSessionFromSourcePath(sourceFilePath).pipe(
           Effect.flatMap(({ session, duplicateOfSessionId }) =>
             Effect.gen(function* () {
-              const maxTopics = maxTopicsPerChunk ?? DEFAULT_MAX_TOPICS_PER_CHUNK;
-
               yield* mapSessionRepositoryStatusUpdateError(
                 session.id,
                 forgeSessionRepository.setSessionStatus({
@@ -405,7 +406,10 @@ export const createForgeHandlers = () =>
 
               yield* mapSessionRepositoryError(
                 session.id,
-                forgeSessionRepository.saveChunks(session.id, extractedAndChunked.chunkResult.chunks),
+                forgeSessionRepository.saveChunks(
+                  session.id,
+                  extractedAndChunked.chunkResult.chunks,
+                ),
               );
 
               yield* mapSessionRepositoryStatusUpdateError(
@@ -448,7 +452,6 @@ export const createForgeHandlers = () =>
                       GetTopicsPromptSpec,
                       {
                         chunkText: chunk.text,
-                        maxTopics,
                       },
                       model ? { model } : undefined,
                     )
@@ -478,7 +481,7 @@ export const createForgeHandlers = () =>
                           }),
                       ),
                     ),
-                { concurrency: 1 },
+                { concurrency: MAX_REQUEST_CONCURRENCY },
               );
 
               yield* mapSessionRepositoryError(

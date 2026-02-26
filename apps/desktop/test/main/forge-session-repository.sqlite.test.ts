@@ -14,9 +14,9 @@ import {
 
 const sqliteBindingAvailable = await (async () => {
   let probeRoot: string | null = null;
-  let runtime: Awaited<
-    ReturnType<typeof createSqliteReviewAnalyticsRuntimeBundle>
-  >["runtime"] | null = null;
+  let runtime:
+    | Awaited<ReturnType<typeof createSqliteReviewAnalyticsRuntimeBundle>>["runtime"]
+    | null = null;
 
   try {
     probeRoot = await fs.mkdtemp(path.join(tmpdir(), "re-forge-sqlite-probe-"));

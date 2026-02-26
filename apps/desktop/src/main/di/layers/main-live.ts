@@ -1,10 +1,7 @@
 import { Layer } from "effect";
 
 import type { ReviewAnalyticsRepository } from "@main/analytics";
-import {
-  makeChunkService,
-  type ChunkService,
-} from "@main/forge/services/chunk-service";
+import { makeChunkService, type ChunkService } from "@main/forge/services/chunk-service";
 import {
   makeInMemoryForgeSessionRepository,
   type ForgeSessionRepository,

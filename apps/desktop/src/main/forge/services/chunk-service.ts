@@ -2,7 +2,7 @@ import { Effect } from "effect";
 
 import type { ForgeChunkPageBoundary } from "@shared/rpc/schemas/forge";
 
-export const CHUNK_SIZE = 16_000;
+export const CHUNK_SIZE = 12_000;
 
 type ChunkedTextInput = {
   readonly text: string;
@@ -32,14 +32,12 @@ const normalizePageBreaks = (
     (pageBreak) => pageBreak.offset >= 0 && pageBreak.offset < textLength,
   );
 
-  return filtered
-    .slice()
-    .sort((a, b) => {
-      if (a.offset === b.offset) {
-        return a.page - b.page;
-      }
-      return a.offset - b.offset;
-    });
+  return filtered.slice().sort((a, b) => {
+    if (a.offset === b.offset) {
+      return a.page - b.page;
+    }
+    return a.offset - b.offset;
+  });
 };
 
 const pageAtOffset = (

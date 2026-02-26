@@ -40,7 +40,7 @@ describe("decodeJsonToSchema", () => {
     const result = await Effect.runPromise(
       decodeJsonToSchema(
         TopicsSchema,
-        "Here is the result:\n```json\n{\"topics\":[\"history\",\"biology\"]}\n```",
+        'Here is the result:\n```json\n{"topics":["history","biology"]}\n```',
         "forge/get-topics",
       ),
     );
@@ -52,7 +52,7 @@ describe("decodeJsonToSchema", () => {
 
   it("returns parse error on malformed JSON", async () => {
     const exit = await Effect.runPromiseExit(
-      decodeJsonToSchema(TopicsSchema, "{\"topics\":[\"math\",}", "forge/get-topics"),
+      decodeJsonToSchema(TopicsSchema, '{"topics":["math",}', "forge/get-topics"),
     );
     const failure = getFailure(exit);
 

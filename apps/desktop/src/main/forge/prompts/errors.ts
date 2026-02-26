@@ -13,9 +13,7 @@ export class PromptOutputParseError extends Data.TaggedError("PromptOutputParseE
   readonly rawExcerpt: string;
 }> {}
 
-export class PromptOutputValidationError extends Data.TaggedError(
-  "PromptOutputValidationError",
-)<{
+export class PromptOutputValidationError extends Data.TaggedError("PromptOutputValidationError")<{
   readonly promptId: string;
   readonly message: string;
   readonly rawExcerpt: string;

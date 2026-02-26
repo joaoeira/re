@@ -41,6 +41,4 @@ export const createForgePromptRegistry = <Spec extends PromptSpecIdentity>(
   };
 };
 
-export const ForgePromptRegistry = createForgePromptRegistry([
-  GetTopicsPromptSpec,
-]);
+export const ForgePromptRegistry = createForgePromptRegistry([GetTopicsPromptSpec]);

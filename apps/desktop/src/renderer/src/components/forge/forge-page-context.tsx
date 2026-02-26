@@ -42,7 +42,12 @@ const toAsyncErrorMessage = (error: unknown): string => {
     return toRpcDefectMessage(error as RpcDefectError);
   }
 
-  if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string") {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
     return error.message;
   }
 
@@ -153,23 +158,21 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
       });
 
       void Effect.runPromise(
-        ipc.client
-          .ForgePreviewChunks({ sourceFilePath })
-          .pipe(
-            Effect.tap((preview) =>
-              Effect.sync(() => {
-                if (!isActiveRequest(requestToken)) return;
-                store.send({
-                  type: "previewReady",
-                  summary: preview,
-                });
-              }),
-            ),
-            Effect.mapError(toAsyncErrorMessage),
-            Effect.catchAll((message) =>
-              Effect.sync(() => setPreviewErrorIfActive(requestToken, message)),
-            ),
+        ipc.client.ForgePreviewChunks({ sourceFilePath }).pipe(
+          Effect.tap((preview) =>
+            Effect.sync(() => {
+              if (!isActiveRequest(requestToken)) return;
+              store.send({
+                type: "previewReady",
+                summary: preview,
+              });
+            }),
           ),
+          Effect.mapError(toAsyncErrorMessage),
+          Effect.catchAll((message) =>
+            Effect.sync(() => setPreviewErrorIfActive(requestToken, message)),
+          ),
+        ),
       );
     },
     [ipc.client, isActiveRequest, setPreviewErrorIfActive, store],

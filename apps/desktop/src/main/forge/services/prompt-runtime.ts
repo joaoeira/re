@@ -71,9 +71,7 @@ export interface MakeForgePromptRuntimeOptions {
 
 type RetryablePromptOutputError = PromptOutputParseError | PromptOutputValidationError;
 
-class RetryablePromptAttemptFailure extends Data.TaggedError(
-  "RetryablePromptAttemptFailure",
-)<{
+class RetryablePromptAttemptFailure extends Data.TaggedError("RetryablePromptAttemptFailure")<{
   readonly error: RetryablePromptOutputError;
   readonly context: PromptAttemptContext;
   readonly promptHash: string;
@@ -165,7 +163,11 @@ export const makeForgePromptRuntime = ({
           const rawText = completion.text;
           const outputChars = rawText.length;
 
-          const decodedOutput = yield* decodeJsonToSchema(spec.outputSchema, rawText, spec.promptId).pipe(
+          const decodedOutput = yield* decodeJsonToSchema(
+            spec.outputSchema,
+            rawText,
+            spec.promptId,
+          ).pipe(
             Effect.catchTags({
               PromptOutputParseError: (error) =>
                 Effect.fail(
@@ -236,7 +238,9 @@ export const makeForgePromptRuntime = ({
                     outputChars: failure.outputChars,
                   }),
               ),
-              Effect.flatMap(() => executeWithRetries(toRetryContext(failure.context, failure.error))),
+              Effect.flatMap(() =>
+                executeWithRetries(toRetryContext(failure.context, failure.error)),
+              ),
             ),
           ),
         );

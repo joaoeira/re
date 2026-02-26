@@ -99,7 +99,9 @@ describe("ForgePromptRuntime", () => {
   it("returns typed output and metadata on happy path", async () => {
     const generateText = vi
       .fn<AiClient["generateText"]>()
-      .mockImplementation(() => Effect.succeed(makeGenerateResult('{"topics":["math","science"]}')));
+      .mockImplementation(() =>
+        Effect.succeed(makeGenerateResult('{"topics":["math","science"]}')),
+      );
 
     const runtime = makeForgePromptRuntime({ aiClient: makeAiClient(generateText) });
 

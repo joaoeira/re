@@ -53,12 +53,14 @@ describe("createForgePromptRegistry", () => {
   });
 
   it("throws on duplicate prompt key", () => {
-    expect(() => createForgePromptRegistry([makeSpec("forge/dup", "1"), makeSpec("forge/dup", "1")]))
-      .toThrowError("Duplicate Forge prompt key detected: forge/dup@1");
+    expect(() =>
+      createForgePromptRegistry([makeSpec("forge/dup", "1"), makeSpec("forge/dup", "1")]),
+    ).toThrowError("Duplicate Forge prompt key detected: forge/dup@1");
   });
 
   it("throws on duplicate promptId across versions", () => {
-    expect(() => createForgePromptRegistry([makeSpec("forge/dup", "1"), makeSpec("forge/dup", "2")]))
-      .toThrowError("Duplicate Forge promptId detected: forge/dup");
+    expect(() =>
+      createForgePromptRegistry([makeSpec("forge/dup", "1"), makeSpec("forge/dup", "2")]),
+    ).toThrowError("Duplicate Forge promptId detected: forge/dup");
   });
 });

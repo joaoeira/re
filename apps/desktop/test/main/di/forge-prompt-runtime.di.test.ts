@@ -2,11 +2,7 @@ import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
 import { createNoopReviewAnalyticsRepository } from "@main/analytics";
-import {
-  ForgePromptRuntimeService,
-  MainAppDirectLive,
-  NoOpAppEventPublisher,
-} from "@main/di";
+import { ForgePromptRuntimeService, MainAppDirectLive, NoOpAppEventPublisher } from "@main/di";
 import { GetTopicsPromptSpec } from "@main/forge/prompts";
 import { NoOpDeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import type { SecretStore } from "@main/secrets/secret-store";

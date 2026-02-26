@@ -4,7 +4,6 @@ import type { PromptAttemptContext, PromptSpec } from "./types";
 
 export const GetTopicsPromptInputSchema = Schema.Struct({
   chunkText: Schema.String.pipe(Schema.minLength(1)),
-  maxTopics: Schema.Number.pipe(Schema.int(), Schema.positive(), Schema.lessThanOrEqualTo(100)),
 });
 export type GetTopicsPromptInput = typeof GetTopicsPromptInputSchema.Type;
 
@@ -40,22 +39,37 @@ export const GetTopicsPromptOutputSchema = Schema.Struct({
 });
 export type GetTopicsPromptOutput = typeof GetTopicsPromptOutputSchema.Type;
 
-const TOPICS_SYSTEM_PROMPT = [
-  "You extract salient topics from source text.",
-  'Return JSON only with the shape: {"topics": string[]}.',
-  "Do not include markdown, prose, or code fences.",
-].join("\n");
+const renderBaseUserPrompt = (_input: GetTopicsPromptInput): string => {
+  return `
+    Analyze the provided text and generate a series of informative statements that capture its key points and progression. Each statement should:
+    1. Be a single, clear sentence expressing one main idea or event from the text, including relevant context.
 
-const renderBaseUserPrompt = (input: GetTopicsPromptInput): string => {
-  const lines: string[] = [
-    `Extract up to ${input.maxTopics} salient topics from the source text.`,
-    `Maximum topics: ${input.maxTopics}.`,
-    "<source_text>",
-    input.chunkText,
-    "</source_text>",
-  ];
+    2. Provide enough detail to stand alone while still connecting to the broader narrative.
+    3. Follow the text's original structure and flow of information.
+    4. Be specific and concrete, avoiding abstract generalizations.
+    5. Include relevant dates, names, and other contextual information when present in the original text.
+    6. Exclude mentions of the author or the text itself.
 
-  return lines.filter((line) => line.length > 0).join("\n");
+    Ensure your summary:
+    - Covers the entire text without omitting significant content.
+    - Maintains the original sequence of ideas and events.
+    - Uses declarative sentences that are informative and contextually rich.
+    - Allows someone to understand the main points and context of the original text from these statements alone.
+
+    Format your response as a JSON object with the following structure:
+
+    Provide your response in JSON format with the following structure:
+    {
+      "topics": [
+        "<topic>"
+        "<topic>"
+        ...
+      ]
+    }
+
+    Do not include any other text or explanations in your response, just the JSON object, otherwise your response will be rejected.
+    Do not wrap it in markdown code blocks, just return the JSON object
+            `;
 };
 
 const renderRepairInstruction = (context: PromptAttemptContext): string => {
@@ -78,8 +92,7 @@ export const GetTopicsPromptSpec: PromptSpec<GetTopicsPromptInput, GetTopicsProm
   outputSchema: GetTopicsPromptOutputSchema,
   defaults: {
     model: "anthropic:claude-sonnet-4-20250514",
-    temperature: 0.2,
-    maxTokens: 1200,
+    temperature: 1.0,
   },
   render: (input, context) => {
     const baseMessage = {
@@ -89,7 +102,7 @@ export const GetTopicsPromptSpec: PromptSpec<GetTopicsPromptInput, GetTopicsProm
 
     if (!context || context.attempt <= 1) {
       return {
-        systemPrompt: TOPICS_SYSTEM_PROMPT,
+        systemPrompt: input.chunkText,
         messages: [baseMessage],
       };
     }
@@ -107,11 +120,11 @@ export const GetTopicsPromptSpec: PromptSpec<GetTopicsPromptInput, GetTopicsProm
     ];
 
     return {
-      systemPrompt: TOPICS_SYSTEM_PROMPT,
+      systemPrompt: input.chunkText,
       messages: repairMessages,
     };
   },
-  normalize: (output, input) => ({
-    topics: output.topics.slice(0, input.maxTopics),
+  normalize: (output) => ({
+    topics: output.topics,
   }),
 };

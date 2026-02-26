@@ -69,7 +69,8 @@ function ForgePageContent() {
               {previewState.status === "ready" ? (
                 <p className="text-xs text-muted-foreground">
                   Estimated {previewState.summary.chunkCount} chunk(s) across{" "}
-                  {previewState.summary.totalPages} page(s) and {previewState.summary.textLength} character(s).
+                  {previewState.summary.totalPages} page(s) and {previewState.summary.textLength}{" "}
+                  character(s).
                 </p>
               ) : null}
 
@@ -138,7 +139,9 @@ function ForgePageContent() {
               disabled={extractState.status === "extracting" || previewState.status !== "ready"}
               className="gap-2 hover:border-foreground disabled:opacity-30"
             >
-              <span>{extractState.status === "extracting" ? "Extracting..." : "Begin Extraction"}</span>
+              <span>
+                {extractState.status === "extracting" ? "Extracting..." : "Begin Extraction"}
+              </span>
               <kbd className="border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground/60">
                 Cmd/Ctrl+Enter
               </kbd>

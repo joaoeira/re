@@ -221,40 +221,39 @@ export const makeAiClient = ({ secretStore }: MakeAiClientOptions): AiClient => 
         const modelMessages = mapMessagesToAiSdk(messages);
         const resolvedMaxRetries = maxRetries ?? 0;
 
-        return Stream.asyncPush<string, AiProviderInvocationError>(
-          (emit) =>
-            Effect.gen(function* () {
-              yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()));
+        return Stream.asyncPush<string, AiProviderInvocationError>((emit) =>
+          Effect.gen(function* () {
+            yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()));
 
-              (async () => {
-                try {
-                  const result = streamText({
-                    model: languageModel,
-                    messages: modelMessages,
-                    ...(systemPrompt !== undefined ? { system: systemPrompt } : {}),
-                    ...(temperature !== undefined ? { temperature } : {}),
-                    ...(maxTokens !== undefined ? { maxOutputTokens: maxTokens } : {}),
-                    maxRetries: resolvedMaxRetries,
-                    abortSignal: controller.signal,
-                  });
+            (async () => {
+              try {
+                const result = streamText({
+                  model: languageModel,
+                  messages: modelMessages,
+                  ...(systemPrompt !== undefined ? { system: systemPrompt } : {}),
+                  ...(temperature !== undefined ? { temperature } : {}),
+                  ...(maxTokens !== undefined ? { maxOutputTokens: maxTokens } : {}),
+                  maxRetries: resolvedMaxRetries,
+                  abortSignal: controller.signal,
+                });
 
-                  for await (const delta of result.textStream) {
-                    const accepted = emit.single(delta);
-                    if (!accepted) {
-                      break;
-                    }
+                for await (const delta of result.textStream) {
+                  const accepted = emit.single(delta);
+                  if (!accepted) {
+                    break;
                   }
-
-                  emit.end();
-                } catch (error) {
-                  if (controller.signal.aborted) {
-                    return;
-                  }
-
-                  emit.fail(mapProviderInvocationError(error));
                 }
-              })();
-            }),
+
+                emit.end();
+              } catch (error) {
+                if (controller.signal.aborted) {
+                  return;
+                }
+
+                emit.fail(mapProviderInvocationError(error));
+              }
+            })();
+          }),
         );
       }),
     ),

@@ -186,9 +186,7 @@ const parsePageBoundaries = (
     );
   });
 
-const toForgeChunk = (
-  row: ForgeChunkRow,
-): Effect.Effect<ForgeChunk, ForgeSessionRepositoryError> =>
+const toForgeChunk = (row: ForgeChunkRow): Effect.Effect<ForgeChunk, ForgeSessionRepositoryError> =>
   parsePageBoundaries(row.page_boundaries).pipe(
     Effect.map((pageBoundaries) => ({
       id: Number(row.id),
@@ -816,7 +814,8 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
 
         return Effect.succeed(cloneSession(next));
       }),
-    hasChunks: (sessionId) => Effect.sync(() => chunks.some((entry) => entry.sessionId === sessionId)),
+    hasChunks: (sessionId) =>
+      Effect.sync(() => chunks.some((entry) => entry.sessionId === sessionId)),
     getChunks: (sessionId) =>
       Effect.sync(() =>
         chunks
@@ -946,7 +945,14 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           (left, right) => left.sequenceOrder - right.sequenceOrder || left.id - right.id,
         );
 
-        const grouped = new Map<number, { readonly chunkId: number; readonly sequenceOrder: number; readonly topics: Array<string> }>();
+        const grouped = new Map<
+          number,
+          {
+            readonly chunkId: number;
+            readonly sequenceOrder: number;
+            readonly topics: Array<string>;
+          }
+        >();
         for (const chunk of orderedChunks) {
           grouped.set(chunk.id, {
             chunkId: chunk.id,

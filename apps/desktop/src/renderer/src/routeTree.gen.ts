@@ -8,114 +8,114 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as ReviewRouteImport } from './routes/review'
-import { Route as ForgeRouteImport } from './routes/forge'
-import { Route as EditorRouteImport } from './routes/editor'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as rootRouteImport } from "./routes/__root";
+import { Route as SettingsRouteImport } from "./routes/settings";
+import { Route as ReviewRouteImport } from "./routes/review";
+import { Route as ForgeRouteImport } from "./routes/forge";
+import { Route as EditorRouteImport } from "./routes/editor";
+import { Route as IndexRouteImport } from "./routes/index";
 
 const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
+  id: "/settings",
+  path: "/settings",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ReviewRoute = ReviewRouteImport.update({
-  id: '/review',
-  path: '/review',
+  id: "/review",
+  path: "/review",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ForgeRoute = ForgeRouteImport.update({
-  id: '/forge',
-  path: '/forge',
+  id: "/forge",
+  path: "/forge",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const EditorRoute = EditorRouteImport.update({
-  id: '/editor',
-  path: '/editor',
+  id: "/editor",
+  path: "/editor",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/editor': typeof EditorRoute
-  '/forge': typeof ForgeRoute
-  '/review': typeof ReviewRoute
-  '/settings': typeof SettingsRoute
+  "/": typeof IndexRoute;
+  "/editor": typeof EditorRoute;
+  "/forge": typeof ForgeRoute;
+  "/review": typeof ReviewRoute;
+  "/settings": typeof SettingsRoute;
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/editor': typeof EditorRoute
-  '/forge': typeof ForgeRoute
-  '/review': typeof ReviewRoute
-  '/settings': typeof SettingsRoute
+  "/": typeof IndexRoute;
+  "/editor": typeof EditorRoute;
+  "/forge": typeof ForgeRoute;
+  "/review": typeof ReviewRoute;
+  "/settings": typeof SettingsRoute;
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/editor': typeof EditorRoute
-  '/forge': typeof ForgeRoute
-  '/review': typeof ReviewRoute
-  '/settings': typeof SettingsRoute
+  __root__: typeof rootRouteImport;
+  "/": typeof IndexRoute;
+  "/editor": typeof EditorRoute;
+  "/forge": typeof ForgeRoute;
+  "/review": typeof ReviewRoute;
+  "/settings": typeof SettingsRoute;
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/editor' | '/forge' | '/review' | '/settings'
-  fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/editor' | '/forge' | '/review' | '/settings'
-  id: '__root__' | '/' | '/editor' | '/forge' | '/review' | '/settings'
-  fileRoutesById: FileRoutesById
+  fileRoutesByFullPath: FileRoutesByFullPath;
+  fullPaths: "/" | "/editor" | "/forge" | "/review" | "/settings";
+  fileRoutesByTo: FileRoutesByTo;
+  to: "/" | "/editor" | "/forge" | "/review" | "/settings";
+  id: "__root__" | "/" | "/editor" | "/forge" | "/review" | "/settings";
+  fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  EditorRoute: typeof EditorRoute
-  ForgeRoute: typeof ForgeRoute
-  ReviewRoute: typeof ReviewRoute
-  SettingsRoute: typeof SettingsRoute
+  IndexRoute: typeof IndexRoute;
+  EditorRoute: typeof EditorRoute;
+  ForgeRoute: typeof ForgeRoute;
+  ReviewRoute: typeof ReviewRoute;
+  SettingsRoute: typeof SettingsRoute;
 }
 
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/review': {
-      id: '/review'
-      path: '/review'
-      fullPath: '/review'
-      preLoaderRoute: typeof ReviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/forge': {
-      id: '/forge'
-      path: '/forge'
-      fullPath: '/forge'
-      preLoaderRoute: typeof ForgeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/editor': {
-      id: '/editor'
-      path: '/editor'
-      fullPath: '/editor'
-      preLoaderRoute: typeof EditorRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
+    "/settings": {
+      id: "/settings";
+      path: "/settings";
+      fullPath: "/settings";
+      preLoaderRoute: typeof SettingsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/review": {
+      id: "/review";
+      path: "/review";
+      fullPath: "/review";
+      preLoaderRoute: typeof ReviewRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/forge": {
+      id: "/forge";
+      path: "/forge";
+      fullPath: "/forge";
+      preLoaderRoute: typeof ForgeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/editor": {
+      id: "/editor";
+      path: "/editor";
+      fullPath: "/editor";
+      preLoaderRoute: typeof EditorRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/": {
+      id: "/";
+      path: "/";
+      fullPath: "/";
+      preLoaderRoute: typeof IndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
   }
 }
 
@@ -125,7 +125,7 @@ const rootRouteChildren: RootRouteChildren = {
   ForgeRoute: ForgeRoute,
   ReviewRoute: ReviewRoute,
   SettingsRoute: SettingsRoute,
-}
+};
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+  ._addFileTypes<FileRouteTypes>();

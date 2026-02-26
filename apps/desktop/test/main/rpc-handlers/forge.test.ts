@@ -72,7 +72,10 @@ const createPdfExtractor = (options?: {
 };
 
 const createPromptRuntime = (
-  run: (input: { readonly chunkText: string; readonly maxTopics: number }) => Effect.Effect<
+  run: (input: {
+    readonly chunkText: string;
+    readonly maxTopics: number;
+  }) => Effect.Effect<
     ReadonlyArray<string>,
     | PromptInputValidationError
     | PromptOutputParseError
@@ -844,7 +847,7 @@ describe("forge handlers", () => {
       new PromptOutputValidationError({
         promptId: "forge/get-topics",
         message: "schema invalid",
-        rawExcerpt: "{\"topics\":1}",
+        rawExcerpt: '{"topics":1}',
       }),
       new PromptNormalizationError({
         promptId: "forge/get-topics",
@@ -907,5 +910,4 @@ describe("forge handlers", () => {
       await dispose();
     }
   });
-
 });

@@ -244,7 +244,9 @@ describe("makeAiClient", () => {
     }));
 
     const chunks = await Effect.runPromise(
-      service.streamText({ model: OPENAI_MODEL, messages: DEFAULT_MESSAGES }).pipe(Stream.runCollect),
+      service
+        .streamText({ model: OPENAI_MODEL, messages: DEFAULT_MESSAGES })
+        .pipe(Stream.runCollect),
     );
 
     expect(Array.from(chunks)).toEqual(["ok"]);
@@ -667,7 +669,9 @@ describe("makeAiClient", () => {
 
     const service = makeServiceWithKey();
     await Effect.runPromise(
-      service.streamText({ model: ANTHROPIC_MODEL, messages: DEFAULT_MESSAGES }).pipe(Stream.runCollect),
+      service
+        .streamText({ model: ANTHROPIC_MODEL, messages: DEFAULT_MESSAGES })
+        .pipe(Stream.runCollect),
     );
 
     const call = mocks.streamText.mock.calls[0]?.[0];
@@ -690,7 +694,9 @@ describe("makeAiClient", () => {
     }));
 
     const exit = await Effect.runPromiseExit(
-      service.streamText({ model: OPENAI_MODEL, messages: DEFAULT_MESSAGES }).pipe(Stream.runCollect),
+      service
+        .streamText({ model: OPENAI_MODEL, messages: DEFAULT_MESSAGES })
+        .pipe(Stream.runCollect),
     );
     const failure = getFailure(exit);
 
@@ -730,21 +736,23 @@ describe("makeAiClient", () => {
 
     mocks.streamText.mockImplementation((input) => {
       capturedSignal = input.abortSignal;
-        return {
-          textStream: {
-            async *[Symbol.asyncIterator]() {
-              yield* [];
-              while (!(input.abortSignal?.aborted ?? true)) {
-                await new Promise((resolve) => setTimeout(resolve, 5));
-              }
-            },
+      return {
+        textStream: {
+          async *[Symbol.asyncIterator]() {
+            yield* [];
+            while (!(input.abortSignal?.aborted ?? true)) {
+              await new Promise((resolve) => setTimeout(resolve, 5));
+            }
+          },
         },
       };
     });
 
     const service = makeServiceWithKey();
     const fiber = Effect.runFork(
-      service.streamText({ model: ANTHROPIC_MODEL, messages: DEFAULT_MESSAGES }).pipe(Stream.runDrain),
+      service
+        .streamText({ model: ANTHROPIC_MODEL, messages: DEFAULT_MESSAGES })
+        .pipe(Stream.runDrain),
     );
 
     await vi.waitFor(() => {
