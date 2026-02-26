@@ -37,6 +37,44 @@ describe("forge session repository", () => {
     expect(count).toBe(2);
   });
 
+  it("getChunks returns ordered rows with cloned page boundaries", async () => {
+    const repository = makeInMemoryForgeSessionRepository();
+    const session = await Effect.runPromise(
+      repository.createSession({
+        sourceKind: "pdf",
+        sourceFilePath: "/tmp/repo-get-chunks.pdf",
+        deckPath: null,
+        sourceFingerprint: "fp:repo-get-chunks",
+      }),
+    );
+
+    await Effect.runPromise(
+      repository.saveChunks(session.id, [
+        {
+          text: "chunk-2",
+          sequenceOrder: 1,
+          pageBoundaries: [{ offset: 0, page: 2 }],
+        },
+        {
+          text: "chunk-1",
+          sequenceOrder: 0,
+          pageBoundaries: [{ offset: 0, page: 1 }],
+        },
+      ]),
+    );
+
+    const chunks = await Effect.runPromise(repository.getChunks(session.id));
+    expect(chunks.map((chunk) => chunk.sequenceOrder)).toEqual([0, 1]);
+
+    const firstBoundary = chunks[0]?.pageBoundaries[0] as { offset: number } | undefined;
+    if (firstBoundary) {
+      firstBoundary.offset = 999;
+    }
+
+    const freshRead = await Effect.runPromise(repository.getChunks(session.id));
+    expect(freshRead[0]?.pageBoundaries[0]?.offset).toBe(0);
+  });
+
   it("saveChunks rolls back batch when any insert fails", async () => {
     const repository = makeInMemoryForgeSessionRepository();
     const session = await Effect.runPromise(
@@ -110,6 +148,106 @@ describe("forge session repository", () => {
     if (Exit.isSuccess(exit)) {
       throw new Error("Expected saveChunks to fail for unknown sessions.");
     }
+  });
+
+  it("replaceTopicsForSession enforces sequence ownership and updates atomically", async () => {
+    const repository = makeInMemoryForgeSessionRepository();
+    const firstSession = await Effect.runPromise(
+      repository.createSession({
+        sourceKind: "pdf",
+        sourceFilePath: "/tmp/repo-topics-first.pdf",
+        deckPath: null,
+        sourceFingerprint: "fp:repo-topics-first",
+      }),
+    );
+    const secondSession = await Effect.runPromise(
+      repository.createSession({
+        sourceKind: "pdf",
+        sourceFilePath: "/tmp/repo-topics-second.pdf",
+        deckPath: null,
+        sourceFingerprint: "fp:repo-topics-second",
+      }),
+    );
+
+    await Effect.runPromise(
+      repository.saveChunks(firstSession.id, [
+        {
+          text: "first-0",
+          sequenceOrder: 0,
+          pageBoundaries: [{ offset: 0, page: 1 }],
+        },
+        {
+          text: "first-1",
+          sequenceOrder: 1,
+          pageBoundaries: [{ offset: 0, page: 2 }],
+        },
+      ]),
+    );
+    await Effect.runPromise(
+      repository.saveChunks(secondSession.id, [
+        {
+          text: "second-0",
+          sequenceOrder: 0,
+          pageBoundaries: [{ offset: 0, page: 1 }],
+        },
+      ]),
+    );
+
+    await Effect.runPromise(
+      repository.replaceTopicsForSession(firstSession.id, [
+        {
+          sequenceOrder: 0,
+          topics: ["alpha", "beta"],
+        },
+        {
+          sequenceOrder: 1,
+          topics: ["gamma"],
+        },
+      ]),
+    );
+
+    const firstTopics = await Effect.runPromise(repository.getTopicsBySession(firstSession.id));
+    expect(firstTopics).toHaveLength(2);
+    expect(firstTopics[0]?.sequenceOrder).toBe(0);
+    expect(firstTopics[0]?.topics).toEqual(["alpha", "beta"]);
+    expect(firstTopics[1]?.sequenceOrder).toBe(1);
+    expect(firstTopics[1]?.topics).toEqual(["gamma"]);
+
+    const secondTopics = await Effect.runPromise(repository.getTopicsBySession(secondSession.id));
+    expect(secondTopics).toEqual([
+      {
+        chunkId: expect.any(Number),
+        sequenceOrder: 0,
+        topics: [],
+      },
+    ]);
+
+    const invalidSequenceExit = await Effect.runPromiseExit(
+      repository.replaceTopicsForSession(firstSession.id, [
+        {
+          sequenceOrder: 99,
+          topics: ["nope"],
+        },
+      ]),
+    );
+    expect(Exit.isFailure(invalidSequenceExit)).toBe(true);
+
+    const duplicateWritesExit = await Effect.runPromiseExit(
+      repository.replaceTopicsForSession(firstSession.id, [
+        {
+          sequenceOrder: 0,
+          topics: ["first"],
+        },
+        {
+          sequenceOrder: 0,
+          topics: ["second"],
+        },
+      ]),
+    );
+    expect(Exit.isFailure(duplicateWritesExit)).toBe(true);
+
+    const unchangedTopics = await Effect.runPromise(repository.getTopicsBySession(firstSession.id));
+    expect(unchangedTopics).toEqual(firstTopics);
   });
 
   it("rejects invalid status transitions", async () => {

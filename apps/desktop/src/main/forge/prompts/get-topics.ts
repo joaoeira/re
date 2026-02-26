@@ -5,15 +5,12 @@ import type { PromptAttemptContext, PromptSpec } from "./types";
 export const GetTopicsPromptInputSchema = Schema.Struct({
   chunkText: Schema.String.pipe(Schema.minLength(1)),
   maxTopics: Schema.Number.pipe(Schema.int(), Schema.positive(), Schema.lessThanOrEqualTo(100)),
-  language: Schema.optional(Schema.String.pipe(Schema.minLength(1))),
-  focusHint: Schema.optional(Schema.String.pipe(Schema.minLength(1))),
 });
 export type GetTopicsPromptInput = typeof GetTopicsPromptInputSchema.Type;
 
 const collapseWhitespace = (value: string): string => value.replace(/\s+/g, " ").trim();
 
 const normalizeTopicList = (topics: ReadonlyArray<string>): ReadonlyArray<string> => {
-  const seen = new Set<string>();
   const normalizedTopics: string[] = [];
 
   for (const topic of topics) {
@@ -22,12 +19,6 @@ const normalizeTopicList = (topics: ReadonlyArray<string>): ReadonlyArray<string
       continue;
     }
 
-    const dedupeKey = normalizedTopic.toLowerCase();
-    if (seen.has(dedupeKey)) {
-      continue;
-    }
-
-    seen.add(dedupeKey);
     normalizedTopics.push(normalizedTopic);
   }
 
@@ -59,8 +50,6 @@ const renderBaseUserPrompt = (input: GetTopicsPromptInput): string => {
   const lines: string[] = [
     `Extract up to ${input.maxTopics} salient topics from the source text.`,
     `Maximum topics: ${input.maxTopics}.`,
-    input.language ? `Language: ${input.language}.` : "",
-    input.focusHint ? `Focus hint: ${input.focusHint}.` : "",
     "<source_text>",
     input.chunkText,
     "</source_text>",

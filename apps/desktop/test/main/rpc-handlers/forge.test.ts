@@ -10,11 +10,23 @@ import {
   ForgeSessionRepositoryError,
   type ForgeSessionRepository,
 } from "@main/forge/services/forge-session-repository";
+import type { ChunkService } from "@main/forge/services/chunk-service";
+import {
+  type PromptRunOptions,
+  type PromptSpec,
+  PromptInputValidationError,
+  PromptModelInvocationError,
+  PromptNormalizationError,
+  PromptOutputParseError,
+  PromptOutputValidationError,
+} from "@main/forge/prompts";
+import type { ForgePromptRuntime } from "@main/forge/services/prompt-runtime";
 import {
   PdfFingerprintResolveError,
   PdfTextExtractError,
   type PdfExtractor,
 } from "@main/forge/services/pdf-extractor";
+import { AiCompletionError } from "@shared/rpc/schemas/ai";
 import type { ForgeChunkPageBoundary } from "@shared/rpc/schemas/forge";
 
 import { createHandlersWithOverrides } from "./helpers";
@@ -59,11 +71,44 @@ const createPdfExtractor = (options?: {
   };
 };
 
+const createPromptRuntime = (
+  run: (input: { readonly chunkText: string; readonly maxTopics: number }) => Effect.Effect<
+    ReadonlyArray<string>,
+    | PromptInputValidationError
+    | PromptOutputParseError
+    | PromptOutputValidationError
+    | PromptNormalizationError
+    | PromptModelInvocationError
+  >,
+): ForgePromptRuntime => ({
+  run: <Input, Output>(
+    _spec: PromptSpec<Input, Output>,
+    input: Input,
+    options?: PromptRunOptions,
+  ) =>
+    run(input as { readonly chunkText: string; readonly maxTopics: number }).pipe(
+      Effect.map((topics) => ({
+        output: { topics } as unknown as Output,
+        rawText: JSON.stringify({ topics }),
+        metadata: {
+          promptId: "forge/get-topics",
+          promptVersion: "1",
+          model: options?.model ?? "mock:model",
+          attemptCount: 1,
+          promptHash: "x".repeat(64),
+          outputChars: topics.join(",").length,
+        },
+      })),
+    ),
+});
+
 describe("forge handlers", () => {
   const setupHandlers = async (
     overrides: {
       readonly repository?: ForgeSessionRepository;
       readonly extractor?: PdfExtractor;
+      readonly chunkService?: ChunkService;
+      readonly promptRuntime?: ForgePromptRuntime;
     } = {},
   ) => {
     const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-forge-settings-"));
@@ -73,6 +118,8 @@ describe("forge handlers", () => {
     const handlers = await createHandlersWithOverrides(settingsFilePath, {
       forgeSessionRepository: repository,
       pdfExtractor: extractor,
+      ...(overrides.chunkService ? { chunkService: overrides.chunkService } : {}),
+      ...(overrides.promptRuntime ? { forgePromptRuntime: overrides.promptRuntime } : {}),
     });
 
     return {
@@ -447,6 +494,396 @@ describe("forge handlers", () => {
       }
     } finally {
       await dispose();
+    }
+  });
+
+  it("previews chunk estimates without creating a session", async () => {
+    const sourceFilePath = "/tmp/forge-preview-success.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: {
+        [sourceFilePath]: "x".repeat(20_500),
+      },
+      pageBreaksByPath: {
+        [sourceFilePath]: [
+          { offset: 0, page: 1 },
+          { offset: 12_000, page: 2 },
+          { offset: 18_000, page: 3 },
+        ],
+      },
+      totalPagesByPath: {
+        [sourceFilePath]: 3,
+      },
+    });
+    const { handlers, repository, dispose } = await setupHandlers({ extractor });
+
+    try {
+      const preview = await Effect.runPromise(handlers.ForgePreviewChunks({ sourceFilePath }));
+      expect(preview.textLength).toBe(20_500);
+      expect(preview.totalPages).toBe(3);
+      expect(preview.chunkCount).toBe(2);
+
+      const latestDuplicate = await Effect.runPromise(
+        repository.findLatestBySourceFingerprint({
+          sourceKind: "pdf",
+          sourceFingerprint: `fp:${sourceFilePath}`,
+        }),
+      );
+      expect(latestDuplicate).toBeNull();
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("returns preview_empty_text when preview extraction is blank", async () => {
+    const sourceFilePath = "/tmp/forge-preview-empty.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: {
+        [sourceFilePath]: " \n\t  ",
+      },
+    });
+    const { handlers, dispose } = await setupHandlers({ extractor });
+
+    try {
+      const exit = await Effect.runPromiseExit(handlers.ForgePreviewChunks({ sourceFilePath }));
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected ForgePreviewChunks to fail.");
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("preview_empty_text");
+      }
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("returns preview_pdf_extraction_error for unreadable preview PDFs", async () => {
+    const sourceFilePath = "/tmp/forge-preview-failing.pdf";
+    const extractor = createPdfExtractor({
+      failingPaths: new Set([sourceFilePath]),
+    });
+    const { handlers, dispose } = await setupHandlers({ extractor });
+
+    try {
+      const exit = await Effect.runPromiseExit(handlers.ForgePreviewChunks({ sourceFilePath }));
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected ForgePreviewChunks to fail.");
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("preview_pdf_extraction_error");
+      }
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("runs start-topic-extraction from session creation through persisted topics", async () => {
+    const sourceFilePath = "/tmp/forge-start-success.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: {
+        [sourceFilePath]: "cell membrane nucleus mitochondria",
+      },
+      pageBreaksByPath: {
+        [sourceFilePath]: [{ offset: 0, page: 1 }],
+      },
+      totalPagesByPath: {
+        [sourceFilePath]: 1,
+      },
+    });
+    const promptRuntime = createPromptRuntime(({ chunkText }) =>
+      Effect.succeed([chunkText.slice(0, 4), "biology"]),
+    );
+    const { handlers, repository, dispose } = await setupHandlers({
+      extractor,
+      promptRuntime,
+    });
+
+    try {
+      const result = await Effect.runPromise(
+        handlers.ForgeStartTopicExtraction({
+          sourceFilePath,
+          maxTopicsPerChunk: 3,
+        }),
+      );
+
+      expect(result.duplicateOfSessionId).toBeNull();
+      expect(result.session.status).toBe("topics_extracted");
+      expect(result.extraction.chunkCount).toBe(1);
+      expect(result.topicsByChunk).toHaveLength(1);
+      expect(result.topicsByChunk[0]?.sequenceOrder).toBe(0);
+      expect(result.topicsByChunk[0]?.topics).toEqual(["cell", "biology"]);
+
+      const persistedTopics = await Effect.runPromise(
+        repository.getTopicsBySession(result.session.id),
+      );
+      expect(persistedTopics).toEqual(result.topicsByChunk);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("keeps chunks with empty topic arrays in topicsByChunk", async () => {
+    const sourceFilePath = "/tmp/forge-start-empty-topic-chunk.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: {
+        [sourceFilePath]: `${"A".repeat(16_000)}${"B".repeat(32)}`,
+      },
+      pageBreaksByPath: {
+        [sourceFilePath]: [
+          { offset: 0, page: 1 },
+          { offset: 16_000, page: 2 },
+        ],
+      },
+      totalPagesByPath: {
+        [sourceFilePath]: 2,
+      },
+    });
+    const promptRuntime = createPromptRuntime(({ chunkText }) => {
+      if (chunkText.startsWith("A")) {
+        return Effect.succeed([]);
+      }
+      return Effect.succeed(["second-chunk-topic"]);
+    });
+    const { handlers, dispose } = await setupHandlers({
+      extractor,
+      promptRuntime,
+    });
+
+    try {
+      const result = await Effect.runPromise(
+        handlers.ForgeStartTopicExtraction({
+          sourceFilePath,
+        }),
+      );
+
+      expect(result.topicsByChunk).toHaveLength(2);
+      expect(result.topicsByChunk[0]?.sequenceOrder).toBe(0);
+      expect(result.topicsByChunk[0]?.topics).toEqual([]);
+      expect(result.topicsByChunk[1]?.sequenceOrder).toBe(1);
+      expect(result.topicsByChunk[1]?.topics).toEqual(["second-chunk-topic"]);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("returns duplicateOfSessionId on start-topic-extraction while creating a fresh session", async () => {
+    const sourceFilePath = "/tmp/forge-start-duplicate.pdf";
+    const sourceFingerprint = "fingerprint-duplicate-start";
+    const extractor = createPdfExtractor({
+      fingerprintByPath: {
+        [sourceFilePath]: sourceFingerprint,
+      },
+      textByPath: {
+        [sourceFilePath]: "duplicate content",
+      },
+    });
+    const promptRuntime = createPromptRuntime(() => Effect.succeed(["topic"]));
+    const { handlers, dispose } = await setupHandlers({
+      extractor,
+      promptRuntime,
+    });
+
+    try {
+      const first = await Effect.runPromise(
+        handlers.ForgeStartTopicExtraction({
+          sourceFilePath,
+        }),
+      );
+      const second = await Effect.runPromise(
+        handlers.ForgeStartTopicExtraction({
+          sourceFilePath,
+        }),
+      );
+
+      expect(second.duplicateOfSessionId).toBe(first.session.id);
+      expect(second.session.id).not.toBe(first.session.id);
+      expect(second.session.sourceFingerprint).toBe(sourceFingerprint);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("fails with topic_extraction_error when chunk loading returns empty", async () => {
+    const sourceFilePath = "/tmp/forge-zero-chunks.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: {
+        [sourceFilePath]: "text that should be chunked",
+      },
+    });
+    const promptRuntime = createPromptRuntime(() => Effect.succeed(["topic"]));
+    const chunkService: ChunkService = {
+      chunkText: () => Effect.succeed({ chunks: [], chunkCount: 0 }),
+    };
+    const { handlers, repository, dispose } = await setupHandlers({
+      extractor,
+      promptRuntime,
+      chunkService,
+    });
+
+    try {
+      const exit = await Effect.runPromiseExit(
+        handlers.ForgeStartTopicExtraction({
+          sourceFilePath,
+        }),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected ForgeStartTopicExtraction to fail.");
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("topic_extraction_error");
+        const sessionId =
+          "sessionId" in failure.value && typeof failure.value.sessionId === "number"
+            ? failure.value.sessionId
+            : null;
+        expect(sessionId).not.toBeNull();
+        if (sessionId !== null) {
+          const stored = await Effect.runPromise(repository.getSession(sessionId));
+          expect(stored?.status).toBe("error");
+        }
+      }
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("marks session as error and preserves topic atomicity when chunk N fails", async () => {
+    const sourceFilePath = "/tmp/forge-start-partial-failure.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: {
+        [sourceFilePath]: `${"A".repeat(16_000)}${"B".repeat(80)}`,
+      },
+      pageBreaksByPath: {
+        [sourceFilePath]: [
+          { offset: 0, page: 1 },
+          { offset: 16_000, page: 2 },
+        ],
+      },
+      totalPagesByPath: {
+        [sourceFilePath]: 2,
+      },
+    });
+    const promptRuntime = createPromptRuntime(({ chunkText }) => {
+      if (chunkText.startsWith("B")) {
+        return Effect.fail(
+          new PromptOutputParseError({
+            promptId: "forge/get-topics",
+            message: "second chunk parse failure",
+            rawExcerpt: "invalid",
+          }),
+        );
+      }
+
+      return Effect.succeed(["first-chunk-topic"]);
+    });
+    const { handlers, repository, dispose } = await setupHandlers({
+      extractor,
+      promptRuntime,
+    });
+
+    try {
+      const exit = await Effect.runPromiseExit(
+        handlers.ForgeStartTopicExtraction({
+          sourceFilePath,
+        }),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected ForgeStartTopicExtraction to fail.");
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("topic_extraction_error");
+        if ("sessionId" in failure.value && typeof failure.value.sessionId === "number") {
+          const stored = await Effect.runPromise(repository.getSession(failure.value.sessionId));
+          expect(stored?.status).toBe("error");
+          const persistedTopics = await Effect.runPromise(
+            repository.getTopicsBySession(failure.value.sessionId),
+          );
+          expect(persistedTopics).toHaveLength(2);
+          expect(persistedTopics.every((chunkTopics) => chunkTopics.topics.length === 0)).toBe(
+            true,
+          );
+        }
+      }
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("maps all prompt runtime error variants to topic_extraction_error", async () => {
+    const sourceFilePath = "/tmp/forge-start-runtime-union.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: {
+        [sourceFilePath]: "runtime union text",
+      },
+    });
+
+    const runtimeErrors = [
+      new PromptInputValidationError({
+        promptId: "forge/get-topics",
+        message: "input invalid",
+      }),
+      new PromptOutputParseError({
+        promptId: "forge/get-topics",
+        message: "parse invalid",
+        rawExcerpt: "bad json",
+      }),
+      new PromptOutputValidationError({
+        promptId: "forge/get-topics",
+        message: "schema invalid",
+        rawExcerpt: "{\"topics\":1}",
+      }),
+      new PromptNormalizationError({
+        promptId: "forge/get-topics",
+        message: "normalization invalid",
+      }),
+      new PromptModelInvocationError({
+        promptId: "forge/get-topics",
+        model: "anthropic:claude-sonnet-4-20250514",
+        attempt: 1,
+        cause: new AiCompletionError({ message: "provider failed" }),
+      }),
+    ] as const;
+
+    for (const runtimeError of runtimeErrors) {
+      const promptRuntime = createPromptRuntime(() => Effect.fail(runtimeError));
+      const { handlers, dispose } = await setupHandlers({
+        extractor,
+        promptRuntime,
+      });
+
+      try {
+        const exit = await Effect.runPromiseExit(
+          handlers.ForgeStartTopicExtraction({
+            sourceFilePath,
+          }),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isSuccess(exit)) {
+          throw new Error("Expected ForgeStartTopicExtraction to fail.");
+        }
+
+        const failure = Cause.failureOption(exit.cause);
+        expect(failure._tag).toBe("Some");
+        if (failure._tag === "Some") {
+          expect(failure.value._tag).toBe("topic_extraction_error");
+        }
+      } finally {
+        await dispose();
+      }
     }
   });
 

@@ -1,4 +1,5 @@
 import { Schema } from "@effect/schema";
+import { ModelIdSchema } from "./ai";
 
 const PositiveIntSchema = Schema.Number.pipe(Schema.int(), Schema.positive());
 const NonNegativeIntSchema = Schema.Number.pipe(Schema.int(), Schema.nonNegative());
@@ -73,6 +74,42 @@ export const ForgeExtractTextResultSchema = Schema.Struct({
 });
 export type ForgeExtractTextResult = typeof ForgeExtractTextResultSchema.Type;
 
+export const ForgePreviewChunksInputSchema = Schema.Struct({
+  sourceFilePath: Schema.String.pipe(Schema.nonEmptyString()),
+});
+export type ForgePreviewChunksInput = typeof ForgePreviewChunksInputSchema.Type;
+
+export const ForgePreviewChunksResultSchema = Schema.Struct({
+  textLength: NonNegativeIntSchema,
+  totalPages: PositiveIntSchema,
+  chunkCount: NonNegativeIntSchema,
+});
+export type ForgePreviewChunksResult = typeof ForgePreviewChunksResultSchema.Type;
+
+export const ForgeStartTopicExtractionInputSchema = Schema.Struct({
+  sourceFilePath: Schema.String.pipe(Schema.nonEmptyString()),
+  maxTopicsPerChunk: Schema.optional(
+    Schema.Number.pipe(Schema.int(), Schema.positive(), Schema.lessThanOrEqualTo(100)),
+  ),
+  model: Schema.optional(ModelIdSchema),
+});
+export type ForgeStartTopicExtractionInput = typeof ForgeStartTopicExtractionInputSchema.Type;
+
+export const ForgeChunkTopicsSchema = Schema.Struct({
+  chunkId: PositiveIntSchema,
+  sequenceOrder: NonNegativeIntSchema,
+  topics: Schema.Array(Schema.String),
+});
+export type ForgeChunkTopics = typeof ForgeChunkTopicsSchema.Type;
+
+export const ForgeStartTopicExtractionResultSchema = Schema.Struct({
+  session: ForgeSessionSchema,
+  duplicateOfSessionId: Schema.Union(PositiveIntSchema, Schema.Null),
+  extraction: ForgeExtractTextResultSchema,
+  topicsByChunk: Schema.Array(ForgeChunkTopicsSchema),
+});
+export type ForgeStartTopicExtractionResult = typeof ForgeStartTopicExtractionResultSchema.Type;
+
 export class ForgeOperationError extends Schema.TaggedError<ForgeOperationError>(
   "@re/desktop/rpc/ForgeOperationError",
 )("forge_operation_error", {
@@ -115,6 +152,43 @@ export class PdfExtractionError extends Schema.TaggedError<PdfExtractionError>(
   message: Schema.String,
 }) {}
 
+export class ForgePreviewOperationError extends Schema.TaggedError<ForgePreviewOperationError>(
+  "@re/desktop/rpc/ForgePreviewOperationError",
+)("preview_operation_error", {
+  sourceFilePath: Schema.String,
+  message: Schema.String,
+}) {}
+
+export class ForgePreviewEmptySourceTextError extends Schema.TaggedError<ForgePreviewEmptySourceTextError>(
+  "@re/desktop/rpc/ForgePreviewEmptySourceTextError",
+)("preview_empty_text", {
+  sourceFilePath: Schema.String,
+  message: Schema.String,
+}) {}
+
+export class ForgePreviewPdfExtractionError extends Schema.TaggedError<ForgePreviewPdfExtractionError>(
+  "@re/desktop/rpc/ForgePreviewPdfExtractionError",
+)("preview_pdf_extraction_error", {
+  sourceFilePath: Schema.String,
+  message: Schema.String,
+}) {}
+
+export class ForgeTopicExtractionError extends Schema.TaggedError<ForgeTopicExtractionError>(
+  "@re/desktop/rpc/ForgeTopicExtractionError",
+)("topic_extraction_error", {
+  sessionId: PositiveIntSchema,
+  chunkId: Schema.optional(PositiveIntSchema),
+  sequenceOrder: Schema.optional(NonNegativeIntSchema),
+  message: Schema.String,
+}) {}
+
+export class ForgeSessionOperationError extends Schema.TaggedError<ForgeSessionOperationError>(
+  "@re/desktop/rpc/ForgeSessionOperationError",
+)("session_operation_error", {
+  sessionId: PositiveIntSchema,
+  message: Schema.String,
+}) {}
+
 export const ForgeCreateSessionErrorSchema = ForgeOperationError;
 export type ForgeCreateSessionError = typeof ForgeCreateSessionErrorSchema.Type;
 
@@ -127,3 +201,19 @@ export const ForgeExtractTextErrorSchema = Schema.Union(
   PdfExtractionError,
 );
 export type ForgeExtractTextError = typeof ForgeExtractTextErrorSchema.Type;
+
+export const ForgePreviewChunksErrorSchema = Schema.Union(
+  ForgePreviewOperationError,
+  ForgePreviewEmptySourceTextError,
+  ForgePreviewPdfExtractionError,
+);
+export type ForgePreviewChunksError = typeof ForgePreviewChunksErrorSchema.Type;
+
+export const ForgeStartTopicExtractionErrorSchema = Schema.Union(
+  ForgeOperationError,
+  ForgeEmptySourceTextError,
+  PdfExtractionError,
+  ForgeTopicExtractionError,
+  ForgeSessionOperationError,
+);
+export type ForgeStartTopicExtractionError = typeof ForgeStartTopicExtractionErrorSchema.Type;

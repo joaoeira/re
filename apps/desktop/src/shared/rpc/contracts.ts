@@ -12,7 +12,12 @@ import {
   OpenEditorWindow,
   ReplaceItem,
 } from "./contracts/editor";
-import { ForgeCreateSession, ForgeExtractText } from "./contracts/forge";
+import {
+  ForgeCreateSession,
+  ForgeExtractText,
+  ForgePreviewChunks,
+  ForgeStartTopicExtraction,
+} from "./contracts/forge";
 import {
   BuildReviewQueue,
   GetCardContent,
@@ -73,6 +78,8 @@ export const appContract = defineContract({
     OpenEditorWindow,
     ForgeCreateSession,
     ForgeExtractText,
+    ForgePreviewChunks,
+    ForgeStartTopicExtraction,
   ] as const,
   events: [WorkspaceSnapshotChanged, CardEdited, CardsDeleted, EditorNavigateRequest] as const,
   streamMethods: [AiStreamText] as const,

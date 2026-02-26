@@ -9,8 +9,6 @@ describe("GetTopicsPromptSpec", () => {
     const rendered = GetTopicsPromptSpec.render({
       chunkText: "The mitochondria is the powerhouse of the cell.",
       maxTopics: 5,
-      language: "pt-BR",
-      focusHint: "Focus on biology terminology",
     });
 
     expect(rendered.systemPrompt).toContain("Return JSON only");
@@ -24,8 +22,6 @@ describe("GetTopicsPromptSpec", () => {
 
     expect(message.role).toBe("user");
     expect(message.content).toContain("Maximum topics: 5.");
-    expect(message.content).toContain("Language: pt-BR.");
-    expect(message.content).toContain("Focus hint: Focus on biology terminology.");
     expect(message.content).toContain("<source_text>");
     expect(message.content).toContain("</source_text>");
   });
@@ -64,7 +60,7 @@ describe("GetTopicsPromptSpec", () => {
     expect(repairMessage.content).toContain("not valid JSON");
   });
 
-  it("applies cleanup in output schema and keeps normalize input-dependent", async () => {
+  it("normalizes whitespace, removes empties, and preserves input order", async () => {
     const decoded = await Effect.runPromise(
       Schema.decodeUnknown(GetTopicsPromptSpec.outputSchema)({
         topics: [
@@ -79,7 +75,7 @@ describe("GetTopicsPromptSpec", () => {
     );
 
     expect(decoded).toEqual({
-      topics: ["Biology", "Data Science", "Chemistry"],
+      topics: ["Biology", "biology", "Data Science", "data science", "Chemistry"],
     });
 
     const normalized = GetTopicsPromptSpec.normalize(decoded, {
@@ -88,7 +84,7 @@ describe("GetTopicsPromptSpec", () => {
     });
 
     expect(normalized).toEqual({
-      topics: ["Biology", "Data Science"],
+      topics: ["Biology", "biology"],
     });
   });
 });

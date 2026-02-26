@@ -127,6 +127,24 @@ const REVIEW_HISTORY_MIGRATIONS = {
       ON forge_chunks(session_id, sequence_order)
     `;
   }),
+  "0004_create_forge_topics": Effect.gen(function* () {
+    const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+    yield* sql`
+      CREATE TABLE IF NOT EXISTS forge_topics (
+        id INTEGER PRIMARY KEY,
+        chunk_id INTEGER NOT NULL REFERENCES forge_chunks(id) ON DELETE CASCADE,
+        topic_order INTEGER NOT NULL CHECK (topic_order >= 0),
+        topic_text TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      )
+    `;
+
+    yield* sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS forge_topics_chunk_order_idx
+      ON forge_topics(chunk_id, topic_order)
+    `;
+  }),
 } satisfies Record<string, Effect.Effect<void, unknown, SqlClient.SqlClient>>;
 
 const toMigrationError = (message: string): Migrator.MigrationError =>

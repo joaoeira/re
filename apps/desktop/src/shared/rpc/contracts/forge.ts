@@ -7,6 +7,12 @@ import {
   ForgeExtractTextErrorSchema,
   ForgeExtractTextInputSchema,
   ForgeExtractTextResultSchema,
+  ForgePreviewChunksErrorSchema,
+  ForgePreviewChunksInputSchema,
+  ForgePreviewChunksResultSchema,
+  ForgeStartTopicExtractionErrorSchema,
+  ForgeStartTopicExtractionInputSchema,
+  ForgeStartTopicExtractionResultSchema,
 } from "@shared/rpc/schemas/forge";
 
 export const ForgeCreateSession = rpc(
@@ -21,4 +27,18 @@ export const ForgeExtractText = rpc(
   ForgeExtractTextInputSchema,
   ForgeExtractTextResultSchema,
   ForgeExtractTextErrorSchema,
+);
+
+export const ForgePreviewChunks = rpc(
+  "ForgePreviewChunks",
+  ForgePreviewChunksInputSchema,
+  ForgePreviewChunksResultSchema,
+  ForgePreviewChunksErrorSchema,
+);
+
+export const ForgeStartTopicExtraction = rpc(
+  "ForgeStartTopicExtraction",
+  ForgeStartTopicExtractionInputSchema,
+  ForgeStartTopicExtractionResultSchema,
+  ForgeStartTopicExtractionErrorSchema,
 );

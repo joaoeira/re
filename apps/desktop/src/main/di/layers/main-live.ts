@@ -20,7 +20,11 @@ import { AiClientServiceFromSecretStoreLive } from "../services/AiClientService"
 import { DeckWriteCoordinatorServiceLive } from "../services/DeckWriteCoordinatorService";
 import { ChunkServiceLive } from "../services/ChunkService";
 import { ForgeSessionRepositoryServiceLive } from "../services/ForgeSessionRepositoryService";
-import { ForgePromptRuntimeServiceLive } from "../services/ForgePromptRuntimeService";
+import {
+  ForgePromptRuntimeService,
+  ForgePromptRuntimeServiceLive,
+  type ForgePromptRuntimeService as ForgePromptRuntime,
+} from "../services/ForgePromptRuntimeService";
 import {
   DuplicateIndexInvalidationBridgeLive,
   DuplicateIndexInvalidationServiceLive,
@@ -48,6 +52,7 @@ type MainStaticDependencies = {
   readonly analyticsRepository: ReviewAnalyticsRepository;
   readonly deckWriteCoordinator: DeckWriteCoordinator;
   readonly forgeSessionRepository?: ForgeSessionRepository;
+  readonly forgePromptRuntime?: ForgePromptRuntime;
   readonly pdfExtractor?: PdfExtractor;
   readonly chunkService?: ChunkService;
 };
@@ -64,10 +69,14 @@ const MainStaticLive = ({
   analyticsRepository,
   deckWriteCoordinator,
   forgeSessionRepository,
+  forgePromptRuntime,
   pdfExtractor,
   chunkService,
 }: MainStaticDependencies) => {
   const aiClientLayer = AiClientServiceFromSecretStoreLive(secretStore);
+  const forgePromptRuntimeLayer = forgePromptRuntime
+    ? Layer.succeed(ForgePromptRuntimeService, forgePromptRuntime)
+    : ForgePromptRuntimeServiceLive.pipe(Layer.provide(aiClientLayer));
 
   return Layer.mergeAll(
     SettingsRepositoryServiceLive(settingsRepository),
@@ -78,7 +87,7 @@ const MainStaticLive = ({
     ForgeSessionRepositoryServiceLive(
       forgeSessionRepository ?? makeInMemoryForgeSessionRepository(),
     ),
-    ForgePromptRuntimeServiceLive.pipe(Layer.provide(aiClientLayer)),
+    forgePromptRuntimeLayer,
     PdfExtractorServiceLive(pdfExtractor ?? makeStubPdfExtractor()),
     ChunkServiceLive(chunkService ?? makeChunkService()),
   );
@@ -103,6 +112,7 @@ export const MainAppDirectLive = ({
   watcher,
   openEditorWindow,
   forgeSessionRepository,
+  forgePromptRuntime,
   pdfExtractor,
   chunkService,
 }: MainDirectDependencies) =>
@@ -113,6 +123,7 @@ export const MainAppDirectLive = ({
       analyticsRepository,
       deckWriteCoordinator,
       ...(forgeSessionRepository ? { forgeSessionRepository } : {}),
+      ...(forgePromptRuntime ? { forgePromptRuntime } : {}),
       ...(pdfExtractor ? { pdfExtractor } : {}),
       ...(chunkService ? { chunkService } : {}),
     }),

@@ -7,6 +7,7 @@ import { MainAppDirectLive, NoOpAppEventPublisher } from "@main/di";
 import type { EditorWindowParams } from "@main/editor-window";
 import type { ForgeSessionRepository } from "@main/forge/services/forge-session-repository";
 import type { ChunkService } from "@main/forge/services/chunk-service";
+import type { ForgePromptRuntime } from "@main/forge/services/prompt-runtime";
 import type { PdfExtractor } from "@main/forge/services/pdf-extractor";
 import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import { NoOpDeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
@@ -70,6 +71,7 @@ export type HandlerTestOverrides = {
   readonly settingsRepository?: SettingsRepository | undefined;
   readonly secretStore?: SecretStore | undefined;
   readonly forgeSessionRepository?: ForgeSessionRepository | undefined;
+  readonly forgePromptRuntime?: ForgePromptRuntime | undefined;
   readonly chunkService?: ChunkService | undefined;
   readonly pdfExtractor?: PdfExtractor | undefined;
 };
@@ -95,6 +97,9 @@ export const createHandlersWithOverrides = async (
           openEditorWindow: overrides.openEditorWindow ?? (() => undefined),
           ...(overrides.forgeSessionRepository
             ? { forgeSessionRepository: overrides.forgeSessionRepository }
+            : {}),
+          ...(overrides.forgePromptRuntime
+            ? { forgePromptRuntime: overrides.forgePromptRuntime }
             : {}),
           ...(overrides.chunkService ? { chunkService: overrides.chunkService } : {}),
           ...(overrides.pdfExtractor ? { pdfExtractor: overrides.pdfExtractor } : {}),
