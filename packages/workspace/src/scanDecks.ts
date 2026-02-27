@@ -53,6 +53,20 @@ export const ScanDecksErrorSchema = Schema.Union(
 
 export type ScanDecksError = typeof ScanDecksErrorSchema.Type;
 
+export const toScanDecksErrorMessage = (error: ScanDecksError): string => {
+  switch (error._tag) {
+    case "WorkspaceRootNotFound":
+      return `Workspace root not found: ${error.rootPath}`;
+    case "WorkspaceRootNotDirectory":
+      return `Workspace root is not a directory: ${error.rootPath}`;
+    case "WorkspaceRootUnreadable":
+      return `Workspace root is unreadable: ${error.message}`;
+  }
+};
+
+export const mapScanDecksErrorToError = (error: ScanDecksError | Error): Error =>
+  "_tag" in error ? new Error(toScanDecksErrorMessage(error)) : error;
+
 const isNestedTolerable = (error: PlatformError): boolean =>
   error._tag === "SystemError" &&
   (error.reason === "PermissionDenied" || error.reason === "NotFound");

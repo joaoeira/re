@@ -1,10 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
-import { useSelector } from "@xstate/store-react";
-import { Effect, Fiber } from "effect";
+import { createContext, useCallback, useContext, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import type { SecretKey } from "@shared/secrets";
-import { useIpc } from "@/lib/ipc-context";
-import { createSettingsPageStore, type SettingsPageStore } from "./settings-page-store";
+import { useApiKeyMutations } from "@/hooks/mutations/use-api-key-mutations";
+import { useWorkspaceRootMutations } from "@/hooks/mutations/use-workspace-root-mutations";
+import { useApiKeysConfiguredQuery } from "@/hooks/queries/use-api-keys-configured-query";
+import { useSettingsQuery } from "@/hooks/queries/use-settings-query";
+import { queryKeys } from "@/lib/query-keys";
+import type { ApiKeyState } from "./provider-key-row";
 
 type SettingsPageActions = {
   readonly reload: () => void;
@@ -14,40 +17,21 @@ type SettingsPageActions = {
   readonly removeKey: (key: SecretKey) => void;
 };
 
+type SettingsPageState = {
+  readonly loading: boolean;
+  readonly loadError: string | null;
+  readonly rootPath: string | null;
+  readonly rootPathSaving: boolean;
+  readonly rootPathError: string | null;
+  readonly apiKeys: Record<SecretKey, ApiKeyState>;
+};
+
 type SettingsPageContextValue = {
-  readonly store: SettingsPageStore;
+  readonly state: SettingsPageState;
   readonly actions: SettingsPageActions;
 };
 
 const SettingsPageContext = createContext<SettingsPageContextValue | null>(null);
-
-const errorDetails = (error: unknown): string => {
-  if (error instanceof Error && error.message.length > 0) return error.message;
-
-  if (typeof error === "object" && error !== null) {
-    const maybeError = error as { _tag?: unknown; message?: unknown };
-    const tag = typeof maybeError._tag === "string" ? maybeError._tag : null;
-    const message = typeof maybeError.message === "string" ? maybeError.message : null;
-
-    if (tag && message) return `${tag}: ${message}`;
-    if (message) return message;
-    if (tag) return tag;
-
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-
-  return String(error);
-};
-
-const formatError = (prefix: string, error: unknown): string => `${prefix}: ${errorDetails(error)}`;
-
-const logSettingsError = (action: string, error: unknown): void => {
-  console.error(`[settings] ${action}`, error);
-};
 
 function useSettingsPageContextValue(): SettingsPageContextValue {
   const context = useContext(SettingsPageContext);
@@ -55,203 +39,95 @@ function useSettingsPageContextValue(): SettingsPageContextValue {
   return context;
 }
 
-export function useSettingsPageStore(): SettingsPageStore {
-  return useSettingsPageContextValue().store;
+export function useSettingsPageState(): SettingsPageState {
+  return useSettingsPageContextValue().state;
 }
 
 export function useSettingsPageActions(): SettingsPageActions {
   return useSettingsPageContextValue().actions;
 }
 
-export function useSettingsPageSelector<T>(
-  selector: (snapshot: ReturnType<SettingsPageStore["getSnapshot"]>) => T,
-): T {
-  const store = useSettingsPageStore();
-  return useSelector(store, selector);
-}
-
 export function SettingsPageProvider({ children }: { children: React.ReactNode }) {
-  const ipc = useIpc();
-  const store = useMemo(() => createSettingsPageStore(), []);
-  const fibersRef = useRef(new Set<Fiber.RuntimeFiber<unknown, unknown>>());
+  const queryClient = useQueryClient();
+  const settingsQuery = useSettingsQuery();
+  const apiKeysConfiguredQuery = useApiKeysConfiguredQuery();
 
-  const runTask = useCallback((effect: Effect.Effect<unknown>) => {
-    let fiber: Fiber.RuntimeFiber<unknown, unknown> | null = null;
-
-    const trackedEffect = effect.pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          if (fiber !== null) fibersRef.current.delete(fiber);
-        }),
-      ),
-    );
-
-    fiber = Effect.runFork(trackedEffect);
-    fibersRef.current.add(fiber);
-  }, []);
-
-  useEffect(
-    () => () => {
-      for (const fiber of fibersRef.current) {
-        Effect.runFork(Fiber.interrupt(fiber));
-      }
-      fibersRef.current.clear();
-    },
-    [],
-  );
+  const {
+    rootPathSaving,
+    rootPathError,
+    selectDirectory,
+    clearRootPath,
+    clearError: clearRootPathError,
+  } = useWorkspaceRootMutations();
+  const {
+    saving: apiKeySaving,
+    errors: apiKeyErrors,
+    saveKey,
+    removeKey,
+    clearErrors: clearApiKeyErrors,
+  } = useApiKeyMutations();
 
   const reload = useCallback(() => {
-    store.send({ type: "setLoading" });
+    clearRootPathError();
+    clearApiKeyErrors();
+    void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.apiKeysConfigured });
+  }, [clearApiKeyErrors, clearRootPathError, queryClient]);
 
-    runTask(
-      Effect.all(
-        {
-          settings: ipc.client.GetSettings(),
-          openai: ipc.client.HasApiKey({ key: "openai-api-key" }),
-          anthropic: ipc.client.HasApiKey({ key: "anthropic-api-key" }),
-          gemini: ipc.client.HasApiKey({ key: "gemini-api-key" }),
+  const loadError = (() => {
+    if (settingsQuery.error) {
+      return `Failed to load settings: ${settingsQuery.error.message}`;
+    }
+
+    if (apiKeysConfiguredQuery.error) {
+      return `Failed to load settings: ${apiKeysConfiguredQuery.error.message}`;
+    }
+
+    return null;
+  })();
+
+  const configuredByKey = apiKeysConfiguredQuery.data ?? {
+    "openai-api-key": false,
+    "anthropic-api-key": false,
+    "gemini-api-key": false,
+  };
+
+  const state = useMemo<SettingsPageState>(
+    () => ({
+      loading: settingsQuery.isPending || apiKeysConfiguredQuery.isPending,
+      loadError,
+      rootPath: settingsQuery.data?.workspace.rootPath ?? null,
+      rootPathSaving,
+      rootPathError,
+      apiKeys: {
+        "openai-api-key": {
+          configured: configuredByKey["openai-api-key"],
+          saving: apiKeySaving["openai-api-key"],
+          error: apiKeyErrors["openai-api-key"],
         },
-        { concurrency: "unbounded" },
-      ).pipe(
-        Effect.match({
-          onSuccess: ({ settings, openai, anthropic, gemini }) => {
-            store.send({
-              type: "loadSuccess",
-              rootPath: settings.workspace.rootPath,
-              openaiConfigured: openai.configured,
-              anthropicConfigured: anthropic.configured,
-              geminiConfigured: gemini.configured,
-            });
-          },
-          onFailure: (error) => {
-            logSettingsError("load", error);
-            store.send({
-              type: "loadError",
-              error: formatError("Failed to load settings", error),
-            });
-          },
-        }),
-      ),
-    );
-  }, [ipc, runTask, store]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
-
-  const selectDirectory = useCallback(() => {
-    store.send({ type: "setRootPathSaving" });
-
-    runTask(
-      ipc.client.SelectDirectory().pipe(
-        Effect.flatMap((result) => {
-          if (result.path === null) {
-            return Effect.succeed({ rootPath: store.getSnapshot().context.rootPath });
-          }
-          return ipc.client
-            .SetWorkspaceRootPath({ rootPath: result.path })
-            .pipe(Effect.map((settings) => ({ rootPath: settings.workspace.rootPath })));
-        }),
-        Effect.match({
-          onSuccess: ({ rootPath }) => {
-            store.send({
-              type: "rootPathSaved",
-              rootPath,
-            });
-          },
-          onFailure: (error) => {
-            logSettingsError("set workspace root", error);
-            store.send({
-              type: "rootPathSaveError",
-              error: formatError("Failed to set workspace path", error),
-            });
-          },
-        }),
-      ),
-    );
-  }, [ipc, runTask, store]);
-
-  const clearRootPath = useCallback(() => {
-    store.send({ type: "setRootPathSaving" });
-
-    runTask(
-      ipc.client.SetWorkspaceRootPath({ rootPath: null }).pipe(
-        Effect.match({
-          onSuccess: (settings) => {
-            store.send({
-              type: "rootPathSaved",
-              rootPath: settings.workspace.rootPath,
-            });
-          },
-          onFailure: (error) => {
-            logSettingsError("clear workspace root", error);
-            store.send({
-              type: "rootPathSaveError",
-              error: formatError("Failed to clear workspace path", error),
-            });
-          },
-        }),
-      ),
-    );
-  }, [ipc, runTask, store]);
-
-  const saveKey = useCallback(
-    (key: SecretKey, value: string) => {
-      store.send({ type: "setApiKeySaving", key });
-
-      runTask(
-        ipc.client.SetApiKey({ key, value }).pipe(
-          Effect.flatMap(() => ipc.client.HasApiKey({ key })),
-          Effect.match({
-            onSuccess: (result) => {
-              store.send({
-                type: "apiKeySaved",
-                key,
-                configured: result.configured,
-              });
-            },
-            onFailure: (error) => {
-              logSettingsError(`save API key (${key})`, error);
-              store.send({
-                type: "apiKeySaveError",
-                key,
-                error: formatError("Failed to save key", error),
-              });
-            },
-          }),
-        ),
-      );
-    },
-    [ipc, runTask, store],
-  );
-
-  const removeKey = useCallback(
-    (key: SecretKey) => {
-      store.send({ type: "setApiKeySaving", key });
-
-      runTask(
-        ipc.client.DeleteApiKey({ key }).pipe(
-          Effect.match({
-            onSuccess: () => {
-              store.send({
-                type: "apiKeySaved",
-                key,
-                configured: false,
-              });
-            },
-            onFailure: (error) => {
-              logSettingsError(`remove API key (${key})`, error);
-              store.send({
-                type: "apiKeySaveError",
-                key,
-                error: formatError("Failed to remove key", error),
-              });
-            },
-          }),
-        ),
-      );
-    },
-    [ipc, runTask, store],
+        "anthropic-api-key": {
+          configured: configuredByKey["anthropic-api-key"],
+          saving: apiKeySaving["anthropic-api-key"],
+          error: apiKeyErrors["anthropic-api-key"],
+        },
+        "gemini-api-key": {
+          configured: configuredByKey["gemini-api-key"],
+          saving: apiKeySaving["gemini-api-key"],
+          error: apiKeyErrors["gemini-api-key"],
+        },
+      },
+    }),
+    [
+      settingsQuery.isPending,
+      apiKeysConfiguredQuery.isPending,
+      loadError,
+      settingsQuery.data,
+      rootPathSaving,
+      rootPathError,
+      configuredByKey,
+      apiKeySaving,
+      apiKeyErrors,
+    ],
   );
 
   const actions = useMemo(
@@ -267,10 +143,10 @@ export function SettingsPageProvider({ children }: { children: React.ReactNode }
 
   const value = useMemo(
     () => ({
-      store,
+      state,
       actions,
     }),
-    [store, actions],
+    [state, actions],
   );
 
   return <SettingsPageContext.Provider value={value}>{children}</SettingsPageContext.Provider>;

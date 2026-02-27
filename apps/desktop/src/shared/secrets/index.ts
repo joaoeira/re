@@ -7,5 +7,7 @@ export {
   SecretStoreReadFailed,
   SecretStoreUnavailable,
   SecretStoreWriteFailed,
+  mapSecretStoreErrorToError,
+  toSecretStoreErrorMessage,
   type SecretStoreError,
 } from "./errors";

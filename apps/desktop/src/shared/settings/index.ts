@@ -15,5 +15,7 @@ export {
   WorkspaceRootNotDirectory,
   WorkspaceRootNotFound,
   WorkspaceRootUnreadable,
+  mapSettingsErrorToError,
+  toSettingsErrorMessage,
   type SettingsError,
 } from "./errors";

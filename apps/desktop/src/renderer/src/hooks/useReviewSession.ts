@@ -1,8 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { createActor, type ActorRefFrom } from "xstate";
 import { Effect } from "effect";
 
 import { useIpc } from "@/lib/ipc-context";
+import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
+import {
+  useReviewBootstrapQuery,
+  type ReviewDeckSelection,
+} from "@/hooks/queries/use-review-bootstrap-query";
+import { queryKeys } from "@/lib/query-keys";
 import { CardEdited, CardsDeleted } from "@shared/rpc/contracts";
 import {
   desktopReviewSessionMachine,
@@ -11,24 +18,6 @@ import {
   type DesktopReviewSessionSend,
   type DesktopReviewSessionSnapshot,
 } from "@/machines/desktopReviewSession";
-
-type ReviewDeckSelection = "all" | string[];
-
-const DEFAULT_SNAPSHOT_OPTIONS = {
-  includeHidden: false,
-  extraIgnorePatterns: [],
-} as const;
-
-const formatUnknownError = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
-const resolveDeckPathFromRoot = (rootPath: string, relativePath: string): string => {
-  const separator = rootPath.includes("\\") ? "\\" : "/";
-  const normalizedRoot =
-    rootPath.endsWith("/") || rootPath.endsWith("\\") ? rootPath.slice(0, -1) : rootPath;
-  const normalizedRelative = relativePath.replace(/^[/\\]+/, "").replace(/[\\/]+/g, separator);
-  return `${normalizedRoot}${separator}${normalizedRelative}`;
-};
 
 type UseReviewSessionResult =
   | { status: "loading"; send: DesktopReviewSessionSend }
@@ -43,244 +32,223 @@ type UseReviewSessionResult =
       send: DesktopReviewSessionSend;
     };
 
-type ReviewSessionState =
-  | { status: "loading" }
-  | { status: "empty" }
-  | { status: "error"; message: string }
-  | {
-      status: "ready";
-      snapshot: DesktopReviewSessionSnapshot;
-      totalDue: number;
-      totalNew: number;
-      notice: string | null;
-    };
+type ReadyReviewSessionState = {
+  readonly snapshot: DesktopReviewSessionSnapshot;
+  readonly totalDue: number;
+  readonly totalNew: number;
+  readonly notice: string | null;
+};
 
 export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionResult {
-  const [state, setState] = useState<ReviewSessionState>({ status: "loading" });
   const actorRef = useRef<ActorRefFrom<typeof desktopReviewSessionMachine> | null>(null);
+  const actorTeardownRef = useRef<(() => void) | null>(null);
   const refreshReasonRef = useRef<string | null>(null);
   const refreshInFlightRef = useRef(false);
-  const [reloadNonce, setReloadNonce] = useState(0);
+  const [readyState, setReadyState] = useState<ReadyReviewSessionState | null>(null);
   const ipc = useIpc();
+  const queryClient = useQueryClient();
+
   const send: DesktopReviewSessionSend = useCallback((event) => {
     actorRef.current?.send(event);
   }, []);
 
-  const deckSelectionKey = useMemo(() => (decks === "all" ? "all" : decks.join("\u0000")), [decks]);
+  const teardownActor = useCallback(() => {
+    actorTeardownRef.current?.();
+    actorTeardownRef.current = null;
+  }, []);
+
+  const { deckSelectionKey, query: bootstrapQuery } = useReviewBootstrapQuery(decks);
 
   useEffect(() => {
-    let isCancelled = false;
-    let unsubscribeActor: (() => void) | null = null;
-    let unsubscribeCardEdited: (() => void) | null = null;
-
-    if (actorRef.current) {
-      actorRef.current.stop();
-      actorRef.current = null;
+    if (bootstrapQuery.isError || !bootstrapQuery.data || bootstrapQuery.data.items.length === 0) {
+      teardownActor();
+      setReadyState(null);
+      return;
     }
 
-    refreshInFlightRef.current = false;
-    setState({ status: "loading" });
+    let isCancelled = false;
 
-    const load = async () => {
-      try {
-        const settings = await Effect.runPromise(ipc.client.GetSettings());
-        const rootPath = settings.workspace.rootPath;
+    teardownActor();
 
-        if (!rootPath) {
-          if (!isCancelled) {
-            setState({
-              status: "error",
-              message: "No workspace configured. Set a workspace root path in settings.",
-            });
-          }
-          return;
-        }
+    const queue = bootstrapQuery.data;
 
-        const snapshot = await Effect.runPromise(
-          ipc.client.GetWorkspaceSnapshot({
-            rootPath,
-            options: DEFAULT_SNAPSHOT_OPTIONS,
-          }),
-        );
-
-        const absoluteByRelative = new Map(
-          snapshot.decks.map((deckSnapshot) => [
-            deckSnapshot.relativePath,
-            deckSnapshot.absolutePath,
-          ]),
-        );
-
-        const deckPaths =
-          decks === "all"
-            ? snapshot.decks.map((deckSnapshot) => deckSnapshot.absolutePath)
-            : decks.map(
-                (relativePath) =>
-                  absoluteByRelative.get(relativePath) ??
-                  resolveDeckPathFromRoot(rootPath, relativePath),
-              );
-
-        const queue = await Effect.runPromise(
-          ipc.client.BuildReviewQueue({
-            deckPaths,
-            rootPath,
-          }),
-        );
-
-        if (isCancelled) return;
-
-        if (queue.items.length === 0) {
-          setState({ status: "empty" });
-          return;
-        }
-
-        const actor = createActor(desktopReviewSessionMachine, {
-          input: {
-            queue: queue.items,
-            loadCard: async (input) =>
-              Effect.runPromise(
-                ipc.client.GetCardContent(input).pipe(
-                  Effect.catchTags({
-                    not_found: (e) => Effect.fail(new RecoverableCardLoadError(e.message)),
-                    parse_error: (e) => Effect.fail(new RecoverableCardLoadError(e.message)),
-                    card_index_out_of_bounds: () =>
-                      Effect.fail(new RecoverableCardLoadError("Card index out of bounds")),
-                  }),
-                ),
+    const actor = createActor(desktopReviewSessionMachine, {
+      input: {
+        queue: queue.items,
+        loadCard: async (input) =>
+          runIpcEffect(
+            ipc.client.GetCardContent(input).pipe(
+              Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                Effect.fail(toRpcDefectError(rpcDefect)),
               ),
-            scheduleReview: async (input) => Effect.runPromise(ipc.client.ScheduleReview(input)),
-            undoReview: async (input) => {
-              await Effect.runPromise(
-                ipc.client.UndoReview(input).pipe(
-                  Effect.catchTags({
-                    undo_conflict: (error) =>
-                      Effect.fail(new RecoverableUndoConflictError(error.message)),
-                  }),
-                ),
-              );
-            },
-          },
-        });
-
-        actorRef.current = actor;
-        actor.start();
-
-        setState({
-          status: "ready",
-          snapshot: actor.getSnapshot(),
-          totalDue: queue.totalDue,
-          totalNew: queue.totalNew,
-          notice: refreshReasonRef.current,
-        });
-        refreshReasonRef.current = null;
-
-        const subscription = actor.subscribe((snapshotValue) => {
-          if (isCancelled) return;
-
-          if (snapshotValue.matches("refreshRequired")) {
-            if (!refreshInFlightRef.current) {
-              refreshInFlightRef.current = true;
-              refreshReasonRef.current = "Session state was refreshed due to external changes.";
-              setReloadNonce((value) => value + 1);
-            }
-            return;
-          }
-
-          setState((currentState) => {
-            if (currentState.status !== "ready") {
-              return {
-                status: "ready",
-                snapshot: snapshotValue,
-                totalDue: queue.totalDue,
-                totalNew: queue.totalNew,
-                notice: refreshReasonRef.current,
-              };
-            }
-
-            return {
-              ...currentState,
-              snapshot: snapshotValue,
-            };
-          });
-        });
-        unsubscribeActor = () => {
-          subscription.unsubscribe();
-        };
-
-        const unsubCardEdited = ipc.events.subscribe(CardEdited, ({ deckPath, cardId }) => {
-          const snapshot = actor.getSnapshot();
-          const current = snapshot.context.queue[snapshot.context.currentIndex];
-          if (!current) {
-            return;
-          }
-
-          if (current.deckPath === deckPath && current.cardId === cardId) {
-            actor.send({ type: "CARD_EDITED" });
-          }
-        });
-
-        const unsubCardsDeleted = ipc.events.subscribe(CardsDeleted, ({ items }) => {
-          const snapshot = actor.getSnapshot();
-          const current = snapshot.context.queue[snapshot.context.currentIndex];
-          if (!current) {
-            return;
-          }
-
-          const isCurrentDeleted = items.some(
-            (item) => item.deckPath === current.deckPath && item.cardId === current.cardId,
+              Effect.catchTags({
+                not_found: (e) => Effect.fail(new RecoverableCardLoadError(e.message)),
+                parse_error: (e) => Effect.fail(new RecoverableCardLoadError(e.message)),
+                card_index_out_of_bounds: () =>
+                  Effect.fail(new RecoverableCardLoadError("Card index out of bounds")),
+                read_error: (e) => Effect.fail(new Error(e.message)),
+              }),
+            ),
+          ),
+        scheduleReview: async (input) =>
+          runIpcEffect(
+            ipc.client.ScheduleReview(input).pipe(
+              Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                Effect.fail(toRpcDefectError(rpcDefect)),
+              ),
+              Effect.catchTag("review_operation_error", (reviewError) =>
+                Effect.fail(new Error(reviewError.message)),
+              ),
+            ),
+          ),
+        undoReview: async (input) => {
+          await runIpcEffect(
+            ipc.client.UndoReview(input).pipe(
+              Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                Effect.fail(toRpcDefectError(rpcDefect)),
+              ),
+              Effect.catchTags({
+                undo_conflict: (error) =>
+                  Effect.fail(new RecoverableUndoConflictError(error.message)),
+                review_operation_error: (error) => Effect.fail(new Error(error.message)),
+                undo_safety_unavailable: (error) => Effect.fail(new Error(error.message)),
+              }),
+            ),
           );
-          if (isCurrentDeleted) {
-            actor.send({ type: "CARD_DELETED" });
-          }
-        });
+        },
+      },
+    });
 
-        unsubscribeCardEdited = () => {
-          unsubCardEdited();
-          unsubCardsDeleted();
+    actorRef.current = actor;
+    actor.start();
+
+    setReadyState({
+      snapshot: actor.getSnapshot(),
+      totalDue: queue.totalDue,
+      totalNew: queue.totalNew,
+      notice: refreshReasonRef.current,
+    });
+    refreshReasonRef.current = null;
+
+    const subscription = actor.subscribe((snapshotValue) => {
+      if (isCancelled) return;
+
+      if (snapshotValue.matches("refreshRequired")) {
+        if (!refreshInFlightRef.current) {
+          refreshInFlightRef.current = true;
+          refreshReasonRef.current = "Session state was refreshed due to external changes.";
+          setReadyState(null);
+          void queryClient
+            .invalidateQueries({
+              queryKey: queryKeys.reviewBootstrap(deckSelectionKey),
+            })
+            .finally(() => {
+              refreshInFlightRef.current = false;
+            });
+        }
+        return;
+      }
+
+      setReadyState((currentState) => {
+        if (!currentState) {
+          return {
+            snapshot: snapshotValue,
+            totalDue: queue.totalDue,
+            totalNew: queue.totalNew,
+            notice: refreshReasonRef.current,
+          };
+        }
+
+        return {
+          ...currentState,
+          snapshot: snapshotValue,
         };
-      } catch (error) {
-        if (isCancelled) return;
-        setState({
-          status: "error",
-          message: formatUnknownError(error),
-        });
+      });
+    });
+
+    const unsubCardEdited = ipc.events.subscribe(CardEdited, ({ deckPath, cardId }) => {
+      const snapshot = actor.getSnapshot();
+      const current = snapshot.context.queue[snapshot.context.currentIndex];
+      if (!current) {
+        return;
       }
-    };
 
-    void load();
+      if (current.deckPath === deckPath && current.cardId === cardId) {
+        actor.send({ type: "CARD_EDITED" });
+      }
+    });
 
-    return () => {
+    const unsubCardsDeleted = ipc.events.subscribe(CardsDeleted, ({ items }) => {
+      const snapshot = actor.getSnapshot();
+      const current = snapshot.context.queue[snapshot.context.currentIndex];
+      if (!current) {
+        return;
+      }
+
+      const isCurrentDeleted = items.some(
+        (item) => item.deckPath === current.deckPath && item.cardId === current.cardId,
+      );
+      if (isCurrentDeleted) {
+        actor.send({ type: "CARD_DELETED" });
+      }
+    });
+
+    const cleanupActor = () => {
       isCancelled = true;
-      if (unsubscribeCardEdited) {
-        unsubscribeCardEdited();
-      }
-      if (unsubscribeActor) {
-        unsubscribeActor();
-      }
-      if (actorRef.current) {
-        actorRef.current.stop();
+      subscription.unsubscribe();
+      unsubCardEdited();
+      unsubCardsDeleted();
+      actor.stop();
+      if (actorRef.current === actor) {
         actorRef.current = null;
       }
     };
-  }, [ipc, deckSelectionKey, reloadNonce]);
 
-  if (state.status === "loading") {
+    actorTeardownRef.current = cleanupActor;
+
+    return () => {
+      if (actorTeardownRef.current === cleanupActor) {
+        actorTeardownRef.current = null;
+      }
+      cleanupActor();
+    };
+  }, [
+    bootstrapQuery.dataUpdatedAt,
+    bootstrapQuery.data,
+    bootstrapQuery.errorUpdatedAt,
+    bootstrapQuery.isError,
+    deckSelectionKey,
+    ipc,
+    queryClient,
+    teardownActor,
+  ]);
+
+  if (bootstrapQuery.isPending || (bootstrapQuery.isFetching && readyState === null)) {
     return { status: "loading", send };
   }
 
-  if (state.status === "empty") {
+  if (bootstrapQuery.isError) {
+    return {
+      status: "error",
+      message: bootstrapQuery.error.message,
+      send,
+    };
+  }
+
+  if (bootstrapQuery.data && bootstrapQuery.data.items.length === 0) {
     return { status: "empty", send };
   }
 
-  if (state.status === "error") {
-    return { status: "error", message: state.message, send };
+  if (!readyState) {
+    return { status: "loading", send };
   }
 
   return {
     status: "ready",
-    snapshot: state.snapshot,
-    totalDue: state.totalDue,
-    totalNew: state.totalNew,
-    notice: state.notice,
+    snapshot: readyState.snapshot,
+    totalDue: readyState.totalDue,
+    totalNew: readyState.totalNew,
+    notice: readyState.notice,
     send,
   };
 }

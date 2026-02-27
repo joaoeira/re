@@ -3,7 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import { SETTINGS_SECTIONS, getSettingsSection } from "./settings-sections";
 import type { SettingsSection } from "./settings-section";
-import { useSettingsPageActions, useSettingsPageSelector } from "./settings-page-context";
+import { useSettingsPageActions, useSettingsPageState } from "./settings-page-context";
 
 export function SettingsPage({
   section,
@@ -13,8 +13,7 @@ export function SettingsPage({
   onSectionChange: (section: SettingsSection) => void;
 }) {
   const actions = useSettingsPageActions();
-  const loading = useSettingsPageSelector((s) => s.context.loading);
-  const loadError = useSettingsPageSelector((s) => s.context.loadError);
+  const { loading, loadError } = useSettingsPageState();
   const selectedSection = getSettingsSection(section);
   const tabRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 

@@ -1,10 +1,9 @@
-import { render } from "vitest-browser-react";
 import { RouterProvider, createHashHistory, createRouter } from "@tanstack/react-router";
 import { describe, expect, it, vi } from "vitest";
 
-import { IpcProvider } from "@/lib/ipc-context";
 import { StoresProvider, createStores } from "@shared/state/stores-context";
 import { routeTree } from "../../src/renderer/src/routeTree.gen";
+import { renderWithIpcProviders } from "./render-with-providers";
 
 const defaultOnStreamFrame: NonNullable<Window["desktopApi"]["onStreamFrame"]> = () => {
   return () => undefined;
@@ -23,12 +22,10 @@ const mockDesktopApi = (
 
 const renderApp = async (stores: ReturnType<typeof createStores>) => {
   const router = createRouter({ routeTree, history: createHashHistory() });
-  return render(
-    <IpcProvider>
-      <StoresProvider stores={stores}>
-        <RouterProvider router={router} />
-      </StoresProvider>
-    </IpcProvider>,
+  return renderWithIpcProviders(
+    <StoresProvider stores={stores}>
+      <RouterProvider router={router} />
+    </StoresProvider>,
   );
 };
 

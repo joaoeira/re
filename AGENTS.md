@@ -188,6 +188,65 @@ someEffect.pipe(Effect.mapError((e) => new ApiError({ message: toErrorMessage(e)
 
 The problem is specifically the classification variant: a function that receives `unknown` and uses an `instanceof` or `_tag` chain to sort errors into different buckets.
 
+## TanStack Query (renderer) best practices
+
+In the desktop renderer, treat TanStack Query as the single source of truth for server state. Avoid component-local `loading` / `error` booleans for IPC data and mutations unless the state is truly UI-local and not tied to an async resource.
+
+### Query key design and ownership
+
+Keep query keys centralized in `apps/desktop/src/renderer/src/lib/query-keys.ts`. Do not inline raw array keys in components or hooks. A key must uniquely describe one cache entry and one data contract. If two consumers need different error behavior, data shape, or fetch semantics, they need different keys or one shared canonical hook with shared behavior.
+
+Never reuse the same key for two different `queryFn` implementations. TanStack Query deduplicates by key, so whichever query runs first controls the cache behavior for all consumers.
+
+Include every value that changes the result in the key. If data depends on `rootPath`, `sourceFilePath`, or selection mode, encode those in the key. Omitting them causes stale cache reuse across logical contexts.
+
+### Canonical query hooks
+
+Prefer one hook per server resource (for example, `useSettingsQuery`, `useWorkspaceSnapshotQuery`, `useReviewBootstrapQuery`) and reuse it across screens/providers. This avoids query key drift, duplicate error mapping, and inconsistent retry behavior.
+
+For optional inputs, use `skipToken` instead of placeholder keys like `""` and avoid mixing `enabled` with fake parameters.
+
+### IPC boundary contract
+
+All IPC query/mutation effects must be mapped to `Effect<A, Error>` before crossing into Promise-land. Use `runIpcEffect` from `apps/desktop/src/renderer/src/lib/ipc-query.ts`; do not call `Effect.runPromise` directly from hooks/components.
+
+At the call site, map RPC defects explicitly:
+
+```ts
+effect.pipe(
+  Effect.catchTag("RpcDefectError", (rpcDefect) => Effect.fail(toRpcDefectError(rpcDefect))),
+  Effect.mapError(mapDomainErrorToError),
+);
+```
+
+Use `Effect.mapError(...)` when every error variant maps uniformly to one `Error` shape. Use `Effect.catchTags(...)` only when branches have materially different behavior (for example, mapping selected tags to recoverable custom `Error` subclasses while mapping others to generic `Error`).
+
+Do not inspect `unknown` errors in React code. The boundary guarantees `Error`, so UI code should read `error.message` directly.
+
+### Shared error mappers
+
+Put domain error-to-message logic next to domain error definitions and export reusable mappers:
+
+- settings: `@shared/settings` (`toSettingsErrorMessage`, `mapSettingsErrorToError`)
+- secrets: `@shared/secrets` (`toSecretStoreErrorMessage`, `mapSecretStoreErrorToError`)
+- workspace scan/snapshot: `@re/workspace` (`toScanDecksErrorMessage`, `mapScanDecksErrorToError`)
+
+Do not duplicate formatter `switch` statements across hooks.
+
+### Mutation and cache update discipline
+
+Mutations should update/invalidate cache through `queryClient` with centralized keys. Use `setQueryData` for deterministic local updates and targeted `invalidateQueries` for refetch. Use key factories/prefixes from `queryKeys`, not ad-hoc string arrays.
+
+When wiring callbacks in providers/contexts, avoid depending on full query/mutation result objects in `useCallback`. Those objects are recreated each render and defeat memoization. Depend on stable refs (`queryClient`, `mutate` functions, local setters) instead.
+
+### Event-driven cache sync
+
+For push-style updates from IPC events, subscribe once in a hook/provider effect and write directly into cache with `queryClient.setQueryData(...)` using the same key factory used by the query hook.
+
+### Testing
+
+Use a shared renderer test helper that wraps `QueryClientProvider` once (for example `render-with-providers.tsx`) instead of duplicating ad-hoc client setup in each test file.
+
 ## SQLite repository runtime boundary
 
 Repository methods use `@effect/sql`, which requires `SqlClient` in the Effect `R` channel. But repository public APIs must be `R = never` because callers (IPC handlers, lifecycle callbacks) are plain JS/Promise boundaries with no Effect runtime context. The bridge between these two worlds — running a `SqlClient`-dependent effect through a `ManagedRuntime` while preserving typed domain errors — is already solved in `apps/desktop/src/main/sqlite/runtime-runner.ts`. Use it directly — do not rewrite or wrap it.

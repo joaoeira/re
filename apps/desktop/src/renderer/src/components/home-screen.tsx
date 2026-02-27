@@ -1,133 +1,24 @@
-import { useCallback, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@xstate/store-react";
-
-import type { ScanDecksError } from "@re/workspace";
-import type { SettingsError } from "@shared/settings";
-import { WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
-import { useDeckSelectionStore, useWorkspaceStore } from "@shared/state/stores-context";
-import { Effect } from "effect";
-import type { RpcDefectError } from "electron-effect-rpc/renderer";
+import { useDeckSelectionStore } from "@shared/state/stores-context";
 
 import { DeckList } from "./deck-list";
 import { ReviewFooter } from "./review-footer";
-import { useIpc } from "../lib/ipc-context";
-
-const DEFAULT_SNAPSHOT_OPTIONS = {
-  includeHidden: false,
-  extraIgnorePatterns: [],
-} as const;
-
-const toRpcDefectMessage = (error: RpcDefectError): string =>
-  `RPC defect (${error.code}): ${error.message}`;
-
-const toScanErrorMessage = (error: ScanDecksError): string => {
-  switch (error._tag) {
-    case "WorkspaceRootNotFound":
-      return `Workspace root not found: ${error.rootPath}`;
-    case "WorkspaceRootNotDirectory":
-      return `Workspace root is not a directory: ${error.rootPath}`;
-    case "WorkspaceRootUnreadable":
-      return `Workspace root is unreadable: ${error.message}`;
-  }
-};
-
-const toSettingsErrorMessage = (error: SettingsError): string => {
-  switch (error._tag) {
-    case "SettingsReadFailed":
-      return `Unable to read settings at ${error.path}: ${error.message}`;
-    case "SettingsDecodeFailed":
-      return `Settings file is invalid at ${error.path}: ${error.message}`;
-    case "SettingsWriteFailed":
-      return `Unable to write settings at ${error.path}: ${error.message}`;
-    case "WorkspaceRootNotFound":
-      return `Workspace root not found: ${error.rootPath}`;
-    case "WorkspaceRootNotDirectory":
-      return `Workspace root is not a directory: ${error.rootPath}`;
-    case "WorkspaceRootUnreadable":
-      return `Workspace root is unreadable: ${error.message}`;
-  }
-};
+import { useSettingsQuery } from "@/hooks/queries/use-settings-query";
+import { useWorkspaceSnapshotQuery } from "@/hooks/queries/use-workspace-snapshot-query";
 
 export function HomeScreen() {
   const navigate = useNavigate();
-  const workspaceStore = useWorkspaceStore();
   const deckSelectionStore = useDeckSelectionStore();
 
-  const workspaceStatus = useSelector(workspaceStore, (s) => s.context.status);
-  const snapshotResult = useSelector(workspaceStore, (s) => s.context.snapshotResult);
-  const workspaceError = useSelector(workspaceStore, (s) => s.context.error);
   const selectedDecks = useSelector(deckSelectionStore, (s) => s.context.selected);
-  const ipc = useIpc();
+  const settingsQuery = useSettingsQuery();
+  const rootPath = settingsQuery.data?.workspace.rootPath ?? null;
 
-  const loadWorkspaceSnapshot = useCallback(
-    (rootPath: string) => {
-      workspaceStore.send({ type: "setLoading" });
+  const workspaceSnapshotQuery = useWorkspaceSnapshotQuery(rootPath);
 
-      void Effect.runPromise(
-        ipc.client
-          .GetWorkspaceSnapshot({
-            rootPath,
-            options: DEFAULT_SNAPSHOT_OPTIONS,
-          })
-          .pipe(
-            Effect.tap((result) =>
-              Effect.sync(() => {
-                workspaceStore.send({ type: "setSnapshot", snapshot: result });
-              }),
-            ),
-            Effect.catchTag("RpcDefectError", (rpcDefect) =>
-              Effect.sync(() => {
-                workspaceStore.send({ type: "setError", error: toRpcDefectMessage(rpcDefect) });
-              }),
-            ),
-            Effect.catchAll((workspaceError) =>
-              Effect.sync(() => {
-                workspaceStore.send({
-                  type: "setError",
-                  error: toScanErrorMessage(workspaceError),
-                });
-              }),
-            ),
-          ),
-      );
-    },
-    [ipc, workspaceStore],
-  );
-
-  useEffect(() => {
-    const unsubscribeSnapshot = ipc.events.subscribe(WorkspaceSnapshotChanged, (snapshot) => {
-      workspaceStore.send({ type: "setSnapshot", snapshot });
-    });
-
-    void Effect.runPromise(
-      ipc.client.GetSettings().pipe(
-        Effect.tap((settings) =>
-          Effect.sync(() => {
-            if (settings.workspace.rootPath) {
-              loadWorkspaceSnapshot(settings.workspace.rootPath);
-            } else {
-              workspaceStore.send({ type: "setSnapshot", snapshot: null });
-            }
-          }),
-        ),
-        Effect.catchTag("RpcDefectError", (rpcDefect) =>
-          Effect.sync(() => {
-            workspaceStore.send({ type: "setError", error: toRpcDefectMessage(rpcDefect) });
-          }),
-        ),
-        Effect.catchAll((settingsError) =>
-          Effect.sync(() => {
-            workspaceStore.send({ type: "setError", error: toSettingsErrorMessage(settingsError) });
-          }),
-        ),
-      ),
-    );
-
-    return unsubscribeSnapshot;
-  }, [ipc, loadWorkspaceSnapshot, workspaceStore]);
-
-  if (workspaceStatus === "idle" || workspaceStatus === "loading") {
+  const isLoading = settingsQuery.isPending || (rootPath !== null && workspaceSnapshotQuery.isPending);
+  if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
         Loading workspace...
@@ -135,14 +26,22 @@ export function HomeScreen() {
     );
   }
 
-  if (workspaceError) {
+  const workspaceErrorMessage = (() => {
+    if (settingsQuery.isError) return settingsQuery.error.message;
+    if (workspaceSnapshotQuery.isError) return workspaceSnapshotQuery.error.message;
+
+    return null;
+  })();
+
+  if (workspaceErrorMessage) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-destructive">
-        {workspaceError}
+        {workspaceErrorMessage}
       </div>
     );
   }
 
+  const snapshotResult = workspaceSnapshotQuery.data ?? null;
   if (!snapshotResult) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">

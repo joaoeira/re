@@ -1,17 +1,15 @@
 import { GeneralSettings } from "./general-settings";
-import { useSettingsPageActions, useSettingsPageSelector } from "./settings-page-context";
+import { useSettingsPageActions, useSettingsPageState } from "./settings-page-context";
 
 export function GeneralSettingsSection() {
-  const rootPath = useSettingsPageSelector((s) => s.context.rootPath);
-  const saving = useSettingsPageSelector((s) => s.context.rootPathSaving);
-  const error = useSettingsPageSelector((s) => s.context.rootPathError);
+  const { rootPath, rootPathSaving, rootPathError } = useSettingsPageState();
   const actions = useSettingsPageActions();
 
   return (
     <GeneralSettings
       rootPath={rootPath}
-      saving={saving}
-      error={error}
+      saving={rootPathSaving}
+      error={rootPathError}
       onSelectDirectory={actions.selectDirectory}
       onClearRootPath={actions.clearRootPath}
     />

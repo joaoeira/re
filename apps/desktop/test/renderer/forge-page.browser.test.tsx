@@ -1,9 +1,8 @@
-import { render } from "vitest-browser-react";
 import { userEvent } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 
 import { ForgePage } from "@/components/forge/forge-page";
-import { IpcProvider } from "@/lib/ipc-context";
+import { renderWithIpcProviders } from "./render-with-providers";
 
 const defaultOnStreamFrame: NonNullable<Window["desktopApi"]["onStreamFrame"]> = () => {
   return () => undefined;
@@ -31,11 +30,7 @@ const mockDesktopGlobals = (
 };
 
 const renderForgePage = async () =>
-  render(
-    <IpcProvider>
-      <ForgePage />
-    </IpcProvider>,
-  );
+  renderWithIpcProviders(<ForgePage />);
 
 const uploadPdf = async (name = "source.pdf") => {
   const input = document.querySelector('input[type="file"]');

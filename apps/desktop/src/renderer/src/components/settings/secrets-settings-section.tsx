@@ -1,8 +1,8 @@
 import { SecretsSettings } from "./secrets-settings";
-import { useSettingsPageActions, useSettingsPageSelector } from "./settings-page-context";
+import { useSettingsPageActions, useSettingsPageState } from "./settings-page-context";
 
 export function SecretsSettingsSection() {
-  const apiKeys = useSettingsPageSelector((s) => s.context.apiKeys);
+  const { apiKeys } = useSettingsPageState();
   const actions = useSettingsPageActions();
 
   return (

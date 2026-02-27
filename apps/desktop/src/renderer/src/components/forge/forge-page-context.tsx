@@ -1,9 +1,12 @@
-import { createContext, useCallback, useContext, useMemo, useRef } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "@xstate/store-react";
 import { Effect } from "effect";
-import type { RpcDefectError } from "electron-effect-rpc/renderer";
 
+import { useForgePreviewQuery } from "@/hooks/queries/use-forge-preview-query";
 import { useIpc } from "@/lib/ipc-context";
+import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
+import { queryKeys } from "@/lib/query-keys";
 import {
   createForgePageStore,
   topicKey,
@@ -27,33 +30,6 @@ type ForgePageContextValue = {
 };
 
 const ForgePageContext = createContext<ForgePageContextValue | null>(null);
-
-const toRpcDefectMessage = (error: RpcDefectError): string =>
-  `RPC defect (${error.code}): ${error.message}`;
-
-const toAsyncErrorMessage = (error: unknown): string => {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof error.code === "string" &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return toRpcDefectMessage(error as RpcDefectError);
-  }
-
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return error.message;
-  }
-
-  return String(error);
-};
 
 function useForgePageContextValue(): ForgePageContextValue {
   const context = useContext(ForgePageContext);
@@ -145,40 +121,80 @@ export function useForgeTopicActions(): ForgeTopicActions {
 
 export function ForgePageProvider({ children }: { children: React.ReactNode }) {
   const ipc = useIpc();
+  const queryClient = useQueryClient();
   const store = useMemo(() => createForgePageStore(), []);
-  const requestTokenRef = useRef(0);
 
-  const isActiveRequest = useCallback((requestToken: number): boolean => {
-    return requestTokenRef.current === requestToken;
-  }, []);
+  const selectedPdf = useSelector(store, (snapshot) => snapshot.context.selectedPdf);
+  const sourceFilePath = selectedPdf?.sourceFilePath ?? null;
 
-  const setPreviewErrorIfActive = useCallback(
-    (requestToken: number, message: string) => {
-      if (!isActiveRequest(requestToken)) return;
-      store.send({ type: "previewError", message });
+  const previewQuery = useForgePreviewQuery(sourceFilePath);
+
+  useEffect(() => {
+    if (!sourceFilePath || !previewQuery.data) return;
+
+    store.send({
+      type: "previewReady",
+      summary: previewQuery.data,
+    });
+  }, [sourceFilePath, previewQuery.data, previewQuery.dataUpdatedAt, store]);
+
+  useEffect(() => {
+    if (!sourceFilePath || !previewQuery.error) return;
+
+    store.send({
+      type: "previewError",
+      message: previewQuery.error.message,
+    });
+  }, [sourceFilePath, previewQuery.error, previewQuery.errorUpdatedAt, store]);
+
+  const extractionMutation = useMutation({
+    mutationFn: ({ selectedSourceFilePath }: { selectedSourceFilePath: string }) =>
+      runIpcEffect(
+        ipc.client
+          .ForgeStartTopicExtraction({
+            sourceFilePath: selectedSourceFilePath,
+          })
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
+          ),
+      ),
+    onMutate: () => {
+      store.send({ type: "setExtracting" });
     },
-    [isActiveRequest, store],
-  );
+    onSuccess: (result, variables) => {
+      const currentSourcePath = store.getSnapshot().context.selectedPdf?.sourceFilePath;
+      if (currentSourcePath !== variables.selectedSourceFilePath) return;
 
-  const setExtractErrorIfActive = useCallback(
-    (requestToken: number, message: string) => {
-      if (!isActiveRequest(requestToken)) return;
-      store.send({ type: "extractionError", message });
+      console.log("[forge/topics]", result.topicsByChunk);
+      store.send({
+        type: "extractionSuccess",
+        duplicateOfSessionId: result.duplicateOfSessionId,
+        extraction: result.extraction,
+        topicsByChunk: result.topicsByChunk,
+      });
     },
-    [isActiveRequest, store],
-  );
+    onError: (error, variables) => {
+      const currentSourcePath = store.getSnapshot().context.selectedPdf?.sourceFilePath;
+      if (currentSourcePath !== variables.selectedSourceFilePath) return;
+
+      store.send({
+        type: "extractionError",
+        message: error.message,
+      });
+    },
+  });
 
   const handleFileSelected = useCallback(
     (file: File | null) => {
       if (!file) {
-        requestTokenRef.current += 1;
         store.send({ type: "resetForNoFile" });
         return;
       }
 
-      const sourceFilePath = window.desktopHost.getPathForFile(file);
-      if (sourceFilePath.length === 0) {
-        requestTokenRef.current += 1;
+      const selectedSourceFilePath = window.desktopHost.getPathForFile(file);
+      if (selectedSourceFilePath.length === 0) {
         store.send({
           type: "setFileSelectionError",
           message: "Unable to resolve a local file path for the selected PDF.",
@@ -186,36 +202,24 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const requestToken = requestTokenRef.current + 1;
-      requestTokenRef.current = requestToken;
+      const previousSourceFilePath = store.getSnapshot().context.selectedPdf?.sourceFilePath ?? null;
 
       store.send({
         type: "setSelectedPdf",
         selectedPdf: {
           fileName: file.name,
-          sourceFilePath,
+          sourceFilePath: selectedSourceFilePath,
         },
       });
 
-      void Effect.runPromise(
-        ipc.client.ForgePreviewChunks({ sourceFilePath }).pipe(
-          Effect.tap((preview) =>
-            Effect.sync(() => {
-              if (!isActiveRequest(requestToken)) return;
-              store.send({
-                type: "previewReady",
-                summary: preview,
-              });
-            }),
-          ),
-          Effect.mapError(toAsyncErrorMessage),
-          Effect.catchAll((message) =>
-            Effect.sync(() => setPreviewErrorIfActive(requestToken, message)),
-          ),
-        ),
-      );
+      if (previousSourceFilePath === selectedSourceFilePath) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.forgePreview(selectedSourceFilePath),
+          exact: true,
+        });
+      }
     },
-    [ipc.client, isActiveRequest, setPreviewErrorIfActive, store],
+    [queryClient, store],
   );
 
   const beginExtraction = useCallback(() => {
@@ -224,35 +228,10 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    store.send({ type: "setExtracting" });
-    const requestToken = requestTokenRef.current + 1;
-    requestTokenRef.current = requestToken;
-
-    void Effect.runPromise(
-      ipc.client
-        .ForgeStartTopicExtraction({
-          sourceFilePath: snapshot.selectedPdf.sourceFilePath,
-        })
-        .pipe(
-          Effect.tap((result) =>
-            Effect.sync(() => {
-              if (!isActiveRequest(requestToken)) return;
-              console.log("[forge/topics]", result.topicsByChunk);
-              store.send({
-                type: "extractionSuccess",
-                duplicateOfSessionId: result.duplicateOfSessionId,
-                extraction: result.extraction,
-                topicsByChunk: result.topicsByChunk,
-              });
-            }),
-          ),
-          Effect.mapError(toAsyncErrorMessage),
-          Effect.catchAll((message) =>
-            Effect.sync(() => setExtractErrorIfActive(requestToken, message)),
-          ),
-        ),
-    );
-  }, [ipc.client, isActiveRequest, setExtractErrorIfActive, store]);
+    extractionMutation.mutate({
+      selectedSourceFilePath: snapshot.selectedPdf.sourceFilePath,
+    });
+  }, [extractionMutation, store]);
 
   const actions = useMemo(
     () => ({

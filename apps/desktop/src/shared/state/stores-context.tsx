@@ -1,10 +1,8 @@
 import { createContext, useContext } from "react";
-import { createWorkspaceStore, type WorkspaceStore } from "./workspaceStore";
 import { createDeckListStore, type DeckListStore } from "./deckListStore";
 import { createDeckSelectionStore, type DeckSelectionStore } from "./deckSelectionStore";
 
 type Stores = {
-  readonly workspace: WorkspaceStore;
   readonly deckList: DeckListStore;
   readonly deckSelection: DeckSelectionStore;
 };
@@ -15,10 +13,6 @@ function useStores(): Stores {
   const stores = useContext(StoresContext);
   if (!stores) throw new Error("StoresProvider is missing from the component tree");
   return stores;
-}
-
-export function useWorkspaceStore(): WorkspaceStore {
-  return useStores().workspace;
 }
 
 export function useDeckListStore(): DeckListStore {
@@ -41,7 +35,6 @@ export function StoresProvider({
 
 export function createStores(): Stores {
   return {
-    workspace: createWorkspaceStore(),
     deckList: createDeckListStore(),
     deckSelection: createDeckSelectionStore(),
   };

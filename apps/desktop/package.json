@@ -36,6 +36,7 @@
     "@re/core": "workspace:*",
     "@re/workspace": "workspace:*",
     "@silk-hq/components": "0.9.12",
+    "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-router": "1.131.35",
     "@tiptap/extension-placeholder": "^3.20.0",
     "@tiptap/react": "^3.3.0",

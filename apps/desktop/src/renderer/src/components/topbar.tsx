@@ -1,9 +1,8 @@
 import { useEffect } from "react";
 import { Plus } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { Effect } from "effect";
 
-import { useIpc } from "@/lib/ipc-context";
+import { useOpenEditorWindowMutation } from "@/hooks/mutations/use-open-editor-window-mutation";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function Topbar() {
@@ -14,7 +13,7 @@ export function Topbar() {
   const currentPageLabel =
     pathname === "/forge" ? "forge" : isReview ? "review" : isSettings ? "settings" : "home";
   const isNestedPage = currentPageLabel !== "home";
-  const ipc = useIpc();
+  const { mutate: openEditorWindow } = useOpenEditorWindowMutation();
 
   useEffect(() => {
     if (!isReview) return;
@@ -82,9 +81,7 @@ export function Topbar() {
             <TooltipTrigger
               className="flex size-7 items-center justify-center border border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
               onClick={() => {
-                void Effect.runPromise(ipc.client.OpenEditorWindow({ mode: "create" })).catch(
-                  () => undefined,
-                );
+                openEditorWindow({ mode: "create" });
               }}
             >
               <Plus className="size-3.5" />

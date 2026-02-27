@@ -3,7 +3,11 @@ import { useNavigate } from "@tanstack/react-router";
 import { Effect } from "effect";
 import { createActor, type ActorRefFrom } from "xstate";
 
+import { mapScanDecksErrorToError } from "@re/workspace";
+import type { CreateDeckError } from "@shared/rpc/schemas/workspace";
+import { mapSettingsErrorToError } from "@shared/settings";
 import { useIpc } from "@/lib/ipc-context";
+import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import {
   canSubmitEditorSession,
   createEditorSessionMachine,
@@ -45,6 +49,22 @@ const toSearchKey = (search: EditorSearchParams): string =>
     ? `create:${search.deckPath ?? ""}`
     : `edit:${search.deckPath}:${search.cardId}`;
 
+const toCreateDeckErrorMessage = (error: CreateDeckError): string => {
+  switch (error._tag) {
+    case "workspace_root_not_configured":
+      return error.message;
+    case "InvalidDeckPath":
+      return `Invalid deck path "${error.inputPath}" (${error.reason}).`;
+    case "DeckAlreadyExists":
+      return `Deck already exists: ${error.deckPath}`;
+    case "DeckFileOperationError":
+      return `Unable to ${error.operation} deck: ${error.message}`;
+  }
+};
+
+const mapCreateDeckErrorToError = (error: CreateDeckError | Error): Error =>
+  "_tag" in error ? new Error(toCreateDeckErrorMessage(error)) : error;
+
 export function useEditorSession(search: EditorSearchParams) {
   const navigate = useNavigate();
   const ipc = useIpc();
@@ -61,42 +81,93 @@ export function useEditorSession(search: EditorSearchParams) {
     const actor = createActor(
       createEditorSessionMachine(
         {
-          getSettings: () => Effect.runPromise(ipc.client.GetSettings()),
-          scanDecks: ({ rootPath }) => Effect.runPromise(ipc.client.ScanDecks({ rootPath })),
+          getSettings: () =>
+            runIpcEffect(
+              ipc.client.GetSettings().pipe(
+                Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                  Effect.fail(toRpcDefectError(rpcDefect)),
+                ),
+                Effect.mapError(mapSettingsErrorToError),
+              ),
+            ),
+          scanDecks: ({ rootPath }) =>
+            runIpcEffect(
+              ipc.client.ScanDecks({ rootPath }).pipe(
+                Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                  Effect.fail(toRpcDefectError(rpcDefect)),
+                ),
+                Effect.mapError(mapScanDecksErrorToError),
+              ),
+            ),
           getItemForEdit: ({ deckPath, cardId }) =>
-            Effect.runPromise(ipc.client.GetItemForEdit({ deckPath, cardId })),
+            runIpcEffect(
+              ipc.client.GetItemForEdit({ deckPath, cardId }).pipe(
+                Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                  Effect.fail(toRpcDefectError(rpcDefect)),
+                ),
+                Effect.catchTag("editor_operation_error", (editorError) =>
+                  Effect.fail(new Error(editorError.message)),
+                ),
+              ),
+            ),
           checkDuplicates: ({ content, cardType, rootPath, excludeCardIds }) =>
-            Effect.runPromise(
+            runIpcEffect(
               ipc.client.CheckDuplicates({
                 content,
                 cardType,
                 rootPath,
                 excludeCardIds: [...excludeCardIds],
-              }),
+              }).pipe(
+                Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                  Effect.fail(toRpcDefectError(rpcDefect)),
+                ),
+                Effect.catchTag("editor_operation_error", (editorError) =>
+                  Effect.fail(new Error(editorError.message)),
+                ),
+              ),
             ),
           appendItem: ({ deckPath, content, cardType }) =>
-            Effect.runPromise(
+            runIpcEffect(
               ipc.client.AppendItem({
                 deckPath,
                 content,
                 cardType,
-              }),
+              }).pipe(
+                Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                  Effect.fail(toRpcDefectError(rpcDefect)),
+                ),
+                Effect.catchTag("editor_operation_error", (editorError) =>
+                  Effect.fail(new Error(editorError.message)),
+                ),
+              ),
             ),
           replaceItem: ({ deckPath, cardId, content, cardType }) =>
-            Effect.runPromise(
+            runIpcEffect(
               ipc.client.ReplaceItem({
                 deckPath,
                 cardId,
                 content,
                 cardType,
-              }),
+              }).pipe(
+                Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                  Effect.fail(toRpcDefectError(rpcDefect)),
+                ),
+                Effect.catchTag("editor_operation_error", (editorError) =>
+                  Effect.fail(new Error(editorError.message)),
+                ),
+              ),
             ),
           createDeck: ({ relativePath, createParents }) =>
-            Effect.runPromise(
+            runIpcEffect(
               ipc.client.CreateDeck({
                 relativePath,
                 createParents,
-              }),
+              }).pipe(
+                Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                  Effect.fail(toRpcDefectError(rpcDefect)),
+                ),
+                Effect.mapError(mapCreateDeckErrorToError),
+              ),
             ),
         },
         search,

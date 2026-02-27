@@ -50,3 +50,23 @@ export const SettingsErrorSchema = Schema.Union(
 );
 
 export type SettingsError = typeof SettingsErrorSchema.Type;
+
+export const toSettingsErrorMessage = (error: SettingsError): string => {
+  switch (error._tag) {
+    case "SettingsReadFailed":
+      return `Unable to read settings at ${error.path}: ${error.message}`;
+    case "SettingsDecodeFailed":
+      return `Settings file is invalid at ${error.path}: ${error.message}`;
+    case "SettingsWriteFailed":
+      return `Unable to write settings at ${error.path}: ${error.message}`;
+    case "WorkspaceRootNotFound":
+      return `Workspace root not found: ${error.rootPath}`;
+    case "WorkspaceRootNotDirectory":
+      return `Workspace root is not a directory: ${error.rootPath}`;
+    case "WorkspaceRootUnreadable":
+      return `Workspace root is unreadable: ${error.message}`;
+  }
+};
+
+export const mapSettingsErrorToError = (error: SettingsError | Error): Error =>
+  "_tag" in error ? new Error(toSettingsErrorMessage(error)) : error;

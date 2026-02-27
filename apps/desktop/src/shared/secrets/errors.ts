@@ -44,3 +44,21 @@ export const SecretStoreErrorSchema = Schema.Union(
 );
 
 export type SecretStoreError = typeof SecretStoreErrorSchema.Type;
+
+export const toSecretStoreErrorMessage = (error: SecretStoreError): string => {
+  switch (error._tag) {
+    case "SecretNotFound":
+      return `Key not found: ${error.key}`;
+    case "SecretStoreUnavailable":
+      return error.message;
+    case "SecretDecryptionFailed":
+      return `Unable to decrypt ${error.key}: ${error.message}`;
+    case "SecretStoreReadFailed":
+      return `Unable to read secret store at ${error.path}: ${error.message}`;
+    case "SecretStoreWriteFailed":
+      return `Unable to write secret store at ${error.path}: ${error.message}`;
+  }
+};
+
+export const mapSecretStoreErrorToError = (error: SecretStoreError | Error): Error =>
+  "_tag" in error ? new Error(toSecretStoreErrorMessage(error)) : error;

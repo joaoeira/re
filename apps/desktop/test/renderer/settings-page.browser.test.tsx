@@ -1,15 +1,14 @@
 import { useState } from "react";
 import { page, userEvent } from "vitest/browser";
-import { render } from "vitest-browser-react";
 import { RouterProvider, createHashHistory, createRouter } from "@tanstack/react-router";
 import { describe, expect, it, vi } from "vitest";
 
-import { IpcProvider } from "@/lib/ipc-context";
 import { StoresProvider, createStores } from "@shared/state/stores-context";
 import { SettingsPageProvider } from "@/components/settings/settings-page-context";
 import { SettingsPage } from "@/components/settings/settings-page";
 import type { SettingsSection } from "@/components/settings/settings-section";
 import { routeTree } from "../../src/renderer/src/routeTree.gen";
+import { renderWithIpcProviders } from "./render-with-providers";
 
 const defaultOnStreamFrame: NonNullable<Window["desktopApi"]["onStreamFrame"]> = () => {
   return () => undefined;
@@ -70,12 +69,7 @@ async function renderSettingsPage(
   initialSection: SettingsSection = "general",
 ) {
   mockDesktopApi(invoke, subscribe);
-
-  const screen = await render(
-    <IpcProvider>
-      <SettingsHarness initialSection={initialSection} />
-    </IpcProvider>,
-  );
+  const screen = await renderWithIpcProviders(<SettingsHarness initialSection={initialSection} />);
 
   await expect.element(page.getByRole("tablist")).toBeVisible();
 
@@ -93,14 +87,12 @@ async function renderAppAt(
   const stores = createStores();
   const router = createRouter({ routeTree, history: createHashHistory() });
 
-  const screen = await render(
-    <IpcProvider>
-      <SettingsPageProvider>
-        <StoresProvider stores={stores}>
-          <RouterProvider router={router} />
-        </StoresProvider>
-      </SettingsPageProvider>
-    </IpcProvider>,
+  const screen = await renderWithIpcProviders(
+    <SettingsPageProvider>
+      <StoresProvider stores={stores}>
+        <RouterProvider router={router} />
+      </StoresProvider>
+    </SettingsPageProvider>,
   );
 
   return { screen, stores, invoke, router };
@@ -274,6 +266,7 @@ describe("SettingsPage", () => {
       });
 
       await renderSettingsPage(invoke);
+      await expect.element(page.getByRole("button", { name: "Browse..." })).toBeVisible();
       nativeClick(page.getByRole("button", { name: "Browse..." }));
       await expect.element(page.getByText(/Failed to set workspace path/)).toBeVisible();
     });
@@ -406,6 +399,9 @@ describe("SettingsPage", () => {
       await userEvent.fill(anthropicInput, "sk-ant-test-123");
       nativeClick(page.getByRole("button", { name: "Save Anthropic key" }));
 
+      await expect
+        .poll(() => invoke.mock.calls.filter(([method]: unknown[]) => method === "SetApiKey").length)
+        .toBe(1);
       const setKeyCalls = invoke.mock.calls.filter(([method]: unknown[]) => method === "SetApiKey");
       expect(setKeyCalls).toHaveLength(1);
       expect(setKeyCalls[0]![1]).toEqual({
@@ -505,12 +501,7 @@ describe("SettingsPage", () => {
       const invoke = vi.fn().mockImplementation(() => new Promise(() => {}));
 
       mockDesktopApi(invoke, defaultSubscribe);
-
-      await render(
-        <IpcProvider>
-          <SettingsHarness />
-        </IpcProvider>,
-      );
+      await renderWithIpcProviders(<SettingsHarness />);
 
       await expect.element(page.getByText("Loading...")).toBeVisible();
     });

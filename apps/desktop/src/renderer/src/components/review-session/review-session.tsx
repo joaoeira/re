@@ -1,13 +1,16 @@
 import { useCallback, useEffect } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Effect } from "effect";
 
+import { useOpenEditorWindowMutation } from "@/hooks/mutations/use-open-editor-window-mutation";
 import { useReviewSession } from "@/hooks/useReviewSession";
 import { CardContent } from "@/components/review-session/card-content";
 import { ReviewActionBar } from "@/components/review-session/review-action-bar";
 import { SessionSummary } from "@/components/review-session/session-summary";
 import { Button } from "@/components/ui/button";
 import { useIpc } from "@/lib/ipc-context";
+import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import type { DesktopReviewSessionSnapshot } from "@/machines/desktopReviewSession";
 import type { LightQueueItem } from "@shared/rpc/schemas/review";
 
@@ -19,6 +22,22 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
   const navigate = useNavigate();
   const session = useReviewSession(decks);
   const ipc = useIpc();
+  const { mutate: openEditorWindow } = useOpenEditorWindowMutation();
+  const { mutate: deleteCard } = useMutation({
+    mutationFn: (queueItem: LightQueueItem) =>
+      runIpcEffect(
+        ipc.client
+          .DeleteItems({
+            items: [{ deckPath: queueItem.deckPath, cardId: queueItem.cardId }],
+          })
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
+          ),
+      ),
+    onError: () => undefined,
+  });
 
   const getCurrentQueueItem = useCallback(
     (snapshot: DesktopReviewSessionSnapshot): LightQueueItem | undefined =>
@@ -31,15 +50,13 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
       const queueItem = getCurrentQueueItem(snapshot);
       if (!queueItem) return;
 
-      void Effect.runPromise(
-        ipc.client.OpenEditorWindow({
-          mode: "edit",
-          deckPath: queueItem.deckPath,
-          cardId: queueItem.cardId,
-        }),
-      ).catch(() => undefined);
+      openEditorWindow({
+        mode: "edit",
+        deckPath: queueItem.deckPath,
+        cardId: queueItem.cardId,
+      });
     },
-    [ipc, getCurrentQueueItem],
+    [getCurrentQueueItem, openEditorWindow],
   );
 
   const deleteCurrentCard = useCallback(
@@ -47,13 +64,9 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
       const queueItem = getCurrentQueueItem(snapshot);
       if (!queueItem) return;
 
-      void Effect.runPromise(
-        ipc.client.DeleteItems({
-          items: [{ deckPath: queueItem.deckPath, cardId: queueItem.cardId }],
-        }),
-      ).catch(() => undefined);
+      deleteCard(queueItem);
     },
-    [ipc, getCurrentQueueItem],
+    [deleteCard, getCurrentQueueItem],
   );
 
   useEffect(() => {

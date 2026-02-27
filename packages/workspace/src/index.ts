@@ -6,6 +6,8 @@ export {
   WorkspaceRootNotFound,
   WorkspaceRootNotDirectory,
   WorkspaceRootUnreadable,
+  mapScanDecksErrorToError,
+  toScanDecksErrorMessage,
   type DeckEntry,
   type ScanDecksOptions,
   type ScanDecksResult,
