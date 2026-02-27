@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import {
   useForgeExtractState,
   useForgeExtractSummary,
+  useForgePreviewState,
   useForgeSelectedTopicCount,
   useForgeSelectedTopicKeys,
   useForgeTopicSyncErrorMessage,
@@ -20,6 +21,7 @@ export function TopicSelection() {
   const selectedKeys = useForgeSelectedTopicKeys();
   const extractSummary = useForgeExtractSummary();
   const extractState = useForgeExtractState();
+  const previewState = useForgePreviewState();
   const topicSyncErrorMessage = useForgeTopicSyncErrorMessage();
   const actions = useForgeTopicActions();
   const selectedCount = useForgeSelectedTopicCount();
@@ -28,6 +30,10 @@ export function TopicSelection() {
     () => topicsByChunk.reduce((sum, c) => sum + c.topics.length, 0),
     [topicsByChunk],
   );
+
+  const chunkCount = previewState.status === "ready" ? previewState.summary.chunkCount : 0;
+  const extractedChunks = chunksWithTopics.length;
+  const extractPct = chunkCount > 0 ? Math.min((extractedChunks / chunkCount) * 100, 100) : 0;
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
@@ -46,9 +52,22 @@ export function TopicSelection() {
       )}
 
       {extractState.status === "extracting" && (
-        <p className="text-xs text-muted-foreground">
-          Extracting topics now. Chunks appear here as they finish.
-        </p>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-[1.5px] border-muted-foreground/40 border-t-transparent" />
+            <span className="text-xs text-muted-foreground">
+              {chunkCount > 0
+                ? `Extracting section ${Math.min(extractedChunks + 1, chunkCount)} of ${chunkCount}…`
+                : "Extracting sections…"}
+            </span>
+          </div>
+          <div className="h-0.5 overflow-hidden rounded-full bg-border/50">
+            <div
+              className="h-full rounded-full bg-muted-foreground/30 transition-[width] duration-500 ease-out"
+              style={{ width: `${extractPct}%` }}
+            />
+          </div>
+        </div>
       )}
 
       {extractState.status === "error" && (
@@ -102,6 +121,12 @@ export function TopicSelection() {
             />
           </div>
         ))}
+        {extractState.status === "extracting" && chunksWithTopics.length > 0 && (
+          <div className="flex items-center gap-2.5 py-4 text-xs text-muted-foreground/60">
+            <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-[1.5px] border-muted-foreground/25 border-t-transparent" />
+            Processing next section…
+          </div>
+        )}
         {chunksWithTopics.length === 0 && extractState.status === "extracting" ? (
           <p className="py-6 text-xs text-muted-foreground/80">Waiting for first chunk...</p>
         ) : null}
