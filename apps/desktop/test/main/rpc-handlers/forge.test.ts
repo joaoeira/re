@@ -106,6 +106,98 @@ const createPromptRuntime = (
     ),
 });
 
+const createCardsDomainPromptRuntime = (options?: {
+  readonly holdCreateCards?: Promise<void>;
+  readonly failCreateCards?: boolean;
+}): ForgePromptRuntime => ({
+  run: <Input, Output>(
+    spec: PromptSpec<Input, Output>,
+    _input: Input,
+    runOptions?: PromptRunOptions,
+  ) =>
+    Effect.gen(function* () {
+      if (spec.promptId === "forge/create-cards") {
+        if (options?.holdCreateCards) {
+          yield* Effect.promise(() => options.holdCreateCards!);
+        }
+
+        if (options?.failCreateCards) {
+          return yield* Effect.fail(
+            new PromptOutputParseError({
+              promptId: spec.promptId,
+              message: "create-cards parse failure",
+              rawExcerpt: "invalid",
+            }),
+          );
+        }
+
+        return {
+          output: {
+            cards: [
+              { question: "What is ATP?", answer: "ATP is the cellular energy currency." },
+              { question: "Where is ATP produced?", answer: "ATP is produced in mitochondria." },
+            ],
+          } as unknown as Output,
+          rawText: "{\"cards\":[]}",
+          metadata: {
+            promptId: spec.promptId,
+            promptVersion: "1",
+            model: runOptions?.model ?? "mock:model",
+            attemptCount: 1,
+            promptHash: "x".repeat(64),
+            outputChars: 10,
+          },
+        };
+      }
+
+      if (spec.promptId === "forge/generate-permutations") {
+        return {
+          output: {
+            permutations: [
+              {
+                question: "What molecule is the energy currency of the cell?",
+                answer: "ATP",
+              },
+            ],
+          } as unknown as Output,
+          rawText: "{\"permutations\":[]}",
+          metadata: {
+            promptId: spec.promptId,
+            promptVersion: "1",
+            model: runOptions?.model ?? "mock:model",
+            attemptCount: 1,
+            promptHash: "x".repeat(64),
+            outputChars: 10,
+          },
+        };
+      }
+
+      if (spec.promptId === "forge/generate-cloze") {
+        return {
+          output: {
+            cloze: "The energy currency of the cell is {{c1::ATP}}.",
+          } as unknown as Output,
+          rawText: "{\"cloze\":\"x\"}",
+          metadata: {
+            promptId: spec.promptId,
+            promptVersion: "1",
+            model: runOptions?.model ?? "mock:model",
+            attemptCount: 1,
+            promptHash: "x".repeat(64),
+            outputChars: 10,
+          },
+        };
+      }
+
+      return yield* Effect.fail(
+        new PromptInputValidationError({
+          promptId: spec.promptId,
+          message: "Unsupported prompt in test runtime.",
+        }),
+      );
+    }),
+});
+
 describe("forge handlers", () => {
   const setupHandlers = async (
     overrides: {
@@ -1015,6 +1107,257 @@ describe("forge handlers", () => {
       if (failure._tag === "Some") {
         expect(failure.value._tag).toBe("session_not_found");
       }
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("generates cards for a persisted topic and returns cards snapshot state", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime();
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const sourceFilePath = "/tmp/forge-cards-topic.pdf";
+      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk text",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: created.session.id,
+          sequenceOrder: 0,
+          topics: ["ATP"],
+        }),
+      );
+
+      const generated = await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          chunkId: 1,
+          topicIndex: 0,
+        }),
+      );
+
+      expect(generated.topic.status).toBe("generated");
+      expect(generated.cards).toHaveLength(2);
+
+      const snapshot = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
+      );
+      expect(snapshot.topics).toHaveLength(1);
+      expect(snapshot.topics[0]?.cardCount).toBe(2);
+      expect(snapshot.topics[0]?.status).toBe("generated");
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("returns topic_already_generating when two card generations race for the same topic", async () => {
+    let resolveCreateCards: () => void = () => undefined;
+    const holdCreateCards = new Promise<void>((resolve) => {
+      resolveCreateCards = resolve;
+    });
+
+    const promptRuntime = createCardsDomainPromptRuntime({
+      holdCreateCards,
+    });
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const sourceFilePath = "/tmp/forge-cards-race.pdf";
+      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk text",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: created.session.id,
+          sequenceOrder: 0,
+          topics: ["ATP"],
+        }),
+      );
+
+      const first = Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          chunkId: 1,
+          topicIndex: 0,
+        }),
+      );
+
+      await expect.poll(async () => {
+        const snapshot = await Effect.runPromise(
+          repository.getCardsSnapshotBySession(created.session.id),
+        );
+        return snapshot[0]?.status ?? null;
+      }).toBe("generating");
+
+      const secondExit = await Effect.runPromiseExit(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          chunkId: 1,
+          topicIndex: 0,
+        }),
+      );
+
+      expect(Exit.isFailure(secondExit)).toBe(true);
+      if (Exit.isSuccess(secondExit)) {
+        throw new Error("Expected second generation to fail.");
+      }
+      const secondFailure = Cause.failureOption(secondExit.cause);
+      expect(secondFailure._tag).toBe("Some");
+      if (secondFailure._tag === "Some") {
+        expect(secondFailure.value._tag).toBe("topic_already_generating");
+      }
+
+      resolveCreateCards();
+      await first;
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("marks topic generation as error when card generation fails", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime({
+      failCreateCards: true,
+    });
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const sourceFilePath = "/tmp/forge-cards-failure.pdf";
+      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk text",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: created.session.id,
+          sequenceOrder: 0,
+          topics: ["ATP"],
+        }),
+      );
+
+      const failedGeneration = await Effect.runPromiseExit(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          chunkId: 1,
+          topicIndex: 0,
+        }),
+      );
+
+      expect(Exit.isFailure(failedGeneration)).toBe(true);
+      if (Exit.isSuccess(failedGeneration)) {
+        throw new Error("Expected topic card generation to fail.");
+      }
+      const failure = Cause.failureOption(failedGeneration.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("card_generation_error");
+      }
+
+      const snapshot = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
+      );
+      expect(snapshot.topics).toHaveLength(1);
+      expect(snapshot.topics[0]?.status).toBe("error");
+      expect(snapshot.topics[0]?.cardCount).toBe(0);
+      expect(snapshot.topics[0]?.errorMessage).toContain("create-cards parse failure");
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("generates permutations and cloze and persists inline card edits", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime();
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const sourceFilePath = "/tmp/forge-cards-variants.pdf";
+      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk text",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: created.session.id,
+          sequenceOrder: 0,
+          topics: ["ATP"],
+        }),
+      );
+
+      const generated = await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          chunkId: 1,
+          topicIndex: 0,
+        }),
+      );
+      const sourceCardId = generated.cards[0]?.id;
+      if (!sourceCardId) {
+        throw new Error("Expected generated source card.");
+      }
+
+      const permutations = await Effect.runPromise(
+        handlers.ForgeGenerateCardPermutations({ sourceCardId }),
+      );
+      expect(permutations.permutations).toHaveLength(1);
+
+      const cloze = await Effect.runPromise(handlers.ForgeGenerateCardCloze({ sourceCardId }));
+      expect(cloze.cloze).toContain("{{c1::ATP}}");
+
+      const updated = await Effect.runPromise(
+        handlers.ForgeUpdateCard({
+          cardId: sourceCardId,
+          question: "Updated question?",
+          answer: "Updated answer.",
+        }),
+      );
+      expect(updated.card.question).toBe("Updated question?");
+
+      const topicCards = await Effect.runPromise(
+        handlers.ForgeGetTopicCards({
+          sessionId: created.session.id,
+          chunkId: 1,
+          topicIndex: 0,
+        }),
+      );
+      expect(topicCards.cards[0]?.question).toBe("Updated question?");
     } finally {
       await dispose();
     }

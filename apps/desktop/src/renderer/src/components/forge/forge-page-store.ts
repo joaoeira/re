@@ -40,6 +40,8 @@ export type SelectedPdf = {
 
 export const topicKey = (chunkId: number, topicIndex: number): string => `${chunkId}:${topicIndex}`;
 
+export type TopicCardIdMap = ReadonlyMap<string, ReadonlySet<number>>;
+
 type ForgePageContext = {
   readonly currentStep: ForgeStep;
   readonly selectedPdf: SelectedPdf | null;
@@ -52,9 +54,13 @@ type ForgePageContext = {
   readonly extractSummary: ExtractSummary | null;
   readonly topicsByChunk: ReadonlyArray<ChunkTopics>;
   readonly selectedTopicKeys: ReadonlySet<string>;
+  readonly activeTopicKey: string | null;
+  readonly addedCardIdsByTopicKey: TopicCardIdMap;
+  readonly deletedCardIdsByTopicKey: TopicCardIdMap;
 };
 
 const emptyTopicKeys: ReadonlySet<string> = new Set<string>();
+const emptyTopicCardIdMap: TopicCardIdMap = new Map<string, ReadonlySet<number>>();
 
 const initialForgePageContext = (): ForgePageContext => ({
   currentStep: "source",
@@ -68,6 +74,9 @@ const initialForgePageContext = (): ForgePageContext => ({
   extractSummary: null,
   topicsByChunk: [],
   selectedTopicKeys: emptyTopicKeys,
+  activeTopicKey: null,
+  addedCardIdsByTopicKey: emptyTopicCardIdMap,
+  deletedCardIdsByTopicKey: emptyTopicCardIdMap,
 });
 
 const sortChunks = (chunks: ReadonlyArray<ChunkTopics>): ReadonlyArray<ChunkTopics> =>
@@ -96,6 +105,54 @@ const pruneSelectedTopicKeys = (
   });
 
   return next.size === selectedTopicKeys.size ? selectedTopicKeys : next;
+};
+
+const pruneTopicCardIdMap = (
+  source: TopicCardIdMap,
+  selectedTopicKeys: ReadonlySet<string>,
+): TopicCardIdMap => {
+  if (source.size === 0) return source;
+
+  const next = new Map<string, ReadonlySet<number>>();
+  source.forEach((cardIds, key) => {
+    if (!selectedTopicKeys.has(key)) return;
+    if (cardIds.size === 0) return;
+    next.set(key, new Set(cardIds));
+  });
+
+  return next.size === source.size ? source : next;
+};
+
+const withTopicCardId = (
+  source: TopicCardIdMap,
+  topicKeyValue: string,
+  cardId: number,
+): TopicCardIdMap => {
+  const existing = source.get(topicKeyValue);
+  const nextSet = new Set(existing ?? []);
+  nextSet.add(cardId);
+  const nextMap = new Map(source);
+  nextMap.set(topicKeyValue, nextSet);
+  return nextMap;
+};
+
+const withoutTopicCardId = (
+  source: TopicCardIdMap,
+  topicKeyValue: string,
+  cardId: number,
+): TopicCardIdMap => {
+  const existing = source.get(topicKeyValue);
+  if (!existing || !existing.has(cardId)) return source;
+
+  const nextSet = new Set(existing);
+  nextSet.delete(cardId);
+  const nextMap = new Map(source);
+  if (nextSet.size === 0) {
+    nextMap.delete(topicKeyValue);
+  } else {
+    nextMap.set(topicKeyValue, nextSet);
+  }
+  return nextMap;
 };
 
 const mergeChunkTopics = (
@@ -155,6 +212,9 @@ export const createForgePageStore = () =>
         extractSummary: null,
         topicsByChunk: [],
         selectedTopicKeys: emptyTopicKeys,
+        activeTopicKey: null,
+        addedCardIdsByTopicKey: emptyTopicCardIdMap,
+        deletedCardIdsByTopicKey: emptyTopicCardIdMap,
       }),
       previewReady: (context, event: { summary: PreviewSummary }) => ({
         ...context,
@@ -181,6 +241,9 @@ export const createForgePageStore = () =>
         extractSummary: null,
         topicsByChunk: [],
         selectedTopicKeys: emptyTopicKeys,
+        activeTopicKey: null,
+        addedCardIdsByTopicKey: emptyTopicCardIdMap,
+        deletedCardIdsByTopicKey: emptyTopicCardIdMap,
       }),
       topicChunkExtracted: (
         context,
@@ -189,10 +252,26 @@ export const createForgePageStore = () =>
         },
       ) => {
         const nextTopicsByChunk = mergeChunkTopics(context.topicsByChunk, event.chunk);
+        const nextSelectedTopicKeys = pruneSelectedTopicKeys(
+          context.selectedTopicKeys,
+          nextTopicsByChunk,
+        );
         return {
           ...context,
           topicsByChunk: nextTopicsByChunk,
-          selectedTopicKeys: pruneSelectedTopicKeys(context.selectedTopicKeys, nextTopicsByChunk),
+          selectedTopicKeys: nextSelectedTopicKeys,
+          activeTopicKey:
+            context.activeTopicKey && nextSelectedTopicKeys.has(context.activeTopicKey)
+              ? context.activeTopicKey
+              : null,
+          addedCardIdsByTopicKey: pruneTopicCardIdMap(
+            context.addedCardIdsByTopicKey,
+            nextSelectedTopicKeys,
+          ),
+          deletedCardIdsByTopicKey: pruneTopicCardIdMap(
+            context.deletedCardIdsByTopicKey,
+            nextSelectedTopicKeys,
+          ),
         };
       },
       topicSnapshotSynced: (
@@ -225,13 +304,29 @@ export const createForgePageStore = () =>
         }
 
         const nextTopicsByChunk = mergeTopicSnapshots(context.topicsByChunk, event.topicsByChunk);
+        const nextSelectedTopicKeys = pruneSelectedTopicKeys(
+          context.selectedTopicKeys,
+          nextTopicsByChunk,
+        );
 
         return {
           ...context,
           activeExtractionSessionId: event.sessionId,
           topicSyncErrorMessage: null,
           topicsByChunk: nextTopicsByChunk,
-          selectedTopicKeys: pruneSelectedTopicKeys(context.selectedTopicKeys, nextTopicsByChunk),
+          selectedTopicKeys: nextSelectedTopicKeys,
+          activeTopicKey:
+            context.activeTopicKey && nextSelectedTopicKeys.has(context.activeTopicKey)
+              ? context.activeTopicKey
+              : null,
+          addedCardIdsByTopicKey: pruneTopicCardIdMap(
+            context.addedCardIdsByTopicKey,
+            nextSelectedTopicKeys,
+          ),
+          deletedCardIdsByTopicKey: pruneTopicCardIdMap(
+            context.deletedCardIdsByTopicKey,
+            nextSelectedTopicKeys,
+          ),
         };
       },
       topicSnapshotError: (context, event: { message: string }) => ({
@@ -247,6 +342,10 @@ export const createForgePageStore = () =>
         },
       ) => {
         const nextTopicsByChunk = sortChunks(event.topicsByChunk);
+        const nextSelectedTopicKeys = pruneSelectedTopicKeys(
+          context.selectedTopicKeys,
+          nextTopicsByChunk,
+        );
         return {
           ...context,
           currentStep: "topics" as const,
@@ -257,7 +356,19 @@ export const createForgePageStore = () =>
           extractSummary: event.extraction,
           topicsByChunk: nextTopicsByChunk,
           extractState: { status: "idle" as const },
-          selectedTopicKeys: pruneSelectedTopicKeys(context.selectedTopicKeys, nextTopicsByChunk),
+          selectedTopicKeys: nextSelectedTopicKeys,
+          activeTopicKey:
+            context.activeTopicKey && nextSelectedTopicKeys.has(context.activeTopicKey)
+              ? context.activeTopicKey
+              : null,
+          addedCardIdsByTopicKey: pruneTopicCardIdMap(
+            context.addedCardIdsByTopicKey,
+            nextSelectedTopicKeys,
+          ),
+          deletedCardIdsByTopicKey: pruneTopicCardIdMap(
+            context.deletedCardIdsByTopicKey,
+            nextSelectedTopicKeys,
+          ),
         };
       },
       extractionError: (context, event: { message: string }) => ({
@@ -270,13 +381,24 @@ export const createForgePageStore = () =>
           status: "error" as const,
           message: event.message,
         },
+        activeTopicKey: null,
+        addedCardIdsByTopicKey: emptyTopicCardIdMap,
+        deletedCardIdsByTopicKey: emptyTopicCardIdMap,
       }),
       toggleTopic: (context, event: { chunkId: number; topicIndex: number }) => {
         const key = topicKey(event.chunkId, event.topicIndex);
         const next = new Set(context.selectedTopicKeys);
         if (next.has(key)) next.delete(key);
         else next.add(key);
-        return { ...context, selectedTopicKeys: next };
+        return {
+          ...context,
+          selectedTopicKeys: next,
+          activeTopicKey: context.activeTopicKey && next.has(context.activeTopicKey)
+            ? context.activeTopicKey
+            : null,
+          addedCardIdsByTopicKey: pruneTopicCardIdMap(context.addedCardIdsByTopicKey, next),
+          deletedCardIdsByTopicKey: pruneTopicCardIdMap(context.deletedCardIdsByTopicKey, next),
+        };
       },
       toggleAllChunk: (context, event: { chunkId: number; select: boolean }) => {
         const chunk = context.topicsByChunk.find((c) => c.chunkId === event.chunkId);
@@ -287,19 +409,76 @@ export const createForgePageStore = () =>
           if (event.select) next.add(key);
           else next.delete(key);
         });
-        return { ...context, selectedTopicKeys: next };
+        return {
+          ...context,
+          selectedTopicKeys: next,
+          activeTopicKey: context.activeTopicKey && next.has(context.activeTopicKey)
+            ? context.activeTopicKey
+            : null,
+          addedCardIdsByTopicKey: pruneTopicCardIdMap(context.addedCardIdsByTopicKey, next),
+          deletedCardIdsByTopicKey: pruneTopicCardIdMap(context.deletedCardIdsByTopicKey, next),
+        };
       },
       selectAllTopics: (context) => {
         const next = new Set<string>();
         context.topicsByChunk.forEach((chunk) => {
           chunk.topics.forEach((_, i) => next.add(topicKey(chunk.chunkId, i)));
         });
-        return { ...context, selectedTopicKeys: next };
+        return {
+          ...context,
+          selectedTopicKeys: next,
+          addedCardIdsByTopicKey: pruneTopicCardIdMap(context.addedCardIdsByTopicKey, next),
+          deletedCardIdsByTopicKey: pruneTopicCardIdMap(context.deletedCardIdsByTopicKey, next),
+        };
       },
       deselectAllTopics: (context) => ({
         ...context,
         selectedTopicKeys: emptyTopicKeys,
+        activeTopicKey: null,
+        addedCardIdsByTopicKey: emptyTopicCardIdMap,
+        deletedCardIdsByTopicKey: emptyTopicCardIdMap,
       }),
+      setActiveCardsTopic: (context, event: { topicKey: string | null }) => ({
+        ...context,
+        activeTopicKey: event.topicKey,
+      }),
+      markCardAddedToTopic: (context, event: { topicKey: string; cardId: number }) => ({
+        ...context,
+        addedCardIdsByTopicKey: withTopicCardId(
+          withoutTopicCardId(context.addedCardIdsByTopicKey, event.topicKey, event.cardId),
+          event.topicKey,
+          event.cardId,
+        ),
+        deletedCardIdsByTopicKey: withoutTopicCardId(
+          context.deletedCardIdsByTopicKey,
+          event.topicKey,
+          event.cardId,
+        ),
+      }),
+      markCardDeletedFromTopic: (context, event: { topicKey: string; cardId: number }) => ({
+        ...context,
+        deletedCardIdsByTopicKey: withTopicCardId(
+          withoutTopicCardId(context.deletedCardIdsByTopicKey, event.topicKey, event.cardId),
+          event.topicKey,
+          event.cardId,
+        ),
+        addedCardIdsByTopicKey: withoutTopicCardId(
+          context.addedCardIdsByTopicKey,
+          event.topicKey,
+          event.cardId,
+        ),
+      }),
+      clearTopicCuration: (context, event: { topicKey: string }) => {
+        const nextAdded = new Map(context.addedCardIdsByTopicKey);
+        const nextDeleted = new Map(context.deletedCardIdsByTopicKey);
+        nextAdded.delete(event.topicKey);
+        nextDeleted.delete(event.topicKey);
+        return {
+          ...context,
+          addedCardIdsByTopicKey: nextAdded,
+          deletedCardIdsByTopicKey: nextDeleted,
+        };
+      },
       advanceToCards: (context) => ({
         ...context,
         currentStep: "cards" as const,
@@ -318,6 +497,9 @@ export const createForgePageStore = () =>
         selectedTopicKeys: event.selectedTopicKeys,
         extractSummary: event.extractSummary,
         extractState: { status: "idle" as const },
+        activeTopicKey: null,
+        addedCardIdsByTopicKey: emptyTopicCardIdMap,
+        deletedCardIdsByTopicKey: emptyTopicCardIdMap,
       }),
     },
   });

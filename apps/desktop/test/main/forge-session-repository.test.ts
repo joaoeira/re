@@ -320,4 +320,236 @@ describe("forge session repository", () => {
 
     expect(current.status).toBe("generating");
   });
+
+  it("starts topic generation once and rejects concurrent start", async () => {
+    const repository = makeInMemoryForgeSessionRepository();
+    const session = await Effect.runPromise(
+      repository.createSession({
+        sourceKind: "pdf",
+        sourceFilePath: "/tmp/forge-topic-generation-start.pdf",
+        deckPath: null,
+        sourceFingerprint: "fp-topic-generation-start",
+      }),
+    );
+
+    await Effect.runPromise(
+      repository.saveChunks(session.id, [
+        {
+          text: "chunk-0",
+          sequenceOrder: 0,
+          pageBoundaries: [{ offset: 0, page: 1 }],
+        },
+      ]),
+    );
+    await Effect.runPromise(
+      repository.replaceTopicsForChunk({
+        sessionId: session.id,
+        sequenceOrder: 0,
+        topics: ["topic-a"],
+      }),
+    );
+
+    const topic = await Effect.runPromise(
+      repository.getTopicByRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
+    );
+    if (!topic) {
+      throw new Error("Expected persisted topic.");
+    }
+
+    const started = await Effect.runPromise(repository.tryStartTopicGeneration(topic.topicId));
+    expect(started.status).toBe("generating");
+
+    const secondStart = await Effect.runPromiseExit(
+      repository.tryStartTopicGeneration(topic.topicId),
+    );
+    expect(Exit.isFailure(secondStart)).toBe(true);
+  });
+
+  it("replaces cards and returns topic cards snapshot rows", async () => {
+    const repository = makeInMemoryForgeSessionRepository();
+    const session = await Effect.runPromise(
+      repository.createSession({
+        sourceKind: "pdf",
+        sourceFilePath: "/tmp/forge-cards-snapshot.pdf",
+        deckPath: null,
+        sourceFingerprint: "fp-cards-snapshot",
+      }),
+    );
+
+    await Effect.runPromise(
+      repository.saveChunks(session.id, [
+        {
+          text: "chunk-0",
+          sequenceOrder: 0,
+          pageBoundaries: [{ offset: 0, page: 1 }],
+        },
+      ]),
+    );
+    await Effect.runPromise(
+      repository.replaceTopicsForChunk({
+        sessionId: session.id,
+        sequenceOrder: 0,
+        topics: ["topic-a"],
+      }),
+    );
+
+    const topic = await Effect.runPromise(
+      repository.getTopicByRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
+    );
+    if (!topic) {
+      throw new Error("Expected persisted topic.");
+    }
+
+    await Effect.runPromise(repository.tryStartTopicGeneration(topic.topicId));
+    await Effect.runPromise(
+      repository.replaceCardsForTopicAndFinishGenerationSuccess({
+        topicId: topic.topicId,
+        cards: [
+          { question: "Q1", answer: "A1" },
+          { question: "Q2", answer: "A2" },
+        ],
+      }),
+    );
+
+    const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+    expect(snapshot).toHaveLength(1);
+    expect(snapshot[0]?.status).toBe("generated");
+    expect(snapshot[0]?.cardCount).toBe(2);
+
+    const detail = await Effect.runPromise(
+      repository.getCardsForTopicRef({
+        sessionId: session.id,
+        chunkId: 1,
+        topicIndex: 0,
+      }),
+    );
+    expect(detail?.cards).toHaveLength(2);
+    expect(detail?.cards[0]?.question).toBe("Q1");
+  });
+
+  it("replaces permutations and upserts cloze for a card", async () => {
+    const repository = makeInMemoryForgeSessionRepository();
+    const session = await Effect.runPromise(
+      repository.createSession({
+        sourceKind: "pdf",
+        sourceFilePath: "/tmp/forge-card-variants.pdf",
+        deckPath: null,
+        sourceFingerprint: "fp-card-variants",
+      }),
+    );
+
+    await Effect.runPromise(
+      repository.saveChunks(session.id, [
+        {
+          text: "chunk-0",
+          sequenceOrder: 0,
+          pageBoundaries: [{ offset: 0, page: 1 }],
+        },
+      ]),
+    );
+    await Effect.runPromise(
+      repository.replaceTopicsForChunk({
+        sessionId: session.id,
+        sequenceOrder: 0,
+        topics: ["topic-a"],
+      }),
+    );
+
+    const topic = await Effect.runPromise(
+      repository.getTopicByRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
+    );
+    if (!topic) {
+      throw new Error("Expected persisted topic.");
+    }
+
+    await Effect.runPromise(
+      repository.replaceCardsForTopic({
+        topicId: topic.topicId,
+        cards: [{ question: "Q1", answer: "A1" }],
+      }),
+    );
+    const detail = await Effect.runPromise(
+      repository.getCardsForTopicRef({
+        sessionId: session.id,
+        chunkId: 1,
+        topicIndex: 0,
+      }),
+    );
+    const sourceCardId = detail?.cards[0]?.id;
+    if (!sourceCardId) {
+      throw new Error("Expected persisted source card.");
+    }
+
+    await Effect.runPromise(
+      repository.replacePermutationsForCard({
+        sourceCardId,
+        permutations: [
+          { question: "P1", answer: "A1" },
+          { question: "P2", answer: "A2" },
+        ],
+      }),
+    );
+    const permutations = await Effect.runPromise(repository.getPermutationsForCard(sourceCardId));
+    expect(permutations).toHaveLength(2);
+
+    await Effect.runPromise(
+      repository.upsertClozeForCard({
+        sourceCardId,
+        clozeText: "{{c1::answer}}",
+      }),
+    );
+    const cloze = await Effect.runPromise(repository.getClozeForCard(sourceCardId));
+    expect(cloze?.clozeText).toBe("{{c1::answer}}");
+  });
+
+  it("recovers stale generating topics into error state", async () => {
+    const repository = makeInMemoryForgeSessionRepository();
+    const session = await Effect.runPromise(
+      repository.createSession({
+        sourceKind: "pdf",
+        sourceFilePath: "/tmp/forge-stale-recovery.pdf",
+        deckPath: null,
+        sourceFingerprint: "fp-stale-recovery",
+      }),
+    );
+
+    await Effect.runPromise(
+      repository.saveChunks(session.id, [
+        {
+          text: "chunk-0",
+          sequenceOrder: 0,
+          pageBoundaries: [{ offset: 0, page: 1 }],
+        },
+      ]),
+    );
+    await Effect.runPromise(
+      repository.replaceTopicsForChunk({
+        sessionId: session.id,
+        sequenceOrder: 0,
+        topics: ["topic-a"],
+      }),
+    );
+
+    const topic = await Effect.runPromise(
+      repository.getTopicByRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
+    );
+    if (!topic) {
+      throw new Error("Expected persisted topic.");
+    }
+
+    await Effect.runPromise(repository.tryStartTopicGeneration(topic.topicId));
+
+    const recovered = await Effect.runPromise(
+      repository.recoverStaleGeneratingTopics({
+        sessionId: session.id,
+        staleBeforeIso: new Date(Date.now() + 10_000).toISOString(),
+        message: "Generation interrupted; please retry.",
+      }),
+    );
+    expect(recovered).toBe(1);
+
+    const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+    expect(snapshot[0]?.status).toBe("error");
+    expect(snapshot[0]?.errorMessage).toBe("Generation interrupted; please retry.");
+  });
 });
