@@ -723,12 +723,10 @@ export const createForgeHandlers = () =>
         }),
       ForgeGetCardPermutations: ({ sourceCardId }) =>
         Effect.gen(function* () {
-          const sourceCard = yield* forgeSessionRepository
-            .getCardById(sourceCardId)
-            .pipe(
-              Effect.mapError(toForgeOperationError),
-              Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
-            );
+          const sourceCard = yield* forgeSessionRepository.getCardById(sourceCardId).pipe(
+            Effect.mapError(toForgeOperationError),
+            Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
+          );
 
           const list = yield* mapSessionRepositoryError(
             sourceCard.sessionId,
@@ -746,12 +744,10 @@ export const createForgeHandlers = () =>
         }),
       ForgeGenerateCardPermutations: ({ sourceCardId, instruction, model }) =>
         Effect.gen(function* () {
-          const sourceCard = yield* forgeSessionRepository
-            .getCardById(sourceCardId)
-            .pipe(
-              Effect.mapError(toForgeOperationError),
-              Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
-            );
+          const sourceCard = yield* forgeSessionRepository.getCardById(sourceCardId).pipe(
+            Effect.mapError(toForgeOperationError),
+            Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
+          );
 
           const promptResult = yield* forgePromptRuntime
             .run(
@@ -800,12 +796,10 @@ export const createForgeHandlers = () =>
         }),
       ForgeGetCardCloze: ({ sourceCardId }) =>
         Effect.gen(function* () {
-          const sourceCard = yield* forgeSessionRepository
-            .getCardById(sourceCardId)
-            .pipe(
-              Effect.mapError(toForgeOperationError),
-              Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
-            );
+          const sourceCard = yield* forgeSessionRepository.getCardById(sourceCardId).pipe(
+            Effect.mapError(toForgeOperationError),
+            Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
+          );
 
           const cloze = yield* mapSessionRepositoryError(
             sourceCard.sessionId,
@@ -819,12 +813,10 @@ export const createForgeHandlers = () =>
         }),
       ForgeGenerateCardCloze: ({ sourceCardId, instruction, model }) =>
         Effect.gen(function* () {
-          const sourceCard = yield* forgeSessionRepository
-            .getCardById(sourceCardId)
-            .pipe(
-              Effect.mapError(toForgeOperationError),
-              Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
-            );
+          const sourceCard = yield* forgeSessionRepository.getCardById(sourceCardId).pipe(
+            Effect.mapError(toForgeOperationError),
+            Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
+          );
 
           const promptResult = yield* forgePromptRuntime
             .run(
@@ -864,12 +856,10 @@ export const createForgeHandlers = () =>
         }),
       ForgeUpdateCard: ({ cardId, question, answer }) =>
         Effect.gen(function* () {
-          const sourceCard = yield* forgeSessionRepository
-            .getCardById(cardId)
-            .pipe(
-              Effect.mapError(toForgeOperationError),
-              Effect.flatMap((card) => ensureCardExists(card, cardId)),
-            );
+          const sourceCard = yield* forgeSessionRepository.getCardById(cardId).pipe(
+            Effect.mapError(toForgeOperationError),
+            Effect.flatMap((card) => ensureCardExists(card, cardId)),
+          );
 
           const updatedCard = yield* mapSessionRepositoryError(
             sourceCard.sessionId,
@@ -1087,11 +1077,9 @@ export const createForgeHandlers = () =>
               };
             }).pipe(
               Effect.catchAll((error) =>
-                setSessionErrorBestEffort(
-                  session.id,
-                  toErrorMessage(error),
-                  "[forge/start]",
-                ).pipe(Effect.zipRight(Effect.fail(error))),
+                setSessionErrorBestEffort(session.id, toErrorMessage(error), "[forge/start]").pipe(
+                  Effect.zipRight(Effect.fail(error)),
+                ),
               ),
             ),
           ),

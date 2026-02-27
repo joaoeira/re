@@ -11,15 +11,18 @@ export function useForgeCardPermutationsQuery(sourceCardId: number | null) {
 
   return useQuery<ForgeGetCardPermutationsResult, Error>({
     queryKey: queryKeys.forgeCardPermutations(sourceCardId),
-    queryFn: sourceCardId !== null
-      ? () =>
-          runIpcEffect(
-            ipc.client.ForgeGetCardPermutations({ sourceCardId }).pipe(
-              Effect.catchTag("RpcDefectError", (rpcDefect) =>
-                Effect.fail(toRpcDefectError(rpcDefect)),
-              ),
-            ),
-          )
-      : skipToken,
+    queryFn:
+      sourceCardId !== null
+        ? () =>
+            runIpcEffect(
+              ipc.client
+                .ForgeGetCardPermutations({ sourceCardId })
+                .pipe(
+                  Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                    Effect.fail(toRpcDefectError(rpcDefect)),
+                  ),
+                ),
+            )
+        : skipToken,
   });
 }

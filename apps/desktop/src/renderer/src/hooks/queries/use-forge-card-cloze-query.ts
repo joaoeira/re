@@ -11,15 +11,18 @@ export function useForgeCardClozeQuery(sourceCardId: number | null) {
 
   return useQuery<ForgeGetCardClozeResult, Error>({
     queryKey: queryKeys.forgeCardCloze(sourceCardId),
-    queryFn: sourceCardId !== null
-      ? () =>
-          runIpcEffect(
-            ipc.client.ForgeGetCardCloze({ sourceCardId }).pipe(
-              Effect.catchTag("RpcDefectError", (rpcDefect) =>
-                Effect.fail(toRpcDefectError(rpcDefect)),
-              ),
-            ),
-          )
-      : skipToken,
+    queryFn:
+      sourceCardId !== null
+        ? () =>
+            runIpcEffect(
+              ipc.client
+                .ForgeGetCardCloze({ sourceCardId })
+                .pipe(
+                  Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                    Effect.fail(toRpcDefectError(rpcDefect)),
+                  ),
+                ),
+            )
+        : skipToken,
   });
 }

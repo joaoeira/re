@@ -460,4 +460,60 @@ describe("forge-page-store topic selection", () => {
       expect(ctx(store).currentStep).toBe("source");
     });
   });
+
+  describe("expanded card panels", () => {
+    it("stores one expanded panel per card and allows switching panel types", () => {
+      const store = storeWithTopics();
+      const alphaKey = topicKey(10, 0);
+
+      store.send({
+        type: "setCardExpandedPanelForTopic",
+        topicKey: alphaKey,
+        cardId: 101,
+        panel: "permutations",
+      });
+      expect(ctx(store).expandedCardPanelsByTopicKey.get(alphaKey)?.get(101)).toBe("permutations");
+
+      store.send({
+        type: "setCardExpandedPanelForTopic",
+        topicKey: alphaKey,
+        cardId: 101,
+        panel: "cloze",
+      });
+      expect(ctx(store).expandedCardPanelsByTopicKey.get(alphaKey)?.get(101)).toBe("cloze");
+    });
+
+    it("clears expanded panels when topic curation is cleared", () => {
+      const store = storeWithTopics();
+      const alphaKey = topicKey(10, 0);
+
+      store.send({
+        type: "setCardExpandedPanelForTopic",
+        topicKey: alphaKey,
+        cardId: 101,
+        panel: "permutations",
+      });
+      expect(ctx(store).expandedCardPanelsByTopicKey.get(alphaKey)?.get(101)).toBe("permutations");
+
+      store.send({ type: "clearTopicCuration", topicKey: alphaKey });
+      expect(ctx(store).expandedCardPanelsByTopicKey.get(alphaKey)).toBeUndefined();
+    });
+
+    it("prunes expanded panels when a topic is deselected", () => {
+      const store = storeWithTopics();
+      const alphaKey = topicKey(10, 0);
+
+      store.send({ type: "toggleTopic", chunkId: 10, topicIndex: 0 });
+      store.send({
+        type: "setCardExpandedPanelForTopic",
+        topicKey: alphaKey,
+        cardId: 101,
+        panel: "permutations",
+      });
+      expect(ctx(store).expandedCardPanelsByTopicKey.get(alphaKey)?.get(101)).toBe("permutations");
+
+      store.send({ type: "toggleTopic", chunkId: 10, topicIndex: 0 });
+      expect(ctx(store).expandedCardPanelsByTopicKey.get(alphaKey)).toBeUndefined();
+    });
+  });
 });

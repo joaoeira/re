@@ -123,6 +123,141 @@ export const ForgeGetTopicExtractionSnapshotResultSchema = Schema.Struct({
 export type ForgeGetTopicExtractionSnapshotResult =
   typeof ForgeGetTopicExtractionSnapshotResultSchema.Type;
 
+export const ForgeTopicRefSchema = Schema.Struct({
+  sessionId: PositiveIntSchema,
+  chunkId: PositiveIntSchema,
+  topicIndex: NonNegativeIntSchema,
+});
+export type ForgeTopicRef = typeof ForgeTopicRefSchema.Type;
+
+export const ForgeTopicCardsStatusSchema = Schema.Literal(
+  "idle",
+  "generating",
+  "generated",
+  "error",
+);
+export type ForgeTopicCardsStatus = typeof ForgeTopicCardsStatusSchema.Type;
+
+export const ForgeGeneratedCardSchema = Schema.Struct({
+  id: PositiveIntSchema,
+  question: Schema.String,
+  answer: Schema.String,
+});
+export type ForgeGeneratedCard = typeof ForgeGeneratedCardSchema.Type;
+
+export const ForgeTopicCardsSummarySchema = Schema.Struct({
+  topicId: PositiveIntSchema,
+  chunkId: PositiveIntSchema,
+  sequenceOrder: NonNegativeIntSchema,
+  topicIndex: NonNegativeIntSchema,
+  topicText: Schema.String,
+  status: ForgeTopicCardsStatusSchema,
+  errorMessage: NullableStringSchema,
+  cardCount: NonNegativeIntSchema,
+  generationRevision: NonNegativeIntSchema,
+});
+export type ForgeTopicCardsSummary = typeof ForgeTopicCardsSummarySchema.Type;
+
+export const ForgeGetCardsSnapshotInputSchema = Schema.Struct({
+  sessionId: PositiveIntSchema,
+});
+export type ForgeGetCardsSnapshotInput = typeof ForgeGetCardsSnapshotInputSchema.Type;
+
+export const ForgeGetCardsSnapshotResultSchema = Schema.Struct({
+  topics: Schema.Array(ForgeTopicCardsSummarySchema),
+});
+export type ForgeGetCardsSnapshotResult = typeof ForgeGetCardsSnapshotResultSchema.Type;
+
+export const ForgeGetTopicCardsInputSchema = ForgeTopicRefSchema;
+export type ForgeGetTopicCardsInput = typeof ForgeGetTopicCardsInputSchema.Type;
+
+export const ForgeGetTopicCardsResultSchema = Schema.Struct({
+  topic: ForgeTopicCardsSummarySchema,
+  cards: Schema.Array(ForgeGeneratedCardSchema),
+});
+export type ForgeGetTopicCardsResult = typeof ForgeGetTopicCardsResultSchema.Type;
+
+export const ForgeGenerateTopicCardsInputSchema = Schema.Struct({
+  sessionId: PositiveIntSchema,
+  chunkId: PositiveIntSchema,
+  topicIndex: NonNegativeIntSchema,
+  instruction: Schema.optional(Schema.String),
+  model: Schema.optional(ModelIdSchema),
+});
+export type ForgeGenerateTopicCardsInput = typeof ForgeGenerateTopicCardsInputSchema.Type;
+
+export const ForgeGenerateTopicCardsResultSchema = ForgeGetTopicCardsResultSchema;
+export type ForgeGenerateTopicCardsResult = typeof ForgeGenerateTopicCardsResultSchema.Type;
+
+export const ForgePermutationSchema = Schema.Struct({
+  id: PositiveIntSchema,
+  question: Schema.String,
+  answer: Schema.String,
+});
+export type ForgePermutation = typeof ForgePermutationSchema.Type;
+
+export const ForgeGetCardPermutationsInputSchema = Schema.Struct({
+  sourceCardId: PositiveIntSchema,
+});
+export type ForgeGetCardPermutationsInput = typeof ForgeGetCardPermutationsInputSchema.Type;
+
+export const ForgeGetCardPermutationsResultSchema = Schema.Struct({
+  sourceCardId: PositiveIntSchema,
+  permutations: Schema.Array(ForgePermutationSchema),
+});
+export type ForgeGetCardPermutationsResult = typeof ForgeGetCardPermutationsResultSchema.Type;
+
+export const ForgeGenerateCardPermutationsInputSchema = Schema.Struct({
+  sourceCardId: PositiveIntSchema,
+  instruction: Schema.optional(Schema.String),
+  model: Schema.optional(ModelIdSchema),
+});
+export type ForgeGenerateCardPermutationsInput =
+  typeof ForgeGenerateCardPermutationsInputSchema.Type;
+
+export const ForgeGenerateCardPermutationsResultSchema = ForgeGetCardPermutationsResultSchema;
+export type ForgeGenerateCardPermutationsResult =
+  typeof ForgeGenerateCardPermutationsResultSchema.Type;
+
+export const ForgeCardClozeSchema = Schema.Struct({
+  sourceCardId: PositiveIntSchema,
+  cloze: Schema.String,
+});
+export type ForgeCardCloze = typeof ForgeCardClozeSchema.Type;
+
+export const ForgeGetCardClozeInputSchema = Schema.Struct({
+  sourceCardId: PositiveIntSchema,
+});
+export type ForgeGetCardClozeInput = typeof ForgeGetCardClozeInputSchema.Type;
+
+export const ForgeGetCardClozeResultSchema = Schema.Struct({
+  sourceCardId: PositiveIntSchema,
+  cloze: Schema.Union(Schema.String, Schema.Null),
+});
+export type ForgeGetCardClozeResult = typeof ForgeGetCardClozeResultSchema.Type;
+
+export const ForgeGenerateCardClozeInputSchema = Schema.Struct({
+  sourceCardId: PositiveIntSchema,
+  instruction: Schema.optional(Schema.String),
+  model: Schema.optional(ModelIdSchema),
+});
+export type ForgeGenerateCardClozeInput = typeof ForgeGenerateCardClozeInputSchema.Type;
+
+export const ForgeGenerateCardClozeResultSchema = ForgeCardClozeSchema;
+export type ForgeGenerateCardClozeResult = typeof ForgeGenerateCardClozeResultSchema.Type;
+
+export const ForgeUpdateCardInputSchema = Schema.Struct({
+  cardId: PositiveIntSchema,
+  question: Schema.String,
+  answer: Schema.String,
+});
+export type ForgeUpdateCardInput = typeof ForgeUpdateCardInputSchema.Type;
+
+export const ForgeUpdateCardResultSchema = Schema.Struct({
+  card: ForgeGeneratedCardSchema,
+});
+export type ForgeUpdateCardResult = typeof ForgeUpdateCardResultSchema.Type;
+
 export const ForgeTopicChunkExtractedEventSchema = Schema.Struct({
   sourceFilePath: Schema.String,
   sessionId: PositiveIntSchema,
@@ -209,6 +344,51 @@ export class ForgeSessionOperationError extends Schema.TaggedError<ForgeSessionO
   message: Schema.String,
 }) {}
 
+export class ForgeTopicNotFoundError extends Schema.TaggedError<ForgeTopicNotFoundError>(
+  "@re/desktop/rpc/ForgeTopicNotFoundError",
+)("topic_not_found", {
+  sessionId: PositiveIntSchema,
+  chunkId: PositiveIntSchema,
+  topicIndex: NonNegativeIntSchema,
+}) {}
+
+export class ForgeCardNotFoundError extends Schema.TaggedError<ForgeCardNotFoundError>(
+  "@re/desktop/rpc/ForgeCardNotFoundError",
+)("card_not_found", {
+  sourceCardId: PositiveIntSchema,
+}) {}
+
+export class ForgeCardGenerationError extends Schema.TaggedError<ForgeCardGenerationError>(
+  "@re/desktop/rpc/ForgeCardGenerationError",
+)("card_generation_error", {
+  sessionId: PositiveIntSchema,
+  chunkId: PositiveIntSchema,
+  topicIndex: NonNegativeIntSchema,
+  message: Schema.String,
+}) {}
+
+export class ForgeTopicAlreadyGeneratingError extends Schema.TaggedError<ForgeTopicAlreadyGeneratingError>(
+  "@re/desktop/rpc/ForgeTopicAlreadyGeneratingError",
+)("topic_already_generating", {
+  sessionId: PositiveIntSchema,
+  chunkId: PositiveIntSchema,
+  topicIndex: NonNegativeIntSchema,
+}) {}
+
+export class ForgePermutationGenerationError extends Schema.TaggedError<ForgePermutationGenerationError>(
+  "@re/desktop/rpc/ForgePermutationGenerationError",
+)("permutation_generation_error", {
+  sourceCardId: PositiveIntSchema,
+  message: Schema.String,
+}) {}
+
+export class ForgeClozeGenerationError extends Schema.TaggedError<ForgeClozeGenerationError>(
+  "@re/desktop/rpc/ForgeClozeGenerationError",
+)("cloze_generation_error", {
+  sourceCardId: PositiveIntSchema,
+  message: Schema.String,
+}) {}
+
 export const ForgeCreateSessionErrorSchema = ForgeOperationError;
 export type ForgeCreateSessionError = typeof ForgeCreateSessionErrorSchema.Type;
 
@@ -244,3 +424,64 @@ export const ForgeGetTopicExtractionSnapshotErrorSchema = Schema.Union(
 );
 export type ForgeGetTopicExtractionSnapshotError =
   typeof ForgeGetTopicExtractionSnapshotErrorSchema.Type;
+
+export const ForgeGetCardsSnapshotErrorSchema = Schema.Union(
+  ForgeSessionNotFoundError,
+  ForgeSessionOperationError,
+  ForgeOperationError,
+);
+export type ForgeGetCardsSnapshotError = typeof ForgeGetCardsSnapshotErrorSchema.Type;
+
+export const ForgeGetTopicCardsErrorSchema = Schema.Union(
+  ForgeTopicNotFoundError,
+  ForgeSessionOperationError,
+  ForgeOperationError,
+);
+export type ForgeGetTopicCardsError = typeof ForgeGetTopicCardsErrorSchema.Type;
+
+export const ForgeGenerateTopicCardsErrorSchema = Schema.Union(
+  ForgeTopicNotFoundError,
+  ForgeTopicAlreadyGeneratingError,
+  ForgeCardGenerationError,
+  ForgeSessionOperationError,
+  ForgeOperationError,
+);
+export type ForgeGenerateTopicCardsError = typeof ForgeGenerateTopicCardsErrorSchema.Type;
+
+export const ForgeGetCardPermutationsErrorSchema = Schema.Union(
+  ForgeCardNotFoundError,
+  ForgeSessionOperationError,
+  ForgeOperationError,
+);
+export type ForgeGetCardPermutationsError = typeof ForgeGetCardPermutationsErrorSchema.Type;
+
+export const ForgeGenerateCardPermutationsErrorSchema = Schema.Union(
+  ForgeCardNotFoundError,
+  ForgePermutationGenerationError,
+  ForgeSessionOperationError,
+  ForgeOperationError,
+);
+export type ForgeGenerateCardPermutationsError =
+  typeof ForgeGenerateCardPermutationsErrorSchema.Type;
+
+export const ForgeGetCardClozeErrorSchema = Schema.Union(
+  ForgeCardNotFoundError,
+  ForgeSessionOperationError,
+  ForgeOperationError,
+);
+export type ForgeGetCardClozeError = typeof ForgeGetCardClozeErrorSchema.Type;
+
+export const ForgeGenerateCardClozeErrorSchema = Schema.Union(
+  ForgeCardNotFoundError,
+  ForgeClozeGenerationError,
+  ForgeSessionOperationError,
+  ForgeOperationError,
+);
+export type ForgeGenerateCardClozeError = typeof ForgeGenerateCardClozeErrorSchema.Type;
+
+export const ForgeUpdateCardErrorSchema = Schema.Union(
+  ForgeCardNotFoundError,
+  ForgeSessionOperationError,
+  ForgeOperationError,
+);
+export type ForgeUpdateCardError = typeof ForgeUpdateCardErrorSchema.Type;

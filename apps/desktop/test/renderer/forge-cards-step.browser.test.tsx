@@ -1,4 +1,4 @@
-import { userEvent } from "vitest/browser";
+import { userEvent } from "@vitest/browser/context";
 import { describe, expect, it, vi } from "vitest";
 
 import { ForgePage } from "@/components/forge/forge-page";
@@ -39,6 +39,13 @@ type InitialTopicState = {
     readonly question: string;
     readonly answer: string;
   }>;
+};
+
+type SnapshotSummaryOverride = {
+  readonly status?: TopicState["status"];
+  readonly errorMessage?: string | null;
+  readonly cardCount?: number;
+  readonly generationRevision?: number;
 };
 
 const TOPICS: ReadonlyArray<TopicDef> = [
@@ -85,6 +92,7 @@ const mockDesktopGlobals = (invoke: (...args: unknown[]) => Promise<unknown>) =>
 const createCardsInvoke = (options?: {
   readonly sessionId?: number;
   readonly initialByTopicKey?: Readonly<Record<string, InitialTopicState>>;
+  readonly snapshotSummaryOverridesByTopicKey?: Readonly<Record<string, SnapshotSummaryOverride>>;
 }) => {
   const sessionId = options?.sessionId ?? 77;
   let nextCardId = 9_000;
@@ -110,7 +118,10 @@ const createCardsInvoke = (options?: {
     });
   });
 
-  const permutationsByCardId = new Map<number, Array<{ id: number; question: string; answer: string }>>();
+  const permutationsByCardId = new Map<
+    number,
+    Array<{ id: number; question: string; answer: string }>
+  >();
   const clozeByCardId = new Map<number, string>();
 
   const findTopicState = (input: { chunkId: number; topicIndex: number }) => {
@@ -135,6 +146,22 @@ const createCardsInvoke = (options?: {
     cardCount: state.cards.length,
     generationRevision: state.generationRevision,
   });
+
+  const withSnapshotOverride = (
+    summary: ReturnType<typeof toSummary>,
+    override?: SnapshotSummaryOverride,
+  ) => {
+    if (!override) return summary;
+
+    return {
+      ...summary,
+      status: override.status ?? summary.status,
+      errorMessage:
+        override.errorMessage !== undefined ? override.errorMessage : summary.errorMessage,
+      cardCount: override.cardCount ?? summary.cardCount,
+      generationRevision: override.generationRevision ?? summary.generationRevision,
+    };
+  };
 
   const invoke = vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
     if (method === "ForgePreviewChunks") {
@@ -191,7 +218,10 @@ const createCardsInvoke = (options?: {
             if (!state) {
               throw new Error(`Missing topic state for ${topic.chunkId}:${topic.topicIndex}`);
             }
-            return toSummary(state);
+            return withSnapshotOverride(
+              toSummary(state),
+              options?.snapshotSummaryOverridesByTopicKey?.[topicKey(topic)],
+            );
           }),
         },
       };
@@ -405,10 +435,13 @@ describe("Forge cards step", () => {
     const screen = await renderWithIpcProviders(<ForgePage />);
     await navigateToCards(screen);
 
-    await expect.poll(() => {
-      return invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeGenerateTopicCards")
-        .length;
-    }).toBe(3);
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateTopicCards",
+        ).length;
+      })
+      .toBe(3);
 
     const generatedPayloads = invoke.mock.calls
       .filter(([method]: unknown[]) => method === "ForgeGenerateTopicCards")
@@ -443,10 +476,14 @@ describe("Forge cards step", () => {
     const screen = await renderWithIpcProviders(<ForgePage />);
     await navigateToCards(screen);
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(
-      invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeGenerateTopicCards").length,
-    ).toBe(0);
+    await expect
+      .poll(
+        () =>
+          invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeGenerateTopicCards")
+            .length,
+        { timeout: 250, interval: 50 },
+      )
+      .toBe(0);
   });
 
   it("switches topics from the sidebar and renders the selected topic cards", async () => {
@@ -494,10 +531,48 @@ describe("Forge cards step", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Generate cards" }));
 
-    await expect.poll(() => {
-      return invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeGenerateTopicCards")
-        .length;
-    }).toBe(1);
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateTopicCards",
+        ).length;
+      })
+      .toBe(1);
+    await expect.element(screen.getByText("Q alpha")).toBeVisible();
+  });
+
+  it("renders generated cards when the topic query is newer than the snapshot summary", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "idle",
+          cards: [],
+        },
+      },
+      snapshotSummaryOverridesByTopicKey: {
+        "101:0": {
+          status: "idle",
+          cardCount: 0,
+          generationRevision: 0,
+        },
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await userEvent.click(screen.getByRole("button", { name: "Generate cards" }));
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateTopicCards",
+        ).length;
+      })
+      .toBe(1);
+
     await expect.element(screen.getByText("Q alpha")).toBeVisible();
   });
 
@@ -544,9 +619,12 @@ describe("Forge cards step", () => {
     questionField.dispatchEvent(new Event("input", { bubbles: true }));
     questionField.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
 
-    await expect.poll(() => {
-      return invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeUpdateCard").length;
-    }).toBe(1);
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeUpdateCard")
+          .length;
+      })
+      .toBe(1);
 
     const updateCall = invoke.mock.calls.find(
       ([method]: unknown[]) => method === "ForgeUpdateCard",
@@ -558,7 +636,7 @@ describe("Forge cards step", () => {
     });
   });
 
-  it("loads and regenerates permutations and cloze variants", async () => {
+  it("auto-generates permutations and cloze variants when panels open empty", async () => {
     const invoke = createCardsInvoke({
       initialByTopicKey: {
         ...defaultInteractiveState(),
@@ -575,30 +653,92 @@ describe("Forge cards step", () => {
     await navigateToCards(screen);
 
     await userEvent.click(screen.getByRole("button", { name: "Permutations" }));
-    await expect.element(screen.getByText("0 variations generated")).toBeVisible();
-    (screen.getByText("regenerate", { exact: true }).element() as HTMLElement).click();
 
-    await expect.poll(() => {
-      return invoke.mock.calls.filter(
-        ([method]: unknown[]) => method === "ForgeGenerateCardPermutations",
-      ).length;
-    }).toBe(1);
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateCardPermutations",
+        ).length;
+      })
+      .toBe(1);
     await expect.element(screen.getByText("Permutation for 8300")).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "Cloze" }));
-    const regenerateButtons = Array.from(document.querySelectorAll("button")).filter(
-      (element) => element.textContent?.trim() === "regenerate",
-    );
-    const clozeRegenerateButton = regenerateButtons[regenerateButtons.length - 1];
-    if (!(clozeRegenerateButton instanceof HTMLElement)) {
-      throw new Error("Expected cloze regenerate button.");
-    }
-    clozeRegenerateButton.click();
 
-    await expect.poll(() => {
-      return invoke.mock.calls.filter(
-        ([method]: unknown[]) => method === "ForgeGenerateCardCloze",
-      ).length;
-    }).toBe(1);
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateCardCloze",
+        ).length;
+      })
+      .toBe(1);
+  });
+
+  it("keeps permutations and cloze mutually exclusive for the same card", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "generated",
+          generationRevision: 1,
+          cards: [{ id: 8_400, question: "exclusive question", answer: "exclusive answer" }],
+        },
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await userEvent.click(screen.getByRole("button", { name: "Permutations" }));
+    await expect.element(screen.getByText("Permutation for 8400")).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "Cloze" }));
+    expect(screen.getByText("Permutation for 8400").query()).toBeNull();
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateCardCloze",
+        ).length;
+      })
+      .toBe(1);
+  });
+
+  it("keeps an expanded panel open when switching topics away and back", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "generated",
+          generationRevision: 1,
+          cards: [{ id: 8_500, question: "persist question", answer: "persist answer" }],
+        },
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await userEvent.click(screen.getByRole("button", { name: "Permutations" }));
+    await expect.element(screen.getByText("Permutation for 8500")).toBeVisible();
+
+    const sidebar = screen.getByText("Topics · 4").element().closest("aside");
+    if (!(sidebar instanceof HTMLElement)) {
+      throw new Error("Expected cards sidebar.");
+    }
+
+    const sidebarButtons = Array.from(sidebar.querySelectorAll("button"));
+    const betaRow = sidebarButtons.find((button) => button.textContent?.includes("beta"));
+    const alphaRow = sidebarButtons.find((button) => button.textContent?.includes("alpha"));
+    if (!(betaRow instanceof HTMLElement) || !(alphaRow instanceof HTMLElement)) {
+      throw new Error("Expected alpha and beta sidebar row buttons.");
+    }
+
+    betaRow.click();
+    await expect.element(screen.getByText("beta question")).toBeVisible();
+
+    alphaRow.click();
+    await expect.element(screen.getByText("Permutation for 8500")).toBeVisible();
   });
 });

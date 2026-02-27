@@ -225,4 +225,63 @@ const setupSqliteRepository = async () => {
       await dispose();
     }
   });
+
+  it("persists cards domain rows and reads cards snapshot", async () => {
+    const { repository, dispose } = await setupSqliteRepository();
+
+    try {
+      const session = await Effect.runPromise(
+        repository.createSession({
+          sourceKind: "pdf",
+          sourceFilePath: "/tmp/sqlite-cards-domain.pdf",
+          deckPath: null,
+          sourceFingerprint: "fp:sqlite-cards-domain",
+        }),
+      );
+
+      await Effect.runPromise(
+        repository.saveChunks(session.id, [
+          {
+            text: "chunk-0",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: session.id,
+          sequenceOrder: 0,
+          topics: ["topic-a"],
+        }),
+      );
+
+      const topic = await Effect.runPromise(
+        repository.getTopicByRef({
+          sessionId: session.id,
+          chunkId: 1,
+          topicIndex: 0,
+        }),
+      );
+      if (!topic) {
+        throw new Error("Expected persisted topic.");
+      }
+
+      await Effect.runPromise(repository.tryStartTopicGeneration(topic.topicId));
+      await Effect.runPromise(
+        repository.replaceCardsForTopicAndFinishGenerationSuccess({
+          topicId: topic.topicId,
+          cards: [{ question: "Q1", answer: "A1" }],
+        }),
+      );
+
+      const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+      expect(snapshot).toHaveLength(1);
+      expect(snapshot[0]?.status).toBe("generated");
+      expect(snapshot[0]?.cardCount).toBe(1);
+      expect(snapshot[0]?.generationRevision).toBe(1);
+    } finally {
+      await dispose();
+    }
+  });
 });

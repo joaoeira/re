@@ -4,6 +4,27 @@ import {
   ForgeCreateSessionErrorSchema,
   ForgeCreateSessionInputSchema,
   ForgeCreateSessionResultSchema,
+  ForgeGenerateCardClozeErrorSchema,
+  ForgeGenerateCardClozeInputSchema,
+  ForgeGenerateCardClozeResultSchema,
+  ForgeGenerateCardPermutationsErrorSchema,
+  ForgeGenerateCardPermutationsInputSchema,
+  ForgeGenerateCardPermutationsResultSchema,
+  ForgeGenerateTopicCardsErrorSchema,
+  ForgeGenerateTopicCardsInputSchema,
+  ForgeGenerateTopicCardsResultSchema,
+  ForgeGetCardClozeErrorSchema,
+  ForgeGetCardClozeInputSchema,
+  ForgeGetCardClozeResultSchema,
+  ForgeGetCardPermutationsErrorSchema,
+  ForgeGetCardPermutationsInputSchema,
+  ForgeGetCardPermutationsResultSchema,
+  ForgeGetCardsSnapshotErrorSchema,
+  ForgeGetCardsSnapshotInputSchema,
+  ForgeGetCardsSnapshotResultSchema,
+  ForgeGetTopicCardsErrorSchema,
+  ForgeGetTopicCardsInputSchema,
+  ForgeGetTopicCardsResultSchema,
   ForgeExtractTextErrorSchema,
   ForgeExtractTextInputSchema,
   ForgeExtractTextResultSchema,
@@ -17,6 +38,9 @@ import {
   ForgeStartTopicExtractionInputSchema,
   ForgeStartTopicExtractionResultSchema,
   ForgeTopicChunkExtractedEventSchema,
+  ForgeUpdateCardErrorSchema,
+  ForgeUpdateCardInputSchema,
+  ForgeUpdateCardResultSchema,
 } from "@shared/rpc/schemas/forge";
 
 export const ForgeCreateSession = rpc(
@@ -52,6 +76,62 @@ export const ForgeGetTopicExtractionSnapshot = rpc(
   ForgeGetTopicExtractionSnapshotInputSchema,
   ForgeGetTopicExtractionSnapshotResultSchema,
   ForgeGetTopicExtractionSnapshotErrorSchema,
+);
+
+export const ForgeGetCardsSnapshot = rpc(
+  "ForgeGetCardsSnapshot",
+  ForgeGetCardsSnapshotInputSchema,
+  ForgeGetCardsSnapshotResultSchema,
+  ForgeGetCardsSnapshotErrorSchema,
+);
+
+export const ForgeGetTopicCards = rpc(
+  "ForgeGetTopicCards",
+  ForgeGetTopicCardsInputSchema,
+  ForgeGetTopicCardsResultSchema,
+  ForgeGetTopicCardsErrorSchema,
+);
+
+export const ForgeGenerateTopicCards = rpc(
+  "ForgeGenerateTopicCards",
+  ForgeGenerateTopicCardsInputSchema,
+  ForgeGenerateTopicCardsResultSchema,
+  ForgeGenerateTopicCardsErrorSchema,
+);
+
+export const ForgeGetCardPermutations = rpc(
+  "ForgeGetCardPermutations",
+  ForgeGetCardPermutationsInputSchema,
+  ForgeGetCardPermutationsResultSchema,
+  ForgeGetCardPermutationsErrorSchema,
+);
+
+export const ForgeGenerateCardPermutations = rpc(
+  "ForgeGenerateCardPermutations",
+  ForgeGenerateCardPermutationsInputSchema,
+  ForgeGenerateCardPermutationsResultSchema,
+  ForgeGenerateCardPermutationsErrorSchema,
+);
+
+export const ForgeGetCardCloze = rpc(
+  "ForgeGetCardCloze",
+  ForgeGetCardClozeInputSchema,
+  ForgeGetCardClozeResultSchema,
+  ForgeGetCardClozeErrorSchema,
+);
+
+export const ForgeGenerateCardCloze = rpc(
+  "ForgeGenerateCardCloze",
+  ForgeGenerateCardClozeInputSchema,
+  ForgeGenerateCardClozeResultSchema,
+  ForgeGenerateCardClozeErrorSchema,
+);
+
+export const ForgeUpdateCard = rpc(
+  "ForgeUpdateCard",
+  ForgeUpdateCardInputSchema,
+  ForgeUpdateCardResultSchema,
+  ForgeUpdateCardErrorSchema,
 );
 
 export const ForgeTopicChunkExtracted = event(

@@ -1,12 +1,11 @@
 import { cn } from "@/lib/utils";
-
-import type { TopicGenerationStatus } from "./mock-cards-data";
+import type { ForgeTopicCardsStatus } from "@shared/rpc/schemas/forge";
 
 type SidebarTopicRowProps = {
   readonly topicKey: string;
   readonly text: string;
   readonly active: boolean;
-  readonly status: TopicGenerationStatus;
+  readonly status: ForgeTopicCardsStatus;
   readonly cardCount: number;
   readonly addedCount: number;
   readonly onSelect: (topicKey: string) => void;
@@ -16,7 +15,7 @@ function StatusDot({
   status,
   allAdded,
 }: {
-  readonly status: TopicGenerationStatus;
+  readonly status: ForgeTopicCardsStatus;
   readonly allAdded: boolean;
 }) {
   const base = "inline-block size-2 shrink-0 rounded-full";

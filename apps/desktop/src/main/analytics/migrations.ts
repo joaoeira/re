@@ -153,6 +153,66 @@ const REVIEW_HISTORY_MIGRATIONS = {
       ON forge_sessions(source_kind, source_file_path, created_at DESC, id DESC)
     `;
   }),
+  "0006_create_forge_cards_domain": Effect.gen(function* () {
+    const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+    yield* sql`
+      CREATE TABLE IF NOT EXISTS forge_topic_generation (
+        id INTEGER PRIMARY KEY,
+        topic_id INTEGER NOT NULL REFERENCES forge_topics(id) ON DELETE CASCADE,
+        status TEXT NOT NULL CHECK (status IN ('idle', 'generating', 'generated', 'error')),
+        error_message TEXT,
+        generation_started_at TEXT,
+        status_changed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        generation_revision INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(topic_id)
+      )
+    `;
+
+    yield* sql`
+      CREATE TABLE IF NOT EXISTS forge_cards (
+        id INTEGER PRIMARY KEY,
+        topic_id INTEGER NOT NULL REFERENCES forge_topics(id) ON DELETE CASCADE,
+        card_order INTEGER NOT NULL CHECK (card_order >= 0),
+        question TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        UNIQUE(topic_id, card_order)
+      )
+    `;
+
+    yield* sql`
+      CREATE INDEX IF NOT EXISTS forge_cards_topic_order_idx
+      ON forge_cards(topic_id, card_order)
+    `;
+
+    yield* sql`
+      CREATE TABLE IF NOT EXISTS forge_card_permutations (
+        id INTEGER PRIMARY KEY,
+        source_card_id INTEGER NOT NULL REFERENCES forge_cards(id) ON DELETE CASCADE,
+        permutation_order INTEGER NOT NULL CHECK (permutation_order >= 0),
+        question TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        UNIQUE(source_card_id, permutation_order)
+      )
+    `;
+
+    yield* sql`
+      CREATE INDEX IF NOT EXISTS forge_card_permutations_source_order_idx
+      ON forge_card_permutations(source_card_id, permutation_order)
+    `;
+
+    yield* sql`
+      CREATE TABLE IF NOT EXISTS forge_card_cloze (
+        id INTEGER PRIMARY KEY,
+        source_card_id INTEGER NOT NULL UNIQUE REFERENCES forge_cards(id) ON DELETE CASCADE,
+        cloze_text TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      )
+    `;
+  }),
 } satisfies Record<string, Effect.Effect<void, unknown, SqlClient.SqlClient>>;
 
 const toMigrationError = (message: string): Migrator.MigrationError =>

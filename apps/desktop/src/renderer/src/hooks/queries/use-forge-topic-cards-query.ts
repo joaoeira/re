@@ -19,15 +19,17 @@ export function useForgeTopicCardsQuery(
       sessionId !== null && chunkId !== null && topicIndex !== null
         ? () =>
             runIpcEffect(
-              ipc.client.ForgeGetTopicCards({
-                sessionId,
-                chunkId,
-                topicIndex,
-              }).pipe(
-                Effect.catchTag("RpcDefectError", (rpcDefect) =>
-                  Effect.fail(toRpcDefectError(rpcDefect)),
+              ipc.client
+                .ForgeGetTopicCards({
+                  sessionId,
+                  chunkId,
+                  topicIndex,
+                })
+                .pipe(
+                  Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                    Effect.fail(toRpcDefectError(rpcDefect)),
+                  ),
                 ),
-              ),
             )
         : skipToken,
   });

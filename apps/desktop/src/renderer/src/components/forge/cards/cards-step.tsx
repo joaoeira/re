@@ -6,6 +6,7 @@ import {
   useForgeAddedCardIdsByTopicKey,
   useForgeCardsCurationActions,
   useForgeDeletedCardIdsByTopicKey,
+  useForgeExpandedCardPanelsByTopicKey,
   useForgeExtractSummary,
   useForgeSelectedTopicKeys,
   useForgeTopicsByChunk,
@@ -18,10 +19,7 @@ import {
 import { useForgeCardsSnapshotQuery } from "@/hooks/queries/use-forge-cards-snapshot-query";
 import { useForgeTopicCardsQuery } from "@/hooks/queries/use-forge-topic-cards-query";
 import { queryKeys } from "@/lib/query-keys";
-import type {
-  ForgeGetTopicCardsResult,
-  ForgeTopicCardsSummary,
-} from "@shared/rpc/schemas/forge";
+import type { ForgeGetTopicCardsResult, ForgeTopicCardsSummary } from "@shared/rpc/schemas/forge";
 import { CardsCanvas } from "./cards-canvas";
 import { CardsFooter } from "./cards-footer";
 import { CardsSidebar } from "./cards-sidebar";
@@ -42,28 +40,26 @@ export function CardsStep() {
   const activeTopicKey = useForgeActiveTopicKey();
   const addedByTopicKey = useForgeAddedCardIdsByTopicKey();
   const deletedByTopicKey = useForgeDeletedCardIdsByTopicKey();
+  const expandedPanelsByTopicKey = useForgeExpandedCardPanelsByTopicKey();
   const topicsByChunk = useForgeTopicsByChunk();
   const selectedTopicKeys = useForgeSelectedTopicKeys();
 
-  const topics = useMemo<ReadonlyArray<CardsTopic>>(
-    () => {
-      const selected: CardsTopic[] = [];
-      for (const chunk of topicsByChunk) {
-        for (let index = 0; index < chunk.topics.length; index += 1) {
-          const key = topicKey(chunk.chunkId, index);
-          if (!selectedTopicKeys.has(key)) continue;
-          selected.push({
-            topicKey: key,
-            chunkId: chunk.chunkId,
-            topicIndex: index,
-            text: chunk.topics[index]!,
-          });
-        }
+  const topics = useMemo<ReadonlyArray<CardsTopic>>(() => {
+    const selected: CardsTopic[] = [];
+    for (const chunk of topicsByChunk) {
+      for (let index = 0; index < chunk.topics.length; index += 1) {
+        const key = topicKey(chunk.chunkId, index);
+        if (!selectedTopicKeys.has(key)) continue;
+        selected.push({
+          topicKey: key,
+          chunkId: chunk.chunkId,
+          topicIndex: index,
+          text: chunk.topics[index]!,
+        });
       }
-      return selected;
-    },
-    [selectedTopicKeys, topicsByChunk],
-  );
+    }
+    return selected;
+  }, [selectedTopicKeys, topicsByChunk]);
 
   useEffect(() => {
     if (topics.length === 0) {
@@ -112,10 +108,7 @@ export function CardsStep() {
       if (!summary) return;
 
       const previousRevision = previousRevisionsByTopicKey.get(topic.topicKey);
-      if (
-        typeof previousRevision === "number" &&
-        previousRevision !== summary.generationRevision
-      ) {
+      if (typeof previousRevision === "number" && previousRevision !== summary.generationRevision) {
         curationActions.clearTopicCuration(topic.topicKey);
       }
 
@@ -213,13 +206,7 @@ export function CardsStep() {
         },
       );
     },
-    [
-      generateTopicCards,
-      patchSnapshotTopicSummary,
-      queryClient,
-      sessionId,
-      summaryByTopicKey,
-    ],
+    [generateTopicCards, patchSnapshotTopicSummary, queryClient, sessionId, summaryByTopicKey],
   );
 
   const autoStartedSessionIdRef = useRef<number | null>(null);
@@ -253,8 +240,18 @@ export function CardsStep() {
   );
   const activeDeletedCardIds = useMemo(
     () =>
-      activeTopicKey ? (deletedByTopicKey.get(activeTopicKey) ?? new Set<number>()) : new Set<number>(),
+      activeTopicKey
+        ? (deletedByTopicKey.get(activeTopicKey) ?? new Set<number>())
+        : new Set<number>(),
     [activeTopicKey, deletedByTopicKey],
+  );
+  const activeExpandedPanels = useMemo(
+    () =>
+      activeTopicKey
+        ? (expandedPanelsByTopicKey.get(activeTopicKey) ??
+          new Map<number, "permutations" | "cloze">())
+        : new Map<number, "permutations" | "cloze">(),
+    [activeTopicKey, expandedPanelsByTopicKey],
   );
 
   const sidebarTopics = useMemo(() => {
@@ -284,7 +281,7 @@ export function CardsStep() {
     );
   }, [sidebarTopics]);
 
-  const activeSummary = activeTopic ? summaryByTopicKey.get(activeTopic.topicKey) ?? null : null;
+  const activeSummary = activeTopic ? (summaryByTopicKey.get(activeTopic.topicKey) ?? null) : null;
   const activeTopicResult = activeTopicCardsQuery.data;
 
   const activeStatus = (() => {
@@ -292,10 +289,12 @@ export function CardsStep() {
       return "error" as const;
     }
 
+    if (activeSummary?.status === "generating") {
+      return "generating" as const;
+    }
+
     return (
-      activeSummary?.status ??
-      activeTopicResult?.topic.status ??
-      (activeTopic ? "idle" : null)
+      activeTopicResult?.topic.status ?? activeSummary?.status ?? (activeTopic ? "idle" : null)
     );
   })();
 
@@ -370,6 +369,7 @@ export function CardsStep() {
           cards={activeCards}
           addedCardIds={activeAddedCardIds}
           deletedCardIds={activeDeletedCardIds}
+          expandedPanels={activeExpandedPanels}
           onAddCard={(cardId) => {
             if (!activeTopicKey) return;
             curationActions.markCardAdded(activeTopicKey, cardId);
@@ -377,6 +377,15 @@ export function CardsStep() {
           onDeleteCard={(cardId) => {
             if (!activeTopicKey) return;
             curationActions.markCardDeleted(activeTopicKey, cardId);
+          }}
+          onTogglePanel={(cardId, panel) => {
+            if (!activeTopicKey) return;
+            const current = activeExpandedPanels.get(cardId) ?? null;
+            curationActions.setCardExpandedPanel(
+              activeTopicKey,
+              cardId,
+              current === panel ? null : panel,
+            );
           }}
           onEditCard={handleEditCard}
           onRegenerate={() => {

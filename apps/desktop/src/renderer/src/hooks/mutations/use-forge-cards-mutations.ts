@@ -20,11 +20,13 @@ export function useForgeGenerateTopicCardsMutation() {
   return useMutation<ForgeGenerateTopicCardsResult, Error, ForgeGenerateTopicCardsInput>({
     mutationFn: (input) =>
       runIpcEffect(
-        ipc.client.ForgeGenerateTopicCards(input).pipe(
-          Effect.catchTag("RpcDefectError", (rpcDefect) =>
-            Effect.fail(toRpcDefectError(rpcDefect)),
+        ipc.client
+          .ForgeGenerateTopicCards(input)
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
           ),
-        ),
       ),
   });
 }
@@ -39,11 +41,13 @@ export function useForgeGeneratePermutationsMutation() {
   >({
     mutationFn: (input) =>
       runIpcEffect(
-        ipc.client.ForgeGenerateCardPermutations(input).pipe(
-          Effect.catchTag("RpcDefectError", (rpcDefect) =>
-            Effect.fail(toRpcDefectError(rpcDefect)),
+        ipc.client
+          .ForgeGenerateCardPermutations(input)
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
           ),
-        ),
       ),
   });
 }
@@ -54,11 +58,13 @@ export function useForgeGenerateClozeMutation() {
   return useMutation<ForgeGenerateCardClozeResult, Error, ForgeGenerateCardClozeInput>({
     mutationFn: (input) =>
       runIpcEffect(
-        ipc.client.ForgeGenerateCardCloze(input).pipe(
-          Effect.catchTag("RpcDefectError", (rpcDefect) =>
-            Effect.fail(toRpcDefectError(rpcDefect)),
+        ipc.client
+          .ForgeGenerateCardCloze(input)
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
           ),
-        ),
       ),
   });
 }
@@ -69,11 +75,13 @@ export function useForgeUpdateCardMutation() {
   return useMutation<ForgeUpdateCardResult, Error, ForgeUpdateCardInput>({
     mutationFn: (input) =>
       runIpcEffect(
-        ipc.client.ForgeUpdateCard(input).pipe(
-          Effect.catchTag("RpcDefectError", (rpcDefect) =>
-            Effect.fail(toRpcDefectError(rpcDefect)),
+        ipc.client
+          .ForgeUpdateCard(input)
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
           ),
-        ),
       ),
   });
 }

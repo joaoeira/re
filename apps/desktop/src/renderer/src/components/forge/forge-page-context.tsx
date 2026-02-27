@@ -11,6 +11,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { ForgeTopicChunkExtracted } from "@shared/rpc/contracts";
 import {
   createForgePageStore,
+  type ForgeCardExpandedPanel,
   topicKey,
   type ChunkTopics,
   type ExtractState,
@@ -19,6 +20,8 @@ import {
   type ForgeStep,
   type PreviewState,
   type SelectedPdf,
+  type TopicCardIdMap,
+  type TopicExpandedCardPanelMap,
 } from "./forge-page-store";
 
 type ForgePageActions = {
@@ -91,6 +94,22 @@ export function useForgeSelectedTopicKeys(): ReadonlySet<string> {
   return useForgePageSelector((snapshot) => snapshot.context.selectedTopicKeys);
 }
 
+export function useForgeActiveTopicKey(): string | null {
+  return useForgePageSelector((snapshot) => snapshot.context.activeTopicKey);
+}
+
+export function useForgeAddedCardIdsByTopicKey(): TopicCardIdMap {
+  return useForgePageSelector((snapshot) => snapshot.context.addedCardIdsByTopicKey);
+}
+
+export function useForgeDeletedCardIdsByTopicKey(): TopicCardIdMap {
+  return useForgePageSelector((snapshot) => snapshot.context.deletedCardIdsByTopicKey);
+}
+
+export function useForgeExpandedCardPanelsByTopicKey(): TopicExpandedCardPanelMap {
+  return useForgePageSelector((snapshot) => snapshot.context.expandedCardPanelsByTopicKey);
+}
+
 export function useForgeSelectedTopicCount(): number {
   return useForgePageSelector((snapshot) => {
     const { topicsByChunk, selectedTopicKeys } = snapshot.context;
@@ -142,6 +161,40 @@ export function useForgeTopicActions(): ForgeTopicActions {
         store.send({ type: "toggleAllChunk", chunkId, select }),
       selectAllTopics: () => store.send({ type: "selectAllTopics" }),
       deselectAllTopics: () => store.send({ type: "deselectAllTopics" }),
+    }),
+    [store],
+  );
+}
+
+export type ForgeCardsCurationActions = {
+  readonly setActiveTopic: (topicKey: string | null) => void;
+  readonly markCardAdded: (topicKey: string, cardId: number) => void;
+  readonly markCardDeleted: (topicKey: string, cardId: number) => void;
+  readonly setCardExpandedPanel: (
+    topicKey: string,
+    cardId: number,
+    panel: ForgeCardExpandedPanel | null,
+  ) => void;
+  readonly clearTopicCuration: (topicKey: string) => void;
+};
+
+export function useForgeCardsCurationActions(): ForgeCardsCurationActions {
+  const store = useForgePageStore();
+  return useMemo(
+    () => ({
+      setActiveTopic: (topicKey: string | null) =>
+        store.send({ type: "setActiveCardsTopic", topicKey }),
+      markCardAdded: (topicKey: string, cardId: number) =>
+        store.send({ type: "markCardAddedToTopic", topicKey, cardId }),
+      markCardDeleted: (topicKey: string, cardId: number) =>
+        store.send({ type: "markCardDeletedFromTopic", topicKey, cardId }),
+      setCardExpandedPanel: (
+        topicKey: string,
+        cardId: number,
+        panel: ForgeCardExpandedPanel | null,
+      ) => store.send({ type: "setCardExpandedPanelForTopic", topicKey, cardId, panel }),
+      clearTopicCuration: (topicKey: string) =>
+        store.send({ type: "clearTopicCuration", topicKey }),
     }),
     [store],
   );
@@ -334,6 +387,7 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
 
   const advanceToCards = useCallback(() => {
     const snapshot = store.getSnapshot().context;
+    if (snapshot.extractState.status === "extracting") return;
     if (snapshot.selectedTopicKeys.size === 0) return;
     store.send({ type: "advanceToCards" });
   }, [store]);

@@ -173,7 +173,7 @@ function ForgePageContent() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={selectedTopicCount === 0}
+                  disabled={selectedTopicCount === 0 || extractState.status === "extracting"}
                   onClick={actions.advanceToCards}
                   className="gap-2 hover:border-foreground disabled:opacity-30"
                 >

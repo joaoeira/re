@@ -1,23 +1,50 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { ClozePreview } from "@/components/editor/cloze-preview";
+import { useForgeGenerateClozeMutation } from "@/hooks/mutations/use-forge-cards-mutations";
+import { useForgeCardClozeQuery } from "@/hooks/queries/use-forge-card-cloze-query";
+import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 
-import { MOCK_CLOZE_TEXT } from "./mock-cards-data";
-
 type ClozePanelProps = {
-  readonly onAddCloze: () => void;
+  readonly sourceCardId: number;
 };
 
-export function ClozePanel({ onAddCloze }: ClozePanelProps) {
-  const [loading, setLoading] = useState(false);
+export function ClozePanel({ sourceCardId }: ClozePanelProps) {
+  const queryClient = useQueryClient();
+  const clozeQuery = useForgeCardClozeQuery(sourceCardId);
+  const { mutate: regenerateCloze, isPending } = useForgeGenerateClozeMutation();
   const [added, setAdded] = useState(false);
+  const autoRegeneratedCardIdRef = useRef<number | null>(null);
 
-  const handleRegenerate = () => {
-    setLoading(true);
-    setAdded(false);
-    setTimeout(() => setLoading(false), 600);
-  };
+  const loading = isPending || clozeQuery.isLoading;
+  const clozeText = clozeQuery.data?.cloze ?? null;
+
+  const handleRegenerate = useCallback(() => {
+    regenerateCloze(
+      { sourceCardId },
+      {
+        onSuccess: (result) => {
+          queryClient.setQueryData(queryKeys.forgeCardCloze(sourceCardId), () => result);
+          setAdded(false);
+        },
+      },
+    );
+  }, [queryClient, regenerateCloze, sourceCardId]);
+
+  useEffect(() => {
+    autoRegeneratedCardIdRef.current = null;
+  }, [sourceCardId]);
+
+  useEffect(() => {
+    if (!clozeQuery.isSuccess) return;
+    if (clozeText !== null) return;
+    if (isPending) return;
+    if (autoRegeneratedCardIdRef.current === sourceCardId) return;
+    autoRegeneratedCardIdRef.current = sourceCardId;
+    handleRegenerate();
+  }, [clozeQuery.isSuccess, clozeText, handleRegenerate, isPending, sourceCardId]);
 
   return (
     <div className="mt-3 border-t border-dashed border-border/40 pt-3">
@@ -33,27 +60,29 @@ export function ClozePanel({ onAddCloze }: ClozePanelProps) {
             <button
               type="button"
               onClick={handleRegenerate}
-              className="text-[11px] text-muted-foreground/40 underline underline-offset-4 decoration-border transition-colors hover:text-foreground/60"
+              className="text-[11px] text-muted-foreground/40 underline decoration-border underline-offset-4 transition-colors hover:text-foreground/60"
             >
               regenerate
             </button>
           </div>
-          <div className="bg-muted/20 px-4 py-3">
-            <ClozePreview content={MOCK_CLOZE_TEXT} />
-          </div>
+
+          {clozeQuery.error ? (
+            <p className="text-[11px] text-destructive">{clozeQuery.error.message}</p>
+          ) : null}
+
+          {clozeText ? (
+            <div className="bg-muted/20 px-4 py-3">
+              <ClozePreview content={clozeText} />
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground/50">No cloze generated yet.</p>
+          )}
+
           <div className="mt-3">
             {added ? (
               <span className="text-[11px] text-primary">✓ Added to deck</span>
             ) : (
-              <Button
-                type="button"
-                variant="secondary"
-                size="xs"
-                onClick={() => {
-                  setAdded(true);
-                  onAddCloze();
-                }}
-              >
+              <Button type="button" variant="secondary" size="xs" onClick={() => setAdded(true)}>
                 + Add to deck
               </Button>
             )}

@@ -15,10 +15,18 @@ import {
 import {
   ForgeCreateSession,
   ForgeExtractText,
+  ForgeGenerateCardCloze,
+  ForgeGenerateCardPermutations,
+  ForgeGenerateTopicCards,
+  ForgeGetCardCloze,
+  ForgeGetCardPermutations,
+  ForgeGetCardsSnapshot,
+  ForgeGetTopicCards,
   ForgeGetTopicExtractionSnapshot,
   ForgePreviewChunks,
   ForgeStartTopicExtraction,
   ForgeTopicChunkExtracted,
+  ForgeUpdateCard,
 } from "./contracts/forge";
 import {
   BuildReviewQueue,
@@ -83,6 +91,14 @@ export const appContract = defineContract({
     ForgePreviewChunks,
     ForgeStartTopicExtraction,
     ForgeGetTopicExtractionSnapshot,
+    ForgeGetCardsSnapshot,
+    ForgeGetTopicCards,
+    ForgeGenerateTopicCards,
+    ForgeGetCardPermutations,
+    ForgeGenerateCardPermutations,
+    ForgeGetCardCloze,
+    ForgeGenerateCardCloze,
+    ForgeUpdateCard,
   ] as const,
   events: [
     WorkspaceSnapshotChanged,

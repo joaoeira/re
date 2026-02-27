@@ -1,39 +1,38 @@
-import { useState } from "react";
 import { Check, ListTree, Braces, Trash2, Plus } from "lucide-react";
 
-import { ClozePreview } from "@/components/editor/cloze-preview";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { ForgeGeneratedCard } from "@shared/rpc/schemas/forge";
 
-import type { ForgeCard } from "./mock-cards-data";
 import { ClozePanel } from "./cloze-panel";
 import { PermutationsPanel } from "./permutations-panel";
 
 type CardBlockProps = {
-  readonly card: ForgeCard;
+  readonly card: ForgeGeneratedCard;
   readonly isAdded: boolean;
+  readonly expandedPanel: "permutations" | "cloze" | null;
   readonly onAdd: () => void;
   readonly onDelete: () => void;
+  readonly onTogglePermutations: () => void;
+  readonly onToggleCloze: () => void;
   readonly onEditQuestion: (value: string) => void;
   readonly onEditAnswer: (value: string) => void;
-  readonly onAddPermutation: () => void;
-  readonly onAddCloze: () => void;
 };
 
 export function CardBlock({
   card,
   isAdded,
+  expandedPanel,
   onAdd,
   onDelete,
+  onTogglePermutations,
+  onToggleCloze,
   onEditQuestion,
   onEditAnswer,
-  onAddPermutation,
-  onAddCloze,
 }: CardBlockProps) {
-  const [showPermutations, setShowPermutations] = useState(false);
-  const [showCloze, setShowCloze] = useState(false);
-
-  const hasExpanded = showPermutations || showCloze;
+  const showPermutations = expandedPanel === "permutations";
+  const showCloze = expandedPanel === "cloze";
+  const hasExpanded = expandedPanel !== null;
 
   return (
     <div className="group relative border-b border-border/30 px-2 py-5">
@@ -49,10 +48,10 @@ export function CardBlock({
           contentEditable={!isAdded}
           suppressContentEditableWarning
           className={cn(
-            "px-2 py-1 -mx-2 text-[15px] font-medium leading-relaxed text-foreground outline-none transition-colors",
+            "-mx-2 px-2 py-1 text-[15px] font-medium leading-relaxed text-foreground outline-none transition-colors",
             !isAdded && "hover:bg-muted/20 focus:bg-muted/20",
           )}
-          onBlur={(e) => onEditQuestion(e.currentTarget.textContent ?? "")}
+          onBlur={(event) => onEditQuestion(event.currentTarget.textContent ?? "")}
         >
           {card.question}
         </div>
@@ -61,19 +60,13 @@ export function CardBlock({
           contentEditable={!isAdded}
           suppressContentEditableWarning
           className={cn(
-            "mt-1.5 px-2 py-1 -mx-2 text-sm leading-relaxed text-muted-foreground outline-none transition-colors",
+            "-mx-2 mt-1.5 px-2 py-1 text-sm leading-relaxed text-muted-foreground outline-none transition-colors",
             !isAdded && "hover:bg-muted/20 focus:bg-muted/20",
           )}
-          onBlur={(e) => onEditAnswer(e.currentTarget.textContent ?? "")}
+          onBlur={(event) => onEditAnswer(event.currentTarget.textContent ?? "")}
         >
           {card.answer}
         </div>
-
-        {card.type === "cloze" && card.clozeText && (
-          <div className="mt-3 bg-muted/20 px-3 py-2.5">
-            <ClozePreview content={card.clozeText} />
-          </div>
-        )}
       </div>
 
       <div
@@ -103,7 +96,7 @@ export function CardBlock({
               "gap-1.5 text-muted-foreground/60 hover:bg-transparent hover:text-foreground",
               showPermutations && "text-foreground",
             )}
-            onClick={() => setShowPermutations((v) => !v)}
+            onClick={onTogglePermutations}
           >
             <ListTree className="size-3" />
             Permutations
@@ -116,7 +109,7 @@ export function CardBlock({
               "gap-1.5 text-muted-foreground/60 hover:bg-transparent hover:text-foreground",
               showCloze && "text-foreground",
             )}
-            onClick={() => setShowCloze((v) => !v)}
+            onClick={onToggleCloze}
           >
             <Braces className="size-3" />
             Cloze
@@ -132,13 +125,13 @@ export function CardBlock({
 
       {showPermutations && (
         <div className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
-          <PermutationsPanel onAddPermutation={onAddPermutation} />
+          <PermutationsPanel sourceCardId={card.id} />
         </div>
       )}
 
       {showCloze && (
         <div className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
-          <ClozePanel onAddCloze={onAddCloze} />
+          <ClozePanel sourceCardId={card.id} />
         </div>
       )}
     </div>

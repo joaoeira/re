@@ -138,7 +138,7 @@ const createCardsDomainPromptRuntime = (options?: {
               { question: "Where is ATP produced?", answer: "ATP is produced in mitochondria." },
             ],
           } as unknown as Output,
-          rawText: "{\"cards\":[]}",
+          rawText: '{"cards":[]}',
           metadata: {
             promptId: spec.promptId,
             promptVersion: "1",
@@ -160,7 +160,7 @@ const createCardsDomainPromptRuntime = (options?: {
               },
             ],
           } as unknown as Output,
-          rawText: "{\"permutations\":[]}",
+          rawText: '{"permutations":[]}',
           metadata: {
             promptId: spec.promptId,
             promptVersion: "1",
@@ -177,7 +177,7 @@ const createCardsDomainPromptRuntime = (options?: {
           output: {
             cloze: "The energy currency of the cell is {{c1::ATP}}.",
           } as unknown as Output,
-          rawText: "{\"cloze\":\"x\"}",
+          rawText: '{"cloze":"x"}',
           metadata: {
             promptId: spec.promptId,
             promptVersion: "1",
@@ -1203,12 +1203,14 @@ describe("forge handlers", () => {
         }),
       );
 
-      await expect.poll(async () => {
-        const snapshot = await Effect.runPromise(
-          repository.getCardsSnapshotBySession(created.session.id),
-        );
-        return snapshot[0]?.status ?? null;
-      }).toBe("generating");
+      await expect
+        .poll(async () => {
+          const snapshot = await Effect.runPromise(
+            repository.getCardsSnapshotBySession(created.session.id),
+          );
+          return snapshot[0]?.status ?? null;
+        })
+        .toBe("generating");
 
       const secondExit = await Effect.runPromiseExit(
         handlers.ForgeGenerateTopicCards({

@@ -11,15 +11,18 @@ export function useForgeCardsSnapshotQuery(sessionId: number | null) {
 
   return useQuery<ForgeGetCardsSnapshotResult, Error>({
     queryKey: queryKeys.forgeCardsSnapshot(sessionId),
-    queryFn: sessionId !== null
-      ? () =>
-          runIpcEffect(
-            ipc.client.ForgeGetCardsSnapshot({ sessionId }).pipe(
-              Effect.catchTag("RpcDefectError", (rpcDefect) =>
-                Effect.fail(toRpcDefectError(rpcDefect)),
-              ),
-            ),
-          )
-      : skipToken,
+    queryFn:
+      sessionId !== null
+        ? () =>
+            runIpcEffect(
+              ipc.client
+                .ForgeGetCardsSnapshot({ sessionId })
+                .pipe(
+                  Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                    Effect.fail(toRpcDefectError(rpcDefect)),
+                  ),
+                ),
+            )
+        : skipToken,
   });
 }

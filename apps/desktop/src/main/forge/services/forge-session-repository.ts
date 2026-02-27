@@ -401,7 +401,10 @@ const canTransitionStatus = (
   toStatus: ForgeSessionStatus,
 ): boolean => fromStatus === toStatus || ALLOWED_TRANSITIONS[fromStatus].has(toStatus);
 
-const TOPIC_GENERATION_ALLOWED_TRANSITIONS: Record<ForgeTopicCardsStatus, ReadonlySet<ForgeTopicCardsStatus>> = {
+const TOPIC_GENERATION_ALLOWED_TRANSITIONS: Record<
+  ForgeTopicCardsStatus,
+  ReadonlySet<ForgeTopicCardsStatus>
+> = {
   idle: new Set(["generating"]),
   generating: new Set(["generated", "error"]),
   generated: new Set(["generating", "generated"]),
@@ -650,7 +653,11 @@ export const makeSqliteForgeSessionRepository = ({
 
   const loadCardsSnapshotByTopicIdSql = (
     topicId: number,
-  ): Effect.Effect<ForgeTopicCardsSnapshotRow | null, ForgeSessionRepositoryError, SqlClient.SqlClient> =>
+  ): Effect.Effect<
+    ForgeTopicCardsSnapshotRow | null,
+    ForgeSessionRepositoryError,
+    SqlClient.SqlClient
+  > =>
     loadCardsSnapshotRowsSql({
       operation: "getCardsSnapshotByTopicId.select",
       sessionId: null,
@@ -659,7 +666,11 @@ export const makeSqliteForgeSessionRepository = ({
 
   const loadCardsForTopicIdSql = (
     topicId: number,
-  ): Effect.Effect<ReadonlyArray<ForgeGeneratedCard>, ForgeSessionRepositoryError, SqlClient.SqlClient> =>
+  ): Effect.Effect<
+    ReadonlyArray<ForgeGeneratedCard>,
+    ForgeSessionRepositoryError,
+    SqlClient.SqlClient
+  > =>
     Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       const rows = yield* withSqlError(
@@ -677,7 +688,11 @@ export const makeSqliteForgeSessionRepository = ({
 
   const loadTopicGenerationByTopicIdSql = (
     topicId: number,
-  ): Effect.Effect<ForgeTopicGenerationRow | null, ForgeSessionRepositoryError, SqlClient.SqlClient> =>
+  ): Effect.Effect<
+    ForgeTopicGenerationRow | null,
+    ForgeSessionRepositoryError,
+    SqlClient.SqlClient
+  > =>
     Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       const rows = yield* withSqlError(
@@ -702,7 +717,11 @@ export const makeSqliteForgeSessionRepository = ({
 
   const loadCardByIdWithContextSql = (
     cardId: number,
-  ): Effect.Effect<ForgeCardWithTopicContext | null, ForgeSessionRepositoryError, SqlClient.SqlClient> =>
+  ): Effect.Effect<
+    ForgeCardWithTopicContext | null,
+    ForgeSessionRepositoryError,
+    SqlClient.SqlClient
+  > =>
     Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       const rows = yield* withSqlError(
@@ -1311,8 +1330,7 @@ export const makeSqliteForgeSessionRepository = ({
           }));
         }),
       ),
-    getTopicByRef: (input) =>
-      runSql("getTopicByRef.runtime", loadTopicByRefSql(input)),
+    getTopicByRef: (input) => runSql("getTopicByRef.runtime", loadTopicByRefSql(input)),
     getCardsSnapshotBySession: (sessionId) =>
       runSql("getCardsSnapshotBySession.runtime", loadCardsSnapshotBySessionSql(sessionId)),
     getCardsForTopicRef: (input) =>
@@ -1564,8 +1582,7 @@ export const makeSqliteForgeSessionRepository = ({
           return row ? toGeneratedCard(row) : null;
         }),
       ),
-    getCardById: (cardId) =>
-      runSql("getCardById.runtime", loadCardByIdWithContextSql(cardId)),
+    getCardById: (cardId) => runSql("getCardById.runtime", loadCardByIdWithContextSql(cardId)),
     replacePermutationsForCard: ({ sourceCardId, permutations }) =>
       runSql(
         "replacePermutationsForCard.runtime",
@@ -2074,9 +2091,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
 
         const sessionChunkIds = new Set(chunkRows.map((row) => row.id));
         const removedTopicIds = new Set(
-          topics
-            .filter((topic) => sessionChunkIds.has(topic.chunkId))
-            .map((topic) => topic.id),
+          topics.filter((topic) => sessionChunkIds.has(topic.chunkId)).map((topic) => topic.id),
         );
         const retainedTopics = topics.filter((topic) => !sessionChunkIds.has(topic.chunkId));
 
@@ -2265,33 +2280,33 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           ForgeTopicGenerationRow,
           ForgeSessionRepositoryError | ForgeTopicAlreadyGeneratingRepositoryError
         > => {
-        const current = ensureTopicGenerationInternal(topicId);
-        if (current.status === "generating") {
-          return Effect.fail(
-            new ForgeTopicAlreadyGeneratingRepositoryError({
-              topicId,
-            }),
-          );
-        }
+          const current = ensureTopicGenerationInternal(topicId);
+          if (current.status === "generating") {
+            return Effect.fail(
+              new ForgeTopicAlreadyGeneratingRepositoryError({
+                topicId,
+              }),
+            );
+          }
 
-        if (!canTransitionTopicGenerationStatus(current.status, "generating")) {
-          return Effect.fail(
-            new ForgeSessionRepositoryError({
-              operation: "tryStartTopicGeneration.transition",
-              message: `Invalid topic generation transition for topic ${topicId}: ${current.status} -> generating.`,
-            }),
-          );
-        }
+          if (!canTransitionTopicGenerationStatus(current.status, "generating")) {
+            return Effect.fail(
+              new ForgeSessionRepositoryError({
+                operation: "tryStartTopicGeneration.transition",
+                message: `Invalid topic generation transition for topic ${topicId}: ${current.status} -> generating.`,
+              }),
+            );
+          }
 
-        const next: InMemoryTopicGeneration = {
-          ...current,
-          status: "generating",
-          errorMessage: null,
-          generationStartedAt: nowIso(),
-          statusChangedAt: nowIso(),
-        };
-        setTopicGenerationInternal(next);
-        return Effect.succeed({ ...next });
+          const next: InMemoryTopicGeneration = {
+            ...current,
+            status: "generating",
+            errorMessage: null,
+            generationStartedAt: nowIso(),
+            statusChangedAt: nowIso(),
+          };
+          setTopicGenerationInternal(next);
+          return Effect.succeed({ ...next });
         },
       ),
     finishTopicGenerationError: ({ topicId, message }) =>
@@ -2448,9 +2463,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           chunks.filter((chunk) => chunk.sessionId === sessionId).map((chunk) => chunk.id),
         );
         const sessionTopicIds = new Set(
-          topics
-            .filter((topic) => sessionChunkIds.has(topic.chunkId))
-            .map((topic) => topic.id),
+          topics.filter((topic) => sessionChunkIds.has(topic.chunkId)).map((topic) => topic.id),
         );
 
         let updated = 0;
