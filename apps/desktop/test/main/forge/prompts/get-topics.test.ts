@@ -5,12 +5,11 @@ import { describe, expect, it } from "vitest";
 import { GetTopicsPromptSpec } from "@main/forge/prompts";
 
 describe("GetTopicsPromptSpec", () => {
-  it("renders dynamic variables with source tags", () => {
-    const rendered = GetTopicsPromptSpec.render({
-      chunkText: "The mitochondria is the powerhouse of the cell.",
-    });
+  it("renders chunk text as system prompt and JSON-only user instructions", () => {
+    const chunkText = "The mitochondria is the powerhouse of the cell.";
+    const rendered = GetTopicsPromptSpec.render({ chunkText });
 
-    expect(rendered.systemPrompt).toContain("Return JSON only");
+    expect(rendered.systemPrompt).toBe(chunkText);
     expect(rendered.messages).toHaveLength(1);
 
     const message = rendered.messages[0];
@@ -20,9 +19,9 @@ describe("GetTopicsPromptSpec", () => {
     }
 
     expect(message.role).toBe("user");
-    expect(message.content).toContain("Maximum topics: 5.");
-    expect(message.content).toContain("<source_text>");
-    expect(message.content).toContain("</source_text>");
+    expect(message.content).toContain("Analyze the provided text");
+    expect(message.content).toContain('"topics": [');
+    expect(message.content).toContain("Do not include any other text");
   });
 
   it("renders retry-aware repair context for attempt 2+", () => {
@@ -58,7 +57,7 @@ describe("GetTopicsPromptSpec", () => {
     expect(repairMessage.content).toContain("not valid JSON");
   });
 
-  it("normalizes whitespace, removes empties, and preserves input order", async () => {
+  it("normalizes whitespace in output schema and leaves normalized output unchanged", async () => {
     const decoded = await Effect.runPromise(
       Schema.decodeUnknown(GetTopicsPromptSpec.outputSchema)({
         topics: [
@@ -80,8 +79,6 @@ describe("GetTopicsPromptSpec", () => {
       chunkText: "irrelevant",
     });
 
-    expect(normalized).toEqual({
-      topics: ["Biology", "biology"],
-    });
+    expect(normalized).toEqual(decoded);
   });
 });
