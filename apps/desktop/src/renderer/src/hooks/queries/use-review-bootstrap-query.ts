@@ -45,19 +45,24 @@ export function useReviewBootstrapQuery(decks: ReviewDeckSelection) {
       }
 
       const snapshot = await runIpcEffect(
-        ipc.client.GetWorkspaceSnapshot({
-          rootPath,
-          options: DEFAULT_SNAPSHOT_OPTIONS,
-        }).pipe(
-          Effect.catchTag("RpcDefectError", (rpcDefect) =>
-            Effect.fail(toRpcDefectError(rpcDefect)),
+        ipc.client
+          .GetWorkspaceSnapshot({
+            rootPath,
+            options: DEFAULT_SNAPSHOT_OPTIONS,
+          })
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
+            Effect.mapError(mapScanDecksErrorToError),
           ),
-          Effect.mapError(mapScanDecksErrorToError),
-        ),
       );
 
       const absoluteByRelative = new Map(
-        snapshot.decks.map((deckSnapshot) => [deckSnapshot.relativePath, deckSnapshot.absolutePath]),
+        snapshot.decks.map((deckSnapshot) => [
+          deckSnapshot.relativePath,
+          deckSnapshot.absolutePath,
+        ]),
       );
 
       const deckPaths =
@@ -65,18 +70,21 @@ export function useReviewBootstrapQuery(decks: ReviewDeckSelection) {
           ? snapshot.decks.map((deckSnapshot) => deckSnapshot.absolutePath)
           : decks.map(
               (relativePath) =>
-                absoluteByRelative.get(relativePath) ?? resolveDeckPathFromRoot(rootPath, relativePath),
+                absoluteByRelative.get(relativePath) ??
+                resolveDeckPathFromRoot(rootPath, relativePath),
             );
 
       return runIpcEffect(
-        ipc.client.BuildReviewQueue({
-          deckPaths,
-          rootPath,
-        }).pipe(
-          Effect.catchTag("RpcDefectError", (rpcDefect) =>
-            Effect.fail(toRpcDefectError(rpcDefect)),
+        ipc.client
+          .BuildReviewQueue({
+            deckPaths,
+            rootPath,
+          })
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
           ),
-        ),
       );
     },
   });

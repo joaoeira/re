@@ -25,7 +25,11 @@ const createSavingMap = (value: boolean): Record<SecretKey, boolean> => ({
   "gemini-api-key": value,
 });
 
-const setKey = <T,>(record: Record<SecretKey, T>, key: SecretKey, value: T): Record<SecretKey, T> => ({
+const setKey = <T>(
+  record: Record<SecretKey, T>,
+  key: SecretKey,
+  value: T,
+): Record<SecretKey, T> => ({
   ...record,
   [key]: value,
 });
@@ -42,7 +46,9 @@ export function useApiKeyMutations(): UseApiKeyMutationsResult {
   const ipc = useIpc();
   const queryClient = useQueryClient();
 
-  const [errors, setErrors] = useState<Record<SecretKey, string | null>>(() => createErrorMap(null));
+  const [errors, setErrors] = useState<Record<SecretKey, string | null>>(() =>
+    createErrorMap(null),
+  );
   const [saving, setSaving] = useState<Record<SecretKey, boolean>>(() => createSavingMap(false));
 
   const { mutate: saveKeyMutate } = useMutation({

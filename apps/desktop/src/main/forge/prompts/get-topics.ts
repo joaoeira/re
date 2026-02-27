@@ -91,7 +91,7 @@ export const GetTopicsPromptSpec: PromptSpec<GetTopicsPromptInput, GetTopicsProm
   inputSchema: GetTopicsPromptInputSchema,
   outputSchema: GetTopicsPromptOutputSchema,
   defaults: {
-    model: "anthropic:claude-sonnet-4-20250514",
+    model: "gemini:gemini-3-flash-preview",
     temperature: 1.0,
   },
   render: (input, context) => {

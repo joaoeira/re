@@ -11,12 +11,13 @@ const defaultOnStreamFrame: NonNullable<Window["desktopApi"]["onStreamFrame"]> =
 const mockDesktopGlobals = (
   invoke: (...args: unknown[]) => Promise<unknown>,
   getPathForFile: (file: File) => string = (file) => `/forge/${file.name}`,
+  subscribe: (...args: unknown[]) => () => void = () => () => undefined,
 ) => {
   Object.defineProperty(window, "desktopApi", {
     configurable: true,
     value: {
       invoke,
-      subscribe: () => () => undefined,
+      subscribe,
       onStreamFrame: defaultOnStreamFrame,
     },
   });
@@ -29,8 +30,7 @@ const mockDesktopGlobals = (
   });
 };
 
-const renderForgePage = async () =>
-  renderWithIpcProviders(<ForgePage />);
+const renderForgePage = async () => renderWithIpcProviders(<ForgePage />);
 
 const uploadPdf = async (name = "source.pdf") => {
   const input = document.querySelector('input[type="file"]');
@@ -100,6 +100,16 @@ const createSuccessInvoke = () =>
       };
     }
 
+    if (method === "ForgeGetTopicExtractionSnapshot") {
+      return {
+        type: "success",
+        data: {
+          session: null,
+          topicsByChunk: [],
+        },
+      };
+    }
+
     return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
   });
 
@@ -128,28 +138,15 @@ describe("ForgePage", () => {
     expect(previewCalls).toEqual(["ForgePreviewChunks"]);
   });
 
-  it("runs one ForgeStartTopicExtraction call and logs topics", async () => {
+  it("runs one ForgeStartTopicExtraction call", async () => {
     const invoke = createSuccessInvoke();
     mockDesktopGlobals(invoke);
-    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     const screen = await renderForgePage();
     await uploadPdf();
     await userEvent.click(screen.getByText("Begin Extraction"));
 
     await expect.element(screen.getByText("Select topics")).toBeVisible();
-    expect(consoleSpy).toHaveBeenCalledWith("[forge/topics]", [
-      {
-        chunkId: 101,
-        sequenceOrder: 0,
-        topics: ["biology", "cells"],
-      },
-      {
-        chunkId: 102,
-        sequenceOrder: 1,
-        topics: ["membranes"],
-      },
-    ]);
 
     const forgeCalls = invoke.mock.calls
       .map(([method]: unknown[]) => method)
@@ -160,8 +157,261 @@ describe("ForgePage", () => {
           method === "ForgeStartTopicExtraction",
       );
     expect(forgeCalls).toEqual(["ForgeStartTopicExtraction"]);
+  });
 
-    consoleSpy.mockRestore();
+  it("moves to topics immediately and appends streamed chunk topics before completion", async () => {
+    const eventHandlers = new Map<string, (payload: unknown) => void>();
+    const subscribe = vi
+      .fn()
+      .mockImplementation((name: string, handler: (payload: unknown) => void) => {
+        eventHandlers.set(name, handler);
+        return () => {
+          eventHandlers.delete(name);
+        };
+      });
+
+    let resolveStartExtraction: ((value: { type: "success"; data: unknown }) => void) | undefined;
+
+    const invoke = vi.fn().mockImplementation(async (method: string, _payload?: unknown) => {
+      if (method === "ForgePreviewChunks") {
+        return {
+          type: "success",
+          data: {
+            textLength: 230,
+            totalPages: 4,
+            chunkCount: 2,
+          },
+        };
+      }
+
+      if (method === "ForgeGetTopicExtractionSnapshot") {
+        return {
+          type: "success",
+          data: {
+            session: {
+              id: 12,
+              sourceKind: "pdf",
+              sourceFilePath: "/forge/source.pdf",
+              deckPath: null,
+              sourceFingerprint: "fp:start",
+              status: "topics_extracting",
+              errorMessage: null,
+              createdAt: "9999-01-10T00:00:00.000Z",
+              updatedAt: "9999-01-10T00:00:00.000Z",
+            },
+            topicsByChunk: [],
+          },
+        };
+      }
+
+      if (method === "ForgeStartTopicExtraction") {
+        return await new Promise((resolve) => {
+          resolveStartExtraction = resolve as (value: { type: "success"; data: unknown }) => void;
+        });
+      }
+
+      return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+    });
+
+    mockDesktopGlobals(invoke, (file) => `/forge/${file.name}`, subscribe);
+
+    const screen = await renderForgePage();
+    await uploadPdf();
+    await userEvent.click(screen.getByText("Begin Extraction"));
+
+    await expect.element(screen.getByText("Select topics")).toBeVisible();
+    await expect.element(screen.getByText("Waiting for first chunk...")).toBeVisible();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const onChunkExtracted = eventHandlers.get("ForgeTopicChunkExtracted");
+    expect(onChunkExtracted).toBeDefined();
+
+    onChunkExtracted?.({
+      sourceFilePath: "/forge/source.pdf",
+      sessionId: 12,
+      chunk: {
+        chunkId: 101,
+        sequenceOrder: 0,
+        topics: ["biology", "cells"],
+      },
+    });
+
+    await expect.element(screen.getByText("biology")).toBeVisible();
+    await expect.element(screen.getByText("cells")).toBeVisible();
+
+    resolveStartExtraction?.({
+      type: "success",
+      data: {
+        session: {
+          id: 12,
+          sourceKind: "pdf",
+          sourceFilePath: "/forge/source.pdf",
+          deckPath: null,
+          sourceFingerprint: "fp:start",
+          status: "topics_extracted",
+          errorMessage: null,
+          createdAt: "2025-01-10T00:00:00.000Z",
+          updatedAt: "2025-01-10T00:00:00.000Z",
+        },
+        duplicateOfSessionId: null,
+        extraction: {
+          sessionId: 12,
+          textLength: 230,
+          preview: "sample extracted preview",
+          totalPages: 4,
+          chunkCount: 2,
+        },
+        topicsByChunk: [
+          {
+            chunkId: 101,
+            sequenceOrder: 0,
+            topics: ["biology", "cells"],
+          },
+          {
+            chunkId: 102,
+            sequenceOrder: 1,
+            topics: ["membranes"],
+          },
+        ],
+      },
+    });
+
+    await expect.element(screen.getByText("membranes")).toBeVisible();
+  });
+
+  it("ignores chunk events from a different session for the same source file", async () => {
+    const eventHandlers = new Map<string, (payload: unknown) => void>();
+    const subscribe = vi
+      .fn()
+      .mockImplementation((name: string, handler: (payload: unknown) => void) => {
+        eventHandlers.set(name, handler);
+        return () => {
+          eventHandlers.delete(name);
+        };
+      });
+
+    const invoke = vi.fn().mockImplementation(async (method: string) => {
+      if (method === "ForgePreviewChunks") {
+        return {
+          type: "success",
+          data: {
+            textLength: 230,
+            totalPages: 4,
+            chunkCount: 2,
+          },
+        };
+      }
+
+      if (method === "ForgeGetTopicExtractionSnapshot") {
+        return {
+          type: "success",
+          data: {
+            session: {
+              id: 500,
+              sourceKind: "pdf",
+              sourceFilePath: "/forge/source.pdf",
+              deckPath: null,
+              sourceFingerprint: "fp:start",
+              status: "topics_extracting",
+              errorMessage: null,
+              createdAt: "9999-01-10T00:00:00.000Z",
+              updatedAt: "9999-01-10T00:00:00.000Z",
+            },
+            topicsByChunk: [],
+          },
+        };
+      }
+
+      if (method === "ForgeStartTopicExtraction") {
+        return await new Promise(() => {
+          // keep extracting state active for this test
+        });
+      }
+
+      return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+    });
+
+    mockDesktopGlobals(invoke, (file) => `/forge/${file.name}`, subscribe);
+
+    const screen = await renderForgePage();
+    await uploadPdf();
+    await userEvent.click(screen.getByText("Begin Extraction"));
+    await expect.element(screen.getByText("Select topics")).toBeVisible();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const onChunkExtracted = eventHandlers.get("ForgeTopicChunkExtracted");
+    expect(onChunkExtracted).toBeDefined();
+
+    onChunkExtracted?.({
+      sourceFilePath: "/forge/source.pdf",
+      sessionId: 499,
+      chunk: {
+        chunkId: 101,
+        sequenceOrder: 0,
+        topics: ["stale-topic"],
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.getByText("stale-topic").query()).toBeNull();
+
+    onChunkExtracted?.({
+      sourceFilePath: "/forge/source.pdf",
+      sessionId: 500,
+      chunk: {
+        chunkId: 102,
+        sequenceOrder: 1,
+        topics: ["fresh-topic"],
+      },
+    });
+    await expect.element(screen.getByText("fresh-topic")).toBeVisible();
+  });
+
+  it("does not issue two start-extraction calls when Begin Extraction is double-clicked", async () => {
+    const invoke = vi.fn().mockImplementation(async (method: string) => {
+      if (method === "ForgePreviewChunks") {
+        return {
+          type: "success",
+          data: { textLength: 230, totalPages: 4, chunkCount: 2 },
+        };
+      }
+
+      if (method === "ForgeGetTopicExtractionSnapshot") {
+        return {
+          type: "success",
+          data: {
+            session: null,
+            topicsByChunk: [],
+          },
+        };
+      }
+
+      if (method === "ForgeStartTopicExtraction") {
+        return await new Promise(() => {
+          // keep pending to simulate long-running extraction
+        });
+      }
+
+      return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+    });
+
+    mockDesktopGlobals(invoke);
+    const screen = await renderForgePage();
+    await uploadPdf();
+
+    const beginButton = screen.getByText("Begin Extraction").element().closest("button");
+    if (!(beginButton instanceof HTMLButtonElement)) {
+      throw new Error("Expected Begin Extraction button.");
+    }
+    await expect.element(beginButton).toBeEnabled();
+
+    beginButton.click();
+    beginButton.click();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const forgeCalls = invoke.mock.calls
+      .map(([method]: unknown[]) => method)
+      .filter((method) => method === "ForgeStartTopicExtraction");
+    expect(forgeCalls).toEqual(["ForgeStartTopicExtraction"]);
   });
 
   it("runs ForgeStartTopicExtraction for Cmd+Enter", async () => {
@@ -259,6 +509,15 @@ describe("ForgePage", () => {
           },
         };
       }
+      if (method === "ForgeGetTopicExtractionSnapshot") {
+        return {
+          type: "success",
+          data: {
+            session: null,
+            topicsByChunk: [],
+          },
+        };
+      }
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
     });
 
@@ -308,6 +567,15 @@ describe("ForgePage", () => {
               totalPages: 1,
               chunkCount: 1,
             },
+            topicsByChunk: [],
+          },
+        };
+      }
+      if (method === "ForgeGetTopicExtractionSnapshot") {
+        return {
+          type: "success",
+          data: {
+            session: null,
             topicsByChunk: [],
           },
         };

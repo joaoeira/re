@@ -400,7 +400,9 @@ describe("SettingsPage", () => {
       nativeClick(page.getByRole("button", { name: "Save Anthropic key" }));
 
       await expect
-        .poll(() => invoke.mock.calls.filter(([method]: unknown[]) => method === "SetApiKey").length)
+        .poll(
+          () => invoke.mock.calls.filter(([method]: unknown[]) => method === "SetApiKey").length,
+        )
         .toBe(1);
       const setKeyCalls = invoke.mock.calls.filter(([method]: unknown[]) => method === "SetApiKey");
       expect(setKeyCalls).toHaveLength(1);

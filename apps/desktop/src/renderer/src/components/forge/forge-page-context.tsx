@@ -4,9 +4,11 @@ import { useSelector } from "@xstate/store-react";
 import { Effect } from "effect";
 
 import { useForgePreviewQuery } from "@/hooks/queries/use-forge-preview-query";
+import { useForgeTopicSnapshotQuery } from "@/hooks/queries/use-forge-topic-snapshot-query";
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
+import { ForgeTopicChunkExtracted } from "@shared/rpc/contracts";
 import {
   createForgePageStore,
   topicKey,
@@ -76,6 +78,10 @@ export function useForgeExtractSummary(): ExtractSummary | null {
   return useForgePageSelector((snapshot) => snapshot.context.extractSummary);
 }
 
+export function useForgeTopicSyncErrorMessage(): string | null {
+  return useForgePageSelector((snapshot) => snapshot.context.topicSyncErrorMessage);
+}
+
 export function useForgeTopicsByChunk(): ReadonlyArray<ChunkTopics> {
   return useForgePageSelector((snapshot) => snapshot.context.topicsByChunk);
 }
@@ -126,8 +132,16 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
 
   const selectedPdf = useSelector(store, (snapshot) => snapshot.context.selectedPdf);
   const sourceFilePath = selectedPdf?.sourceFilePath ?? null;
+  const currentStep = useSelector(store, (snapshot) => snapshot.context.currentStep);
+  const extractState = useSelector(store, (snapshot) => snapshot.context.extractState);
 
   const previewQuery = useForgePreviewQuery(sourceFilePath);
+  const topicSnapshotQuery = useForgeTopicSnapshotQuery(
+    currentStep === "topics" ? sourceFilePath : null,
+    {
+      refetchIntervalMs: extractState.status === "extracting" ? 2_000 : false,
+    },
+  );
 
   useEffect(() => {
     if (!sourceFilePath || !previewQuery.data) return;
@@ -147,6 +161,60 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
     });
   }, [sourceFilePath, previewQuery.error, previewQuery.errorUpdatedAt, store]);
 
+  useEffect(() => {
+    if (!sourceFilePath || currentStep !== "topics" || !topicSnapshotQuery.data) return;
+
+    const currentSourcePath = store.getSnapshot().context.selectedPdf?.sourceFilePath;
+    if (currentSourcePath !== sourceFilePath) return;
+
+    store.send({
+      type: "topicSnapshotSynced",
+      sessionId: topicSnapshotQuery.data.session?.id ?? null,
+      sessionCreatedAt: topicSnapshotQuery.data.session?.createdAt ?? null,
+      topicsByChunk: topicSnapshotQuery.data.topicsByChunk,
+    });
+  }, [
+    currentStep,
+    sourceFilePath,
+    topicSnapshotQuery.data,
+    topicSnapshotQuery.dataUpdatedAt,
+    store,
+  ]);
+
+  useEffect(() => {
+    if (currentStep !== "topics" || !sourceFilePath || !topicSnapshotQuery.error) return;
+    if (store.getSnapshot().context.extractState.status !== "extracting") return;
+
+    const currentSourcePath = store.getSnapshot().context.selectedPdf?.sourceFilePath;
+    if (currentSourcePath !== sourceFilePath) return;
+
+    store.send({
+      type: "topicSnapshotError",
+      message: topicSnapshotQuery.error.message,
+    });
+  }, [
+    currentStep,
+    sourceFilePath,
+    topicSnapshotQuery.error,
+    topicSnapshotQuery.errorUpdatedAt,
+    store,
+  ]);
+
+  useEffect(() => {
+    return ipc.events.subscribe(ForgeTopicChunkExtracted, (event) => {
+      const context = store.getSnapshot().context;
+      const currentSourcePath = context.selectedPdf?.sourceFilePath;
+      if (currentSourcePath !== event.sourceFilePath) return;
+      if (context.activeExtractionSessionId === null) return;
+      if (context.activeExtractionSessionId !== event.sessionId) return;
+
+      store.send({
+        type: "topicChunkExtracted",
+        chunk: event.chunk,
+      });
+    });
+  }, [ipc, store]);
+
   const extractionMutation = useMutation({
     mutationFn: ({ selectedSourceFilePath }: { selectedSourceFilePath: string }) =>
       runIpcEffect(
@@ -160,14 +228,17 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
             ),
           ),
       ),
-    onMutate: () => {
-      store.send({ type: "setExtracting" });
+    onMutate: ({ selectedSourceFilePath }) => {
+      store.send({ type: "setExtracting", startedAt: new Date().toISOString() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.forgeTopicSnapshot(selectedSourceFilePath),
+        exact: true,
+      });
     },
     onSuccess: (result, variables) => {
       const currentSourcePath = store.getSnapshot().context.selectedPdf?.sourceFilePath;
       if (currentSourcePath !== variables.selectedSourceFilePath) return;
 
-      console.log("[forge/topics]", result.topicsByChunk);
       store.send({
         type: "extractionSuccess",
         duplicateOfSessionId: result.duplicateOfSessionId,
@@ -185,6 +256,7 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
       });
     },
   });
+  const startTopicExtractionMutation = extractionMutation.mutate;
 
   const handleFileSelected = useCallback(
     (file: File | null) => {
@@ -202,7 +274,8 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const previousSourceFilePath = store.getSnapshot().context.selectedPdf?.sourceFilePath ?? null;
+      const previousSourceFilePath =
+        store.getSnapshot().context.selectedPdf?.sourceFilePath ?? null;
 
       store.send({
         type: "setSelectedPdf",
@@ -217,6 +290,10 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
           queryKey: queryKeys.forgePreview(selectedSourceFilePath),
           exact: true,
         });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.forgeTopicSnapshot(selectedSourceFilePath),
+          exact: true,
+        });
       }
     },
     [queryClient, store],
@@ -228,10 +305,10 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    extractionMutation.mutate({
+    startTopicExtractionMutation({
       selectedSourceFilePath: snapshot.selectedPdf.sourceFilePath,
     });
-  }, [extractionMutation, store]);
+  }, [startTopicExtractionMutation, store]);
 
   const actions = useMemo(
     () => ({

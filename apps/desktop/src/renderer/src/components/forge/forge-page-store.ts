@@ -46,6 +46,9 @@ type ForgePageContext = {
   readonly duplicateOfSessionId: number | null;
   readonly previewState: PreviewState;
   readonly extractState: ExtractState;
+  readonly activeExtractionStartedAt: string | null;
+  readonly activeExtractionSessionId: number | null;
+  readonly topicSyncErrorMessage: string | null;
   readonly extractSummary: ExtractSummary | null;
   readonly topicsByChunk: ReadonlyArray<ChunkTopics>;
   readonly selectedTopicKeys: ReadonlySet<string>;
@@ -59,10 +62,73 @@ const initialForgePageContext = (): ForgePageContext => ({
   duplicateOfSessionId: null,
   previewState: { status: "idle" },
   extractState: { status: "idle" },
+  activeExtractionStartedAt: null,
+  activeExtractionSessionId: null,
+  topicSyncErrorMessage: null,
   extractSummary: null,
   topicsByChunk: [],
   selectedTopicKeys: emptyTopicKeys,
 });
+
+const sortChunks = (chunks: ReadonlyArray<ChunkTopics>): ReadonlyArray<ChunkTopics> =>
+  chunks
+    .slice()
+    .sort(
+      (left, right) => left.sequenceOrder - right.sequenceOrder || left.chunkId - right.chunkId,
+    );
+
+const pruneSelectedTopicKeys = (
+  selectedTopicKeys: ReadonlySet<string>,
+  topicsByChunk: ReadonlyArray<ChunkTopics>,
+): ReadonlySet<string> => {
+  if (selectedTopicKeys.size === 0) return selectedTopicKeys;
+
+  const valid = new Set<string>();
+  topicsByChunk.forEach((chunk) => {
+    chunk.topics.forEach((_, index) => {
+      valid.add(topicKey(chunk.chunkId, index));
+    });
+  });
+
+  const next = new Set<string>();
+  selectedTopicKeys.forEach((key) => {
+    if (valid.has(key)) next.add(key);
+  });
+
+  return next.size === selectedTopicKeys.size ? selectedTopicKeys : next;
+};
+
+const mergeChunkTopics = (
+  current: ReadonlyArray<ChunkTopics>,
+  chunk: ChunkTopics,
+): ReadonlyArray<ChunkTopics> => {
+  const index = current.findIndex((entry) => entry.chunkId === chunk.chunkId);
+  if (index < 0) return sortChunks([...current, chunk]);
+  const next = current.slice();
+  next[index] = chunk;
+  return sortChunks(next);
+};
+
+const mergeTopicSnapshots = (
+  current: ReadonlyArray<ChunkTopics>,
+  incoming: ReadonlyArray<ChunkTopics>,
+): ReadonlyArray<ChunkTopics> => {
+  const byChunkId = new Map<number, ChunkTopics>();
+  for (const chunk of current) {
+    byChunkId.set(chunk.chunkId, chunk);
+  }
+
+  for (const chunk of incoming) {
+    const existing = byChunkId.get(chunk.chunkId);
+    // For one session/chunk, topic extraction is monotonic: once a chunk has N topics,
+    // later snapshots should not have fewer unless data is stale.
+    if (!existing || chunk.topics.length >= existing.topics.length) {
+      byChunkId.set(chunk.chunkId, chunk);
+    }
+  }
+
+  return sortChunks(Array.from(byChunkId.values()));
+};
 
 export const createForgePageStore = () =>
   createStore({
@@ -83,6 +149,9 @@ export const createForgePageStore = () =>
         duplicateOfSessionId: null,
         previewState: { status: "loading" as const },
         extractState: { status: "idle" as const },
+        activeExtractionStartedAt: null,
+        activeExtractionSessionId: null,
+        topicSyncErrorMessage: null,
         extractSummary: null,
         topicsByChunk: [],
         selectedTopicKeys: emptyTopicKeys,
@@ -101,10 +170,73 @@ export const createForgePageStore = () =>
           message: event.message,
         },
       }),
-      setExtracting: (context) => ({
+      setExtracting: (context, event: { startedAt: string }) => ({
         ...context,
+        currentStep: "topics" as const,
         duplicateOfSessionId: null,
+        activeExtractionStartedAt: event.startedAt,
+        activeExtractionSessionId: null,
+        topicSyncErrorMessage: null,
         extractState: { status: "extracting" as const },
+        extractSummary: null,
+        topicsByChunk: [],
+        selectedTopicKeys: emptyTopicKeys,
+      }),
+      topicChunkExtracted: (
+        context,
+        event: {
+          chunk: ChunkTopics;
+        },
+      ) => {
+        const nextTopicsByChunk = mergeChunkTopics(context.topicsByChunk, event.chunk);
+        return {
+          ...context,
+          topicsByChunk: nextTopicsByChunk,
+          selectedTopicKeys: pruneSelectedTopicKeys(context.selectedTopicKeys, nextTopicsByChunk),
+        };
+      },
+      topicSnapshotSynced: (
+        context,
+        event: {
+          sessionId: number | null;
+          sessionCreatedAt: string | null;
+          topicsByChunk: ReadonlyArray<ChunkTopics>;
+        },
+      ) => {
+        if (event.sessionId === null) {
+          return context;
+        }
+
+        if (
+          context.activeExtractionSessionId !== null &&
+          context.activeExtractionSessionId !== event.sessionId
+        ) {
+          return context;
+        }
+
+        if (
+          context.activeExtractionSessionId === null &&
+          context.extractState.status === "extracting" &&
+          context.activeExtractionStartedAt &&
+          event.sessionCreatedAt &&
+          Date.parse(event.sessionCreatedAt) < Date.parse(context.activeExtractionStartedAt)
+        ) {
+          return context;
+        }
+
+        const nextTopicsByChunk = mergeTopicSnapshots(context.topicsByChunk, event.topicsByChunk);
+
+        return {
+          ...context,
+          activeExtractionSessionId: event.sessionId,
+          topicSyncErrorMessage: null,
+          topicsByChunk: nextTopicsByChunk,
+          selectedTopicKeys: pruneSelectedTopicKeys(context.selectedTopicKeys, nextTopicsByChunk),
+        };
+      },
+      topicSnapshotError: (context, event: { message: string }) => ({
+        ...context,
+        topicSyncErrorMessage: event.message,
       }),
       extractionSuccess: (
         context,
@@ -113,17 +245,27 @@ export const createForgePageStore = () =>
           extraction: ExtractSummary;
           topicsByChunk: ReadonlyArray<ChunkTopics>;
         },
-      ) => ({
-        ...context,
-        currentStep: "topics" as const,
-        duplicateOfSessionId: event.duplicateOfSessionId,
-        extractSummary: event.extraction,
-        topicsByChunk: event.topicsByChunk,
-        extractState: { status: "idle" as const },
-        selectedTopicKeys: emptyTopicKeys,
-      }),
+      ) => {
+        const nextTopicsByChunk = sortChunks(event.topicsByChunk);
+        return {
+          ...context,
+          currentStep: "topics" as const,
+          duplicateOfSessionId: event.duplicateOfSessionId,
+          activeExtractionStartedAt: null,
+          activeExtractionSessionId: event.extraction.sessionId,
+          topicSyncErrorMessage: null,
+          extractSummary: event.extraction,
+          topicsByChunk: nextTopicsByChunk,
+          extractState: { status: "idle" as const },
+          selectedTopicKeys: pruneSelectedTopicKeys(context.selectedTopicKeys, nextTopicsByChunk),
+        };
+      },
       extractionError: (context, event: { message: string }) => ({
         ...context,
+        currentStep: "source" as const,
+        activeExtractionStartedAt: null,
+        activeExtractionSessionId: null,
+        topicSyncErrorMessage: null,
         extractState: {
           status: "error" as const,
           message: event.message,

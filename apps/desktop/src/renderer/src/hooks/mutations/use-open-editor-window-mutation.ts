@@ -14,11 +14,13 @@ export function useOpenEditorWindowMutation() {
   return useMutation({
     mutationFn: (input: OpenEditorWindowInput) =>
       runIpcEffect(
-        ipc.client.OpenEditorWindow(input).pipe(
-          Effect.catchTag("RpcDefectError", (rpcDefect) =>
-            Effect.fail(toRpcDefectError(rpcDefect)),
+        ipc.client
+          .OpenEditorWindow(input)
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
           ),
-        ),
       ),
     onError: () => undefined,
   });

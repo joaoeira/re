@@ -1,4 +1,4 @@
-import { rpc } from "electron-effect-rpc/contract";
+import { event, rpc } from "electron-effect-rpc/contract";
 
 import {
   ForgeCreateSessionErrorSchema,
@@ -7,12 +7,16 @@ import {
   ForgeExtractTextErrorSchema,
   ForgeExtractTextInputSchema,
   ForgeExtractTextResultSchema,
+  ForgeGetTopicExtractionSnapshotErrorSchema,
+  ForgeGetTopicExtractionSnapshotInputSchema,
+  ForgeGetTopicExtractionSnapshotResultSchema,
   ForgePreviewChunksErrorSchema,
   ForgePreviewChunksInputSchema,
   ForgePreviewChunksResultSchema,
   ForgeStartTopicExtractionErrorSchema,
   ForgeStartTopicExtractionInputSchema,
   ForgeStartTopicExtractionResultSchema,
+  ForgeTopicChunkExtractedEventSchema,
 } from "@shared/rpc/schemas/forge";
 
 export const ForgeCreateSession = rpc(
@@ -41,4 +45,16 @@ export const ForgeStartTopicExtraction = rpc(
   ForgeStartTopicExtractionInputSchema,
   ForgeStartTopicExtractionResultSchema,
   ForgeStartTopicExtractionErrorSchema,
+);
+
+export const ForgeGetTopicExtractionSnapshot = rpc(
+  "ForgeGetTopicExtractionSnapshot",
+  ForgeGetTopicExtractionSnapshotInputSchema,
+  ForgeGetTopicExtractionSnapshotResultSchema,
+  ForgeGetTopicExtractionSnapshotErrorSchema,
+);
+
+export const ForgeTopicChunkExtracted = event(
+  "ForgeTopicChunkExtracted",
+  ForgeTopicChunkExtractedEventSchema,
 );

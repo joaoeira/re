@@ -15,8 +15,10 @@ import {
 import {
   ForgeCreateSession,
   ForgeExtractText,
+  ForgeGetTopicExtractionSnapshot,
   ForgePreviewChunks,
   ForgeStartTopicExtraction,
+  ForgeTopicChunkExtracted,
 } from "./contracts/forge";
 import {
   BuildReviewQueue,
@@ -80,8 +82,15 @@ export const appContract = defineContract({
     ForgeExtractText,
     ForgePreviewChunks,
     ForgeStartTopicExtraction,
+    ForgeGetTopicExtractionSnapshot,
   ] as const,
-  events: [WorkspaceSnapshotChanged, CardEdited, CardsDeleted, EditorNavigateRequest] as const,
+  events: [
+    WorkspaceSnapshotChanged,
+    CardEdited,
+    CardsDeleted,
+    EditorNavigateRequest,
+    ForgeTopicChunkExtracted,
+  ] as const,
   streamMethods: [AiStreamText] as const,
 });
 

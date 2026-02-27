@@ -112,62 +112,70 @@ export function useEditorSession(search: EditorSearchParams) {
             ),
           checkDuplicates: ({ content, cardType, rootPath, excludeCardIds }) =>
             runIpcEffect(
-              ipc.client.CheckDuplicates({
-                content,
-                cardType,
-                rootPath,
-                excludeCardIds: [...excludeCardIds],
-              }).pipe(
-                Effect.catchTag("RpcDefectError", (rpcDefect) =>
-                  Effect.fail(toRpcDefectError(rpcDefect)),
+              ipc.client
+                .CheckDuplicates({
+                  content,
+                  cardType,
+                  rootPath,
+                  excludeCardIds: [...excludeCardIds],
+                })
+                .pipe(
+                  Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                    Effect.fail(toRpcDefectError(rpcDefect)),
+                  ),
+                  Effect.catchTag("editor_operation_error", (editorError) =>
+                    Effect.fail(new Error(editorError.message)),
+                  ),
                 ),
-                Effect.catchTag("editor_operation_error", (editorError) =>
-                  Effect.fail(new Error(editorError.message)),
-                ),
-              ),
             ),
           appendItem: ({ deckPath, content, cardType }) =>
             runIpcEffect(
-              ipc.client.AppendItem({
-                deckPath,
-                content,
-                cardType,
-              }).pipe(
-                Effect.catchTag("RpcDefectError", (rpcDefect) =>
-                  Effect.fail(toRpcDefectError(rpcDefect)),
+              ipc.client
+                .AppendItem({
+                  deckPath,
+                  content,
+                  cardType,
+                })
+                .pipe(
+                  Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                    Effect.fail(toRpcDefectError(rpcDefect)),
+                  ),
+                  Effect.catchTag("editor_operation_error", (editorError) =>
+                    Effect.fail(new Error(editorError.message)),
+                  ),
                 ),
-                Effect.catchTag("editor_operation_error", (editorError) =>
-                  Effect.fail(new Error(editorError.message)),
-                ),
-              ),
             ),
           replaceItem: ({ deckPath, cardId, content, cardType }) =>
             runIpcEffect(
-              ipc.client.ReplaceItem({
-                deckPath,
-                cardId,
-                content,
-                cardType,
-              }).pipe(
-                Effect.catchTag("RpcDefectError", (rpcDefect) =>
-                  Effect.fail(toRpcDefectError(rpcDefect)),
+              ipc.client
+                .ReplaceItem({
+                  deckPath,
+                  cardId,
+                  content,
+                  cardType,
+                })
+                .pipe(
+                  Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                    Effect.fail(toRpcDefectError(rpcDefect)),
+                  ),
+                  Effect.catchTag("editor_operation_error", (editorError) =>
+                    Effect.fail(new Error(editorError.message)),
+                  ),
                 ),
-                Effect.catchTag("editor_operation_error", (editorError) =>
-                  Effect.fail(new Error(editorError.message)),
-                ),
-              ),
             ),
           createDeck: ({ relativePath, createParents }) =>
             runIpcEffect(
-              ipc.client.CreateDeck({
-                relativePath,
-                createParents,
-              }).pipe(
-                Effect.catchTag("RpcDefectError", (rpcDefect) =>
-                  Effect.fail(toRpcDefectError(rpcDefect)),
+              ipc.client
+                .CreateDeck({
+                  relativePath,
+                  createParents,
+                })
+                .pipe(
+                  Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                    Effect.fail(toRpcDefectError(rpcDefect)),
+                  ),
+                  Effect.mapError(mapCreateDeckErrorToError),
                 ),
-                Effect.mapError(mapCreateDeckErrorToError),
-              ),
             ),
         },
         search,

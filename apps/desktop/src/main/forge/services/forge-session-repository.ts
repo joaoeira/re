@@ -55,6 +55,10 @@ export interface ForgeSessionRepository {
     readonly sourceKind: ForgeSourceKind;
     readonly sourceFingerprint: string;
   }) => Effect.Effect<ForgeSession | null, ForgeSessionRepositoryError>;
+  readonly findLatestBySourceFilePath: (input: {
+    readonly sourceKind: ForgeSourceKind;
+    readonly sourceFilePath: string;
+  }) => Effect.Effect<ForgeSession | null, ForgeSessionRepositoryError>;
   readonly getSession: (
     sessionId: number,
   ) => Effect.Effect<ForgeSession | null, ForgeSessionRepositoryError>;
@@ -81,6 +85,11 @@ export interface ForgeSessionRepository {
     sessionId: number,
     writes: ReadonlyArray<ForgeTopicWrite>,
   ) => Effect.Effect<void, ForgeSessionRepositoryError>;
+  readonly replaceTopicsForChunk: (input: {
+    readonly sessionId: number;
+    readonly sequenceOrder: number;
+    readonly topics: ReadonlyArray<string>;
+  }) => Effect.Effect<void, ForgeSessionRepositoryError>;
   readonly getTopicsBySession: (
     sessionId: number,
   ) => Effect.Effect<ReadonlyArray<ForgeChunkTopics>, ForgeSessionRepositoryError>;
@@ -374,6 +383,36 @@ export const makeSqliteForgeSessionRepository = ({
           return row ? fromRow(row) : null;
         }),
       ),
+    findLatestBySourceFilePath: ({ sourceKind, sourceFilePath }) =>
+      runSql(
+        "findLatestBySourceFilePath.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const rows = yield* withSqlError(
+            "findLatestBySourceFilePath.select",
+            sql<ForgeSessionRow>`
+              SELECT
+                id,
+                source_kind,
+                source_file_path,
+                deck_path,
+                source_fingerprint,
+                status,
+                error_message,
+                created_at,
+                updated_at
+              FROM forge_sessions
+              WHERE source_kind = ${sourceKind}
+                AND source_file_path = ${sourceFilePath}
+              ORDER BY created_at DESC, id DESC
+              LIMIT 1
+            `,
+          );
+
+          const row = rows[0];
+          return row ? fromRow(row) : null;
+        }),
+      ),
     getSession: (sessionId) => runSql("getSession.runtime", loadSessionByIdSql(sessionId)),
     tryBeginExtraction: (sessionId) =>
       runSql(
@@ -618,6 +657,69 @@ export const makeSqliteForgeSessionRepository = ({
           );
         }),
       ),
+    replaceTopicsForChunk: ({ sessionId, sequenceOrder, topics }) =>
+      runSql(
+        "replaceTopicsForChunk.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const replaceEffect = Effect.gen(function* () {
+            const chunkRows = yield* withSqlError(
+              "replaceTopicsForChunk.selectChunk",
+              sql<ForgeChunkReferenceRow>`
+                SELECT id, sequence_order
+                FROM forge_chunks
+                WHERE session_id = ${sessionId}
+                  AND sequence_order = ${sequenceOrder}
+                LIMIT 1
+              `,
+            );
+
+            const chunk = chunkRows[0];
+            if (!chunk) {
+              return yield* Effect.fail(
+                new ForgeSessionRepositoryError({
+                  operation: "replaceTopicsForChunk.selectChunk",
+                  message: `Chunk sequence order ${sequenceOrder} was not found for session ${sessionId}.`,
+                }),
+              );
+            }
+
+            const chunkId = Number(chunk.id);
+
+            yield* sql`
+              DELETE FROM forge_topics
+              WHERE chunk_id = ${chunkId}
+            `;
+
+            yield* Effect.forEach(
+              topics,
+              (topicText, topicOrder) =>
+                sql`
+                  INSERT INTO forge_topics (
+                    chunk_id,
+                    topic_order,
+                    topic_text
+                  ) VALUES (
+                    ${chunkId},
+                    ${topicOrder},
+                    ${topicText}
+                  )
+                `,
+              { discard: true },
+            );
+          });
+
+          yield* sql.withTransaction(replaceEffect).pipe(
+            Effect.mapError(
+              (error) =>
+                new ForgeSessionRepositoryError({
+                  operation: "replaceTopicsForChunk.transaction",
+                  message: toErrorMessage(error),
+                }),
+            ),
+          );
+        }),
+      ),
     getTopicsBySession: (sessionId) =>
       runSql(
         "getTopicsBySession.runtime",
@@ -755,6 +857,19 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
             session.sourceKind === sourceKind &&
             session.sourceFingerprint === sourceFingerprint
           ) {
+            return cloneSession(session);
+          }
+        }
+
+        return null;
+      }),
+    findLatestBySourceFilePath: ({ sourceKind, sourceFilePath }) =>
+      Effect.sync(() => {
+        for (let index = sessions.length - 1; index >= 0; index -= 1) {
+          const session = sessions[index];
+          if (!session) continue;
+
+          if (session.sourceKind === sourceKind && session.sourceFilePath === sourceFilePath) {
             return cloneSession(session);
           }
         }
@@ -923,6 +1038,36 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
 
         const sessionChunkIds = new Set(chunkRows.map((row) => row.id));
         const retainedTopics = topics.filter((topic) => !sessionChunkIds.has(topic.chunkId));
+
+        topics.length = 0;
+        topics.push(...retainedTopics, ...stagedTopics);
+        nextTopicId += stagedTopics.length;
+
+        return Effect.void;
+      }),
+    replaceTopicsForChunk: ({ sessionId, sequenceOrder, topics: topicTexts }) =>
+      Effect.suspend(() => {
+        const ownerChunk = chunks.find(
+          (entry) => entry.sessionId === sessionId && entry.sequenceOrder === sequenceOrder,
+        );
+
+        if (!ownerChunk) {
+          return Effect.fail(
+            new ForgeSessionRepositoryError({
+              operation: "replaceTopicsForChunk.selectChunk",
+              message: `Chunk sequence order ${sequenceOrder} was not found for session ${sessionId}.`,
+            }),
+          );
+        }
+
+        const retainedTopics = topics.filter((topic) => topic.chunkId !== ownerChunk.id);
+        const stagedTopics = topicTexts.map((topicText, topicOrder) => ({
+          id: nextTopicId + topicOrder,
+          chunkId: ownerChunk.id,
+          topicOrder,
+          topicText,
+          createdAt: nowIso(),
+        }));
 
         topics.length = 0;
         topics.push(...retainedTopics, ...stagedTopics);

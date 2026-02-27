@@ -63,11 +63,19 @@ const createSuccessInvoke = (topicsByChunk = TOPICS_BY_CHUNK) =>
         },
       };
     }
+    if (method === "ForgeGetTopicExtractionSnapshot") {
+      return {
+        type: "success",
+        data: {
+          session: null,
+          topicsByChunk: [],
+        },
+      };
+    }
     return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
   });
 
-const renderForgePage = async () =>
-  renderWithIpcProviders(<ForgePage />);
+const renderForgePage = async () => renderWithIpcProviders(<ForgePage />);
 
 const uploadPdf = async (name = "source.pdf") => {
   const input = document.querySelector('input[type="file"]');
@@ -523,7 +531,7 @@ describe("TopicSelection", () => {
   });
 
   describe("zero-topics chunk", () => {
-    it("renders chunk header with no topic rows", async () => {
+    it("hides empty chunks and only renders chunks with topics", async () => {
       const chunks = [
         { chunkId: 101, sequenceOrder: 1, topics: [] as string[] },
         { chunkId: 102, sequenceOrder: 2, topics: ["membranes"] },
@@ -532,9 +540,9 @@ describe("TopicSelection", () => {
       const screen = await renderForgePage();
       await navigateToTopics(screen);
 
-      await expect.element(screen.getByText("Chunk 1")).toBeVisible();
       await expect.element(screen.getByText("Chunk 2")).toBeVisible();
       await expect.element(screen.getByText("membranes")).toBeVisible();
+      expect(screen.getByText("Chunk 1").query()).toBeNull();
     });
   });
 });

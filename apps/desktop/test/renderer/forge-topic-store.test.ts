@@ -60,7 +60,7 @@ describe("forge-page-store topic selection", () => {
   });
 
   describe("extractionSuccess", () => {
-    it("resets selectedTopicKeys to empty", () => {
+    it("preserves selectedTopicKeys that still exist", () => {
       const store = storeWithTopics();
       store.send({ type: "toggleTopic", chunkId: 10, topicIndex: 0 });
       expect(ctx(store).selectedTopicKeys.size).toBe(1);
@@ -71,7 +71,7 @@ describe("forge-page-store topic selection", () => {
         extraction: EXTRACTION,
         topicsByChunk: TWO_CHUNKS,
       });
-      expect(ctx(store).selectedTopicKeys.size).toBe(0);
+      expect(ctx(store).selectedTopicKeys.size).toBe(1);
     });
 
     it("transitions to the topics step", () => {
@@ -81,7 +81,7 @@ describe("forge-page-store topic selection", () => {
 
     it("resets extractState to idle", () => {
       const store = createForgePageStore();
-      store.send({ type: "setExtracting" });
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
       expect(ctx(store).extractState.status).toBe("extracting");
 
       store.send({
@@ -95,7 +95,7 @@ describe("forge-page-store topic selection", () => {
 
     it("populates topicsByChunk and extractSummary", () => {
       const store = storeWithTopics();
-      expect(ctx(store).topicsByChunk).toBe(TWO_CHUNKS);
+      expect(ctx(store).topicsByChunk).toEqual(TWO_CHUNKS);
       expect(ctx(store).extractSummary).toBe(EXTRACTION);
     });
 
@@ -146,6 +146,121 @@ describe("forge-page-store topic selection", () => {
 
       expect(ctx(store).selectedTopicKeys.has(topicKey(999, 0))).toBe(true);
       expect(ctx(store).selectedTopicKeys.size).toBe(1);
+    });
+  });
+
+  describe("topic updates", () => {
+    it("upserts chunk topics as chunk events arrive", () => {
+      const store = createForgePageStore();
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
+
+      store.send({
+        type: "topicChunkExtracted",
+        chunk: { chunkId: 20, sequenceOrder: 1, topics: ["gamma"] },
+      });
+      store.send({
+        type: "topicChunkExtracted",
+        chunk: { chunkId: 10, sequenceOrder: 0, topics: ["alpha", "beta"] },
+      });
+
+      expect(ctx(store).topicsByChunk).toEqual([
+        { chunkId: 10, sequenceOrder: 0, topics: ["alpha", "beta"] },
+        { chunkId: 20, sequenceOrder: 1, topics: ["gamma"] },
+      ]);
+    });
+
+    it("ignores stale topic snapshots while a fresh extraction is running", () => {
+      const store = createForgePageStore();
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
+
+      store.send({
+        type: "topicSnapshotSynced",
+        sessionId: 5,
+        sessionCreatedAt: "2026-02-27T11:59:59.000Z",
+        topicsByChunk: [{ chunkId: 99, sequenceOrder: 0, topics: ["stale"] }],
+      });
+
+      expect(ctx(store).topicsByChunk).toEqual([]);
+    });
+
+    it("accepts a valid topic snapshot during extraction", () => {
+      const store = createForgePageStore();
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
+
+      store.send({
+        type: "topicSnapshotSynced",
+        sessionId: 7,
+        sessionCreatedAt: "2026-02-27T12:00:01.000Z",
+        topicsByChunk: [{ chunkId: 11, sequenceOrder: 0, topics: ["alpha"] }],
+      });
+
+      expect(ctx(store).activeExtractionSessionId).toBe(7);
+      expect(ctx(store).topicsByChunk).toEqual([
+        { chunkId: 11, sequenceOrder: 0, topics: ["alpha"] },
+      ]);
+    });
+
+    it("keeps existing chunk topics when a snapshot has fewer topics", () => {
+      const store = createForgePageStore();
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
+
+      store.send({
+        type: "topicSnapshotSynced",
+        sessionId: 8,
+        sessionCreatedAt: "2026-02-27T12:00:01.000Z",
+        topicsByChunk: [{ chunkId: 12, sequenceOrder: 0, topics: ["alpha", "beta"] }],
+      });
+
+      store.send({
+        type: "topicSnapshotSynced",
+        sessionId: 8,
+        sessionCreatedAt: "2026-02-27T12:00:02.000Z",
+        topicsByChunk: [{ chunkId: 12, sequenceOrder: 0, topics: ["alpha"] }],
+      });
+
+      expect(ctx(store).topicsByChunk).toEqual([
+        { chunkId: 12, sequenceOrder: 0, topics: ["alpha", "beta"] },
+      ]);
+    });
+
+    it("ignores snapshots from a different active session", () => {
+      const store = createForgePageStore();
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
+
+      store.send({
+        type: "topicSnapshotSynced",
+        sessionId: 9,
+        sessionCreatedAt: "2026-02-27T12:00:01.000Z",
+        topicsByChunk: [{ chunkId: 10, sequenceOrder: 0, topics: ["alpha"] }],
+      });
+
+      store.send({
+        type: "topicSnapshotSynced",
+        sessionId: 10,
+        sessionCreatedAt: "2026-02-27T12:00:02.000Z",
+        topicsByChunk: [{ chunkId: 11, sequenceOrder: 1, topics: ["beta"] }],
+      });
+
+      expect(ctx(store).activeExtractionSessionId).toBe(9);
+      expect(ctx(store).topicsByChunk).toEqual([
+        { chunkId: 10, sequenceOrder: 0, topics: ["alpha"] },
+      ]);
+    });
+
+    it("stores a snapshot sync error message and clears it on successful sync", () => {
+      const store = createForgePageStore();
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
+
+      store.send({ type: "topicSnapshotError", message: "Snapshot fetch failed" });
+      expect(ctx(store).topicSyncErrorMessage).toBe("Snapshot fetch failed");
+
+      store.send({
+        type: "topicSnapshotSynced",
+        sessionId: 9,
+        sessionCreatedAt: "2026-02-27T12:00:01.000Z",
+        topicsByChunk: [{ chunkId: 10, sequenceOrder: 0, topics: ["alpha"] }],
+      });
+      expect(ctx(store).topicSyncErrorMessage).toBeNull();
     });
   });
 
@@ -293,9 +408,10 @@ describe("forge-page-store topic selection", () => {
   describe("setExtracting", () => {
     it("sets extractState to extracting", () => {
       const store = createForgePageStore();
-      store.send({ type: "setExtracting" });
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
 
       expect(ctx(store).extractState).toEqual({ status: "extracting" });
+      expect(ctx(store).currentStep).toBe("topics");
     });
 
     it("resets duplicateOfSessionId to null", () => {
@@ -310,7 +426,7 @@ describe("forge-page-store topic selection", () => {
       });
       expect(ctx(store).duplicateOfSessionId).toBe(42);
 
-      store.send({ type: "setExtracting" });
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
       expect(ctx(store).duplicateOfSessionId).toBeNull();
     });
   });
@@ -337,9 +453,11 @@ describe("forge-page-store topic selection", () => {
   describe("extractionError", () => {
     it("sets extract state to error with message", () => {
       const store = createForgePageStore();
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
       store.send({ type: "extractionError", message: "timeout" });
 
       expect(ctx(store).extractState).toEqual({ status: "error", message: "timeout" });
+      expect(ctx(store).currentStep).toBe("source");
     });
   });
 });

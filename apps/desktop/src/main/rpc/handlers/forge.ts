@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import type { Implementations } from "electron-effect-rpc/types";
 
 import {
+  AppEventPublisherService,
   ChunkService,
   ForgePromptRuntimeService,
   ForgeSessionRepositoryService,
@@ -16,7 +17,7 @@ import type {
 } from "@main/forge/services/forge-session-repository";
 import type { PdfTextExtractError } from "@main/forge/services/pdf-extractor";
 import { toErrorMessage } from "@main/utils/format";
-import type { AppContract } from "@shared/rpc/contracts";
+import { ForgeTopicChunkExtracted, type AppContract } from "@shared/rpc/contracts";
 import {
   ForgeEmptySourceTextError,
   ForgeOperationError,
@@ -35,7 +36,8 @@ type ForgeHandlerKeys =
   | "ForgeCreateSession"
   | "ForgeExtractText"
   | "ForgePreviewChunks"
-  | "ForgeStartTopicExtraction";
+  | "ForgeStartTopicExtraction"
+  | "ForgeGetTopicExtractionSnapshot";
 
 const PREVIEW_LENGTH = 500;
 
@@ -153,6 +155,7 @@ export const createForgeHandlers = () =>
     const pdfExtractor = yield* PdfExtractorService;
     const chunkService = yield* ChunkService;
     const forgePromptRuntime = yield* ForgePromptRuntimeService;
+    const appEventPublisher = yield* AppEventPublisherService;
 
     const setSessionErrorBestEffort = (
       sessionId: number,
@@ -171,6 +174,37 @@ export const createForgeHandlers = () =>
               console.error(`${logContext} failed to mark session as error`, {
                 sessionId,
                 originalMessage: message,
+                error: toErrorMessage(error),
+              });
+            }),
+          ),
+          Effect.asVoid,
+        );
+
+    const publishChunkExtractedBestEffort = (payload: {
+      readonly sourceFilePath: string;
+      readonly sessionId: number;
+      readonly chunkId: number;
+      readonly sequenceOrder: number;
+      readonly topics: ReadonlyArray<string>;
+    }): Effect.Effect<void> =>
+      appEventPublisher
+        .publish(ForgeTopicChunkExtracted, {
+          sourceFilePath: payload.sourceFilePath,
+          sessionId: payload.sessionId,
+          chunk: {
+            chunkId: payload.chunkId,
+            sequenceOrder: payload.sequenceOrder,
+            topics: payload.topics,
+          },
+        })
+        .pipe(
+          Effect.catchAll((error) =>
+            Effect.sync(() => {
+              console.error("[forge/topics] failed to publish chunk event", {
+                sessionId: payload.sessionId,
+                chunkId: payload.chunkId,
+                sequenceOrder: payload.sequenceOrder,
                 error: toErrorMessage(error),
               });
             }),
@@ -386,6 +420,40 @@ export const createForgeHandlers = () =>
             chunkCount: chunkResult.chunkCount,
           };
         }),
+      ForgeGetTopicExtractionSnapshot: ({ sourceFilePath }) =>
+        Effect.gen(function* () {
+          if (!path.isAbsolute(sourceFilePath)) {
+            return yield* Effect.fail(
+              new ForgeOperationError({
+                message: `Forge sourceFilePath must be absolute: ${sourceFilePath}`,
+              }),
+            );
+          }
+
+          const session = yield* mapOperationError(
+            forgeSessionRepository.findLatestBySourceFilePath({
+              sourceKind: "pdf",
+              sourceFilePath,
+            }),
+          );
+
+          if (!session) {
+            return {
+              session: null,
+              topicsByChunk: [],
+            };
+          }
+
+          const topicsByChunk = yield* mapSessionRepositoryError(
+            session.id,
+            forgeSessionRepository.getTopicsBySession(session.id),
+          );
+
+          return {
+            session,
+            topicsByChunk,
+          };
+        }),
       ForgeStartTopicExtraction: ({ sourceFilePath, model }) =>
         createSessionFromSourcePath(sourceFilePath).pipe(
           Effect.flatMap(({ session, duplicateOfSessionId }) =>
@@ -444,7 +512,7 @@ export const createForgeHandlers = () =>
                 );
               }
 
-              const topicsByChunkWrites = yield* Effect.forEach(
+              yield* Effect.forEach(
                 chunks,
                 (chunk) =>
                   forgePromptRuntime
@@ -461,6 +529,27 @@ export const createForgeHandlers = () =>
                         sequenceOrder: chunk.sequenceOrder,
                         topics: result.output.topics,
                       })),
+                      Effect.flatMap((write) =>
+                        mapSessionRepositoryError(
+                          session.id,
+                          forgeSessionRepository.replaceTopicsForChunk({
+                            sessionId: session.id,
+                            sequenceOrder: write.sequenceOrder,
+                            topics: write.topics,
+                          }),
+                        ).pipe(
+                          Effect.zipRight(
+                            publishChunkExtractedBestEffort({
+                              sourceFilePath: session.sourceFilePath,
+                              sessionId: session.id,
+                              chunkId: write.chunkId,
+                              sequenceOrder: write.sequenceOrder,
+                              topics: write.topics,
+                            }),
+                          ),
+                          Effect.as(write),
+                        ),
+                      ),
                       Effect.catchTag("PromptModelInvocationError", (error) =>
                         Effect.fail(
                           new ForgeTopicExtractionError({
@@ -471,28 +560,20 @@ export const createForgeHandlers = () =>
                           }),
                         ),
                       ),
-                      Effect.mapError(
-                        (error) =>
-                          new ForgeTopicExtractionError({
-                            sessionId: session.id,
-                            chunkId: chunk.id,
-                            sequenceOrder: chunk.sequenceOrder,
-                            message: toErrorMessage(error),
-                          }),
-                      ),
+                      Effect.mapError((error) => {
+                        if (error instanceof ForgeTopicExtractionError) {
+                          return error;
+                        }
+
+                        return new ForgeTopicExtractionError({
+                          sessionId: session.id,
+                          chunkId: chunk.id,
+                          sequenceOrder: chunk.sequenceOrder,
+                          message: toErrorMessage(error),
+                        });
+                      }),
                     ),
                 { concurrency: MAX_REQUEST_CONCURRENCY },
-              );
-
-              yield* mapSessionRepositoryError(
-                session.id,
-                forgeSessionRepository.replaceTopicsForSession(
-                  session.id,
-                  topicsByChunkWrites.map((write) => ({
-                    sequenceOrder: write.sequenceOrder,
-                    topics: write.topics,
-                  })),
-                ),
               );
 
               yield* mapSessionRepositoryStatusUpdateError(

@@ -17,7 +17,8 @@ export function HomeScreen() {
 
   const workspaceSnapshotQuery = useWorkspaceSnapshotQuery(rootPath);
 
-  const isLoading = settingsQuery.isPending || (rootPath !== null && workspaceSnapshotQuery.isPending);
+  const isLoading =
+    settingsQuery.isPending || (rootPath !== null && workspaceSnapshotQuery.isPending);
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">

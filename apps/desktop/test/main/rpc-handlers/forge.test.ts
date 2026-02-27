@@ -28,6 +28,7 @@ import {
 } from "@main/forge/services/pdf-extractor";
 import { AiCompletionError } from "@shared/rpc/schemas/ai";
 import type { ForgeChunkPageBoundary } from "@shared/rpc/schemas/forge";
+import { ForgeTopicChunkExtracted } from "@shared/rpc/contracts";
 
 import { createHandlersWithOverrides } from "./helpers";
 
@@ -112,6 +113,7 @@ describe("forge handlers", () => {
       readonly extractor?: PdfExtractor;
       readonly chunkService?: ChunkService;
       readonly promptRuntime?: ForgePromptRuntime;
+      readonly publish?: NonNullable<Parameters<typeof createHandlersWithOverrides>[1]>["publish"];
     } = {},
   ) => {
     const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-forge-settings-"));
@@ -121,6 +123,7 @@ describe("forge handlers", () => {
     const handlers = await createHandlersWithOverrides(settingsFilePath, {
       forgeSessionRepository: repository,
       pdfExtractor: extractor,
+      ...(overrides.publish ? { publish: overrides.publish } : {}),
       ...(overrides.chunkService ? { chunkService: overrides.chunkService } : {}),
       ...(overrides.promptRuntime ? { forgePromptRuntime: overrides.promptRuntime } : {}),
     });
@@ -632,16 +635,118 @@ describe("forge handlers", () => {
     }
   });
 
-  it("keeps chunks with empty topic arrays in topicsByChunk", async () => {
-    const sourceFilePath = "/tmp/forge-start-empty-topic-chunk.pdf";
+  it("returns the latest topic snapshot for a source path", async () => {
+    const sourceFilePath = "/tmp/forge-topic-snapshot.pdf";
     const extractor = createPdfExtractor({
       textByPath: {
-        [sourceFilePath]: `${"A".repeat(16_000)}${"B".repeat(32)}`,
+        [sourceFilePath]: "snapshot content",
+      },
+    });
+    const promptRuntime = createPromptRuntime(() => Effect.succeed(["topic-a", "topic-b"]));
+    const { handlers, dispose } = await setupHandlers({
+      extractor,
+      promptRuntime,
+    });
+
+    try {
+      const extracted = await Effect.runPromise(
+        handlers.ForgeStartTopicExtraction({
+          sourceFilePath,
+        }),
+      );
+
+      const snapshot = await Effect.runPromise(
+        handlers.ForgeGetTopicExtractionSnapshot({
+          sourceFilePath,
+        }),
+      );
+
+      expect(snapshot.session).not.toBeNull();
+      expect(snapshot.session?.id).toBe(extracted.session.id);
+      expect(snapshot.topicsByChunk).toEqual(extracted.topicsByChunk);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("publishes a ForgeTopicChunkExtracted event for each completed chunk", async () => {
+    const sourceFilePath = "/tmp/forge-topic-events.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: {
+        [sourceFilePath]: `${"A".repeat(16_000)}${"B".repeat(48)}`,
       },
       pageBreaksByPath: {
         [sourceFilePath]: [
           { offset: 0, page: 1 },
           { offset: 16_000, page: 2 },
+        ],
+      },
+      totalPagesByPath: {
+        [sourceFilePath]: 2,
+      },
+    });
+    const promptRuntime = createPromptRuntime(({ chunkText }) =>
+      Effect.succeed(chunkText.startsWith("A") ? ["chunk-a"] : ["chunk-b"]),
+    );
+
+    const publishedChunks: Array<{
+      readonly sourceFilePath: string;
+      readonly sessionId: number;
+      readonly chunk: {
+        readonly chunkId: number;
+        readonly sequenceOrder: number;
+        readonly topics: readonly string[];
+      };
+    }> = [];
+
+    const publish = vi.fn().mockImplementation((event: unknown, payload: unknown) => {
+      if (event === ForgeTopicChunkExtracted) {
+        publishedChunks.push(
+          payload as {
+            readonly sourceFilePath: string;
+            readonly sessionId: number;
+            readonly chunk: {
+              readonly chunkId: number;
+              readonly sequenceOrder: number;
+              readonly topics: readonly string[];
+            };
+          },
+        );
+      }
+      return Effect.void;
+    });
+
+    const { handlers, dispose } = await setupHandlers({
+      extractor,
+      promptRuntime,
+      publish,
+    });
+
+    try {
+      await Effect.runPromise(
+        handlers.ForgeStartTopicExtraction({
+          sourceFilePath,
+        }),
+      );
+
+      expect(publishedChunks).toHaveLength(2);
+      expect(publishedChunks.every((entry) => entry.sourceFilePath === sourceFilePath)).toBe(true);
+      expect(publishedChunks.map((entry) => entry.chunk.sequenceOrder).sort()).toEqual([0, 1]);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("keeps chunks with empty topic arrays in topicsByChunk", async () => {
+    const sourceFilePath = "/tmp/forge-start-empty-topic-chunk.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: {
+        [sourceFilePath]: `${"A".repeat(12_000)}${"B".repeat(32)}`,
+      },
+      pageBreaksByPath: {
+        [sourceFilePath]: [
+          { offset: 0, page: 1 },
+          { offset: 12_000, page: 2 },
         ],
       },
       totalPagesByPath: {
@@ -760,16 +865,16 @@ describe("forge handlers", () => {
     }
   });
 
-  it("marks session as error and preserves topic atomicity when chunk N fails", async () => {
+  it("marks session as error and keeps already-completed chunk topics when chunk N fails", async () => {
     const sourceFilePath = "/tmp/forge-start-partial-failure.pdf";
     const extractor = createPdfExtractor({
       textByPath: {
-        [sourceFilePath]: `${"A".repeat(16_000)}${"B".repeat(80)}`,
+        [sourceFilePath]: `${"A".repeat(12_000)}${"B".repeat(80)}`,
       },
       pageBreaksByPath: {
         [sourceFilePath]: [
           { offset: 0, page: 1 },
-          { offset: 16_000, page: 2 },
+          { offset: 12_000, page: 2 },
         ],
       },
       totalPagesByPath: {
@@ -778,12 +883,16 @@ describe("forge handlers", () => {
     });
     const promptRuntime = createPromptRuntime(({ chunkText }) => {
       if (chunkText.startsWith("B")) {
-        return Effect.fail(
-          new PromptOutputParseError({
-            promptId: "forge/get-topics",
-            message: "second chunk parse failure",
-            rawExcerpt: "invalid",
-          }),
+        return Effect.sleep("30 millis").pipe(
+          Effect.zipRight(
+            Effect.fail(
+              new PromptOutputParseError({
+                promptId: "forge/get-topics",
+                message: "second chunk parse failure",
+                rawExcerpt: "invalid",
+              }),
+            ),
+          ),
         );
       }
 
@@ -816,9 +925,9 @@ describe("forge handlers", () => {
             repository.getTopicsBySession(failure.value.sessionId),
           );
           expect(persistedTopics).toHaveLength(2);
-          expect(persistedTopics.every((chunkTopics) => chunkTopics.topics.length === 0)).toBe(
-            true,
-          );
+          expect(
+            persistedTopics.some((chunkTopics) => chunkTopics.topics.includes("first-chunk-topic")),
+          ).toBe(true);
         }
       }
     } finally {

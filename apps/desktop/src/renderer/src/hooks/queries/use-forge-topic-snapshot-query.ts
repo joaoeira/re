@@ -5,16 +5,23 @@ import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
 
-export function useForgePreviewQuery(sourceFilePath: string | null) {
+type UseForgeTopicSnapshotQueryOptions = {
+  readonly refetchIntervalMs?: number | false;
+};
+
+export function useForgeTopicSnapshotQuery(
+  sourceFilePath: string | null,
+  options: UseForgeTopicSnapshotQueryOptions = {},
+) {
   const ipc = useIpc();
 
   return useQuery({
-    queryKey: queryKeys.forgePreview(sourceFilePath),
+    queryKey: queryKeys.forgeTopicSnapshot(sourceFilePath),
     queryFn: sourceFilePath
       ? () =>
           runIpcEffect(
             ipc.client
-              .ForgePreviewChunks({ sourceFilePath })
+              .ForgeGetTopicExtractionSnapshot({ sourceFilePath })
               .pipe(
                 Effect.catchTag("RpcDefectError", (rpcDefect) =>
                   Effect.fail(toRpcDefectError(rpcDefect)),
@@ -22,5 +29,6 @@ export function useForgePreviewQuery(sourceFilePath: string | null) {
               ),
           )
       : skipToken,
+    refetchInterval: options.refetchIntervalMs ?? false,
   });
 }

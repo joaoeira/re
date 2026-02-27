@@ -1,9 +1,11 @@
 import { useMemo } from "react";
 
 import {
+  useForgeExtractState,
   useForgeExtractSummary,
   useForgeSelectedTopicCount,
   useForgeSelectedTopicKeys,
+  useForgeTopicSyncErrorMessage,
   useForgeTopicActions,
   useForgeTopicsByChunk,
 } from "../forge-page-context";
@@ -11,8 +13,14 @@ import { ChunkSection } from "./chunk-section";
 
 export function TopicSelection() {
   const topicsByChunk = useForgeTopicsByChunk();
+  const chunksWithTopics = useMemo(
+    () => topicsByChunk.filter((chunk) => chunk.topics.length > 0),
+    [topicsByChunk],
+  );
   const selectedKeys = useForgeSelectedTopicKeys();
   const extractSummary = useForgeExtractSummary();
+  const extractState = useForgeExtractState();
+  const topicSyncErrorMessage = useForgeTopicSyncErrorMessage();
   const actions = useForgeTopicActions();
   const selectedCount = useForgeSelectedTopicCount();
 
@@ -33,7 +41,25 @@ export function TopicSelection() {
       {extractSummary && (
         <p className="text-xs text-muted-foreground">
           Extracted <span className="font-mono text-foreground/70">{totalTopics}</span> topics from{" "}
-          <span className="font-mono text-foreground/70">{topicsByChunk.length}</span> chunks
+          <span className="font-mono text-foreground/70">{chunksWithTopics.length}</span> chunks
+        </p>
+      )}
+
+      {extractState.status === "extracting" && (
+        <p className="text-xs text-muted-foreground">
+          Extracting topics now. Chunks appear here as they finish.
+        </p>
+      )}
+
+      {extractState.status === "error" && (
+        <p role="alert" className="text-xs text-destructive">
+          {extractState.message}
+        </p>
+      )}
+
+      {topicSyncErrorMessage && extractState.status === "extracting" && (
+        <p role="alert" className="text-xs text-destructive/90">
+          Sync warning: {topicSyncErrorMessage}
         </p>
       )}
 
@@ -60,7 +86,7 @@ export function TopicSelection() {
       </div>
 
       <div>
-        {topicsByChunk.map((chunk, i) => (
+        {chunksWithTopics.map((chunk, i) => (
           <div
             key={chunk.chunkId}
             className="animate-in fade-in-0 slide-in-from-bottom-1"
@@ -76,6 +102,9 @@ export function TopicSelection() {
             />
           </div>
         ))}
+        {chunksWithTopics.length === 0 && extractState.status === "extracting" ? (
+          <p className="py-6 text-xs text-muted-foreground/80">Waiting for first chunk...</p>
+        ) : null}
       </div>
     </div>
   );

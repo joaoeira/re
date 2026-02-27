@@ -14,7 +14,9 @@ export function useSettingsQuery() {
     queryFn: () =>
       runIpcEffect(
         ipc.client.GetSettings().pipe(
-          Effect.catchTag("RpcDefectError", (rpcDefect) => Effect.fail(toRpcDefectError(rpcDefect))),
+          Effect.catchTag("RpcDefectError", (rpcDefect) =>
+            Effect.fail(toRpcDefectError(rpcDefect)),
+          ),
           Effect.mapError(mapSettingsErrorToError),
         ),
       ),

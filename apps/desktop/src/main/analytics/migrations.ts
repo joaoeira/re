@@ -145,6 +145,14 @@ const REVIEW_HISTORY_MIGRATIONS = {
       ON forge_topics(chunk_id, topic_order)
     `;
   }),
+  "0005_create_forge_sessions_source_path_idx": Effect.gen(function* () {
+    const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+    yield* sql`
+      CREATE INDEX IF NOT EXISTS forge_sessions_source_kind_file_path_created_idx
+      ON forge_sessions(source_kind, source_file_path, created_at DESC, id DESC)
+    `;
+  }),
 } satisfies Record<string, Effect.Effect<void, unknown, SqlClient.SqlClient>>;
 
 const toMigrationError = (message: string): Migrator.MigrationError =>

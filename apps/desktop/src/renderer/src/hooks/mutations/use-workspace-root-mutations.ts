@@ -23,11 +23,13 @@ export function useWorkspaceRootMutations(): UseWorkspaceRootMutationsResult {
   const { mutate: selectDirectoryMutate, isPending: isSelectingDirectory } = useMutation({
     mutationFn: async () => {
       const selected = await runIpcEffect(
-        ipc.client.SelectDirectory().pipe(
-          Effect.catchTag("RpcDefectError", (rpcDefect) =>
-            Effect.fail(toRpcDefectError(rpcDefect)),
+        ipc.client
+          .SelectDirectory()
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
           ),
-        ),
       );
       if (selected.path === null) {
         return { cancelled: true as const };
