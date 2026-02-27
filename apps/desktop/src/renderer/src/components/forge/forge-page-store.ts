@@ -31,7 +31,7 @@ export type ChunkTopics = {
   readonly topics: ReadonlyArray<string>;
 };
 
-export type ForgeStep = "source" | "topics";
+export type ForgeStep = "source" | "topics" | "cards";
 
 export type SelectedPdf = {
   readonly fileName: string;
@@ -299,6 +299,25 @@ export const createForgePageStore = () =>
       deselectAllTopics: (context) => ({
         ...context,
         selectedTopicKeys: emptyTopicKeys,
+      }),
+      advanceToCards: (context) => ({
+        ...context,
+        currentStep: "cards" as const,
+      }),
+      devSkipToCards: (
+        context,
+        event: {
+          topicsByChunk: ReadonlyArray<ChunkTopics>;
+          selectedTopicKeys: ReadonlySet<string>;
+          extractSummary: ExtractSummary;
+        },
+      ) => ({
+        ...context,
+        currentStep: "cards" as const,
+        topicsByChunk: event.topicsByChunk,
+        selectedTopicKeys: event.selectedTopicKeys,
+        extractSummary: event.extractSummary,
+        extractState: { status: "idle" as const },
       }),
     },
   });

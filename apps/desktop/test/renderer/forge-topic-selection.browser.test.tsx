@@ -447,16 +447,20 @@ describe("TopicSelection", () => {
       await expect.element(screen.getByText("~21 cards estimated")).toBeVisible();
     });
 
-    it("Continue to cards button is always disabled", async () => {
+    it("Continue to cards button enables when topics are selected", async () => {
       mockDesktopGlobals(createSuccessInvoke());
       const screen = await renderForgePage();
       await navigateToTopics(screen);
+
+      await expect
+        .element(screen.getByText("Continue to cards").element().closest("button")!)
+        .toBeDisabled();
 
       await userEvent.click(selectAllButton(screen));
 
       await expect
         .element(screen.getByText("Continue to cards").element().closest("button")!)
-        .toBeDisabled();
+        .toBeEnabled();
     });
   });
 

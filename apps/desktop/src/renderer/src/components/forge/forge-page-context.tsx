@@ -24,6 +24,7 @@ import {
 type ForgePageActions = {
   readonly handleFileSelected: (file: File | null) => void;
   readonly beginExtraction: () => void;
+  readonly advanceToCards: () => void;
 };
 
 type ForgePageContextValue = {
@@ -100,6 +101,27 @@ export function useForgeSelectedTopicCount(): number {
       }
     }
     return count;
+  });
+}
+
+export type SelectedTopic = {
+  readonly chunkId: number;
+  readonly topicIndex: number;
+  readonly text: string;
+};
+
+export function useForgeSelectedTopics(): ReadonlyArray<SelectedTopic> {
+  return useForgePageSelector((snapshot) => {
+    const { topicsByChunk, selectedTopicKeys } = snapshot.context;
+    const result: SelectedTopic[] = [];
+    for (const chunk of topicsByChunk) {
+      for (let i = 0; i < chunk.topics.length; i++) {
+        if (selectedTopicKeys.has(topicKey(chunk.chunkId, i))) {
+          result.push({ chunkId: chunk.chunkId, topicIndex: i, text: chunk.topics[i]! });
+        }
+      }
+    }
+    return result;
   });
 }
 
@@ -310,12 +332,19 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
     });
   }, [startTopicExtractionMutation, store]);
 
+  const advanceToCards = useCallback(() => {
+    const snapshot = store.getSnapshot().context;
+    if (snapshot.selectedTopicKeys.size === 0) return;
+    store.send({ type: "advanceToCards" });
+  }, [store]);
+
   const actions = useMemo(
     () => ({
       handleFileSelected,
       beginExtraction,
+      advanceToCards,
     }),
-    [handleFileSelected, beginExtraction],
+    [handleFileSelected, beginExtraction, advanceToCards],
   );
 
   const value = useMemo(
