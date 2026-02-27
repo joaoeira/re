@@ -1,3 +1,6 @@
+import { CreateCardsPromptSpec } from "./create-cards";
+import { GenerateClozePromptSpec } from "./generate-cloze";
+import { GeneratePermutationsPromptSpec } from "./generate-permutations";
 import { GetTopicsPromptSpec } from "./get-topics";
 
 export interface PromptSpecIdentity {
@@ -41,4 +44,9 @@ export const createForgePromptRegistry = <Spec extends PromptSpecIdentity>(
   };
 };
 
-export const ForgePromptRegistry = createForgePromptRegistry([GetTopicsPromptSpec]);
+export const ForgePromptRegistry = createForgePromptRegistry([
+  GetTopicsPromptSpec,
+  CreateCardsPromptSpec,
+  GeneratePermutationsPromptSpec,
+  GenerateClozePromptSpec,
+]);

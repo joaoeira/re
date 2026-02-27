@@ -24,6 +24,27 @@ export {
   type GetTopicsPromptOutput,
 } from "./get-topics";
 export {
+  CreateCardsPromptInputSchema,
+  CreateCardsPromptOutputSchema,
+  CreateCardsPromptSpec,
+  type CreateCardsPromptInput,
+  type CreateCardsPromptOutput,
+} from "./create-cards";
+export {
+  GeneratePermutationsPromptInputSchema,
+  GeneratePermutationsPromptOutputSchema,
+  GeneratePermutationsPromptSpec,
+  type GeneratePermutationsPromptInput,
+  type GeneratePermutationsPromptOutput,
+} from "./generate-permutations";
+export {
+  GenerateClozePromptInputSchema,
+  GenerateClozePromptOutputSchema,
+  GenerateClozePromptSpec,
+  type GenerateClozePromptInput,
+  type GenerateClozePromptOutput,
+} from "./generate-cloze";
+export {
   createForgePromptRegistry,
   ForgePromptRegistry,
   type ForgePromptRegistryData,
