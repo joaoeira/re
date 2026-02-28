@@ -26,10 +26,13 @@ const normalizeFile = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 ? value : null;
 
 export const Route = createFileRoute("/forge")({
-  validateSearch: (search): ForgeSearch => ({
-    session: normalizeSession((search as Record<string, unknown>).session),
-    file: normalizeFile((search as Record<string, unknown>).file),
-  }),
+  validateSearch: (search): ForgeSearch => {
+    const session = normalizeSession((search as Record<string, unknown>).session);
+    return {
+      session,
+      file: session !== null ? normalizeFile((search as Record<string, unknown>).file) : null,
+    };
+  },
   component: ForgeRoute,
 });
 

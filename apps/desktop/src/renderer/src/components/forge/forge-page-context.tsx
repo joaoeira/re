@@ -1,12 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "@xstate/store-react";
 import { Effect } from "effect";
@@ -277,7 +269,6 @@ export function ForgePageProvider({
   onSessionChangeRef.current = onSessionChange;
 
   const sessionListQuery = useForgeSessionListQuery();
-  const [autoResumeAttempted, setAutoResumeAttempted] = useState(false);
 
   const selectedPdf = useSelector(store, (snapshot) => snapshot.context.selectedPdf);
   const sourceFilePath = selectedPdf?.sourceFilePath ?? null;
@@ -366,7 +357,7 @@ export function ForgePageProvider({
 
   const resumingRef = useRef(false);
 
-  const resumeSession = useCallback(
+  const loadSessionData = useCallback(
     (session: ForgeSessionSummary) => {
       if (resumingRef.current) return;
       resumingRef.current = true;
@@ -421,17 +412,13 @@ export function ForgePageProvider({
             type: "resumeError",
             message: `Failed to load session data for "${fileName}". Please try again.`,
           });
-        })
-        .finally(() => {
-          resumingRef.current = false;
         });
     },
     [ipc.client, queryClient, store],
   );
 
   useEffect(() => {
-    if (autoResumeAttempted || !initialSessionId || !sessionListQuery.data) return;
-    setAutoResumeAttempted(true);
+    if (!initialSessionId || !sessionListQuery.data) return;
 
     const match = sessionListQuery.data.sessions.find((s) => s.id === initialSessionId);
     if (!match) {
@@ -439,8 +426,8 @@ export function ForgePageProvider({
       return;
     }
 
-    resumeSession(match);
-  }, [autoResumeAttempted, initialSessionId, sessionListQuery.data, resumeSession]);
+    loadSessionData(match);
+  }, [initialSessionId, sessionListQuery.data, loadSessionData]);
 
   const extractionMutation = useMutation({
     mutationFn: ({ selectedSourceFilePath }: { selectedSourceFilePath: string }) =>
@@ -472,14 +459,6 @@ export function ForgePageProvider({
         extraction: result.extraction,
         topicsByChunk: result.topicsByChunk,
       });
-
-      const selectedFileName = store.getSnapshot().context.selectedPdf?.fileName;
-      if (selectedFileName) {
-        onSessionChangeRef.current({
-          id: result.extraction.sessionId,
-          fileName: selectedFileName,
-        });
-      }
     },
     onError: (error, variables) => {
       const currentSourcePath = store.getSnapshot().context.selectedPdf?.sourceFilePath;
@@ -497,7 +476,6 @@ export function ForgePageProvider({
     (file: File | null) => {
       if (!file) {
         store.send({ type: "resetForNoFile" });
-        onSessionChangeRef.current(null);
         return;
       }
 
@@ -578,6 +556,11 @@ export function ForgePageProvider({
         store.send({ type: "advanceToCards" });
       });
   }, [ipc.client, store]);
+
+  const resumeSession = useCallback((session: ForgeSessionSummary) => {
+    const fileName = session.sourceFilePath.split("/").pop() ?? session.sourceFilePath;
+    onSessionChangeRef.current({ id: session.id, fileName });
+  }, []);
 
   const actions = useMemo(
     () => ({

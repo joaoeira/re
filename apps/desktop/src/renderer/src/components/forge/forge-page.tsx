@@ -204,7 +204,11 @@ export function ForgePage({
   onSessionChange = noopSessionChange,
 }: ForgePageProps = {}) {
   return (
-    <ForgePageProvider initialSessionId={initialSessionId} onSessionChange={onSessionChange}>
+    <ForgePageProvider
+      key={initialSessionId ?? "list"}
+      initialSessionId={initialSessionId}
+      onSessionChange={onSessionChange}
+    >
       <ForgePageContent />
     </ForgePageProvider>
   );
