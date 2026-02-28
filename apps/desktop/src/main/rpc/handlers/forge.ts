@@ -1,15 +1,21 @@
 import path from "node:path";
 
+import { createMetadata } from "@re/core";
+import { ClozeType, QAType } from "@re/types";
+import { DeckManager } from "@re/workspace";
 import { Cause, Effect, Option } from "effect";
 import type { Implementations } from "electron-effect-rpc/types";
 
 import {
   AppEventPublisherService,
   ChunkService,
+  DeckWriteCoordinatorService,
   ForgePromptRuntimeService,
   ForgeSessionRepositoryService,
   PdfExtractorService,
+  SettingsRepositoryService,
 } from "@main/di";
+import { DeckManagerServicesLive, validateDeckAccessAs } from "./shared";
 import {
   CreateCardsPromptSpec,
   GenerateClozePromptSpec,
@@ -65,7 +71,8 @@ type ForgeHandlerKeys =
   | "ForgeUpdateCard"
   | "ForgeUpdatePermutation"
   | "ForgeSaveTopicSelections"
-  | "ForgeSetSessionDeckPath";
+  | "ForgeSetSessionDeckPath"
+  | "ForgeAddCardToDeck";
 
 const PREVIEW_LENGTH = 500;
 
@@ -210,10 +217,12 @@ const toFailureMessageFromCause = <E>(cause: Cause.Cause<E>): string => {
 export const createForgeHandlers = () =>
   Effect.gen(function* () {
     const forgeSessionRepository = yield* ForgeSessionRepositoryService;
+    const settingsRepository = yield* SettingsRepositoryService;
     const pdfExtractor = yield* PdfExtractorService;
     const chunkService = yield* ChunkService;
     const forgePromptRuntime = yield* ForgePromptRuntimeService;
     const appEventPublisher = yield* AppEventPublisherService;
+    const deckWriteCoordinator = yield* DeckWriteCoordinatorService;
 
     const setSessionErrorBestEffort = (
       sessionId: number,
@@ -1262,6 +1271,29 @@ export const createForgeHandlers = () =>
 
           return {};
         }),
+      ForgeAddCardToDeck: ({ deckPath, content, cardType }) =>
+        Effect.gen(function* () {
+          yield* validateDeckAccessAs(
+            settingsRepository,
+            deckPath,
+            (m) => new ForgeOperationError({ message: m }),
+          );
+
+          const cardCount =
+            cardType === "qa"
+              ? yield* QAType.parse(content).pipe(Effect.map((p) => QAType.cards(p).length))
+              : yield* ClozeType.parse(content).pipe(Effect.map((p) => ClozeType.cards(p).length));
+          const itemType = cardType === "qa" ? QAType : ClozeType;
+          const cards = Array.from({ length: cardCount }, () => createMetadata());
+
+          const deckManager = yield* DeckManager;
+          yield* deckWriteCoordinator.withDeckLock(
+            deckPath,
+            deckManager.appendItem(deckPath, { cards, content }, itemType),
+          );
+
+          return { cardIds: cards.map((card) => card.id) };
+        }).pipe(Effect.provide(DeckManagerServicesLive), Effect.mapError(toForgeOperationError)),
     };
 
     return handlers;

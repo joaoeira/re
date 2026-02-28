@@ -10,6 +10,9 @@ type CardsCanvasProps = {
   readonly errorMessage: string | null;
   readonly cards: ReadonlyArray<ForgeGeneratedCard>;
   readonly addedCardIds: ReadonlySet<number>;
+  readonly addingCardIds: ReadonlySet<number>;
+  readonly addDisabled: boolean;
+  readonly addCardError: string | null;
   readonly deletedCardIds: ReadonlySet<number>;
   readonly expandedPanels: ReadonlyMap<number, "permutations" | "cloze">;
   readonly onAddCard: (cardId: number) => void;
@@ -33,6 +36,9 @@ export function CardsCanvas({
   errorMessage,
   cards,
   addedCardIds,
+  addingCardIds,
+  addDisabled,
+  addCardError,
   deletedCardIds,
   expandedPanels,
   onAddCard,
@@ -103,11 +109,14 @@ export function CardsCanvas({
 
         {status === "generated" && (
           <div className="mt-4">
+            {addCardError && <p className="mb-3 text-[11px] text-destructive">{addCardError}</p>}
             {visible.map((card) => (
               <CardBlock
                 key={card.id}
                 card={card}
                 isAdded={addedCardIds.has(card.id)}
+                isAdding={addingCardIds.has(card.id)}
+                addDisabled={addDisabled}
                 expandedPanel={expandedPanels.get(card.id) ?? null}
                 onAdd={() => onAddCard(card.id)}
                 onDelete={() => onDeleteCard(card.id)}

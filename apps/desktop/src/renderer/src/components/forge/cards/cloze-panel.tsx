@@ -4,11 +4,13 @@ import { useIsMutating } from "@tanstack/react-query";
 import { ClozePreview } from "@/components/editor/cloze-preview";
 import {
   forgeCardsMutationKeys,
+  useForgeAddCardToDeckMutation,
   useForgeGenerateClozeMutation,
 } from "@/hooks/mutations/use-forge-cards-mutations";
 import { useForgeCardClozeQuery } from "@/hooks/queries/use-forge-card-cloze-query";
 import type { ForgeGenerateCardClozeInput } from "@shared/rpc/schemas/forge";
 import { Button } from "@/components/ui/button";
+import { useForgeTargetDeckPath } from "../forge-page-context";
 
 type ClozePanelProps = {
   readonly sourceCardId: number;
@@ -17,6 +19,8 @@ type ClozePanelProps = {
 export function ClozePanel({ sourceCardId }: ClozePanelProps) {
   const clozeQuery = useForgeCardClozeQuery(sourceCardId);
   const { mutate: regenerateCloze, isPending } = useForgeGenerateClozeMutation();
+  const { mutate: addCardToDeck } = useForgeAddCardToDeckMutation();
+  const targetDeckPath = useForgeTargetDeckPath();
   const inFlightForSourceCardCount = useIsMutating({
     mutationKey: forgeCardsMutationKeys.generateCloze,
     predicate: (mutation) => {
@@ -25,6 +29,8 @@ export function ClozePanel({ sourceCardId }: ClozePanelProps) {
     },
   });
   const [added, setAdded] = useState(false);
+  const [addingCloze, setAddingCloze] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const autoRegeneratedCardIdRef = useRef<number | null>(null);
 
   const hasInFlightGeneration = inFlightForSourceCardCount > 0;
@@ -90,6 +96,8 @@ export function ClozePanel({ sourceCardId }: ClozePanelProps) {
             <p className="text-[11px] text-destructive">{clozeQuery.error.message}</p>
           ) : null}
 
+          {addError ? <p className="text-[11px] text-destructive">{addError}</p> : null}
+
           {clozeText ? (
             <div className="bg-muted/20 px-4 py-3">
               <ClozePreview content={clozeText} />
@@ -102,7 +110,25 @@ export function ClozePanel({ sourceCardId }: ClozePanelProps) {
             {added ? (
               <span className="text-[11px] text-primary">✓ Added to deck</span>
             ) : (
-              <Button type="button" variant="secondary" size="xs" onClick={() => setAdded(true)}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="xs"
+                disabled={addingCloze || !targetDeckPath || !clozeText}
+                onClick={() => {
+                  if (!targetDeckPath || !clozeText || addingCloze) return;
+                  setAddingCloze(true);
+                  setAddError(null);
+                  addCardToDeck(
+                    { deckPath: targetDeckPath, content: clozeText, cardType: "cloze" },
+                    {
+                      onSuccess: () => setAdded(true),
+                      onError: (error) => setAddError(error.message),
+                      onSettled: () => setAddingCloze(false),
+                    },
+                  );
+                }}
+              >
                 + Add to deck
               </Button>
             )}

@@ -3,6 +3,8 @@ import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 
 import {
   forgeCardsMutationKeys,
+  formatQAContent,
+  useForgeAddCardToDeckMutation,
   useForgeGeneratePermutationsMutation,
   useForgeUpdatePermutationMutation,
 } from "@/hooks/mutations/use-forge-cards-mutations";
@@ -13,6 +15,7 @@ import type {
   ForgeGetCardPermutationsResult,
 } from "@shared/rpc/schemas/forge";
 import { Button } from "@/components/ui/button";
+import { useForgeTargetDeckPath } from "../forge-page-context";
 
 import { InlineEditor } from "./inline-editor";
 
@@ -24,6 +27,8 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
   const permutationsQuery = useForgeCardPermutationsQuery(sourceCardId);
   const { mutate: regeneratePermutations, isPending } = useForgeGeneratePermutationsMutation();
   const { mutate: updatePermutation } = useForgeUpdatePermutationMutation();
+  const { mutate: addCardToDeck } = useForgeAddCardToDeckMutation();
+  const targetDeckPath = useForgeTargetDeckPath();
   const queryClient = useQueryClient();
   const inFlightForSourceCardCount = useIsMutating({
     mutationKey: forgeCardsMutationKeys.generatePermutations,
@@ -33,6 +38,8 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
     },
   });
   const [addedIds, setAddedIds] = useState<ReadonlySet<number>>(new Set());
+  const [addingIds, setAddingIds] = useState<ReadonlySet<number>>(new Set());
+  const [addError, setAddError] = useState<string | null>(null);
   const autoRegeneratedCardIdRef = useRef<number | null>(null);
 
   const hasInFlightGeneration = inFlightForSourceCardCount > 0;
@@ -139,6 +146,8 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
         <p className="text-[11px] text-destructive">{permutationsQuery.error.message}</p>
       ) : null}
 
+      {addError ? <p className="mb-2 text-[11px] text-destructive">{addError}</p> : null}
+
       {!loading &&
         permutations.map((permutation) => (
           <div
@@ -169,7 +178,29 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
                 variant="default"
                 size="xs"
                 className="shrink-0"
-                onClick={() => setAddedIds((prev) => new Set([...prev, permutation.id]))}
+                disabled={addingIds.has(permutation.id) || !targetDeckPath}
+                onClick={() => {
+                  if (!targetDeckPath || addingIds.has(permutation.id)) return;
+                  setAddingIds((prev) => new Set([...prev, permutation.id]));
+                  setAddError(null);
+                  addCardToDeck(
+                    {
+                      deckPath: targetDeckPath,
+                      content: formatQAContent(permutation.question, permutation.answer),
+                      cardType: "qa",
+                    },
+                    {
+                      onSuccess: () => setAddedIds((prev) => new Set([...prev, permutation.id])),
+                      onError: (error) => setAddError(error.message),
+                      onSettled: () =>
+                        setAddingIds((prev) => {
+                          const next = new Set(prev);
+                          next.delete(permutation.id);
+                          return next;
+                        }),
+                    },
+                  );
+                }}
               >
                 + Add
               </Button>

@@ -535,6 +535,13 @@ const createCardsInvoke = (options?: {
       return { type: "success", data: { sessions: [] } };
     }
 
+    if (method === "ForgeAddCardToDeck") {
+      return {
+        type: "success",
+        data: { cardIds: [`forge-added-${nextCardId++}`] },
+      };
+    }
+
     if (method === "ForgeSetSessionDeckPath") {
       const input = payload as { sessionId: number; deckPath: string | null };
       const remainingFailuresForDeck =

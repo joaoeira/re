@@ -56,6 +56,9 @@ import {
   ForgeSetSessionDeckPathErrorSchema,
   ForgeSetSessionDeckPathInputSchema,
   ForgeSetSessionDeckPathResultSchema,
+  ForgeAddCardToDeckErrorSchema,
+  ForgeAddCardToDeckInputSchema,
+  ForgeAddCardToDeckResultSchema,
 } from "@shared/rpc/schemas/forge";
 
 export const ForgeCreateSession = rpc(
@@ -182,6 +185,13 @@ export const ForgeListSessions = rpc(
   ForgeListSessionsInputSchema,
   ForgeListSessionsResultSchema,
   ForgeListSessionsErrorSchema,
+);
+
+export const ForgeAddCardToDeck = rpc(
+  "ForgeAddCardToDeck",
+  ForgeAddCardToDeckInputSchema,
+  ForgeAddCardToDeckResultSchema,
+  ForgeAddCardToDeckErrorSchema,
 );
 
 export const ForgeTopicChunkExtracted = event(

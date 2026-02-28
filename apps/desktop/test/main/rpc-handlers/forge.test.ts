@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { Cause, Effect, Exit } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
+import { parseFile } from "@re/core";
+
 import {
   makeInMemoryForgeSessionRepository,
   ForgeSessionRepositoryError,
@@ -1827,6 +1829,273 @@ describe("forge handlers", () => {
         }
       }
     } finally {
+      await dispose();
+    }
+  });
+
+  it("adds a QA card to a deck file", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-add-qa-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const { handlers, dispose } = await setupHandlers();
+
+    try {
+      await fs.writeFile(deckPath, "", "utf8");
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const result = await Effect.runPromise(
+        handlers.ForgeAddCardToDeck({
+          deckPath,
+          content: "What is ATP?\n---\nThe energy currency of cells.\n",
+          cardType: "qa",
+        }),
+      );
+
+      expect(result.cardIds).toHaveLength(1);
+      const parsed = await Effect.runPromise(parseFile(await fs.readFile(deckPath, "utf8")));
+      expect(parsed.items).toHaveLength(1);
+      expect(parsed.items[0]!.cards).toHaveLength(1);
+      expect(parsed.items[0]!.cards[0]!.id).toBe(result.cardIds[0]);
+      expect(parsed.items[0]!.content).toContain("What is ATP?");
+      expect(parsed.items[0]!.content).toContain("The energy currency of cells.");
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await dispose();
+    }
+  });
+
+  it("adds a cloze card to a deck file", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-add-cloze-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const { handlers, dispose } = await setupHandlers();
+
+    try {
+      await fs.writeFile(deckPath, "", "utf8");
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const result = await Effect.runPromise(
+        handlers.ForgeAddCardToDeck({
+          deckPath,
+          content: "The energy currency of cells is {{c1::ATP}}.",
+          cardType: "cloze",
+        }),
+      );
+
+      expect(result.cardIds).toHaveLength(1);
+      const parsed = await Effect.runPromise(parseFile(await fs.readFile(deckPath, "utf8")));
+      expect(parsed.items).toHaveLength(1);
+      expect(parsed.items[0]!.cards).toHaveLength(1);
+      expect(parsed.items[0]!.content).toContain("{{c1::ATP}}");
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await dispose();
+    }
+  });
+
+  it("creates multiple card metadata entries for multi-index cloze", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-add-multi-cloze-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const { handlers, dispose } = await setupHandlers();
+
+    try {
+      await fs.writeFile(deckPath, "", "utf8");
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const result = await Effect.runPromise(
+        handlers.ForgeAddCardToDeck({
+          deckPath,
+          content: "{{c1::ATP}} is produced in {{c2::mitochondria}}.",
+          cardType: "cloze",
+        }),
+      );
+
+      expect(result.cardIds).toHaveLength(2);
+      const parsed = await Effect.runPromise(parseFile(await fs.readFile(deckPath, "utf8")));
+      expect(parsed.items).toHaveLength(1);
+      expect(parsed.items[0]!.cards).toHaveLength(2);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await dispose();
+    }
+  });
+
+  it("appends multiple cards to the same deck", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-add-multi-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const { handlers, dispose } = await setupHandlers();
+
+    try {
+      await fs.writeFile(deckPath, "", "utf8");
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      await Effect.runPromise(
+        handlers.ForgeAddCardToDeck({
+          deckPath,
+          content: "First Q?\n---\nFirst A\n",
+          cardType: "qa",
+        }),
+      );
+      await Effect.runPromise(
+        handlers.ForgeAddCardToDeck({
+          deckPath,
+          content: "Second Q?\n---\nSecond A\n",
+          cardType: "qa",
+        }),
+      );
+
+      const parsed = await Effect.runPromise(parseFile(await fs.readFile(deckPath, "utf8")));
+      expect(parsed.items).toHaveLength(2);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await dispose();
+    }
+  });
+
+  it("fails with forge_operation_error for invalid QA content", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-add-invalid-qa-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const { handlers, dispose } = await setupHandlers();
+
+    try {
+      await fs.writeFile(deckPath, "", "utf8");
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const exit = await Effect.runPromiseExit(
+        handlers.ForgeAddCardToDeck({
+          deckPath,
+          content: "no separator here",
+          cardType: "qa",
+        }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failure = Cause.failureOption(exit.cause);
+        expect(failure._tag).toBe("Some");
+        if (failure._tag === "Some") {
+          expect(failure.value._tag).toBe("forge_operation_error");
+        }
+      }
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await dispose();
+    }
+  });
+
+  it("fails with forge_operation_error for invalid cloze content", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-add-invalid-cloze-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const { handlers, dispose } = await setupHandlers();
+
+    try {
+      await fs.writeFile(deckPath, "", "utf8");
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const exit = await Effect.runPromiseExit(
+        handlers.ForgeAddCardToDeck({
+          deckPath,
+          content: "no cloze markers here",
+          cardType: "cloze",
+        }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failure = Cause.failureOption(exit.cause);
+        expect(failure._tag).toBe("Some");
+        if (failure._tag === "Some") {
+          expect(failure.value._tag).toBe("forge_operation_error");
+        }
+      }
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await dispose();
+    }
+  });
+
+  it("rejects deck path outside workspace root", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-add-root-"));
+    const outsidePath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-add-outside-"));
+    const deckPath = path.join(outsidePath, "deck.md");
+    const { handlers, dispose } = await setupHandlers();
+
+    try {
+      await fs.writeFile(deckPath, "", "utf8");
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const exit = await Effect.runPromiseExit(
+        handlers.ForgeAddCardToDeck({
+          deckPath,
+          content: "Q?\n---\nA\n",
+          cardType: "qa",
+        }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failure = Cause.failureOption(exit.cause);
+        expect(failure._tag).toBe("Some");
+        if (failure._tag === "Some") {
+          expect(failure.value._tag).toBe("forge_operation_error");
+          expect(failure.value.message).toContain("outside workspace root");
+        }
+      }
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(outsidePath, { recursive: true, force: true });
+      await dispose();
+    }
+  });
+
+  it("rejects when no workspace root is configured", async () => {
+    const { handlers, dispose } = await setupHandlers();
+
+    try {
+      const exit = await Effect.runPromiseExit(
+        handlers.ForgeAddCardToDeck({
+          deckPath: "/some/deck.md",
+          content: "Q?\n---\nA\n",
+          cardType: "qa",
+        }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failure = Cause.failureOption(exit.cause);
+        expect(failure._tag).toBe("Some");
+        if (failure._tag === "Some") {
+          expect(failure.value._tag).toBe("forge_operation_error");
+          expect(failure.value.message).toContain("root path is not configured");
+        }
+      }
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("appends to a deck with existing items without clobbering", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-add-existing-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const { handlers, dispose } = await setupHandlers();
+
+    try {
+      await fs.writeFile(deckPath, "<!--@ existing-card 0 0 0 0-->\nOld Q?\n---\nOld A\n", "utf8");
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      await Effect.runPromise(
+        handlers.ForgeAddCardToDeck({
+          deckPath,
+          content: "New Q?\n---\nNew A\n",
+          cardType: "qa",
+        }),
+      );
+
+      const parsed = await Effect.runPromise(parseFile(await fs.readFile(deckPath, "utf8")));
+      expect(parsed.items).toHaveLength(2);
+      expect(parsed.items[0]!.cards[0]!.id).toBe("existing-card");
+      expect(parsed.items[0]!.content).toContain("Old Q?");
+      expect(parsed.items[1]!.content).toContain("New Q?");
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
       await dispose();
     }
   });

@@ -621,3 +621,18 @@ export const ForgeUpdatePermutationErrorSchema = Schema.Union(
   ForgeOperationError,
 );
 export type ForgeUpdatePermutationError = typeof ForgeUpdatePermutationErrorSchema.Type;
+
+export const ForgeAddCardToDeckInputSchema = Schema.Struct({
+  deckPath: Schema.String.pipe(Schema.nonEmptyString()),
+  content: Schema.String.pipe(Schema.nonEmptyString()),
+  cardType: Schema.Literal("qa", "cloze"),
+});
+export type ForgeAddCardToDeckInput = typeof ForgeAddCardToDeckInputSchema.Type;
+
+export const ForgeAddCardToDeckResultSchema = Schema.Struct({
+  cardIds: Schema.Array(Schema.String),
+});
+export type ForgeAddCardToDeckResult = typeof ForgeAddCardToDeckResultSchema.Type;
+
+export const ForgeAddCardToDeckErrorSchema = ForgeOperationError;
+export type ForgeAddCardToDeckError = typeof ForgeAddCardToDeckErrorSchema.Type;

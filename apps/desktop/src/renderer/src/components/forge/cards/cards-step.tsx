@@ -16,7 +16,11 @@ import {
   useForgeTopicsByChunk,
 } from "../forge-page-context";
 import { topicKey } from "../forge-page-store";
-import { useForgeUpdateCardMutation } from "@/hooks/mutations/use-forge-cards-mutations";
+import {
+  formatQAContent,
+  useForgeAddCardToDeckMutation,
+  useForgeUpdateCardMutation,
+} from "@/hooks/mutations/use-forge-cards-mutations";
 import { useForgeCardsSnapshotQuery } from "@/hooks/queries/use-forge-cards-snapshot-query";
 import { useScanDecksQuery } from "@/hooks/queries/use-scan-decks-query";
 import { useSettingsQuery } from "@/hooks/queries/use-settings-query";
@@ -517,6 +521,9 @@ export function CardsStep() {
   ]);
 
   const { mutate: updateCard } = useForgeUpdateCardMutation();
+  const { mutate: addCardToDeck } = useForgeAddCardToDeckMutation();
+  const [addingCardIds, setAddingCardIds] = useState<ReadonlySet<number>>(new Set());
+  const [addCardError, setAddCardError] = useState<string | null>(null);
 
   const generationRevisionByTopicKeyRef = useRef<Map<string, number>>(new Map());
   useEffect(() => {
@@ -848,9 +855,33 @@ export function CardsStep() {
           addedCardIds={activeAddedCardIds}
           deletedCardIds={activeDeletedCardIds}
           expandedPanels={activeExpandedPanels}
+          addingCardIds={addingCardIds}
+          addDisabled={!targetDeckPath}
+          addCardError={addCardError}
           onAddCard={(cardId) => {
-            if (!activeTopicKey) return;
-            curationActions.markCardAdded(activeTopicKey, cardId);
+            if (!activeTopicKey || !targetDeckPath) return;
+            if (addingCardIds.has(cardId)) return;
+            const card = activeCards.find((c) => c.id === cardId);
+            if (!card) return;
+            setAddingCardIds((prev) => new Set([...prev, cardId]));
+            setAddCardError(null);
+            addCardToDeck(
+              {
+                deckPath: targetDeckPath,
+                content: formatQAContent(card.question, card.answer),
+                cardType: "qa",
+              },
+              {
+                onSuccess: () => curationActions.markCardAdded(activeTopicKey, cardId),
+                onError: (error) => setAddCardError(error.message),
+                onSettled: () =>
+                  setAddingCardIds((prev) => {
+                    const next = new Set(prev);
+                    next.delete(cardId);
+                    return next;
+                  }),
+              },
+            );
           }}
           onDeleteCard={(cardId) => {
             if (!activeTopicKey) return;

@@ -1,4 +1,5 @@
-import { Check, ListTree, Braces, Trash2, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, ListTree, Braces, Trash2, Plus, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -11,6 +12,8 @@ import { PermutationsPanel } from "./permutations-panel";
 type CardBlockProps = {
   readonly card: ForgeGeneratedCard;
   readonly isAdded: boolean;
+  readonly isAdding: boolean;
+  readonly addDisabled: boolean;
   readonly expandedPanel: "permutations" | "cloze" | null;
   readonly onAdd: () => void;
   readonly onDelete: () => void;
@@ -23,6 +26,8 @@ type CardBlockProps = {
 export function CardBlock({
   card,
   isAdded,
+  isAdding,
+  addDisabled,
   expandedPanel,
   onAdd,
   onDelete,
@@ -34,6 +39,17 @@ export function CardBlock({
   const showPermutations = expandedPanel === "permutations";
   const showCloze = expandedPanel === "cloze";
   const hasExpanded = expandedPanel !== null;
+
+  const [permutationsMounted, setPermutationsMounted] = useState(false);
+  const [clozeMounted, setClozeMounted] = useState(false);
+
+  useEffect(() => {
+    if (showPermutations) setPermutationsMounted(true);
+  }, [showPermutations]);
+
+  useEffect(() => {
+    if (showCloze) setClozeMounted(true);
+  }, [showCloze]);
 
   return (
     <div className="group relative border-b border-border/30 px-2 py-5">
@@ -70,8 +86,15 @@ export function CardBlock({
       >
         {!isAdded && (
           <>
-            <Button type="button" variant="secondary" size="xs" className="gap-1.5" onClick={onAdd}>
-              <Plus className="size-3" />
+            <Button
+              type="button"
+              variant="secondary"
+              size="xs"
+              className="gap-1.5"
+              disabled={isAdding || addDisabled}
+              onClick={onAdd}
+            >
+              {isAdding ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
               Add to deck
             </Button>
             <div className="mx-1 h-4 w-px bg-border/30" />
@@ -114,14 +137,19 @@ export function CardBlock({
         </Button>
       </div>
 
-      {showPermutations && (
-        <div className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
+      {(showPermutations || permutationsMounted) && (
+        <div
+          className={cn(
+            "ml-5 mt-2 border-l-2 border-border/30 pl-5",
+            !showPermutations && "hidden",
+          )}
+        >
           <PermutationsPanel sourceCardId={card.id} />
         </div>
       )}
 
-      {showCloze && (
-        <div className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
+      {(showCloze || clozeMounted) && (
+        <div className={cn("ml-5 mt-2 border-l-2 border-border/30 pl-5", !showCloze && "hidden")}>
           <ClozePanel sourceCardId={card.id} />
         </div>
       )}

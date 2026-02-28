@@ -13,6 +13,7 @@ import {
   ReplaceItem,
 } from "./contracts/editor";
 import {
+  ForgeAddCardToDeck,
   ForgeCreateSession,
   ForgeExtractText,
   ForgeGenerateCardCloze,
@@ -109,6 +110,7 @@ export const appContract = defineContract({
     ForgeUpdatePermutation,
     ForgeSaveTopicSelections,
     ForgeSetSessionDeckPath,
+    ForgeAddCardToDeck,
   ] as const,
   events: [
     WorkspaceSnapshotChanged,

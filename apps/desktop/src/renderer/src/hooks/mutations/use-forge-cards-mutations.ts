@@ -5,6 +5,8 @@ import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
 import type {
+  ForgeAddCardToDeckInput,
+  ForgeAddCardToDeckResult,
   ForgeGenerateCardClozeInput,
   ForgeGenerateCardClozeResult,
   ForgeGenerateCardPermutationsInput,
@@ -15,11 +17,15 @@ import type {
   ForgeUpdatePermutationResult,
 } from "@shared/rpc/schemas/forge";
 
+export const formatQAContent = (question: string, answer: string): string =>
+  `${question}\n---\n${answer}\n`;
+
 export const forgeCardsMutationKeys = {
   generatePermutations: ["forgeGenerateCardPermutations"] as const,
   generateCloze: ["forgeGenerateCardCloze"] as const,
   updateCard: ["forgeUpdateCard"] as const,
   updatePermutation: ["forgeUpdatePermutation"] as const,
+  addCardToDeck: ["forgeAddCardToDeck"] as const,
 };
 
 export function useForgeGeneratePermutationsMutation() {
@@ -97,6 +103,24 @@ export function useForgeUpdatePermutationMutation() {
       runIpcEffect(
         ipc.client
           .ForgeUpdatePermutation(input)
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
+          ),
+      ),
+  });
+}
+
+export function useForgeAddCardToDeckMutation() {
+  const ipc = useIpc();
+
+  return useMutation<ForgeAddCardToDeckResult, Error, ForgeAddCardToDeckInput>({
+    mutationKey: forgeCardsMutationKeys.addCardToDeck,
+    mutationFn: (input) =>
+      runIpcEffect(
+        ipc.client
+          .ForgeAddCardToDeck(input)
           .pipe(
             Effect.catchTag("RpcDefectError", (rpcDefect) =>
               Effect.fail(toRpcDefectError(rpcDefect)),
