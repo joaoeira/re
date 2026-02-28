@@ -3,7 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ForgePage } from "@/components/forge/forge-page";
 import { renderWithIpcProviders } from "./render-with-providers";
-import { mockDesktopGlobals, uploadPdf } from "./forge-test-helpers";
+import {
+  DEFAULT_FORGE_DECKS,
+  FORGE_WORKSPACE_ROOT_PATH,
+  forgeSettingsSuccess,
+  mockDesktopGlobals,
+  toDeckEntry,
+  uploadPdf,
+  type ForgeDeckEntry,
+} from "./forge-test-helpers";
 
 type TopicDef = {
   readonly chunkId: number;
@@ -100,10 +108,22 @@ const createCardsInvoke = (options?: {
   readonly topicGenerationFailureByTopicKey?: Readonly<Record<string, string>>;
   readonly permutationsGenerationDelayMs?: number;
   readonly clozeGenerationDelayMs?: number;
+  readonly initialDecks?: ReadonlyArray<ForgeDeckEntry>;
+  readonly scanDecksByCall?: ReadonlyArray<ReadonlyArray<ForgeDeckEntry>>;
+  readonly createDeckFailureMessage?: string;
+  readonly deckPathPersistFailuresBeforeSuccess?: number;
+  readonly deckPathPersistFailuresByDeckPath?: Readonly<Record<string, number>>;
 }) => {
   const sessionId = options?.sessionId ?? 77;
+  const workspaceRootPath = FORGE_WORKSPACE_ROOT_PATH;
   let nextCardId = 9_000;
   let nextPermutationId = 12_000;
+  let decks = [...(options?.initialDecks ?? DEFAULT_FORGE_DECKS)];
+  let scanDecksCallCount = 0;
+  let remainingDeckPathPersistFailures = options?.deckPathPersistFailuresBeforeSuccess ?? 0;
+  const remainingDeckPathPersistFailuresByDeckPath = new Map(
+    Object.entries(options?.deckPathPersistFailuresByDeckPath ?? {}),
+  );
   const permutationsGenerationDelayMs = options?.permutationsGenerationDelayMs ?? 0;
   const clozeGenerationDelayMs = options?.clozeGenerationDelayMs ?? 0;
 
@@ -174,6 +194,49 @@ const createCardsInvoke = (options?: {
   };
 
   const invoke = vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
+    if (method === "GetSettings") {
+      return forgeSettingsSuccess(workspaceRootPath);
+    }
+
+    if (method === "ScanDecks") {
+      const decksForCall = options?.scanDecksByCall?.[scanDecksCallCount] ?? decks;
+      scanDecksCallCount += 1;
+      return {
+        type: "success",
+        data: {
+          rootPath: workspaceRootPath,
+          decks: decksForCall.map((deck) => ({ ...deck })),
+        },
+      };
+    }
+
+    if (method === "CreateDeck") {
+      const input = payload as { relativePath: string };
+      if (options?.createDeckFailureMessage) {
+        return {
+          type: "failure",
+          error: {
+            _tag: "InvalidDeckPath",
+            inputPath: input.relativePath,
+            reason: "invalid_file_name",
+            message: options.createDeckFailureMessage,
+          },
+        };
+      }
+      const createdDeck = toDeckEntry(workspaceRootPath, input.relativePath);
+      if (!decks.some((deck) => deck.absolutePath === createdDeck.absolutePath)) {
+        decks = [...decks, createdDeck].sort((left, right) =>
+          left.relativePath.localeCompare(right.relativePath),
+        );
+      }
+      return {
+        type: "success",
+        data: {
+          absolutePath: createdDeck.absolutePath,
+        },
+      };
+    }
+
     if (method === "ForgePreviewChunks") {
       return {
         type: "success",
@@ -472,6 +535,41 @@ const createCardsInvoke = (options?: {
       return { type: "success", data: { sessions: [] } };
     }
 
+    if (method === "ForgeSetSessionDeckPath") {
+      const input = payload as { sessionId: number; deckPath: string | null };
+      const remainingFailuresForDeck =
+        input.deckPath === null
+          ? undefined
+          : remainingDeckPathPersistFailuresByDeckPath.get(input.deckPath);
+      if ((remainingFailuresForDeck ?? 0) > 0 && input.deckPath !== null) {
+        remainingDeckPathPersistFailuresByDeckPath.set(
+          input.deckPath,
+          (remainingFailuresForDeck ?? 0) - 1,
+        );
+        return {
+          type: "failure",
+          error: {
+            _tag: "session_operation_error",
+            sessionId,
+            message: "temporary sqlite lock",
+          },
+        };
+      }
+
+      if (remainingDeckPathPersistFailures > 0) {
+        remainingDeckPathPersistFailures -= 1;
+        return {
+          type: "failure",
+          error: {
+            _tag: "session_operation_error",
+            sessionId,
+            message: "temporary sqlite lock",
+          },
+        };
+      }
+      return { type: "success", data: {} };
+    }
+
     return {
       type: "failure",
       error: { code: "UNKNOWN_METHOD", message: method },
@@ -491,6 +589,46 @@ const navigateToCards = async (screen: Awaited<ReturnType<typeof renderWithIpcPr
   await expect.element(screen.getByText("Topics · 4")).toBeVisible();
 };
 
+const openDeckCombobox = () => {
+  const trigger = document.querySelector("[data-slot='combobox-trigger']");
+  if (!(trigger instanceof HTMLElement)) {
+    throw new Error("Expected deck combobox trigger.");
+  }
+  trigger.click();
+};
+
+const getDeckSelectionText = (): string => {
+  const trigger = document.querySelector("[data-slot='combobox-trigger']");
+  if (!(trigger instanceof HTMLElement)) {
+    throw new Error("Expected deck combobox trigger.");
+  }
+  return trigger.textContent?.replace(/\s+/g, " ").trim() ?? "";
+};
+
+const setDeckComboboxInputValue = async (value: string) => {
+  const input = document.querySelector("[data-slot='combobox-input']");
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error("Expected deck combobox input.");
+  }
+  input.value = "";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  await userEvent.type(input, value);
+};
+
+const findDeckOption = (relativePath: string) => {
+  const options = Array.from(document.querySelectorAll("[data-slot='combobox-item']"));
+  return options.find((option) => option.textContent?.includes(relativePath)) ?? null;
+};
+
+const selectDeckOption = async (relativePath: string) => {
+  await expect.poll(() => Boolean(findDeckOption(relativePath))).toBe(true);
+  const option = findDeckOption(relativePath);
+  if (!(option instanceof HTMLElement)) {
+    throw new Error(`Expected deck option for "${relativePath}".`);
+  }
+  option.click();
+};
+
 const defaultInteractiveState = (): Record<string, InitialTopicState> => ({
   "101:1": {
     status: "generated",
@@ -500,6 +638,186 @@ const defaultInteractiveState = (): Record<string, InitialTopicState> => ({
 });
 
 describe("Forge cards step", () => {
+  it("renders the deck combobox in the footer instead of Save to deck", async () => {
+    const invoke = createCardsInvoke();
+    mockDesktopGlobals(invoke);
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await expect
+      .poll(() => Boolean(document.querySelector("[data-slot='combobox-trigger']")))
+      .toBe(true);
+    expect(screen.getByText("Save to deck").query()).toBeNull();
+  });
+
+  it("auto-selects the first scanned deck on first cards-step entry", async () => {
+    const invoke = createCardsInvoke();
+    mockDesktopGlobals(invoke);
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await expect.poll(() => getDeckSelectionText()).toContain("decks/alpha.md");
+  });
+
+  it("persists manual deck selection while switching topics", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "generated",
+          generationRevision: 1,
+          cards: [{ id: 8_700, question: "alpha question", answer: "alpha answer" }],
+        },
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    openDeckCombobox();
+    await selectDeckOption("decks/beta.md");
+    await expect.poll(() => getDeckSelectionText()).toContain("decks/beta.md");
+    await expect
+      .poll(() =>
+        invoke.mock.calls.some(
+          ([method, payload]: unknown[]) =>
+            method === "ForgeSetSessionDeckPath" &&
+            (payload as { sessionId: number; deckPath: string | null })?.sessionId === 77 &&
+            (payload as { sessionId: number; deckPath: string | null })?.deckPath ===
+              `${FORGE_WORKSPACE_ROOT_PATH}/decks/beta.md`,
+        ),
+      )
+      .toBe(true);
+
+    const sidebar = screen.getByText("Topics · 4").element().closest("aside");
+    if (!(sidebar instanceof HTMLElement)) {
+      throw new Error("Expected cards sidebar.");
+    }
+    const sidebarButtons = Array.from(sidebar.querySelectorAll("button"));
+    const betaRow = sidebarButtons.find((button) => button.textContent?.includes("beta"));
+    const alphaRow = sidebarButtons.find((button) => button.textContent?.includes("alpha"));
+    if (!(betaRow instanceof HTMLElement) || !(alphaRow instanceof HTMLElement)) {
+      throw new Error("Expected alpha and beta topic rows.");
+    }
+
+    betaRow.click();
+    await expect.element(screen.getByText("beta question")).toBeVisible();
+    alphaRow.click();
+    await expect.element(screen.getByText("alpha question")).toBeVisible();
+    await expect.poll(() => getDeckSelectionText()).toContain("decks/beta.md");
+  });
+
+  it("retries persisting deck selection after a transient failure", async () => {
+    const invoke = createCardsInvoke({
+      deckPathPersistFailuresByDeckPath: {
+        [`${FORGE_WORKSPACE_ROOT_PATH}/decks/beta.md`]: 1,
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    openDeckCombobox();
+    await selectDeckOption("decks/beta.md");
+    await expect.poll(() => getDeckSelectionText()).toContain("decks/beta.md");
+
+    await expect
+      .poll(
+        () =>
+          invoke.mock.calls.filter(([method, payload]: unknown[]) => {
+            if (method !== "ForgeSetSessionDeckPath") return false;
+            const typedPayload = payload as { sessionId: number; deckPath: string | null };
+            return (
+              typedPayload.sessionId === 77 &&
+              typedPayload.deckPath === `${FORGE_WORKSPACE_ROOT_PATH}/decks/beta.md`
+            );
+          }).length,
+      )
+      .toBeGreaterThanOrEqual(2);
+  });
+
+  it("creates a deck from the combobox and selects it", async () => {
+    const invoke = createCardsInvoke();
+    mockDesktopGlobals(invoke);
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    openDeckCombobox();
+    await setDeckComboboxInputValue("new-forge");
+
+    await selectDeckOption("new-forge.md");
+
+    await expect.poll(() => getDeckSelectionText()).toContain("new-forge.md");
+    await expect
+      .poll(
+        () =>
+          invoke.mock.calls.find(([method]: unknown[]) => method === "CreateDeck") as
+            | [string, { relativePath: string; createParents?: boolean }]
+            | undefined,
+      )
+      .toBeTruthy();
+
+    const createDeckCall = invoke.mock.calls.find(
+      ([method]: unknown[]) => method === "CreateDeck",
+    ) as [string, { relativePath: string; createParents?: boolean }] | undefined;
+    expect(createDeckCall?.[1]).toEqual({
+      relativePath: "new-forge.md",
+      createParents: true,
+    });
+  });
+
+  it("shows a create deck error when creation fails", async () => {
+    const invoke = createCardsInvoke({
+      createDeckFailureMessage: "permission denied",
+    });
+    mockDesktopGlobals(invoke);
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    openDeckCombobox();
+    await setDeckComboboxInputValue("broken-deck");
+    await selectDeckOption("broken-deck.md");
+
+    await expect
+      .poll(() => invoke.mock.calls.filter(([method]: unknown[]) => method === "CreateDeck").length)
+      .toBe(1);
+    await expect
+      .poll(() => {
+        const error = document.querySelector("span.text-destructive");
+        return error?.textContent?.trim() ?? "";
+      })
+      .not.toBe("");
+    await expect.poll(() => getDeckSelectionText()).toContain("decks/alpha.md");
+  });
+
+  it("clears target deck when a selected deck is missing after rescan", async () => {
+    const invoke = createCardsInvoke({
+      scanDecksByCall: [DEFAULT_FORGE_DECKS, DEFAULT_FORGE_DECKS],
+    });
+    mockDesktopGlobals(invoke);
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    openDeckCombobox();
+    await setDeckComboboxInputValue("disappears-deck");
+    await selectDeckOption("disappears-deck.md");
+
+    await expect.poll(() => getDeckSelectionText()).toContain("select deck");
+    await expect.poll(() => getDeckSelectionText().includes("decks/alpha.md")).toBe(false);
+    await expect
+      .poll(() =>
+        invoke.mock.calls.some(
+          ([method, payload]: unknown[]) =>
+            method === "ForgeSetSessionDeckPath" &&
+            (payload as { sessionId: number; deckPath: string | null })?.sessionId === 77 &&
+            (payload as { sessionId: number; deckPath: string | null })?.deckPath === null,
+        ),
+      )
+      .toBe(true);
+  });
+
   it("auto-starts first three topics when no selected topic has cards", async () => {
     const invoke = createCardsInvoke();
     mockDesktopGlobals(invoke);
@@ -580,7 +898,7 @@ describe("Forge cards step", () => {
 
     await expect.element(screen.getByText("Q alpha")).toBeVisible();
 
-    const betaRow = screen.getByText("beta").element().closest("button");
+    const betaRow = screen.getByText("beta", { exact: true }).element().closest("button");
     const gammaRow = screen.getByText("gamma").element().closest("button");
     if (!(betaRow instanceof HTMLElement) || !(gammaRow instanceof HTMLElement)) {
       throw new Error("Expected beta and gamma sidebar rows.");
@@ -619,7 +937,7 @@ describe("Forge cards step", () => {
     await expect.element(screen.getByText("Q alpha")).toBeVisible();
 
     const gammaRow = screen.getByText("gamma").element().closest("button");
-    const betaRow = screen.getByText("beta").element().closest("button");
+    const betaRow = screen.getByText("beta", { exact: true }).element().closest("button");
     if (!(betaRow instanceof HTMLElement) || !(gammaRow instanceof HTMLElement)) {
       throw new Error("Expected beta and gamma sidebar rows.");
     }
@@ -666,7 +984,7 @@ describe("Forge cards step", () => {
 
     await expect.element(screen.getByText("alpha question")).toBeVisible();
 
-    const betaRow = screen.getByText("beta").element().closest("button");
+    const betaRow = screen.getByText("beta", { exact: true }).element().closest("button");
     if (!(betaRow instanceof HTMLElement)) {
       throw new Error("Expected beta sidebar row button.");
     }

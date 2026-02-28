@@ -37,3 +37,19 @@ export const RenameDeckErrorSchema = Schema.Union(
 export type CreateDeckError = typeof CreateDeckErrorSchema.Type;
 export type DeleteDeckError = typeof DeleteDeckErrorSchema.Type;
 export type RenameDeckError = typeof RenameDeckErrorSchema.Type;
+
+export const toCreateDeckErrorMessage = (error: CreateDeckError): string => {
+  switch (error._tag) {
+    case "workspace_root_not_configured":
+      return error.message;
+    case "InvalidDeckPath":
+      return `Invalid deck path "${error.inputPath}" (${error.reason}).`;
+    case "DeckAlreadyExists":
+      return `Deck already exists: ${error.deckPath}`;
+    case "DeckFileOperationError":
+      return `Unable to ${error.operation} deck: ${error.message}`;
+  }
+};
+
+export const mapCreateDeckErrorToError = (error: CreateDeckError | Error): Error =>
+  "_tag" in error ? new Error(toCreateDeckErrorMessage(error)) : error;

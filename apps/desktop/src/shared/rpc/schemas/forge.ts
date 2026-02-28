@@ -315,6 +315,15 @@ export type ForgeSaveTopicSelectionsInput = typeof ForgeSaveTopicSelectionsInput
 export const ForgeSaveTopicSelectionsResultSchema = Schema.Struct({});
 export type ForgeSaveTopicSelectionsResult = typeof ForgeSaveTopicSelectionsResultSchema.Type;
 
+export const ForgeSetSessionDeckPathInputSchema = Schema.Struct({
+  sessionId: PositiveIntSchema,
+  deckPath: NullableStringSchema,
+});
+export type ForgeSetSessionDeckPathInput = typeof ForgeSetSessionDeckPathInputSchema.Type;
+
+export const ForgeSetSessionDeckPathResultSchema = Schema.Struct({});
+export type ForgeSetSessionDeckPathResult = typeof ForgeSetSessionDeckPathResultSchema.Type;
+
 export const ForgeTopicChunkExtractedEventSchema = Schema.Struct({
   sourceFilePath: Schema.String,
   sessionId: PositiveIntSchema,
@@ -455,6 +464,7 @@ export class ForgeClozeGenerationError extends Schema.TaggedError<ForgeClozeGene
 export const ForgeSessionSummarySchema = Schema.Struct({
   id: PositiveIntSchema,
   sourceFilePath: Schema.String,
+  deckPath: NullableStringSchema,
   status: ForgeSessionStatusSchema,
   errorMessage: NullableStringSchema,
   topicCount: NonNegativeIntSchema,
@@ -586,6 +596,13 @@ export const ForgeSaveTopicSelectionsErrorSchema = Schema.Union(
   ForgeOperationError,
 );
 export type ForgeSaveTopicSelectionsError = typeof ForgeSaveTopicSelectionsErrorSchema.Type;
+
+export const ForgeSetSessionDeckPathErrorSchema = Schema.Union(
+  ForgeSessionNotFoundError,
+  ForgeSessionOperationError,
+  ForgeOperationError,
+);
+export type ForgeSetSessionDeckPathError = typeof ForgeSetSessionDeckPathErrorSchema.Type;
 
 export const ForgeUpdatePermutationInputSchema = Schema.Struct({
   permutationId: PositiveIntSchema,

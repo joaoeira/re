@@ -65,6 +65,35 @@ const setupSqliteRepository = async () => {
 };
 
 (sqliteBindingAvailable ? describe : describe.skip)("sqlite forge session repository", () => {
+  it("updates and persists session deck_path", async () => {
+    const { repository, dispose } = await setupSqliteRepository();
+
+    try {
+      const session = await Effect.runPromise(
+        repository.createSession({
+          sourceKind: "pdf",
+          sourceFilePath: "/tmp/sqlite-deck-target.pdf",
+          deckPath: null,
+          sourceFingerprint: "fp:sqlite-deck-target",
+        }),
+      );
+
+      const updated = await Effect.runPromise(
+        repository.setSessionDeckPath({
+          sessionId: session.id,
+          deckPath: "/workspace/decks/sqlite.md",
+        }),
+      );
+
+      expect(updated?.deckPath).toBe("/workspace/decks/sqlite.md");
+
+      const summaries = await Effect.runPromise(repository.listRecentSessions());
+      expect(summaries[0]?.deckPath).toBe("/workspace/decks/sqlite.md");
+    } finally {
+      await dispose();
+    }
+  });
+
   it("includes chunk entries with empty topics in getTopicsBySession", async () => {
     const { repository, dispose } = await setupSqliteRepository();
 

@@ -8,6 +8,7 @@ import { mockDesktopGlobals, waitForFileInput } from "./forge-test-helpers";
 const SESSION_A = {
   id: 1,
   sourceFilePath: "/docs/biology.pdf",
+  deckPath: null,
   status: "topics_extracted" as const,
   errorMessage: null,
   topicCount: 5,
@@ -19,6 +20,7 @@ const SESSION_A = {
 const SESSION_B = {
   id: 2,
   sourceFilePath: "/docs/chemistry.pdf",
+  deckPath: "/workspace/decks/beta.md",
   status: "ready" as const,
   errorMessage: null,
   topicCount: 3,
@@ -27,10 +29,46 @@ const SESSION_B = {
   updatedAt: "2026-02-26T14:00:00.000Z",
 };
 
+const SESSION_C = {
+  ...SESSION_B,
+  id: 3,
+  sourceFilePath: "/docs/physics.pdf",
+  deckPath: "/workspace/decks/missing.md",
+};
+
 const createInvokeWithSessions = (sessions: unknown[] = [SESSION_A, SESSION_B]) =>
   vi.fn().mockImplementation(async (method: string) => {
     if (method === "ForgeListSessions") {
       return { type: "success", data: { sessions } };
+    }
+    if (method === "GetSettings") {
+      return {
+        type: "success",
+        data: {
+          settingsVersion: 1,
+          workspace: { rootPath: "/workspace" },
+        },
+      };
+    }
+    if (method === "ScanDecks") {
+      return {
+        type: "success",
+        data: {
+          rootPath: "/workspace",
+          decks: [
+            {
+              absolutePath: "/workspace/decks/alpha.md",
+              relativePath: "decks/alpha.md",
+              name: "alpha",
+            },
+            {
+              absolutePath: "/workspace/decks/beta.md",
+              relativePath: "decks/beta.md",
+              name: "beta",
+            },
+          ],
+        },
+      };
     }
     if (method === "ForgePreviewChunks") {
       return {
@@ -61,6 +99,9 @@ const createInvokeWithSessions = (sessions: unknown[] = [SESSION_A, SESSION_B]) 
           ],
         },
       };
+    }
+    if (method === "ForgeSetSessionDeckPath") {
+      return { type: "success", data: {} };
     }
     return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
   });
@@ -135,6 +176,60 @@ describe("ForgePage session browser", () => {
           ([method, payload]: unknown[]) =>
             method === "ForgeGetCardsSnapshot" &&
             (payload as { sessionId: number })?.sessionId === SESSION_B.id,
+        ),
+      )
+      .toBe(true);
+  });
+
+  it("hydrates persisted deck selection when resuming a cards session", async () => {
+    const invoke = createInvokeWithSessions([SESSION_B]);
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderForgePage();
+    await expect.element(screen.getByText("chemistry.pdf")).toBeVisible();
+
+    await userEvent.click(screen.getByText("chemistry.pdf"));
+
+    await expect
+      .poll(() => {
+        const trigger = document.querySelector("[data-slot='combobox-trigger']");
+        if (!(trigger instanceof HTMLElement)) return "";
+        return trigger.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      })
+      .toContain("decks/beta.md");
+  });
+
+  it("clears a missing persisted deck on resume without silently selecting a fallback", async () => {
+    const invoke = createInvokeWithSessions([SESSION_C]);
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderForgePage();
+    await expect.element(screen.getByText("physics.pdf")).toBeVisible();
+
+    await userEvent.click(screen.getByText("physics.pdf"));
+
+    await expect
+      .poll(() => {
+        const trigger = document.querySelector("[data-slot='combobox-trigger']");
+        if (!(trigger instanceof HTMLElement)) return "";
+        return trigger.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      })
+      .toContain("select deck");
+    await expect
+      .poll(() => {
+        const trigger = document.querySelector("[data-slot='combobox-trigger']");
+        if (!(trigger instanceof HTMLElement)) return true;
+        return !trigger.textContent?.includes("decks/alpha.md");
+      })
+      .toBe(true);
+    await expect
+      .poll(() =>
+        invoke.mock.calls.some(
+          ([method, payload]: unknown[]) =>
+            method === "ForgeSetSessionDeckPath" &&
+            (payload as { sessionId: number; deckPath: string | null })?.sessionId ===
+              SESSION_C.id &&
+            (payload as { sessionId: number; deckPath: string | null })?.deckPath === null,
         ),
       )
       .toBe(true);

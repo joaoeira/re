@@ -58,6 +58,28 @@ describe("forge-page-store topic selection", () => {
       expect(ctx(store).previewState).toEqual({ status: "idle" });
       expect(ctx(store).extractState).toEqual({ status: "idle" });
     });
+
+    it("starts with no target deck", () => {
+      const store = createForgePageStore();
+      expect(ctx(store).targetDeckPath).toBeNull();
+    });
+  });
+
+  describe("setTargetDeckPath", () => {
+    it("stores a selected target deck path", () => {
+      const store = createForgePageStore();
+      store.send({ type: "setTargetDeckPath", deckPath: "/workspace/decks/alpha.md" });
+
+      expect(ctx(store).targetDeckPath).toBe("/workspace/decks/alpha.md");
+    });
+
+    it("allows clearing the selected target deck path", () => {
+      const store = createForgePageStore();
+      store.send({ type: "setTargetDeckPath", deckPath: "/workspace/decks/alpha.md" });
+      store.send({ type: "setTargetDeckPath", deckPath: null });
+
+      expect(ctx(store).targetDeckPath).toBeNull();
+    });
   });
 
   describe("extractionSuccess", () => {
@@ -109,6 +131,20 @@ describe("forge-page-store topic selection", () => {
         topicsByChunk: TWO_CHUNKS,
       });
       expect(ctx(store).duplicateOfSessionId).toBe(42);
+    });
+
+    it("clears targetDeckPath defensively", () => {
+      const store = createForgePageStore();
+      store.send({ type: "setTargetDeckPath", deckPath: "/workspace/decks/alpha.md" });
+
+      store.send({
+        type: "extractionSuccess",
+        duplicateOfSessionId: null,
+        extraction: EXTRACTION,
+        topicsByChunk: TWO_CHUNKS,
+      });
+
+      expect(ctx(store).targetDeckPath).toBeNull();
     });
   });
 
@@ -375,6 +411,18 @@ describe("forge-page-store topic selection", () => {
       });
       expect(ctx(store).selectedTopicKeys.size).toBe(0);
     });
+
+    it("clears targetDeckPath when a new PDF is selected", () => {
+      const store = storeWithTopics();
+      store.send({ type: "setTargetDeckPath", deckPath: "/workspace/decks/alpha.md" });
+
+      store.send({
+        type: "setSelectedPdf",
+        selectedPdf: { fileName: "new.pdf", sourceFilePath: "/new.pdf" },
+      });
+
+      expect(ctx(store).targetDeckPath).toBeNull();
+    });
   });
 
   describe("resetForNoFile", () => {
@@ -384,6 +432,14 @@ describe("forge-page-store topic selection", () => {
       store.send({ type: "resetForNoFile" });
 
       expect(ctx(store).selectedTopicKeys.size).toBe(0);
+    });
+
+    it("clears targetDeckPath on full reset", () => {
+      const store = storeWithTopics();
+      store.send({ type: "setTargetDeckPath", deckPath: "/workspace/decks/alpha.md" });
+      store.send({ type: "resetForNoFile" });
+
+      expect(ctx(store).targetDeckPath).toBeNull();
     });
   });
 
@@ -403,6 +459,15 @@ describe("forge-page-store topic selection", () => {
 
       expect(ctx(store).currentStep).toBe("source");
       expect(ctx(store).previewState).toEqual({ status: "error", message: "bad file" });
+    });
+
+    it("clears targetDeckPath", () => {
+      const store = storeWithTopics();
+      store.send({ type: "setTargetDeckPath", deckPath: "/workspace/decks/alpha.md" });
+
+      store.send({ type: "setFileSelectionError", message: "bad file" });
+
+      expect(ctx(store).targetDeckPath).toBeNull();
     });
   });
 
@@ -429,6 +494,15 @@ describe("forge-page-store topic selection", () => {
 
       store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
       expect(ctx(store).duplicateOfSessionId).toBeNull();
+    });
+
+    it("clears targetDeckPath", () => {
+      const store = storeWithTopics();
+      store.send({ type: "setTargetDeckPath", deckPath: "/workspace/decks/alpha.md" });
+
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
+
+      expect(ctx(store).targetDeckPath).toBeNull();
     });
   });
 
@@ -460,6 +534,15 @@ describe("forge-page-store topic selection", () => {
       expect(ctx(store).extractState).toEqual({ status: "error", message: "timeout" });
       expect(ctx(store).currentStep).toBe("source");
     });
+
+    it("clears targetDeckPath", () => {
+      const store = createForgePageStore();
+      store.send({ type: "setTargetDeckPath", deckPath: "/workspace/decks/alpha.md" });
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
+      store.send({ type: "extractionError", message: "timeout" });
+
+      expect(ctx(store).targetDeckPath).toBeNull();
+    });
   });
 
   describe("resumeSession", () => {
@@ -479,6 +562,7 @@ describe("forge-page-store topic selection", () => {
         currentStep: "cards",
         selectedPdf: { fileName: "resume.pdf", sourceFilePath: "/tmp/resume.pdf" },
         sessionId: 77,
+        targetDeckPath: "/workspace/decks/resume.md",
         topicsByChunk: resumeChunks,
         selectedTopicKeys: resumeKeys,
       });
@@ -492,6 +576,7 @@ describe("forge-page-store topic selection", () => {
       expect(state.activeExtractionSessionId).toBe(77);
       expect(state.topicsByChunk).toEqual(resumeChunks);
       expect(state.selectedTopicKeys).toBe(resumeKeys);
+      expect(state.targetDeckPath).toBe("/workspace/decks/resume.md");
       expect(state.extractState).toEqual({ status: "idle" });
       expect(state.extractSummary?.sessionId).toBe(77);
     });
@@ -503,6 +588,7 @@ describe("forge-page-store topic selection", () => {
         currentStep: "topics",
         selectedPdf: { fileName: "topics.pdf", sourceFilePath: "/tmp/topics.pdf" },
         sessionId: 88,
+        targetDeckPath: null,
         topicsByChunk: TWO_CHUNKS,
         selectedTopicKeys: new Set<string>(),
       });
@@ -514,6 +600,7 @@ describe("forge-page-store topic selection", () => {
     it("clears prior state from a dirty store", () => {
       const store = storeWithTopics();
       store.send({ type: "selectAllTopics" });
+      store.send({ type: "setTargetDeckPath", deckPath: "/workspace/decks/alpha.md" });
       store.send({
         type: "setCardExpandedPanelForTopic",
         topicKey: topicKey(10, 0),
@@ -531,6 +618,7 @@ describe("forge-page-store topic selection", () => {
         currentStep: "cards",
         selectedPdf: { fileName: "clean.pdf", sourceFilePath: "/tmp/clean.pdf" },
         sessionId: 99,
+        targetDeckPath: null,
         topicsByChunk: [],
         selectedTopicKeys: new Set<string>(),
       });
@@ -541,6 +629,7 @@ describe("forge-page-store topic selection", () => {
       expect(state.expandedCardPanelsByTopicKey.size).toBe(0);
       expect(state.duplicateOfSessionId).toBeNull();
       expect(state.activeTopicKey).toBeNull();
+      expect(state.targetDeckPath).toBeNull();
       expect(state.topicSyncErrorMessage).toBeNull();
     });
   });
@@ -563,6 +652,7 @@ describe("forge-page-store topic selection", () => {
         currentStep: "cards",
         selectedPdf: { fileName: "f.pdf", sourceFilePath: "/f.pdf" },
         sessionId: 1,
+        targetDeckPath: null,
         topicsByChunk: [],
         selectedTopicKeys: new Set<string>(),
       });

@@ -3,7 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ForgePage } from "@/components/forge/forge-page";
 import { renderWithIpcProviders } from "./render-with-providers";
-import { mockDesktopGlobals, uploadPdf } from "./forge-test-helpers";
+import {
+  DEFAULT_FORGE_DECKS,
+  FORGE_WORKSPACE_ROOT_PATH,
+  forgeSettingsSuccess,
+  mockDesktopGlobals,
+  uploadPdf,
+} from "./forge-test-helpers";
 
 type TopicDef = {
   readonly chunkId: number;
@@ -27,8 +33,30 @@ const groupTopicsByChunk = () => [
 
 const createCardsInvoke = () => {
   const sessionId = 77;
+  const workspaceRootPath = FORGE_WORKSPACE_ROOT_PATH;
 
   return vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
+    if (method === "GetSettings") {
+      return forgeSettingsSuccess(workspaceRootPath);
+    }
+    if (method === "ScanDecks") {
+      return {
+        type: "success",
+        data: {
+          rootPath: workspaceRootPath,
+          decks: DEFAULT_FORGE_DECKS.map((deck) => ({ ...deck })),
+        },
+      };
+    }
+    if (method === "CreateDeck") {
+      const input = payload as { relativePath: string };
+      return {
+        type: "success",
+        data: {
+          absolutePath: `${workspaceRootPath}/${input.relativePath}`,
+        },
+      };
+    }
     if (method === "ForgePreviewChunks") {
       return { type: "success", data: { textLength: 230, totalPages: 4, chunkCount: 2 } };
     }
@@ -151,6 +179,9 @@ const createCardsInvoke = () => {
     if (method === "ForgeListSessions") {
       return { type: "success", data: { sessions: [] } };
     }
+    if (method === "ForgeSetSessionDeckPath") {
+      return { type: "success", data: {} };
+    }
     return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
   });
 };
@@ -169,7 +200,7 @@ const findSidebarRow = (
   screen: Awaited<ReturnType<typeof renderWithIpcProviders>>,
   text: string,
 ) => {
-  const el = screen.getByText(text).element().closest("button");
+  const el = screen.getByText(text, { exact: true }).element().closest("button");
   if (!(el instanceof HTMLElement)) throw new Error(`Sidebar row for "${text}" not found`);
   return el;
 };
@@ -276,16 +307,24 @@ describe("Forge cards sidebar multi-select", () => {
     await expect.poll(() => screen.getByText("selected", { exact: false }).query()).toBeNull();
 
     await expect
-      .poll(() =>
-        invoke.mock.calls.find(
-          ([method]: unknown[]) => method === "ForgeGenerateSelectedTopicCards",
-        ) as [string, { sessionId: number; topics: Array<{ chunkId: number; topicIndex: number }> }] | undefined,
+      .poll(
+        () =>
+          invoke.mock.calls.find(
+            ([method]: unknown[]) => method === "ForgeGenerateSelectedTopicCards",
+          ) as
+            | [
+                string,
+                { sessionId: number; topics: Array<{ chunkId: number; topicIndex: number }> },
+              ]
+            | undefined,
       )
       .toBeTruthy();
 
     const generateCall = invoke.mock.calls.find(
       ([method]: unknown[]) => method === "ForgeGenerateSelectedTopicCards",
-    ) as [string, { sessionId: number; topics: Array<{ chunkId: number; topicIndex: number }> }] | undefined;
+    ) as
+      | [string, { sessionId: number; topics: Array<{ chunkId: number; topicIndex: number }> }]
+      | undefined;
     expect(generateCall?.[1]).toEqual({
       sessionId: 77,
       topics: [{ chunkId: 101, topicIndex: 1 }],

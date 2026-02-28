@@ -154,6 +154,10 @@ export interface ForgeSessionRepository {
     ForgeSession | null,
     ForgeSessionRepositoryError | ForgeSessionStatusTransitionError
   >;
+  readonly setSessionDeckPath: (input: {
+    readonly sessionId: number;
+    readonly deckPath: string | null;
+  }) => Effect.Effect<ForgeSession | null, ForgeSessionRepositoryError>;
   readonly hasChunks: (sessionId: number) => Effect.Effect<boolean, ForgeSessionRepositoryError>;
   readonly saveChunks: (
     sessionId: number,
@@ -347,6 +351,7 @@ type ForgeCardClozeRow = {
 type ForgeSessionSummaryRow = {
   id: number;
   source_file_path: string;
+  deck_path: string | null;
   status: ForgeSessionStatus;
   error_message: string | null;
   topic_count: number;
@@ -1087,6 +1092,36 @@ export const makeSqliteForgeSessionRepository = ({
           return fromRow(row);
         }),
       ),
+    setSessionDeckPath: ({ sessionId, deckPath }) =>
+      runSql(
+        "setSessionDeckPath.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const rows = yield* withSqlError(
+            "setSessionDeckPath.update",
+            sql<ForgeSessionRow>`
+              UPDATE forge_sessions
+              SET
+                deck_path = ${deckPath},
+                updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+              WHERE id = ${sessionId}
+              RETURNING
+                id,
+                source_kind,
+                source_file_path,
+                deck_path,
+                source_fingerprint,
+                status,
+                error_message,
+                created_at,
+                updated_at
+            `,
+          );
+
+          const row = rows[0];
+          return row ? fromRow(row) : null;
+        }),
+      ),
     hasChunks: (sessionId) =>
       runSql(
         "hasChunks.runtime",
@@ -1823,6 +1858,7 @@ export const makeSqliteForgeSessionRepository = ({
               SELECT
                 s.id,
                 s.source_file_path,
+                s.deck_path,
                 s.status,
                 s.error_message,
                 COUNT(DISTINCT t.id) AS topic_count,
@@ -1843,6 +1879,7 @@ export const makeSqliteForgeSessionRepository = ({
             (row): ForgeSessionSummary => ({
               id: Number(row.id),
               sourceFilePath: row.source_file_path,
+              deckPath: row.deck_path,
               status: row.status,
               errorMessage: row.error_message,
               topicCount: Number(row.topic_count),
@@ -2124,6 +2161,21 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
         sessions[index] = next;
 
         return Effect.succeed(cloneSession(next));
+      }),
+    setSessionDeckPath: ({ sessionId, deckPath }) =>
+      Effect.sync(() => {
+        const index = sessions.findIndex((entry) => entry.id === sessionId);
+        if (index < 0) return null;
+
+        const existing = sessions[index]!;
+        const next: ForgeSession = {
+          ...existing,
+          deckPath,
+          updatedAt: nowIso(),
+        };
+        sessions[index] = next;
+
+        return cloneSession(next);
       }),
     hasChunks: (sessionId) =>
       Effect.sync(() => chunks.some((entry) => entry.sessionId === sessionId)),
@@ -2692,6 +2744,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
             return {
               id: session.id,
               sourceFilePath: session.sourceFilePath,
+              deckPath: session.deckPath,
               status: session.status,
               errorMessage: session.errorMessage,
               topicCount: sessionTopics.length,

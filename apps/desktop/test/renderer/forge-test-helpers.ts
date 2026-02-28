@@ -2,6 +2,50 @@ export const defaultOnStreamFrame: NonNullable<Window["desktopApi"]["onStreamFra
   return () => undefined;
 };
 
+export type ForgeDeckEntry = {
+  readonly absolutePath: string;
+  readonly relativePath: string;
+  readonly name: string;
+};
+
+export const FORGE_WORKSPACE_ROOT_PATH = "/workspace";
+
+export const DEFAULT_FORGE_DECKS: ReadonlyArray<ForgeDeckEntry> = [
+  {
+    absolutePath: `${FORGE_WORKSPACE_ROOT_PATH}/decks/alpha.md`,
+    relativePath: "decks/alpha.md",
+    name: "alpha",
+  },
+  {
+    absolutePath: `${FORGE_WORKSPACE_ROOT_PATH}/decks/beta.md`,
+    relativePath: "decks/beta.md",
+    name: "beta",
+  },
+];
+
+export const forgeSettingsSuccess = (rootPath: string | null = FORGE_WORKSPACE_ROOT_PATH) => ({
+  type: "success" as const,
+  data: {
+    settingsVersion: 1 as const,
+    workspace: { rootPath },
+  },
+});
+
+export const normalizeDeckRelativePath = (relativePath: string): string => {
+  const trimmed = relativePath.trim().replace(/^[/\\]+/, "");
+  return trimmed.endsWith(".md") ? trimmed : `${trimmed}.md`;
+};
+
+export const toDeckEntry = (rootPath: string, relativePath: string): ForgeDeckEntry => {
+  const normalizedRelativePath = normalizeDeckRelativePath(relativePath);
+  const deckName = normalizedRelativePath.split("/").pop()?.replace(/\.md$/i, "") ?? "deck";
+  return {
+    absolutePath: `${rootPath}/${normalizedRelativePath}`,
+    relativePath: normalizedRelativePath,
+    name: deckName,
+  };
+};
+
 export const mockDesktopGlobals = (
   invoke: (...args: unknown[]) => Promise<unknown>,
   getPathForFile: (file: File) => string = (file) => `/forge/${file.name}`,

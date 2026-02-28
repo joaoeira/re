@@ -1,11 +1,27 @@
-import { Button } from "@/components/ui/button";
+import type { DeckEntry } from "@re/workspace";
+import { DeckCombobox } from "@/components/editor/deck-combobox";
 
 type CardsFooterProps = {
   readonly addedCount: number;
   readonly totalCount: number;
+  readonly deckPath: string | null;
+  readonly decks: ReadonlyArray<DeckEntry>;
+  readonly disabled?: boolean;
+  readonly deckErrorMessage?: string | null;
+  readonly onDeckPathChange: (deckPath: string | null) => void;
+  readonly onCreateDeck: (relativePath: string) => void;
 };
 
-export function CardsFooter({ addedCount, totalCount }: CardsFooterProps) {
+export function CardsFooter({
+  addedCount,
+  totalCount,
+  deckPath,
+  decks,
+  disabled = false,
+  deckErrorMessage = null,
+  onDeckPathChange,
+  onCreateDeck,
+}: CardsFooterProps) {
   return (
     <div className="shrink-0 border-t border-border bg-muted/30 px-6 py-2.5">
       <div className="flex items-center justify-between">
@@ -14,18 +30,18 @@ export function CardsFooter({ addedCount, totalCount }: CardsFooterProps) {
           <span className="text-muted-foreground/30"> / </span>
           <span className="font-mono">{totalCount}</span> cards added
         </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled
-          className="gap-2 disabled:opacity-30"
-        >
-          <span>Save to deck</span>
-          <kbd className="border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground/60">
-            Cmd/Ctrl+Enter
-          </kbd>
-        </Button>
+        <div className="flex items-center gap-3">
+          {deckErrorMessage ? (
+            <span className="max-w-72 truncate text-xs text-destructive">{deckErrorMessage}</span>
+          ) : null}
+          <DeckCombobox
+            deckPath={deckPath}
+            decks={decks}
+            disabled={disabled}
+            onChange={onDeckPathChange}
+            onCreateDeck={onCreateDeck}
+          />
+        </div>
       </div>
     </div>
   );

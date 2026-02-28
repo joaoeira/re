@@ -50,6 +50,7 @@ export type TopicExpandedCardPanelMap = ReadonlyMap<
 type ForgePageContext = {
   readonly currentStep: ForgeStep;
   readonly selectedPdf: SelectedPdf | null;
+  readonly targetDeckPath: string | null;
   readonly duplicateOfSessionId: number | null;
   readonly previewState: PreviewState;
   readonly extractState: ExtractState;
@@ -76,6 +77,7 @@ const emptyTopicExpandedCardPanelMap: TopicExpandedCardPanelMap = new Map<
 const initialForgePageContext = (): ForgePageContext => ({
   currentStep: "source",
   selectedPdf: null,
+  targetDeckPath: null,
   duplicateOfSessionId: null,
   previewState: { status: "idle" },
   extractState: { status: "idle" },
@@ -264,6 +266,7 @@ export const createForgePageStore = () =>
         ...context,
         currentStep: "source" as const,
         selectedPdf: event.selectedPdf,
+        targetDeckPath: null,
         duplicateOfSessionId: null,
         previewState: { status: "loading" as const },
         extractState: { status: "idle" as const },
@@ -296,6 +299,7 @@ export const createForgePageStore = () =>
       setExtracting: (context, event: { startedAt: string }) => ({
         ...context,
         currentStep: "topics" as const,
+        targetDeckPath: null,
         duplicateOfSessionId: null,
         activeExtractionStartedAt: event.startedAt,
         activeExtractionSessionId: null,
@@ -421,6 +425,7 @@ export const createForgePageStore = () =>
         return {
           ...context,
           currentStep: "topics" as const,
+          targetDeckPath: null,
           duplicateOfSessionId: event.duplicateOfSessionId,
           activeExtractionStartedAt: null,
           activeExtractionSessionId: event.extraction.sessionId,
@@ -450,6 +455,7 @@ export const createForgePageStore = () =>
       extractionError: (context, event: { message: string }) => ({
         ...context,
         currentStep: "source" as const,
+        targetDeckPath: null,
         activeExtractionStartedAt: null,
         activeExtractionSessionId: null,
         topicSyncErrorMessage: null,
@@ -595,12 +601,17 @@ export const createForgePageStore = () =>
         ...context,
         currentStep: "cards" as const,
       }),
+      setTargetDeckPath: (context, event: { deckPath: string | null }) => ({
+        ...context,
+        targetDeckPath: event.deckPath,
+      }),
       resumeSession: (
         _context,
         event: {
           currentStep: ForgeStep;
           selectedPdf: SelectedPdf;
           sessionId: number;
+          targetDeckPath: string | null;
           topicsByChunk: ReadonlyArray<ChunkTopics>;
           selectedTopicKeys: ReadonlySet<string>;
         },
@@ -608,6 +619,7 @@ export const createForgePageStore = () =>
         ...initialForgePageContext(),
         currentStep: event.currentStep,
         selectedPdf: event.selectedPdf,
+        targetDeckPath: event.targetDeckPath,
         activeExtractionSessionId: event.sessionId,
         extractSummary: {
           sessionId: event.sessionId,

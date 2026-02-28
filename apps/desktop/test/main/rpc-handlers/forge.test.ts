@@ -412,6 +412,30 @@ describe("forge handlers", () => {
     }
   });
 
+  it("persists session deck path updates", async () => {
+    const sourceFilePath = "/tmp/forge-deck-target.pdf";
+    const { handlers, repository, dispose } = await setupHandlers();
+
+    try {
+      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const deckPath = "/workspace/decks/biology.md";
+
+      const result = await Effect.runPromise(
+        handlers.ForgeSetSessionDeckPath({
+          sessionId: created.session.id,
+          deckPath,
+        }),
+      );
+
+      expect(result).toEqual({});
+
+      const stored = await Effect.runPromise(repository.getSession(created.session.id));
+      expect(stored?.deckPath).toBe(deckPath);
+    } finally {
+      await dispose();
+    }
+  });
+
   it("persists chunks, updates status, and returns extraction summary", async () => {
     const sourceFilePath = "/tmp/forge-extract.pdf";
     const extractedText = "a".repeat(20_500);
@@ -1374,7 +1398,11 @@ describe("forge handlers", () => {
     let maxInFlightCreateCards = 0;
 
     const promptRuntime: ForgePromptRuntime = {
-      run: <Input, Output>(spec: PromptSpec<Input, Output>, _input: Input, options?: PromptRunOptions) =>
+      run: <Input, Output>(
+        spec: PromptSpec<Input, Output>,
+        _input: Input,
+        options?: PromptRunOptions,
+      ) =>
         Effect.gen(function* () {
           if (spec.promptId !== "forge/create-cards") {
             return yield* Effect.fail(
@@ -1537,7 +1565,11 @@ describe("forge handlers", () => {
     });
 
     const promptRuntime: ForgePromptRuntime = {
-      run: <Input, Output>(spec: PromptSpec<Input, Output>, input: Input, options?: PromptRunOptions) =>
+      run: <Input, Output>(
+        spec: PromptSpec<Input, Output>,
+        input: Input,
+        options?: PromptRunOptions,
+      ) =>
         Effect.gen(function* () {
           if (spec.promptId !== "forge/create-cards") {
             return yield* Effect.fail(
@@ -1634,7 +1666,9 @@ describe("forge handlers", () => {
       );
 
       const resultByKey = new Map(
-        batchResult.results.map((entry) => [`${entry.chunkId}:${entry.topicIndex}`, entry] as const),
+        batchResult.results.map(
+          (entry) => [`${entry.chunkId}:${entry.topicIndex}`, entry] as const,
+        ),
       );
       expect(resultByKey.get("1:0")?.status).toBe("already_generating");
       expect(resultByKey.get("1:0")?.message).toBeNull();

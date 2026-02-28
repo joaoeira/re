@@ -53,6 +53,9 @@ import {
   ForgeSaveTopicSelectionsErrorSchema,
   ForgeSaveTopicSelectionsInputSchema,
   ForgeSaveTopicSelectionsResultSchema,
+  ForgeSetSessionDeckPathErrorSchema,
+  ForgeSetSessionDeckPathInputSchema,
+  ForgeSetSessionDeckPathResultSchema,
 } from "@shared/rpc/schemas/forge";
 
 export const ForgeCreateSession = rpc(
@@ -165,6 +168,13 @@ export const ForgeSaveTopicSelections = rpc(
   ForgeSaveTopicSelectionsInputSchema,
   ForgeSaveTopicSelectionsResultSchema,
   ForgeSaveTopicSelectionsErrorSchema,
+);
+
+export const ForgeSetSessionDeckPath = rpc(
+  "ForgeSetSessionDeckPath",
+  ForgeSetSessionDeckPathInputSchema,
+  ForgeSetSessionDeckPathResultSchema,
+  ForgeSetSessionDeckPathErrorSchema,
 );
 
 export const ForgeListSessions = rpc(

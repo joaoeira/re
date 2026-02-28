@@ -633,6 +633,28 @@ describe("forge session repository", () => {
       expect(sessions[0]?.errorMessage).toBe("Something went wrong");
     });
 
+    it("returns persisted deckPath in session summaries", async () => {
+      const repository = makeInMemoryForgeSessionRepository();
+      const session = await Effect.runPromise(
+        repository.createSession({
+          sourceKind: "pdf",
+          sourceFilePath: "/tmp/deck-target.pdf",
+          deckPath: null,
+          sourceFingerprint: "fp:deck-target",
+        }),
+      );
+
+      await Effect.runPromise(
+        repository.setSessionDeckPath({
+          sessionId: session.id,
+          deckPath: "/workspace/decks/biology.md",
+        }),
+      );
+
+      const sessions = await Effect.runPromise(repository.listRecentSessions());
+      expect(sessions[0]?.deckPath).toBe("/workspace/decks/biology.md");
+    });
+
     it("reports zero counts for a session with no chunks", async () => {
       const repository = makeInMemoryForgeSessionRepository();
       await Effect.runPromise(

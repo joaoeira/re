@@ -4,6 +4,7 @@ export const queryKeys = {
   apiKeysConfigured: ["apiKeysConfigured"] as const,
   workspaceSnapshotPrefix: ["workspaceSnapshot"] as const,
   workspaceSnapshot: (rootPath: string | null) => ["workspaceSnapshot", rootPath] as const,
+  scanDecks: (rootPath: string | null) => ["scanDecks", rootPath] as const,
   forgePreview: (sourceFilePath: string | null) => ["forgePreview", sourceFilePath] as const,
   forgeTopicSnapshot: (sourceFilePath: string | null) =>
     ["forgeTopicSnapshot", sourceFilePath] as const,

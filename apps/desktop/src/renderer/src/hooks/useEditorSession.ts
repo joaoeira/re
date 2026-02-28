@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { createActor, type ActorRefFrom } from "xstate";
 
 import { mapScanDecksErrorToError } from "@re/workspace";
-import type { CreateDeckError } from "@shared/rpc/schemas/workspace";
+import { mapCreateDeckErrorToError } from "@shared/rpc/schemas/workspace";
 import { mapSettingsErrorToError } from "@shared/settings";
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
@@ -48,22 +48,6 @@ const toSearchKey = (search: EditorSearchParams): string =>
   search.mode === "create"
     ? `create:${search.deckPath ?? ""}`
     : `edit:${search.deckPath}:${search.cardId}`;
-
-const toCreateDeckErrorMessage = (error: CreateDeckError): string => {
-  switch (error._tag) {
-    case "workspace_root_not_configured":
-      return error.message;
-    case "InvalidDeckPath":
-      return `Invalid deck path "${error.inputPath}" (${error.reason}).`;
-    case "DeckAlreadyExists":
-      return `Deck already exists: ${error.deckPath}`;
-    case "DeckFileOperationError":
-      return `Unable to ${error.operation} deck: ${error.message}`;
-  }
-};
-
-const mapCreateDeckErrorToError = (error: CreateDeckError | Error): Error =>
-  "_tag" in error ? new Error(toCreateDeckErrorMessage(error)) : error;
 
 export function useEditorSession(search: EditorSearchParams) {
   const navigate = useNavigate();

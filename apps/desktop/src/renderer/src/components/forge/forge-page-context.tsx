@@ -104,6 +104,10 @@ export function useForgeActiveTopicKey(): string | null {
   return useForgePageSelector((snapshot) => snapshot.context.activeTopicKey);
 }
 
+export function useForgeTargetDeckPath(): string | null {
+  return useForgePageSelector((snapshot) => snapshot.context.targetDeckPath);
+}
+
 export function useForgeAddedCardIdsByTopicKey(): TopicCardIdMap {
   return useForgePageSelector((snapshot) => snapshot.context.addedCardIdsByTopicKey);
 }
@@ -201,6 +205,21 @@ export function useForgeCardsCurationActions(): ForgeCardsCurationActions {
       ) => store.send({ type: "setCardExpandedPanelForTopic", topicKey, cardId, panel }),
       clearTopicCuration: (topicKey: string) =>
         store.send({ type: "clearTopicCuration", topicKey }),
+    }),
+    [store],
+  );
+}
+
+export type ForgeDeckTargetActions = {
+  readonly setTargetDeckPath: (deckPath: string | null) => void;
+};
+
+export function useForgeDeckTargetActions(): ForgeDeckTargetActions {
+  const store = useForgePageStore();
+  return useMemo(
+    () => ({
+      setTargetDeckPath: (deckPath: string | null) =>
+        store.send({ type: "setTargetDeckPath", deckPath }),
     }),
     [store],
   );
@@ -492,6 +511,7 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
             currentStep: targetStep,
             selectedPdf: { fileName, sourceFilePath: session.sourceFilePath },
             sessionId: session.id,
+            targetDeckPath: session.deckPath,
             topicsByChunk,
             selectedTopicKeys,
           });

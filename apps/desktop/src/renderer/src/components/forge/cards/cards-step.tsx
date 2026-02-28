@@ -1,32 +1,43 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSelector } from "@xstate/store-react";
 import { Effect } from "effect";
 
 import {
   useForgeActiveTopicKey,
   useForgeAddedCardIdsByTopicKey,
   useForgeCardsCurationActions,
+  useForgeDeckTargetActions,
   useForgeDeletedCardIdsByTopicKey,
   useForgeExpandedCardPanelsByTopicKey,
   useForgeExtractSummary,
   useForgeSelectedTopicKeys,
+  useForgeTargetDeckPath,
   useForgeTopicsByChunk,
 } from "../forge-page-context";
 import { topicKey } from "../forge-page-store";
 import { useForgeUpdateCardMutation } from "@/hooks/mutations/use-forge-cards-mutations";
 import { useForgeCardsSnapshotQuery } from "@/hooks/queries/use-forge-cards-snapshot-query";
+import { useScanDecksQuery } from "@/hooks/queries/use-scan-decks-query";
+import { useSettingsQuery } from "@/hooks/queries/use-settings-query";
 import { useForgeTopicCardsQuery } from "@/hooks/queries/use-forge-topic-cards-query";
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
+import type { ScanDecksResult } from "@re/workspace";
 import type {
   ForgeGetTopicCardsResult,
   ForgeTopicCardsStatus,
   ForgeTopicCardsSummary,
 } from "@shared/rpc/schemas/forge";
+import { mapCreateDeckErrorToError } from "@shared/rpc/schemas/workspace";
 import { CardsCanvas } from "./cards-canvas";
 import { CardsFooter } from "./cards-footer";
 import { CardsSidebar } from "./cards-sidebar";
+import {
+  createDeckTargetControllerStore,
+  type PersistSessionDeckPathVariables,
+} from "./deck-target-controller-store";
 
 type CardsTopic = {
   readonly topicKey: string;
@@ -84,6 +95,16 @@ const deriveActiveStatus = ({
 const inFlightTopicKey = (sessionId: number, topicKeyValue: string): string =>
   `${sessionId}:${topicKeyValue}`;
 const TOPIC_BATCH_GENERATION_CONCURRENCY = 3;
+const SESSION_DECK_PATH_PERSIST_RETRY_COUNT = 2;
+const SESSION_DECK_PATH_PERSIST_RETRY_DELAY_MS = 300;
+
+const normalizeDeckRelativePath = (relativePath: string): string =>
+  relativePath.endsWith(".md") ? relativePath : `${relativePath}.md`;
+
+const toDeckName = (relativePath: string): string => {
+  const fileName = relativePath.split("/").pop() ?? relativePath;
+  return fileName.replace(/\.md$/, "");
+};
 
 export function CardsStep() {
   const queryClient = useQueryClient();
@@ -98,6 +119,167 @@ export function CardsStep() {
   const expandedPanelsByTopicKey = useForgeExpandedCardPanelsByTopicKey();
   const topicsByChunk = useForgeTopicsByChunk();
   const selectedTopicKeys = useForgeSelectedTopicKeys();
+  const targetDeckPath = useForgeTargetDeckPath();
+  const deckTargetActions = useForgeDeckTargetActions();
+
+  const settingsQuery = useSettingsQuery();
+  const rootPath = settingsQuery.data?.workspace.rootPath ?? null;
+  const scanDecksQuery = useScanDecksQuery(rootPath);
+  const deckOptions = scanDecksQuery.data?.decks ?? [];
+  const [createDeckErrorMessage, setCreateDeckErrorMessage] = useState<string | null>(null);
+  const deckOptionPaths = useMemo(
+    () => deckOptions.map((deck) => deck.absolutePath),
+    [deckOptions],
+  );
+  const autoSelectScopeKey = `${sessionId ?? "none"}:${rootPath ?? "none"}`;
+  const [deckTargetControllerStore] = useState(() => createDeckTargetControllerStore());
+  const pendingDeckTargetCommands = useSelector(
+    deckTargetControllerStore,
+    (snapshot) => snapshot.context.pendingCommands,
+  );
+
+  const { mutate: persistSessionDeckPath } = useMutation({
+    mutationFn: ({ sessionId, deckPath }: PersistSessionDeckPathVariables) =>
+      runIpcEffect(
+        ipc.client
+          .ForgeSetSessionDeckPath({ sessionId, deckPath })
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
+          ),
+      ),
+    retry: SESSION_DECK_PATH_PERSIST_RETRY_COUNT,
+    retryDelay: SESSION_DECK_PATH_PERSIST_RETRY_DELAY_MS,
+    onSuccess: (_result, variables) => {
+      deckTargetControllerStore.send({
+        type: "persistSucceeded",
+        requestId: variables.requestId,
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.forgeSessionList, exact: true });
+    },
+    onError: (error, variables) => {
+      deckTargetControllerStore.send({
+        type: "persistFailed",
+        requestId: variables.requestId,
+      });
+
+      console.warn("[forge/cards] failed to persist session deck path", {
+        requestId: variables.requestId,
+        sessionId: variables.sessionId,
+        deckPath: variables.deckPath,
+        error: error.message,
+      });
+    },
+  });
+
+  const { mutate: createDeck, isPending: creatingDeck } = useMutation({
+    mutationFn: ({ relativePath }: { relativePath: string; rootPath: string }) =>
+      runIpcEffect(
+        ipc.client
+          .CreateDeck({
+            relativePath,
+            createParents: true,
+          })
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
+            Effect.mapError(mapCreateDeckErrorToError),
+          ),
+      ),
+    onMutate: () => {
+      setCreateDeckErrorMessage(null);
+    },
+    onSuccess: (result, variables) => {
+      const normalizedRelativePath = normalizeDeckRelativePath(variables.relativePath);
+      const createdDeck = {
+        absolutePath: result.absolutePath,
+        relativePath: normalizedRelativePath,
+        name: toDeckName(normalizedRelativePath),
+      };
+
+      queryClient.setQueryData<ScanDecksResult>(
+        queryKeys.scanDecks(variables.rootPath),
+        (previous) => {
+          if (!previous) {
+            return {
+              rootPath: variables.rootPath,
+              decks: [createdDeck],
+            };
+          }
+          if (previous.decks.some((deck) => deck.absolutePath === createdDeck.absolutePath)) {
+            return previous;
+          }
+          return {
+            ...previous,
+            decks: [...previous.decks, createdDeck].sort((left, right) =>
+              left.relativePath.localeCompare(right.relativePath),
+            ),
+          };
+        },
+      );
+      deckTargetControllerStore.send({
+        type: "createDeckSucceeded",
+        deckPath: result.absolutePath,
+      });
+    },
+    onError: (error) => {
+      setCreateDeckErrorMessage(error.message);
+    },
+    onSettled: (_result, _error, variables) => {
+      if (!variables) return;
+
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.scanDecks(variables.rootPath),
+        exact: true,
+      });
+    },
+  });
+
+  useEffect(() => {
+    deckTargetControllerStore.send({
+      type: "syncFromView",
+      sessionId,
+      scopeKey: autoSelectScopeKey,
+      targetDeckPath,
+      deckPaths: deckOptionPaths,
+      decksQuerySuccess: scanDecksQuery.isSuccess,
+      decksQueryFetching: scanDecksQuery.isFetching,
+    });
+  }, [
+    autoSelectScopeKey,
+    deckOptionPaths,
+    deckTargetControllerStore,
+    scanDecksQuery.isFetching,
+    scanDecksQuery.isSuccess,
+    sessionId,
+    targetDeckPath,
+  ]);
+
+  useEffect(() => {
+    if (pendingDeckTargetCommands.length === 0) return;
+
+    pendingDeckTargetCommands.forEach((command) => {
+      if (command.type === "setTargetDeckPath") {
+        deckTargetActions.setTargetDeckPath(command.deckPath);
+        return;
+      }
+
+      persistSessionDeckPath({
+        requestId: command.requestId,
+        sessionId: command.sessionId,
+        deckPath: command.deckPath,
+      });
+    });
+
+    deckTargetControllerStore.send({ type: "commandsFlushed" });
+  }, [
+    deckTargetActions,
+    deckTargetControllerStore,
+    pendingDeckTargetCommands,
+    persistSessionDeckPath,
+  ]);
 
   const topics = useMemo<ReadonlyArray<CardsTopic>>(() => {
     const selected: CardsTopic[] = [];
@@ -236,7 +418,9 @@ export function CardsStep() {
           concurrencyLimit: TOPIC_BATCH_GENERATION_CONCURRENCY,
         })
         .pipe(
-          Effect.catchTag("RpcDefectError", (rpcDefect) => Effect.fail(toRpcDefectError(rpcDefect))),
+          Effect.catchTag("RpcDefectError", (rpcDefect) =>
+            Effect.fail(toRpcDefectError(rpcDefect)),
+          ),
         ),
     )
       .catch(() => undefined)
@@ -258,14 +442,7 @@ export function CardsStep() {
           });
         }
       });
-  }, [
-    checkedTopicBatchInFlight,
-    checkedTopicKeys,
-    ipc.client,
-    queryClient,
-    sessionId,
-    topics,
-  ]);
+  }, [checkedTopicBatchInFlight, checkedTopicKeys, ipc.client, queryClient, sessionId, topics]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -317,7 +494,11 @@ export function CardsStep() {
 
       if (activeTopic) {
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.forgeTopicCards(sessionId, activeTopic.chunkId, activeTopic.topicIndex),
+          queryKey: queryKeys.forgeTopicCards(
+            sessionId,
+            activeTopic.chunkId,
+            activeTopic.topicIndex,
+          ),
           exact: true,
         });
       }
@@ -626,6 +807,24 @@ export function CardsStep() {
     [activeTopic, queryClient, sessionId, updateCard],
   );
 
+  const handleDeckPathChange = useCallback(
+    (deckPath: string | null) => {
+      setCreateDeckErrorMessage(null);
+      deckTargetActions.setTargetDeckPath(deckPath);
+    },
+    [deckTargetActions],
+  );
+
+  const handleCreateDeck = useCallback(
+    (relativePath: string) => {
+      if (!rootPath || creatingDeck) return;
+      createDeck({ relativePath, rootPath });
+    },
+    [createDeck, creatingDeck, rootPath],
+  );
+
+  const deckSelectionDisabled = rootPath === null || settingsQuery.isLoading || creatingDeck;
+
   return (
     <>
       <div className="flex min-h-0 flex-1">
@@ -674,7 +873,16 @@ export function CardsStep() {
           }}
         />
       </div>
-      <CardsFooter addedCount={totalAdded} totalCount={totalCards} />
+      <CardsFooter
+        addedCount={totalAdded}
+        totalCount={totalCards}
+        deckPath={targetDeckPath}
+        decks={deckOptions}
+        disabled={deckSelectionDisabled}
+        deckErrorMessage={createDeckErrorMessage}
+        onDeckPathChange={handleDeckPathChange}
+        onCreateDeck={handleCreateDeck}
+      />
     </>
   );
 }

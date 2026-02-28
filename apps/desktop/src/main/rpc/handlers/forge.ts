@@ -25,10 +25,7 @@ import {
 } from "@main/forge/services/forge-session-repository";
 import type { PdfTextExtractError } from "@main/forge/services/pdf-extractor";
 import { toErrorMessage } from "@main/utils/format";
-import {
-  ForgeTopicChunkExtracted,
-  type AppContract,
-} from "@shared/rpc/contracts";
+import { ForgeTopicChunkExtracted, type AppContract } from "@shared/rpc/contracts";
 import {
   ForgeEmptySourceTextError,
   ForgeOperationError,
@@ -67,15 +64,15 @@ type ForgeHandlerKeys =
   | "ForgeGenerateCardCloze"
   | "ForgeUpdateCard"
   | "ForgeUpdatePermutation"
-  | "ForgeSaveTopicSelections";
+  | "ForgeSaveTopicSelections"
+  | "ForgeSetSessionDeckPath";
 
 const PREVIEW_LENGTH = 500;
 
 const MAX_REQUEST_CONCURRENCY = 8;
 const DEFAULT_TOPIC_GENERATION_BATCH_CONCURRENCY = 5;
 const FORGE_TOPIC_GENERATION_STALE_TIMEOUT_MS = 120_000;
-const FORGE_TOPIC_GENERATION_STALE_MESSAGE =
-  "Generation interrupted; please retry.";
+const FORGE_TOPIC_GENERATION_STALE_MESSAGE = "Generation interrupted; please retry.";
 
 const toForgeOperationError = (error: unknown): ForgeOperationError =>
   new ForgeOperationError({ message: toErrorMessage(error) });
@@ -100,14 +97,10 @@ const toSessionOperationErrorFromStatusTransitionError = (
 
 const mapOperationError = <A, E>(
   effect: Effect.Effect<A, E>,
-): Effect.Effect<A, ForgeOperationError> =>
-  effect.pipe(Effect.mapError(toForgeOperationError));
+): Effect.Effect<A, ForgeOperationError> => effect.pipe(Effect.mapError(toForgeOperationError));
 
 const mapRepositoryStatusUpdateError = <A>(
-  effect: Effect.Effect<
-    A,
-    ForgeSessionRepositoryError | ForgeSessionStatusTransitionError
-  >,
+  effect: Effect.Effect<A, ForgeSessionRepositoryError | ForgeSessionStatusTransitionError>,
 ): Effect.Effect<A, ForgeOperationError> =>
   effect.pipe(
     Effect.catchTag("ForgeSessionRepositoryError", (error) =>
@@ -124,19 +117,14 @@ const mapRepositoryStatusUpdateError = <A>(
 
 const mapSessionRepositoryStatusUpdateError = <A>(
   sessionId: number,
-  effect: Effect.Effect<
-    A,
-    ForgeSessionRepositoryError | ForgeSessionStatusTransitionError
-  >,
+  effect: Effect.Effect<A, ForgeSessionRepositoryError | ForgeSessionStatusTransitionError>,
 ): Effect.Effect<A, ForgeSessionOperationError> =>
   effect.pipe(
     Effect.catchTag("ForgeSessionRepositoryError", (error) =>
       Effect.fail(toSessionOperationErrorFromRepositoryError(sessionId, error)),
     ),
     Effect.catchTag("ForgeSessionStatusTransitionError", (error) =>
-      Effect.fail(
-        toSessionOperationErrorFromStatusTransitionError(sessionId, error),
-      ),
+      Effect.fail(toSessionOperationErrorFromStatusTransitionError(sessionId, error)),
     ),
   );
 
@@ -145,9 +133,7 @@ const mapSessionRepositoryError = <A>(
   effect: Effect.Effect<A, ForgeSessionRepositoryError>,
 ): Effect.Effect<A, ForgeSessionOperationError> =>
   effect.pipe(
-    Effect.mapError((error) =>
-      toSessionOperationErrorFromRepositoryError(sessionId, error),
-    ),
+    Effect.mapError((error) => toSessionOperationErrorFromRepositoryError(sessionId, error)),
   );
 
 const ensureSessionExists = <T>(session: T | null, sessionId: number) =>
@@ -155,10 +141,7 @@ const ensureSessionExists = <T>(session: T | null, sessionId: number) =>
     ? Effect.fail(new ForgeSessionNotFoundError({ sessionId }))
     : Effect.succeed(session);
 
-const ensureSessionExistsForStart = <T>(
-  session: T | null,
-  sessionId: number,
-) =>
+const ensureSessionExistsForStart = <T>(session: T | null, sessionId: number) =>
   session === null
     ? Effect.fail(
         new ForgeSessionOperationError({
@@ -194,10 +177,7 @@ const ensureCardExists = (
       )
     : Effect.succeed(card);
 
-const toPdfExtractionError = (
-  sessionId: number,
-  error: PdfTextExtractError,
-): PdfExtractionError =>
+const toPdfExtractionError = (sessionId: number, error: PdfTextExtractError): PdfExtractionError =>
   new PdfExtractionError({
     sessionId,
     sourceFilePath: error.sourceFilePath,
@@ -294,9 +274,7 @@ export const createForgeHandlers = () =>
       Effect.gen(function* () {
         const latestSession = yield* mapOperationError(
           forgeSessionRepository.getSession(sessionId),
-        ).pipe(
-          Effect.flatMap((session) => ensureSessionExists(session, sessionId)),
-        );
+        ).pipe(Effect.flatMap((session) => ensureSessionExists(session, sessionId)));
 
         const alreadyHasChunks = yield* mapOperationError(
           forgeSessionRepository.hasChunks(sessionId),
@@ -363,16 +341,11 @@ export const createForgeHandlers = () =>
         };
       });
 
-    const extractAndChunkForSession = (
-      sessionId: number,
-      sourceFilePath: string,
-    ) =>
+    const extractAndChunkForSession = (sessionId: number, sourceFilePath: string) =>
       Effect.gen(function* () {
         const extracted = yield* pdfExtractor
           .extractText(sourceFilePath)
-          .pipe(
-            Effect.mapError((error) => toPdfExtractionError(sessionId, error)),
-          );
+          .pipe(Effect.mapError((error) => toPdfExtractionError(sessionId, error)));
 
         if (extracted.text.trim().length === 0) {
           const message = `No extractable text found in PDF source: ${sourceFilePath}`;
@@ -432,15 +405,12 @@ export const createForgeHandlers = () =>
         .pipe(
           Effect.catchAll((error) =>
             Effect.sync(() => {
-              console.error(
-                `${input.logContext} failed to mark topic as error`,
-                {
-                  topicId: input.topicId,
-                  sessionId: input.sessionId,
-                  originalMessage: input.message,
-                  error: toErrorMessage(error),
-                },
-              );
+              console.error(`${input.logContext} failed to mark topic as error`, {
+                topicId: input.topicId,
+                sessionId: input.sessionId,
+                originalMessage: input.message,
+                error: toErrorMessage(error),
+              });
             }),
           ),
           Effect.asVoid,
@@ -466,33 +436,22 @@ export const createForgeHandlers = () =>
           const topic = yield* mapSessionRepositoryError(
             input.sessionId,
             forgeSessionRepository.getTopicByRef(topicRef),
-          ).pipe(
-            Effect.flatMap((current) => ensureTopicExists(current, topicRef)),
-          );
+          ).pipe(Effect.flatMap((current) => ensureTopicExists(current, topicRef)));
 
-          yield* forgeSessionRepository
-            .tryStartTopicGeneration(topic.topicId)
-            .pipe(
-              Effect.catchTag(
-                "ForgeTopicAlreadyGeneratingRepositoryError",
-                () =>
-                  Effect.fail(
-                    new ForgeTopicAlreadyGeneratingError({
-                      sessionId: input.sessionId,
-                      chunkId: input.chunkId,
-                      topicIndex: input.topicIndex,
-                    }),
-                  ),
+          yield* forgeSessionRepository.tryStartTopicGeneration(topic.topicId).pipe(
+            Effect.catchTag("ForgeTopicAlreadyGeneratingRepositoryError", () =>
+              Effect.fail(
+                new ForgeTopicAlreadyGeneratingError({
+                  sessionId: input.sessionId,
+                  chunkId: input.chunkId,
+                  topicIndex: input.topicIndex,
+                }),
               ),
-              Effect.catchTag("ForgeSessionRepositoryError", (error) =>
-                Effect.fail(
-                  toSessionOperationErrorFromRepositoryError(
-                    input.sessionId,
-                    error,
-                  ),
-                ),
-              ),
-            );
+            ),
+            Effect.catchTag("ForgeSessionRepositoryError", (error) =>
+              Effect.fail(toSessionOperationErrorFromRepositoryError(input.sessionId, error)),
+            ),
+          );
           startedTopic = topic;
 
           const promptResult = yield* forgePromptRuntime
@@ -501,9 +460,7 @@ export const createForgeHandlers = () =>
               {
                 chunkText: topic.chunkText,
                 topic: topic.topicText,
-                ...(input.instruction
-                  ? { instruction: input.instruction }
-                  : {}),
+                ...(input.instruction ? { instruction: input.instruction } : {}),
               },
               input.model ? { model: input.model } : undefined,
             )
@@ -521,12 +478,10 @@ export const createForgeHandlers = () =>
 
           yield* mapSessionRepositoryError(
             input.sessionId,
-            forgeSessionRepository.replaceCardsForTopicAndFinishGenerationSuccess(
-              {
-                topicId: topic.topicId,
-                cards: promptResult.output.cards,
-              },
-            ),
+            forgeSessionRepository.replaceCardsForTopicAndFinishGenerationSuccess({
+              topicId: topic.topicId,
+              cards: promptResult.output.cards,
+            }),
           );
           generationFinishedSuccessfully = true;
 
@@ -582,12 +537,8 @@ export const createForgeHandlers = () =>
         );
       });
 
-    const handlers: Pick<
-      Implementations<AppContract, never>,
-      ForgeHandlerKeys
-    > = {
-      ForgeCreateSession: ({ sourceFilePath }) =>
-        createSessionFromSourcePath(sourceFilePath),
+    const handlers: Pick<Implementations<AppContract, never>, ForgeHandlerKeys> = {
+      ForgeCreateSession: ({ sourceFilePath }) => createSessionFromSourcePath(sourceFilePath),
       ForgeListSessions: () =>
         mapOperationError(forgeSessionRepository.listRecentSessions()).pipe(
           Effect.map((sessions) => ({ sessions })),
@@ -619,10 +570,7 @@ export const createForgeHandlers = () =>
             );
 
             yield* mapOperationError(
-              forgeSessionRepository.saveChunks(
-                sessionId,
-                extractedAndChunked.chunkResult.chunks,
-              ),
+              forgeSessionRepository.saveChunks(sessionId, extractedAndChunked.chunkResult.chunks),
             );
 
             yield* mapRepositoryStatusUpdateError(
@@ -631,11 +579,7 @@ export const createForgeHandlers = () =>
                 status: "extracted",
                 errorMessage: null,
               }),
-            ).pipe(
-              Effect.flatMap((session) =>
-                ensureSessionExists(session, sessionId),
-              ),
-            );
+            ).pipe(Effect.flatMap((session) => ensureSessionExists(session, sessionId)));
 
             yield* Effect.sync(() => {
               console.log("[forge/extract]", {
@@ -654,17 +598,13 @@ export const createForgeHandlers = () =>
               session_not_found: (error) => Effect.fail(error),
               empty_text: (error) => Effect.fail(error),
               pdf_extraction_error: (error) =>
-                setSessionErrorBestEffort(
-                  sessionId,
-                  error.message,
-                  "[forge/extract]",
-                ).pipe(Effect.zipRight(Effect.fail(error))),
+                setSessionErrorBestEffort(sessionId, error.message, "[forge/extract]").pipe(
+                  Effect.zipRight(Effect.fail(error)),
+                ),
               forge_operation_error: (error) =>
-                setSessionErrorBestEffort(
-                  sessionId,
-                  error.message,
-                  "[forge/extract]",
-                ).pipe(Effect.zipRight(Effect.fail(error))),
+                setSessionErrorBestEffort(sessionId, error.message, "[forge/extract]").pipe(
+                  Effect.zipRight(Effect.fail(error)),
+                ),
             }),
           );
         }),
@@ -681,11 +621,7 @@ export const createForgeHandlers = () =>
 
           const extracted = yield* pdfExtractor
             .extractText(sourceFilePath)
-            .pipe(
-              Effect.mapError((error) =>
-                toPreviewPdfExtractionError(sourceFilePath, error),
-              ),
-            );
+            .pipe(Effect.mapError((error) => toPreviewPdfExtractionError(sourceFilePath, error)));
 
           if (extracted.text.trim().length === 0) {
             return yield* Effect.fail(
@@ -746,11 +682,7 @@ export const createForgeHandlers = () =>
           yield* mapSessionRepositoryError(
             sessionId,
             forgeSessionRepository.getSession(sessionId),
-          ).pipe(
-            Effect.flatMap((session) =>
-              ensureSessionExists(session, sessionId),
-            ),
-          );
+          ).pipe(Effect.flatMap((session) => ensureSessionExists(session, sessionId)));
 
           yield* recoverStaleGeneratingTopics(sessionId);
 
@@ -814,13 +746,7 @@ export const createForgeHandlers = () =>
             })),
           };
         }),
-      ForgeGenerateTopicCards: ({
-        sessionId,
-        chunkId,
-        topicIndex,
-        instruction,
-        model,
-      }) =>
+      ForgeGenerateTopicCards: ({ sessionId, chunkId, topicIndex, instruction, model }) =>
         generateTopicCardsForRef({
           sessionId,
           chunkId,
@@ -839,11 +765,7 @@ export const createForgeHandlers = () =>
           yield* mapSessionRepositoryError(
             sessionId,
             forgeSessionRepository.getSession(sessionId),
-          ).pipe(
-            Effect.flatMap((session) =>
-              ensureSessionExists(session, sessionId),
-            ),
-          );
+          ).pipe(Effect.flatMap((session) => ensureSessionExists(session, sessionId)));
 
           yield* recoverStaleGeneratingTopics(sessionId);
 
@@ -927,12 +849,10 @@ export const createForgeHandlers = () =>
         }),
       ForgeGetCardPermutations: ({ sourceCardId }) =>
         Effect.gen(function* () {
-          const sourceCard = yield* forgeSessionRepository
-            .getCardById(sourceCardId)
-            .pipe(
-              Effect.mapError(toForgeOperationError),
-              Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
-            );
+          const sourceCard = yield* forgeSessionRepository.getCardById(sourceCardId).pipe(
+            Effect.mapError(toForgeOperationError),
+            Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
+          );
 
           const list = yield* mapSessionRepositoryError(
             sourceCard.sessionId,
@@ -950,12 +870,10 @@ export const createForgeHandlers = () =>
         }),
       ForgeGenerateCardPermutations: ({ sourceCardId, instruction, model }) =>
         Effect.gen(function* () {
-          const sourceCard = yield* forgeSessionRepository
-            .getCardById(sourceCardId)
-            .pipe(
-              Effect.mapError(toForgeOperationError),
-              Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
-            );
+          const sourceCard = yield* forgeSessionRepository.getCardById(sourceCardId).pipe(
+            Effect.mapError(toForgeOperationError),
+            Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
+          );
 
           const promptResult = yield* forgePromptRuntime
             .run(
@@ -1006,12 +924,10 @@ export const createForgeHandlers = () =>
         }),
       ForgeGetCardCloze: ({ sourceCardId }) =>
         Effect.gen(function* () {
-          const sourceCard = yield* forgeSessionRepository
-            .getCardById(sourceCardId)
-            .pipe(
-              Effect.mapError(toForgeOperationError),
-              Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
-            );
+          const sourceCard = yield* forgeSessionRepository.getCardById(sourceCardId).pipe(
+            Effect.mapError(toForgeOperationError),
+            Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
+          );
 
           const cloze = yield* mapSessionRepositoryError(
             sourceCard.sessionId,
@@ -1025,12 +941,10 @@ export const createForgeHandlers = () =>
         }),
       ForgeGenerateCardCloze: ({ sourceCardId, instruction, model }) =>
         Effect.gen(function* () {
-          const sourceCard = yield* forgeSessionRepository
-            .getCardById(sourceCardId)
-            .pipe(
-              Effect.mapError(toForgeOperationError),
-              Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
-            );
+          const sourceCard = yield* forgeSessionRepository.getCardById(sourceCardId).pipe(
+            Effect.mapError(toForgeOperationError),
+            Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
+          );
 
           const promptResult = yield* forgePromptRuntime
             .run(
@@ -1072,12 +986,10 @@ export const createForgeHandlers = () =>
         }),
       ForgeUpdateCard: ({ cardId, question, answer }) =>
         Effect.gen(function* () {
-          const sourceCard = yield* forgeSessionRepository
-            .getCardById(cardId)
-            .pipe(
-              Effect.mapError(toForgeOperationError),
-              Effect.flatMap((card) => ensureCardExists(card, cardId)),
-            );
+          const sourceCard = yield* forgeSessionRepository.getCardById(cardId).pipe(
+            Effect.mapError(toForgeOperationError),
+            Effect.flatMap((card) => ensureCardExists(card, cardId)),
+          );
 
           const updatedCard = yield* mapSessionRepositoryError(
             sourceCard.sessionId,
@@ -1115,9 +1027,7 @@ export const createForgeHandlers = () =>
           );
 
           if (!updatedPermutation) {
-            return yield* Effect.fail(
-              new ForgePermutationNotFoundError({ permutationId }),
-            );
+            return yield* Effect.fail(new ForgePermutationNotFoundError({ permutationId }));
           }
 
           return {
@@ -1139,11 +1049,7 @@ export const createForgeHandlers = () =>
                   status: "extracting",
                   errorMessage: null,
                 }),
-              ).pipe(
-                Effect.flatMap((current) =>
-                  ensureSessionExistsForStart(current, session.id),
-                ),
-              );
+              ).pipe(Effect.flatMap((current) => ensureSessionExistsForStart(current, session.id)));
 
               const extractedAndChunked = yield* extractAndChunkForSession(
                 session.id,
@@ -1165,11 +1071,7 @@ export const createForgeHandlers = () =>
                   status: "extracted",
                   errorMessage: null,
                 }),
-              ).pipe(
-                Effect.flatMap((current) =>
-                  ensureSessionExistsForStart(current, session.id),
-                ),
-              );
+              ).pipe(Effect.flatMap((current) => ensureSessionExistsForStart(current, session.id)));
 
               yield* mapSessionRepositoryStatusUpdateError(
                 session.id,
@@ -1178,11 +1080,7 @@ export const createForgeHandlers = () =>
                   status: "topics_extracting",
                   errorMessage: null,
                 }),
-              ).pipe(
-                Effect.flatMap((current) =>
-                  ensureSessionExistsForStart(current, session.id),
-                ),
-              );
+              ).pipe(Effect.flatMap((current) => ensureSessionExistsForStart(current, session.id)));
 
               const chunks = yield* mapSessionRepositoryError(
                 session.id,
@@ -1303,20 +1201,12 @@ export const createForgeHandlers = () =>
                   status: "topics_extracted",
                   errorMessage: null,
                 }),
-              ).pipe(
-                Effect.flatMap((current) =>
-                  ensureSessionExistsForStart(current, session.id),
-                ),
-              );
+              ).pipe(Effect.flatMap((current) => ensureSessionExistsForStart(current, session.id)));
 
               const finalSession = yield* mapSessionRepositoryError(
                 session.id,
                 forgeSessionRepository.getSession(session.id),
-              ).pipe(
-                Effect.flatMap((current) =>
-                  ensureSessionExistsForStart(current, session.id),
-                ),
-              );
+              ).pipe(Effect.flatMap((current) => ensureSessionExistsForStart(current, session.id)));
 
               const topicsByChunk = yield* mapSessionRepositoryError(
                 session.id,
@@ -1339,11 +1229,9 @@ export const createForgeHandlers = () =>
               };
             }).pipe(
               Effect.catchAll((error) =>
-                setSessionErrorBestEffort(
-                  session.id,
-                  toErrorMessage(error),
-                  "[forge/start]",
-                ).pipe(Effect.zipRight(Effect.fail(error))),
+                setSessionErrorBestEffort(session.id, toErrorMessage(error), "[forge/start]").pipe(
+                  Effect.zipRight(Effect.fail(error)),
+                ),
               ),
             ),
           ),
@@ -1353,11 +1241,7 @@ export const createForgeHandlers = () =>
           yield* mapSessionRepositoryError(
             sessionId,
             forgeSessionRepository.getSession(sessionId),
-          ).pipe(
-            Effect.flatMap((session) =>
-              ensureSessionExists(session, sessionId),
-            ),
-          );
+          ).pipe(Effect.flatMap((session) => ensureSessionExists(session, sessionId)));
 
           yield* mapSessionRepositoryError(
             sessionId,
@@ -1366,6 +1250,15 @@ export const createForgeHandlers = () =>
               selections,
             }),
           );
+
+          return {};
+        }),
+      ForgeSetSessionDeckPath: ({ sessionId, deckPath }) =>
+        Effect.gen(function* () {
+          yield* mapSessionRepositoryError(
+            sessionId,
+            forgeSessionRepository.setSessionDeckPath({ sessionId, deckPath }),
+          ).pipe(Effect.flatMap((session) => ensureSessionExists(session, sessionId)));
 
           return {};
         }),
