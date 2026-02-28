@@ -62,7 +62,8 @@ type ForgeHandlerKeys =
   | "ForgeGetCardCloze"
   | "ForgeGenerateCardCloze"
   | "ForgeUpdateCard"
-  | "ForgeUpdatePermutation";
+  | "ForgeUpdatePermutation"
+  | "ForgeSaveTopicSelections";
 
 const PREVIEW_LENGTH = 500;
 
@@ -577,6 +578,7 @@ export const createForgeHandlers = () =>
               errorMessage: row.errorMessage,
               cardCount: row.cardCount,
               generationRevision: row.generationRevision,
+              selected: row.selected,
             })),
           };
         }),
@@ -611,6 +613,7 @@ export const createForgeHandlers = () =>
               errorMessage: result.topic.errorMessage,
               cardCount: result.topic.cardCount,
               generationRevision: result.topic.generationRevision,
+              selected: result.topic.selected,
             },
             cards: result.cards.map((card) => ({
               id: card.id,
@@ -704,6 +707,7 @@ export const createForgeHandlers = () =>
                 errorMessage: result.topic.errorMessage,
                 cardCount: result.topic.cardCount,
                 generationRevision: result.topic.generationRevision,
+                selected: result.topic.selected,
               },
               cards: result.cards.map((card) => ({
                 id: card.id,
@@ -910,9 +914,7 @@ export const createForgeHandlers = () =>
           );
 
           if (!updatedPermutation) {
-            return yield* Effect.fail(
-              new ForgePermutationNotFoundError({ permutationId }),
-            );
+            return yield* Effect.fail(new ForgePermutationNotFoundError({ permutationId }));
           }
 
           return {
@@ -1121,6 +1123,20 @@ export const createForgeHandlers = () =>
             ),
           ),
         ),
+      ForgeSaveTopicSelections: ({ sessionId, selections }) =>
+        Effect.gen(function* () {
+          yield* mapSessionRepositoryError(
+            sessionId,
+            forgeSessionRepository.getSession(sessionId),
+          ).pipe(Effect.flatMap((session) => ensureSessionExists(session, sessionId)));
+
+          yield* mapSessionRepositoryError(
+            sessionId,
+            forgeSessionRepository.saveTopicSelections({ sessionId, selections }),
+          );
+
+          return {};
+        }),
     };
 
     return handlers;

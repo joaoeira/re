@@ -656,6 +656,7 @@ describe("topicsSummaryToChunkTopics", () => {
     errorMessage: null,
     cardCount: 0,
     generationRevision: 0,
+    selected: false,
   });
 
   it("groups topics by chunk and sorts by sequenceOrder then topicIndex", () => {

@@ -22,16 +22,13 @@ type PermutationsPanelProps = {
 
 export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
   const permutationsQuery = useForgeCardPermutationsQuery(sourceCardId);
-  const { mutate: regeneratePermutations, isPending } =
-    useForgeGeneratePermutationsMutation();
+  const { mutate: regeneratePermutations, isPending } = useForgeGeneratePermutationsMutation();
   const { mutate: updatePermutation } = useForgeUpdatePermutationMutation();
   const queryClient = useQueryClient();
   const inFlightForSourceCardCount = useIsMutating({
     mutationKey: forgeCardsMutationKeys.generatePermutations,
     predicate: (mutation) => {
-      const variables = mutation.state.variables as
-        | ForgeGenerateCardPermutationsInput
-        | undefined;
+      const variables = mutation.state.variables as ForgeGenerateCardPermutationsInput | undefined;
       return variables?.sourceCardId === sourceCardId;
     },
   });
@@ -39,8 +36,7 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
   const autoRegeneratedCardIdRef = useRef<number | null>(null);
 
   const hasInFlightGeneration = inFlightForSourceCardCount > 0;
-  const loading =
-    isPending || hasInFlightGeneration || permutationsQuery.isLoading;
+  const loading = isPending || hasInFlightGeneration || permutationsQuery.isLoading;
   const permutations = permutationsQuery.data?.permutations ?? [];
 
   const handleRegenerate = useCallback(() => {
@@ -140,9 +136,7 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
       </div>
 
       {permutationsQuery.error ? (
-        <p className="text-[11px] text-destructive">
-          {permutationsQuery.error.message}
-        </p>
+        <p className="text-[11px] text-destructive">{permutationsQuery.error.message}</p>
       ) : null}
 
       {!loading &&
@@ -163,25 +157,19 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
               <InlineEditor
                 content={permutation.answer}
                 editable
-                onContentChange={(value) =>
-                  handleEditPermutation(permutation.id, "answer", value)
-                }
+                onContentChange={(value) => handleEditPermutation(permutation.id, "answer", value)}
                 className="mt-1 min-h-0 text-xs leading-relaxed text-muted-foreground/60"
               />
             </div>
             {addedIds.has(permutation.id) ? (
-              <span className="shrink-0 pt-0.5 text-[11px] text-primary">
-                ✓
-              </span>
+              <span className="shrink-0 pt-0.5 text-[11px] text-primary">✓</span>
             ) : (
               <Button
                 type="button"
                 variant="default"
                 size="xs"
                 className="shrink-0"
-                onClick={() =>
-                  setAddedIds((prev) => new Set([...prev, permutation.id]))
-                }
+                onClick={() => setAddedIds((prev) => new Set([...prev, permutation.id]))}
               >
                 + Add
               </Button>

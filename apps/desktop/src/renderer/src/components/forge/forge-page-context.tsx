@@ -419,8 +419,34 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
     const snapshot = store.getSnapshot().context;
     if (snapshot.extractState.status === "extracting") return;
     if (snapshot.selectedTopicKeys.size === 0) return;
-    store.send({ type: "advanceToCards" });
-  }, [store]);
+    if (snapshot.extractSummary?.sessionId == null) return;
+
+    const sessionId = snapshot.extractSummary.sessionId;
+    const selections: Array<{ chunkId: number; topicIndex: number }> = [];
+    for (const key of snapshot.selectedTopicKeys) {
+      const parts = key.split(":");
+      const chunkId = Number(parts[0]);
+      const topicIndex = Number(parts[1]);
+      if (!Number.isFinite(chunkId) || !Number.isFinite(topicIndex)) continue;
+      selections.push({ chunkId, topicIndex });
+    }
+
+    runIpcEffect(
+      ipc.client
+        .ForgeSaveTopicSelections({ sessionId, selections })
+        .pipe(
+          Effect.catchTag("RpcDefectError", (rpcDefect) =>
+            Effect.fail(toRpcDefectError(rpcDefect)),
+          ),
+        ),
+    )
+      .then(() => {
+        store.send({ type: "advanceToCards" });
+      })
+      .catch(() => {
+        store.send({ type: "advanceToCards" });
+      });
+  }, [ipc.client, store]);
 
   const resumingRef = useRef(false);
 
@@ -443,17 +469,23 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
       )
         .then((result) => {
           const topicsByChunk = topicsSummaryToChunkTopics(result.topics);
-          let selectedTopicKeys: ReadonlySet<string> = new Set<string>();
+          const selectedKeys = new Set<string>();
 
-          if (targetStep === "cards") {
-            const allKeys = new Set<string>();
-            topicsByChunk.forEach((chunk) => {
-              chunk.topics.forEach((_, index) => {
-                allKeys.add(topicKey(chunk.chunkId, index));
-              });
-            });
-            selectedTopicKeys = allKeys;
+          for (const topic of result.topics) {
+            if (topic.selected) {
+              selectedKeys.add(topicKey(topic.chunkId, topic.topicIndex));
+            }
           }
+
+          if (targetStep === "cards" && selectedKeys.size === 0) {
+            for (const chunk of topicsByChunk) {
+              chunk.topics.forEach((_, index) => {
+                selectedKeys.add(topicKey(chunk.chunkId, index));
+              });
+            }
+          }
+
+          const selectedTopicKeys: ReadonlySet<string> = selectedKeys;
 
           store.send({
             type: "resumeSession",

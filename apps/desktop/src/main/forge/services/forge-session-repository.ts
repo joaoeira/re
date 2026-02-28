@@ -95,6 +95,7 @@ export type ForgeTopicCardsSnapshotRow = {
   readonly errorMessage: string | null;
   readonly cardCount: number;
   readonly generationRevision: number;
+  readonly selected: boolean;
 };
 
 export type ForgeTopicCardsResultRow = {
@@ -173,6 +174,10 @@ export interface ForgeSessionRepository {
   readonly getTopicsBySession: (
     sessionId: number,
   ) => Effect.Effect<ReadonlyArray<ForgeChunkTopics>, ForgeSessionRepositoryError>;
+  readonly saveTopicSelections: (input: {
+    readonly sessionId: number;
+    readonly selections: ReadonlyArray<{ readonly chunkId: number; readonly topicIndex: number }>;
+  }) => Effect.Effect<void, ForgeSessionRepositoryError>;
   readonly getTopicByRef: (
     input: ForgeTopicRef,
   ) => Effect.Effect<ForgeTopicRecord | null, ForgeSessionRepositoryError>;
@@ -301,6 +306,7 @@ type ForgeTopicCardsSnapshotRowDb = {
   error_message: string | null;
   card_count: number;
   generation_revision: number;
+  selected: number;
 };
 
 type ForgeCardRow = {
@@ -388,6 +394,7 @@ const toTopicCardsSnapshotRow = (
   errorMessage: row.error_message,
   cardCount: Number(row.card_count),
   generationRevision: Number(row.generation_revision),
+  selected: row.selected === 1,
 });
 
 const toGeneratedCard = (row: ForgeCardRow): ForgeGeneratedCard => ({
@@ -636,7 +643,8 @@ export const makeSqliteForgeSessionRepository = ({
             COALESCE(forge_topic_generation.status, 'idle') AS status,
             forge_topic_generation.error_message AS error_message,
             COALESCE(COUNT(forge_cards.id), 0) AS card_count,
-            COALESCE(forge_topic_generation.generation_revision, 0) AS generation_revision
+            COALESCE(forge_topic_generation.generation_revision, 0) AS generation_revision,
+            forge_topics.selected AS selected
           FROM forge_topics
           JOIN forge_chunks ON forge_chunks.id = forge_topics.chunk_id
           LEFT JOIN forge_topic_generation ON forge_topic_generation.topic_id = forge_topics.id
@@ -1351,6 +1359,55 @@ export const makeSqliteForgeSessionRepository = ({
           }));
         }),
       ),
+    saveTopicSelections: ({ sessionId, selections }) =>
+      runSql(
+        "saveTopicSelections.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          yield* sql
+            .withTransaction(
+              Effect.gen(function* () {
+                yield* withSqlError(
+                  "saveTopicSelections.deselectAll",
+                  sql`
+                    UPDATE forge_topics SET selected = 0
+                    WHERE chunk_id IN (
+                      SELECT id FROM forge_chunks WHERE session_id = ${sessionId}
+                    )
+                  `,
+                );
+
+                if (selections.length > 0) {
+                  yield* Effect.forEach(
+                    selections,
+                    (sel) =>
+                      withSqlError(
+                        "saveTopicSelections.select",
+                        sql`
+                          UPDATE forge_topics SET selected = 1
+                          WHERE chunk_id = ${sel.chunkId}
+                            AND topic_order = ${sel.topicIndex}
+                            AND chunk_id IN (
+                              SELECT id FROM forge_chunks WHERE session_id = ${sessionId}
+                            )
+                        `,
+                      ),
+                    { discard: true },
+                  );
+                }
+              }),
+            )
+            .pipe(
+              Effect.mapError(
+                (error) =>
+                  new ForgeSessionRepositoryError({
+                    operation: "saveTopicSelections.transaction",
+                    message: toErrorMessage(error),
+                  }),
+              ),
+            );
+        }),
+      ),
     getTopicByRef: (input) => runSql("getTopicByRef.runtime", loadTopicByRefSql(input)),
     getCardsSnapshotBySession: (sessionId) =>
       runSql("getCardsSnapshotBySession.runtime", loadCardsSnapshotBySessionSql(sessionId)),
@@ -1814,6 +1871,7 @@ type InMemoryTopic = {
   readonly topicOrder: number;
   readonly topicText: string;
   readonly createdAt: string;
+  selected: boolean;
 };
 
 type InMemoryTopicGeneration = ForgeTopicGenerationRow;
@@ -1925,6 +1983,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           errorMessage: generation?.errorMessage ?? null,
           cardCount,
           generationRevision: generation?.generationRevision ?? 0,
+          selected: topic.selected,
         };
       });
   };
@@ -2169,6 +2228,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
               topicOrder: index,
               topicText: write.topics[index]!,
               createdAt: nowIso(),
+              selected: false,
             });
           }
         }
@@ -2233,6 +2293,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           topicOrder,
           topicText,
           createdAt: nowIso(),
+          selected: false,
         }));
 
         topics.length = 0;
@@ -2318,6 +2379,29 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
             sequenceOrder: group.sequenceOrder,
             topics: group.topics.slice(),
           }));
+      }),
+    saveTopicSelections: ({ sessionId, selections }) =>
+      Effect.sync(() => {
+        const sessionChunkIds = new Set(
+          chunks.filter((chunk) => chunk.sessionId === sessionId).map((chunk) => chunk.id),
+        );
+
+        for (const topic of topics) {
+          if (!sessionChunkIds.has(topic.chunkId)) continue;
+          topic.selected = false;
+        }
+
+        for (const sel of selections) {
+          const topic = topics.find(
+            (t) =>
+              sessionChunkIds.has(t.chunkId) &&
+              t.chunkId === sel.chunkId &&
+              t.topicOrder === sel.topicIndex,
+          );
+          if (topic) {
+            topic.selected = true;
+          }
+        }
       }),
     getTopicByRef: (input) =>
       Effect.sync(() => {

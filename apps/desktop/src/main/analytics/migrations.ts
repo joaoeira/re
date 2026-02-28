@@ -213,6 +213,17 @@ const REVIEW_HISTORY_MIGRATIONS = {
       )
     `;
   }),
+  "0007_add_forge_topics_selected": Effect.gen(function* () {
+    const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+    yield* sql`
+      ALTER TABLE forge_topics ADD COLUMN selected INTEGER NOT NULL DEFAULT 0
+    `;
+
+    yield* sql`
+      UPDATE forge_topics SET selected = 1
+    `;
+  }),
 } satisfies Record<string, Effect.Effect<void, unknown, SqlClient.SqlClient>>;
 
 const toMigrationError = (message: string): Migrator.MigrationError =>

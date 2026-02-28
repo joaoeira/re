@@ -155,6 +155,7 @@ export const ForgeTopicCardsSummarySchema = Schema.Struct({
   errorMessage: NullableStringSchema,
   cardCount: NonNegativeIntSchema,
   generationRevision: NonNegativeIntSchema,
+  selected: Schema.Boolean,
 });
 export type ForgeTopicCardsSummary = typeof ForgeTopicCardsSummarySchema.Type;
 
@@ -257,6 +258,20 @@ export const ForgeUpdateCardResultSchema = Schema.Struct({
   card: ForgeGeneratedCardSchema,
 });
 export type ForgeUpdateCardResult = typeof ForgeUpdateCardResultSchema.Type;
+
+export const ForgeSaveTopicSelectionsInputSchema = Schema.Struct({
+  sessionId: PositiveIntSchema,
+  selections: Schema.Array(
+    Schema.Struct({
+      chunkId: PositiveIntSchema,
+      topicIndex: NonNegativeIntSchema,
+    }),
+  ),
+});
+export type ForgeSaveTopicSelectionsInput = typeof ForgeSaveTopicSelectionsInputSchema.Type;
+
+export const ForgeSaveTopicSelectionsResultSchema = Schema.Struct({});
+export type ForgeSaveTopicSelectionsResult = typeof ForgeSaveTopicSelectionsResultSchema.Type;
 
 export const ForgeTopicChunkExtractedEventSchema = Schema.Struct({
   sourceFilePath: Schema.String,
@@ -514,6 +529,13 @@ export const ForgeUpdateCardErrorSchema = Schema.Union(
   ForgeOperationError,
 );
 export type ForgeUpdateCardError = typeof ForgeUpdateCardErrorSchema.Type;
+
+export const ForgeSaveTopicSelectionsErrorSchema = Schema.Union(
+  ForgeSessionNotFoundError,
+  ForgeSessionOperationError,
+  ForgeOperationError,
+);
+export type ForgeSaveTopicSelectionsError = typeof ForgeSaveTopicSelectionsErrorSchema.Type;
 
 export const ForgeUpdatePermutationInputSchema = Schema.Struct({
   permutationId: PositiveIntSchema,

@@ -207,6 +207,7 @@ export function CardsStep() {
         readonly errorMessage: string | null;
         readonly cardCount: number;
         readonly generationRevision: number;
+        readonly selected: boolean;
       },
       fallbackInvalidate = true,
     ) => {

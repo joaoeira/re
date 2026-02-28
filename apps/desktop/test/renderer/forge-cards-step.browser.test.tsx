@@ -95,9 +95,7 @@ const groupTopicsByChunk = () => [
 const createCardsInvoke = (options?: {
   readonly sessionId?: number;
   readonly initialByTopicKey?: Readonly<Record<string, InitialTopicState>>;
-  readonly snapshotSummaryOverridesByTopicKey?: Readonly<
-    Record<string, SnapshotSummaryOverride>
-  >;
+  readonly snapshotSummaryOverridesByTopicKey?: Readonly<Record<string, SnapshotSummaryOverride>>;
   readonly topicGenerationDelayByTopicKey?: Readonly<Record<string, number>>;
   readonly topicGenerationFailureByTopicKey?: Readonly<Record<string, string>>;
   readonly permutationsGenerationDelayMs?: number;
@@ -106,8 +104,7 @@ const createCardsInvoke = (options?: {
   const sessionId = options?.sessionId ?? 77;
   let nextCardId = 9_000;
   let nextPermutationId = 12_000;
-  const permutationsGenerationDelayMs =
-    options?.permutationsGenerationDelayMs ?? 0;
+  const permutationsGenerationDelayMs = options?.permutationsGenerationDelayMs ?? 0;
   const clozeGenerationDelayMs = options?.clozeGenerationDelayMs ?? 0;
 
   const topicByKey = new Map<string, TopicState>();
@@ -157,6 +154,7 @@ const createCardsInvoke = (options?: {
     errorMessage: state.errorMessage,
     cardCount: state.cards.length,
     generationRevision: state.generationRevision,
+    selected: true,
   });
 
   const withSnapshotOverride = (
@@ -169,345 +167,325 @@ const createCardsInvoke = (options?: {
       ...summary,
       status: override.status ?? summary.status,
       errorMessage:
-        override.errorMessage !== undefined
-          ? override.errorMessage
-          : summary.errorMessage,
+        override.errorMessage !== undefined ? override.errorMessage : summary.errorMessage,
       cardCount: override.cardCount ?? summary.cardCount,
-      generationRevision:
-        override.generationRevision ?? summary.generationRevision,
+      generationRevision: override.generationRevision ?? summary.generationRevision,
     };
   };
 
-  const invoke = vi
-    .fn()
-    .mockImplementation(async (method: string, payload?: unknown) => {
-      if (method === "ForgePreviewChunks") {
-        return {
-          type: "success",
-          data: { textLength: 230, totalPages: 4, chunkCount: 2 },
-        };
-      }
+  const invoke = vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
+    if (method === "ForgePreviewChunks") {
+      return {
+        type: "success",
+        data: { textLength: 230, totalPages: 4, chunkCount: 2 },
+      };
+    }
 
-      if (method === "ForgeStartTopicExtraction") {
-        return {
-          type: "success",
-          data: {
-            session: {
-              id: sessionId,
-              sourceKind: "pdf",
-              sourceFilePath: "/forge/source.pdf",
-              deckPath: null,
-              sourceFingerprint: "fp",
-              status: "topics_extracted",
-              errorMessage: null,
-              createdAt: "2026-02-27T00:00:00.000Z",
-              updatedAt: "2026-02-27T00:00:00.000Z",
-            },
-            duplicateOfSessionId: null,
-            extraction: {
-              sessionId,
-              textLength: 230,
-              preview: "preview",
-              totalPages: 4,
-              chunkCount: 2,
-            },
-            topicsByChunk: groupTopicsByChunk(),
+    if (method === "ForgeStartTopicExtraction") {
+      return {
+        type: "success",
+        data: {
+          session: {
+            id: sessionId,
+            sourceKind: "pdf",
+            sourceFilePath: "/forge/source.pdf",
+            deckPath: null,
+            sourceFingerprint: "fp",
+            status: "topics_extracted",
+            errorMessage: null,
+            createdAt: "2026-02-27T00:00:00.000Z",
+            updatedAt: "2026-02-27T00:00:00.000Z",
           },
-        };
-      }
-
-      if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: null,
-            topicsByChunk: [],
+          duplicateOfSessionId: null,
+          extraction: {
+            sessionId,
+            textLength: 230,
+            preview: "preview",
+            totalPages: 4,
+            chunkCount: 2,
           },
-        };
-      }
+          topicsByChunk: groupTopicsByChunk(),
+        },
+      };
+    }
 
-      if (method === "ForgeGetCardsSnapshot") {
-        return {
-          type: "success",
-          data: {
-            topics: TOPICS.map((topic) => {
-              const state = topicByKey.get(topicKey(topic));
-              if (!state) {
-                throw new Error(
-                  `Missing topic state for ${topic.chunkId}:${topic.topicIndex}`,
-                );
-              }
-              return withSnapshotOverride(
-                toSummary(state),
-                options?.snapshotSummaryOverridesByTopicKey?.[topicKey(topic)],
-              );
-            }),
-          },
-        };
-      }
+    if (method === "ForgeGetTopicExtractionSnapshot") {
+      return {
+        type: "success",
+        data: {
+          session: null,
+          topicsByChunk: [],
+        },
+      };
+    }
 
-      if (method === "ForgeGetTopicCards") {
-        const input = payload as { chunkId: number; topicIndex: number };
-        const state = findTopicState(input);
-        if (!state) {
-          return {
-            type: "failure",
-            error: {
-              _tag: "topic_not_found",
-              sessionId,
-              chunkId: input.chunkId,
-              topicIndex: input.topicIndex,
-            },
-          };
-        }
+    if (method === "ForgeGetCardsSnapshot") {
+      return {
+        type: "success",
+        data: {
+          topics: TOPICS.map((topic) => {
+            const state = topicByKey.get(topicKey(topic));
+            if (!state) {
+              throw new Error(`Missing topic state for ${topic.chunkId}:${topic.topicIndex}`);
+            }
+            return withSnapshotOverride(
+              toSummary(state),
+              options?.snapshotSummaryOverridesByTopicKey?.[topicKey(topic)],
+            );
+          }),
+        },
+      };
+    }
 
-        return {
-          type: "success",
-          data: {
-            topic: toSummary(state),
-            cards: state.cards.map((card) => ({
-              id: card.id,
-              question: card.question,
-              answer: card.answer,
-            })),
-          },
-        };
-      }
-
-      if (method === "ForgeGenerateTopicCards") {
-        const input = payload as { chunkId: number; topicIndex: number };
-        const state = findTopicState(input);
-        if (!state) {
-          return {
-            type: "failure",
-            error: {
-              _tag: "topic_not_found",
-              sessionId,
-              chunkId: input.chunkId,
-              topicIndex: input.topicIndex,
-            },
-          };
-        }
-        const generationDelayMs =
-          options?.topicGenerationDelayByTopicKey?.[topicKey(state.topic)] ?? 0;
-        if (generationDelayMs > 0) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, generationDelayMs),
-          );
-        }
-        const generationFailureMessage =
-          options?.topicGenerationFailureByTopicKey?.[topicKey(state.topic)] ??
-          null;
-        if (generationFailureMessage) {
-          state.status = "error";
-          state.errorMessage = generationFailureMessage;
-          state.cards = [];
-          state.generationRevision += 1;
-
-          return {
-            type: "failure",
-            error: {
-              _tag: "card_generation_error",
-              sessionId,
-              chunkId: state.topic.chunkId,
-              topicIndex: state.topic.topicIndex,
-              message: generationFailureMessage,
-            },
-          };
-        }
-
-        const nextRevision = state.generationRevision + 1;
-        const nextCards =
-          state.cards.length > 0
-            ? state.cards.map((card, index) => ({
-                id: card.id,
-                question: `${state.topic.topicText} regenerated ${nextRevision}-${index + 1}`,
-                answer: `A ${state.topic.topicText} ${nextRevision}-${index + 1}`,
-              }))
-            : [
-                {
-                  id: nextCardId++,
-                  question: `Q ${state.topic.topicText}`,
-                  answer: `A ${state.topic.topicText}`,
-                },
-              ];
-
-        state.status = "generated";
-        state.errorMessage = null;
-        state.generationRevision = nextRevision;
-        state.cards = nextCards;
-
-        return {
-          type: "success",
-          data: {
-            topic: toSummary(state),
-            cards: nextCards.map((card) => ({
-              id: card.id,
-              question: card.question,
-              answer: card.answer,
-            })),
-          },
-        };
-      }
-
-      if (method === "ForgeUpdateCard") {
-        const input = payload as {
-          cardId: number;
-          question: string;
-          answer: string;
-        };
-        const state = findTopicStateByCardId(input.cardId);
-        if (!state) {
-          return {
-            type: "failure",
-            error: {
-              _tag: "card_not_found",
-              sourceCardId: input.cardId,
-            },
-          };
-        }
-
-        state.cards = state.cards.map((card) =>
-          card.id === input.cardId
-            ? { id: card.id, question: input.question, answer: input.answer }
-            : card,
-        );
-
-        return {
-          type: "success",
-          data: {
-            card: {
-              id: input.cardId,
-              question: input.question,
-              answer: input.answer,
-            },
-          },
-        };
-      }
-
-      if (method === "ForgeUpdatePermutation") {
-        const input = payload as {
-          permutationId: number;
-          question: string;
-          answer: string;
-        };
-        for (const permutations of permutationsByCardId.values()) {
-          const index = permutations.findIndex(
-            (p) => p.id === input.permutationId,
-          );
-          if (index >= 0) {
-            permutations[index] = {
-              id: input.permutationId,
-              question: input.question,
-              answer: input.answer,
-            };
-            return {
-              type: "success",
-              data: {
-                permutation: {
-                  id: input.permutationId,
-                  question: input.question,
-                  answer: input.answer,
-                },
-              },
-            };
-          }
-        }
+    if (method === "ForgeGetTopicCards") {
+      const input = payload as { chunkId: number; topicIndex: number };
+      const state = findTopicState(input);
+      if (!state) {
         return {
           type: "failure",
           error: {
-            _tag: "permutation_not_found",
-            permutationId: input.permutationId,
+            _tag: "topic_not_found",
+            sessionId,
+            chunkId: input.chunkId,
+            topicIndex: input.topicIndex,
           },
         };
-      }
-
-      if (method === "ForgeGetCardPermutations") {
-        const input = payload as { sourceCardId: number };
-        return {
-          type: "success",
-          data: {
-            sourceCardId: input.sourceCardId,
-            permutations: permutationsByCardId.get(input.sourceCardId) ?? [],
-          },
-        };
-      }
-
-      if (method === "ForgeGenerateCardPermutations") {
-        const input = payload as { sourceCardId: number };
-        if (permutationsGenerationDelayMs > 0) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, permutationsGenerationDelayMs),
-          );
-        }
-        const permutations = [
-          {
-            id: nextPermutationId++,
-            question: `Permutation for ${input.sourceCardId}`,
-            answer: "Permutation answer",
-          },
-        ];
-        permutationsByCardId.set(input.sourceCardId, permutations);
-        return {
-          type: "success",
-          data: {
-            sourceCardId: input.sourceCardId,
-            permutations,
-          },
-        };
-      }
-
-      if (method === "ForgeGetCardCloze") {
-        const input = payload as { sourceCardId: number };
-        return {
-          type: "success",
-          data: {
-            sourceCardId: input.sourceCardId,
-            cloze: clozeByCardId.get(input.sourceCardId) ?? null,
-          },
-        };
-      }
-
-      if (method === "ForgeGenerateCardCloze") {
-        const input = payload as { sourceCardId: number };
-        if (clozeGenerationDelayMs > 0) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, clozeGenerationDelayMs),
-          );
-        }
-        const cloze = `The answer is {{c1::${input.sourceCardId}}}.`;
-        clozeByCardId.set(input.sourceCardId, cloze);
-        return {
-          type: "success",
-          data: {
-            sourceCardId: input.sourceCardId,
-            cloze,
-          },
-        };
-      }
-
-      if (method === "ForgeListSessions") {
-        return { type: "success", data: { sessions: [] } };
       }
 
       return {
-        type: "failure",
-        error: { code: "UNKNOWN_METHOD", message: method },
+        type: "success",
+        data: {
+          topic: toSummary(state),
+          cards: state.cards.map((card) => ({
+            id: card.id,
+            question: card.question,
+            answer: card.answer,
+          })),
+        },
       };
-    });
+    }
+
+    if (method === "ForgeGenerateTopicCards") {
+      const input = payload as { chunkId: number; topicIndex: number };
+      const state = findTopicState(input);
+      if (!state) {
+        return {
+          type: "failure",
+          error: {
+            _tag: "topic_not_found",
+            sessionId,
+            chunkId: input.chunkId,
+            topicIndex: input.topicIndex,
+          },
+        };
+      }
+      const generationDelayMs =
+        options?.topicGenerationDelayByTopicKey?.[topicKey(state.topic)] ?? 0;
+      if (generationDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, generationDelayMs));
+      }
+      const generationFailureMessage =
+        options?.topicGenerationFailureByTopicKey?.[topicKey(state.topic)] ?? null;
+      if (generationFailureMessage) {
+        state.status = "error";
+        state.errorMessage = generationFailureMessage;
+        state.cards = [];
+        state.generationRevision += 1;
+
+        return {
+          type: "failure",
+          error: {
+            _tag: "card_generation_error",
+            sessionId,
+            chunkId: state.topic.chunkId,
+            topicIndex: state.topic.topicIndex,
+            message: generationFailureMessage,
+          },
+        };
+      }
+
+      const nextRevision = state.generationRevision + 1;
+      const nextCards =
+        state.cards.length > 0
+          ? state.cards.map((card, index) => ({
+              id: card.id,
+              question: `${state.topic.topicText} regenerated ${nextRevision}-${index + 1}`,
+              answer: `A ${state.topic.topicText} ${nextRevision}-${index + 1}`,
+            }))
+          : [
+              {
+                id: nextCardId++,
+                question: `Q ${state.topic.topicText}`,
+                answer: `A ${state.topic.topicText}`,
+              },
+            ];
+
+      state.status = "generated";
+      state.errorMessage = null;
+      state.generationRevision = nextRevision;
+      state.cards = nextCards;
+
+      return {
+        type: "success",
+        data: {
+          topic: toSummary(state),
+          cards: nextCards.map((card) => ({
+            id: card.id,
+            question: card.question,
+            answer: card.answer,
+          })),
+        },
+      };
+    }
+
+    if (method === "ForgeUpdateCard") {
+      const input = payload as {
+        cardId: number;
+        question: string;
+        answer: string;
+      };
+      const state = findTopicStateByCardId(input.cardId);
+      if (!state) {
+        return {
+          type: "failure",
+          error: {
+            _tag: "card_not_found",
+            sourceCardId: input.cardId,
+          },
+        };
+      }
+
+      state.cards = state.cards.map((card) =>
+        card.id === input.cardId
+          ? { id: card.id, question: input.question, answer: input.answer }
+          : card,
+      );
+
+      return {
+        type: "success",
+        data: {
+          card: {
+            id: input.cardId,
+            question: input.question,
+            answer: input.answer,
+          },
+        },
+      };
+    }
+
+    if (method === "ForgeUpdatePermutation") {
+      const input = payload as {
+        permutationId: number;
+        question: string;
+        answer: string;
+      };
+      for (const permutations of permutationsByCardId.values()) {
+        const index = permutations.findIndex((p) => p.id === input.permutationId);
+        if (index >= 0) {
+          permutations[index] = {
+            id: input.permutationId,
+            question: input.question,
+            answer: input.answer,
+          };
+          return {
+            type: "success",
+            data: {
+              permutation: {
+                id: input.permutationId,
+                question: input.question,
+                answer: input.answer,
+              },
+            },
+          };
+        }
+      }
+      return {
+        type: "failure",
+        error: {
+          _tag: "permutation_not_found",
+          permutationId: input.permutationId,
+        },
+      };
+    }
+
+    if (method === "ForgeGetCardPermutations") {
+      const input = payload as { sourceCardId: number };
+      return {
+        type: "success",
+        data: {
+          sourceCardId: input.sourceCardId,
+          permutations: permutationsByCardId.get(input.sourceCardId) ?? [],
+        },
+      };
+    }
+
+    if (method === "ForgeGenerateCardPermutations") {
+      const input = payload as { sourceCardId: number };
+      if (permutationsGenerationDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, permutationsGenerationDelayMs));
+      }
+      const permutations = [
+        {
+          id: nextPermutationId++,
+          question: `Permutation for ${input.sourceCardId}`,
+          answer: "Permutation answer",
+        },
+      ];
+      permutationsByCardId.set(input.sourceCardId, permutations);
+      return {
+        type: "success",
+        data: {
+          sourceCardId: input.sourceCardId,
+          permutations,
+        },
+      };
+    }
+
+    if (method === "ForgeGetCardCloze") {
+      const input = payload as { sourceCardId: number };
+      return {
+        type: "success",
+        data: {
+          sourceCardId: input.sourceCardId,
+          cloze: clozeByCardId.get(input.sourceCardId) ?? null,
+        },
+      };
+    }
+
+    if (method === "ForgeGenerateCardCloze") {
+      const input = payload as { sourceCardId: number };
+      if (clozeGenerationDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, clozeGenerationDelayMs));
+      }
+      const cloze = `The answer is {{c1::${input.sourceCardId}}}.`;
+      clozeByCardId.set(input.sourceCardId, cloze);
+      return {
+        type: "success",
+        data: {
+          sourceCardId: input.sourceCardId,
+          cloze,
+        },
+      };
+    }
+
+    if (method === "ForgeListSessions") {
+      return { type: "success", data: { sessions: [] } };
+    }
+
+    return {
+      type: "failure",
+      error: { code: "UNKNOWN_METHOD", message: method },
+    };
+  });
 
   return invoke;
 };
 
-const navigateToCards = async (
-  screen: Awaited<ReturnType<typeof renderWithIpcProviders>>,
-) => {
+const navigateToCards = async (screen: Awaited<ReturnType<typeof renderWithIpcProviders>>) => {
   await uploadPdf();
   await userEvent.click(screen.getByText("Begin Extraction"));
   await expect.element(screen.getByText("Select topics")).toBeVisible();
-  await userEvent.click(
-    screen.getByRole("button", { name: "Select all", exact: true }),
-  );
+  await userEvent.click(screen.getByRole("button", { name: "Select all", exact: true }));
   await expect.element(screen.getByText("4 topics selected")).toBeVisible();
   await userEvent.click(screen.getByText("Continue to cards"));
   await expect.element(screen.getByText("Topics · 4")).toBeVisible();
@@ -572,9 +550,8 @@ describe("Forge cards step", () => {
     await expect
       .poll(
         () =>
-          invoke.mock.calls.filter(
-            ([method]: unknown[]) => method === "ForgeGenerateTopicCards",
-          ).length,
+          invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeGenerateTopicCards")
+            .length,
         { timeout: 250, interval: 50 },
       )
       .toBe(0);
@@ -605,10 +582,7 @@ describe("Forge cards step", () => {
 
     const betaRow = screen.getByText("beta").element().closest("button");
     const gammaRow = screen.getByText("gamma").element().closest("button");
-    if (
-      !(betaRow instanceof HTMLElement) ||
-      !(gammaRow instanceof HTMLElement)
-    ) {
+    if (!(betaRow instanceof HTMLElement) || !(gammaRow instanceof HTMLElement)) {
       throw new Error("Expected beta and gamma sidebar rows.");
     }
 
@@ -646,10 +620,7 @@ describe("Forge cards step", () => {
 
     const gammaRow = screen.getByText("gamma").element().closest("button");
     const betaRow = screen.getByText("beta").element().closest("button");
-    if (
-      !(betaRow instanceof HTMLElement) ||
-      !(gammaRow instanceof HTMLElement)
-    ) {
+    if (!(betaRow instanceof HTMLElement) || !(gammaRow instanceof HTMLElement)) {
       throw new Error("Expected beta and gamma sidebar rows.");
     }
 
@@ -657,16 +628,10 @@ describe("Forge cards step", () => {
     await expect.element(screen.getByText("Q gamma")).toBeVisible();
 
     betaRow.click();
-    await expect
-      .element(screen.getByText("beta auto-start failed"))
-      .toBeVisible();
-    await expect
-      .element(screen.getByRole("button", { name: "Retry", exact: true }))
-      .toBeVisible();
+    await expect.element(screen.getByText("beta auto-start failed")).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
 
-    const retryButton = screen
-      .getByRole("button", { name: "Retry", exact: true })
-      .element();
+    const retryButton = screen.getByRole("button", { name: "Retry", exact: true }).element();
     if (!(retryButton instanceof HTMLButtonElement)) {
       throw new Error("Expected retry button element.");
     }
@@ -690,9 +655,7 @@ describe("Forge cards step", () => {
         "101:0": {
           status: "generated",
           generationRevision: 2,
-          cards: [
-            { id: 8_100, question: "alpha question", answer: "alpha answer" },
-          ],
+          cards: [{ id: 8_100, question: "alpha question", answer: "alpha answer" }],
         },
       },
     });
@@ -728,9 +691,7 @@ describe("Forge cards step", () => {
     const screen = await renderWithIpcProviders(<ForgePage />);
     await navigateToCards(screen);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Generate cards" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Generate cards" }));
 
     await expect
       .poll(() => {
@@ -805,9 +766,7 @@ describe("Forge cards step", () => {
     const screen = await renderWithIpcProviders(<ForgePage />);
     await navigateToCards(screen);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Generate cards" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Generate cards" }));
 
     await expect
       .poll(() => {
@@ -849,9 +808,7 @@ describe("Forge cards step", () => {
     const screen = await renderWithIpcProviders(<ForgePage />);
     await navigateToCards(screen);
 
-    await expect
-      .element(screen.getByText("alpha already generated"))
-      .toBeVisible();
+    await expect.element(screen.getByText("alpha already generated")).toBeVisible();
   });
 
   it("keeps rendering generating when snapshot is generating and topic query is stale idle", async () => {
@@ -877,9 +834,7 @@ describe("Forge cards step", () => {
     await navigateToCards(screen);
 
     await expect.element(screen.getByText("Generating cards…")).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Generate cards" }).query(),
-    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Generate cards" }).query()).toBeNull();
   });
 
   it("renders topic error state and retries generation", async () => {
@@ -898,12 +853,8 @@ describe("Forge cards step", () => {
     const screen = await renderWithIpcProviders(<ForgePage />);
     await navigateToCards(screen);
 
-    await expect
-      .element(screen.getByText("topic generation failed"))
-      .toBeVisible();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Retry", exact: true }),
-    );
+    await expect.element(screen.getByText("topic generation failed")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Retry", exact: true }));
     await expect.element(screen.getByText("Q alpha")).toBeVisible();
   });
 
@@ -930,9 +881,7 @@ describe("Forge cards step", () => {
     await navigateToCards(screen);
 
     const questionEditor = await vi.waitFor(() => {
-      const el = document.querySelector<HTMLElement>(
-        ".editor-prosemirror[contenteditable='true']",
-      );
+      const el = document.querySelector<HTMLElement>(".editor-prosemirror[contenteditable='true']");
       if (!el) throw new Error("tiptap editor not found");
       return el;
     });
@@ -944,17 +893,14 @@ describe("Forge cards step", () => {
 
     await expect
       .poll(() => {
-        return invoke.mock.calls.filter(
-          ([method]: unknown[]) => method === "ForgeUpdateCard",
-        ).length;
+        return invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeUpdateCard")
+          .length;
       })
       .toBeGreaterThanOrEqual(1);
 
     const updateCall = invoke.mock.calls.findLast(
       ([method]: unknown[]) => method === "ForgeUpdateCard",
-    ) as
-      | [string, { cardId: number; question: string; answer: string }]
-      | undefined;
+    ) as [string, { cardId: number; question: string; answer: string }] | undefined;
     expect(updateCall?.[1]).toEqual({
       cardId: 8_200,
       question: "edited question",
@@ -984,22 +930,15 @@ describe("Forge cards step", () => {
     const screen = await renderWithIpcProviders(<ForgePage />);
     await navigateToCards(screen);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Permutations" }),
-    );
-    await expect
-      .element(screen.getByText("Permutation for 8250"))
-      .toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Permutations" }));
+    await expect.element(screen.getByText("Permutation for 8250")).toBeVisible();
 
     const permutationId = 12_000;
-    const updateResult = await invoke(
-      "ForgeUpdatePermutation",
-      {
-        permutationId,
-        question: "updated question",
-        answer: "updated answer",
-      },
-    );
+    const updateResult = await invoke("ForgeUpdatePermutation", {
+      permutationId,
+      question: "updated question",
+      answer: "updated answer",
+    });
 
     expect(updateResult).toEqual({
       type: "success",
@@ -1061,9 +1000,7 @@ describe("Forge cards step", () => {
         ).length;
       })
       .toBe(1);
-    await expect
-      .element(screen.getByText("Permutation for 8300"))
-      .toBeVisible();
+    await expect.element(screen.getByText("Permutation for 8300")).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "Cloze" }));
 
@@ -1099,9 +1036,7 @@ describe("Forge cards step", () => {
     await navigateToCards(screen);
 
     await userEvent.click(screen.getByRole("button", { name: "Permutations" }));
-    await expect
-      .element(screen.getByText("Permutation for 8400"))
-      .toBeVisible();
+    await expect.element(screen.getByText("Permutation for 8400")).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "Cloze" }));
     expect(screen.getByText("Permutation for 8400").query()).toBeNull();
@@ -1173,9 +1108,8 @@ describe("Forge cards step", () => {
     await expect
       .poll(
         () =>
-          invoke.mock.calls.filter(
-            ([method]: unknown[]) => method === "ForgeGenerateCardCloze",
-          ).length,
+          invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeGenerateCardCloze")
+            .length,
         { timeout: 700, interval: 50 },
       )
       .toBe(1);
@@ -1204,9 +1138,7 @@ describe("Forge cards step", () => {
     await navigateToCards(screen);
 
     await userEvent.click(screen.getByRole("button", { name: "Permutations" }));
-    await expect
-      .element(screen.getByText("Permutation for 8500"))
-      .toBeVisible();
+    await expect.element(screen.getByText("Permutation for 8500")).toBeVisible();
 
     const sidebar = screen.getByText("Topics · 4").element().closest("aside");
     if (!(sidebar instanceof HTMLElement)) {
@@ -1214,16 +1146,9 @@ describe("Forge cards step", () => {
     }
 
     const sidebarButtons = Array.from(sidebar.querySelectorAll("button"));
-    const betaRow = sidebarButtons.find((button) =>
-      button.textContent?.includes("beta"),
-    );
-    const alphaRow = sidebarButtons.find((button) =>
-      button.textContent?.includes("alpha"),
-    );
-    if (
-      !(betaRow instanceof HTMLElement) ||
-      !(alphaRow instanceof HTMLElement)
-    ) {
+    const betaRow = sidebarButtons.find((button) => button.textContent?.includes("beta"));
+    const alphaRow = sidebarButtons.find((button) => button.textContent?.includes("alpha"));
+    if (!(betaRow instanceof HTMLElement) || !(alphaRow instanceof HTMLElement)) {
       throw new Error("Expected alpha and beta sidebar row buttons.");
     }
 
@@ -1231,8 +1156,6 @@ describe("Forge cards step", () => {
     await expect.element(screen.getByText("beta question")).toBeVisible();
 
     alphaRow.click();
-    await expect
-      .element(screen.getByText("Permutation for 8500"))
-      .toBeVisible();
+    await expect.element(screen.getByText("Permutation for 8500")).toBeVisible();
   });
 });

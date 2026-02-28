@@ -33,10 +33,7 @@ export function InlineEditor({
 
   const debouncedChange = useCallback((md: string) => {
     clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(
-      () => onContentChangeRef.current?.(md),
-      DEBOUNCE_MS,
-    );
+    debounceTimer.current = setTimeout(() => onContentChangeRef.current?.(md), DEBOUNCE_MS);
   }, []);
 
   useEffect(() => () => clearTimeout(debounceTimer.current), []);
@@ -62,9 +59,7 @@ export function InlineEditor({
     },
     onUpdate: ({ editor }) => {
       const storage = editor.storage as MarkdownStorage;
-      const md = storage.markdown
-        ? storage.markdown.getMarkdown()
-        : editor.getText();
+      const md = storage.markdown ? storage.markdown.getMarkdown() : editor.getText();
       lastContentFromProp.current = md;
       debouncedChange(md);
     },

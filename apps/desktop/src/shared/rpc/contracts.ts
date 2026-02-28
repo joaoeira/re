@@ -25,6 +25,7 @@ import {
   ForgeGetTopicExtractionSnapshot,
   ForgeListSessions,
   ForgePreviewChunks,
+  ForgeSaveTopicSelections,
   ForgeStartTopicExtraction,
   ForgeTopicChunkExtracted,
   ForgeUpdateCard,
@@ -103,6 +104,7 @@ export const appContract = defineContract({
     ForgeGenerateCardCloze,
     ForgeUpdateCard,
     ForgeUpdatePermutation,
+    ForgeSaveTopicSelections,
   ] as const,
   events: [
     WorkspaceSnapshotChanged,

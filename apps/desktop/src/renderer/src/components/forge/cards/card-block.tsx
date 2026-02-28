@@ -70,13 +70,7 @@ export function CardBlock({
       >
         {!isAdded && (
           <>
-            <Button
-              type="button"
-              variant="secondary"
-              size="xs"
-              className="gap-1.5"
-              onClick={onAdd}
-            >
+            <Button type="button" variant="secondary" size="xs" className="gap-1.5" onClick={onAdd}>
               <Plus className="size-3" />
               Add to deck
             </Button>
@@ -115,12 +109,7 @@ export function CardBlock({
 
         <div className="flex-1" />
 
-        <Button
-          type="button"
-          variant="destructive"
-          size="xs"
-          onClick={onDelete}
-        >
+        <Button type="button" variant="destructive" size="xs" onClick={onDelete}>
           <Trash2 className="size-3" />
         </Button>
       </div>

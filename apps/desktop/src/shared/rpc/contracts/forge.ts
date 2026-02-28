@@ -47,6 +47,9 @@ import {
   ForgeUpdatePermutationErrorSchema,
   ForgeUpdatePermutationInputSchema,
   ForgeUpdatePermutationResultSchema,
+  ForgeSaveTopicSelectionsErrorSchema,
+  ForgeSaveTopicSelectionsInputSchema,
+  ForgeSaveTopicSelectionsResultSchema,
 } from "@shared/rpc/schemas/forge";
 
 export const ForgeCreateSession = rpc(
@@ -145,6 +148,13 @@ export const ForgeUpdatePermutation = rpc(
   ForgeUpdatePermutationInputSchema,
   ForgeUpdatePermutationResultSchema,
   ForgeUpdatePermutationErrorSchema,
+);
+
+export const ForgeSaveTopicSelections = rpc(
+  "ForgeSaveTopicSelections",
+  ForgeSaveTopicSelectionsInputSchema,
+  ForgeSaveTopicSelectionsResultSchema,
+  ForgeSaveTopicSelectionsErrorSchema,
 );
 
 export const ForgeListSessions = rpc(
