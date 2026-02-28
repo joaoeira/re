@@ -1369,6 +1369,289 @@ describe("forge handlers", () => {
     }
   });
 
+  it("generates selected topics in main with a bounded concurrency limit", async () => {
+    let inFlightCreateCards = 0;
+    let maxInFlightCreateCards = 0;
+
+    const promptRuntime: ForgePromptRuntime = {
+      run: <Input, Output>(spec: PromptSpec<Input, Output>, _input: Input, options?: PromptRunOptions) =>
+        Effect.gen(function* () {
+          if (spec.promptId !== "forge/create-cards") {
+            return yield* Effect.fail(
+              new PromptInputValidationError({
+                promptId: spec.promptId,
+                message: "Unsupported prompt in test runtime.",
+              }),
+            );
+          }
+
+          inFlightCreateCards += 1;
+          maxInFlightCreateCards = Math.max(maxInFlightCreateCards, inFlightCreateCards);
+          yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 25)));
+          inFlightCreateCards -= 1;
+
+          return {
+            output: {
+              cards: [{ question: "Q", answer: "A" }],
+            } as unknown as Output,
+            rawText: '{"cards":[{"question":"Q","answer":"A"}]}',
+            metadata: {
+              promptId: spec.promptId,
+              promptVersion: "1",
+              model: options?.model ?? "mock:model",
+              attemptCount: 1,
+              promptHash: "x".repeat(64),
+              outputChars: 32,
+            },
+          };
+        }),
+    };
+
+    const { handlers, repository, dispose } = await setupHandlers({ promptRuntime });
+
+    try {
+      const sourceFilePath = "/tmp/forge-cards-batch-concurrency.pdf";
+      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk one",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+          {
+            text: "chunk two",
+            sequenceOrder: 1,
+            pageBoundaries: [{ offset: 10, page: 2 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: created.session.id,
+          sequenceOrder: 0,
+          topics: ["topic a", "topic b"],
+        }),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: created.session.id,
+          sequenceOrder: 1,
+          topics: ["topic c", "topic d"],
+        }),
+      );
+
+      const result = await Effect.runPromise(
+        handlers.ForgeGenerateSelectedTopicCards({
+          sessionId: created.session.id,
+          topics: [
+            { chunkId: 1, topicIndex: 0 },
+            { chunkId: 1, topicIndex: 1 },
+            { chunkId: 2, topicIndex: 0 },
+            { chunkId: 2, topicIndex: 1 },
+          ],
+          concurrencyLimit: 2,
+        }),
+      );
+
+      expect(result.results).toHaveLength(4);
+      expect(result.results.every((entry) => entry.status === "generated")).toBe(true);
+      expect(maxInFlightCreateCards).toBeLessThanOrEqual(2);
+
+      const snapshot = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
+      );
+      expect(snapshot.topics).toHaveLength(4);
+      expect(snapshot.topics.every((topic) => topic.status === "generated")).toBe(true);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("regenerates cards in batch for topics that already have cards", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime();
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const sourceFilePath = "/tmp/forge-cards-batch-regenerate.pdf";
+      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk text",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: created.session.id,
+          sequenceOrder: 0,
+          topics: ["ATP"],
+        }),
+      );
+
+      await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          chunkId: 1,
+          topicIndex: 0,
+        }),
+      );
+
+      const firstSnapshot = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
+      );
+      const firstRevision = firstSnapshot.topics[0]?.generationRevision;
+      expect(typeof firstRevision).toBe("number");
+
+      const batchResult = await Effect.runPromise(
+        handlers.ForgeGenerateSelectedTopicCards({
+          sessionId: created.session.id,
+          topics: [{ chunkId: 1, topicIndex: 0 }],
+          concurrencyLimit: 1,
+        }),
+      );
+      expect(batchResult.results[0]?.status).toBe("generated");
+
+      const secondSnapshot = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
+      );
+      expect(secondSnapshot.topics[0]?.status).toBe("generated");
+      expect(secondSnapshot.topics[0]?.generationRevision).toBe((firstRevision ?? 0) + 1);
+      expect(secondSnapshot.topics[0]?.cardCount).toBeGreaterThan(0);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("returns isolated per-topic statuses for already_generating, topic_not_found, typed errors, and defects", async () => {
+    let resolveBusyTopicGeneration: () => void = () => undefined;
+    const holdBusyTopicGeneration = new Promise<void>((resolve) => {
+      resolveBusyTopicGeneration = resolve;
+    });
+
+    const promptRuntime: ForgePromptRuntime = {
+      run: <Input, Output>(spec: PromptSpec<Input, Output>, input: Input, options?: PromptRunOptions) =>
+        Effect.gen(function* () {
+          if (spec.promptId !== "forge/create-cards") {
+            return yield* Effect.fail(
+              new PromptInputValidationError({
+                promptId: spec.promptId,
+                message: "Unsupported prompt in test runtime.",
+              }),
+            );
+          }
+
+          const createCardsInput = input as { readonly topic: string };
+          if (createCardsInput.topic === "Busy topic") {
+            yield* Effect.promise(() => holdBusyTopicGeneration);
+          } else if (createCardsInput.topic === "Fail topic") {
+            return yield* Effect.fail(
+              new PromptOutputParseError({
+                promptId: spec.promptId,
+                message: "forced topic failure",
+                rawExcerpt: "invalid",
+              }),
+            );
+          } else if (createCardsInput.topic === "Defect topic") {
+            return yield* Effect.die(new Error("defect in batch generation"));
+          }
+
+          return {
+            output: {
+              cards: [{ question: "Q", answer: "A" }],
+            } as unknown as Output,
+            rawText: '{"cards":[{"question":"Q","answer":"A"}]}',
+            metadata: {
+              promptId: spec.promptId,
+              promptVersion: "1",
+              model: options?.model ?? "mock:model",
+              attemptCount: 1,
+              promptHash: "x".repeat(64),
+              outputChars: 32,
+            },
+          };
+        }),
+    };
+
+    const { handlers, repository, dispose } = await setupHandlers({ promptRuntime });
+
+    try {
+      const sourceFilePath = "/tmp/forge-cards-batch-statuses.pdf";
+      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk text",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: created.session.id,
+          sequenceOrder: 0,
+          topics: ["Busy topic", "Fail topic", "Defect topic"],
+        }),
+      );
+
+      const busyGeneration = Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          chunkId: 1,
+          topicIndex: 0,
+        }),
+      );
+
+      await expect
+        .poll(async () => {
+          const snapshot = await Effect.runPromise(
+            repository.getCardsSnapshotBySession(created.session.id),
+          );
+          return snapshot[0]?.status ?? null;
+        })
+        .toBe("generating");
+
+      const batchResult = await Effect.runPromise(
+        handlers.ForgeGenerateSelectedTopicCards({
+          sessionId: created.session.id,
+          topics: [
+            { chunkId: 1, topicIndex: 0 },
+            { chunkId: 1, topicIndex: 1 },
+            { chunkId: 1, topicIndex: 2 },
+            { chunkId: 999, topicIndex: 0 },
+          ],
+          concurrencyLimit: 2,
+        }),
+      );
+
+      const resultByKey = new Map(
+        batchResult.results.map((entry) => [`${entry.chunkId}:${entry.topicIndex}`, entry] as const),
+      );
+      expect(resultByKey.get("1:0")?.status).toBe("already_generating");
+      expect(resultByKey.get("1:0")?.message).toBeNull();
+      expect(resultByKey.get("1:1")?.status).toBe("error");
+      expect(resultByKey.get("1:1")?.message).toContain("forced topic failure");
+      expect(resultByKey.get("1:2")?.status).toBe("error");
+      expect(resultByKey.get("1:2")?.message).toContain("defect in batch generation");
+      expect(resultByKey.get("999:0")?.status).toBe("topic_not_found");
+      expect(resultByKey.get("999:0")?.message).toBeNull();
+
+      resolveBusyTopicGeneration();
+      await busyGeneration;
+    } finally {
+      await dispose();
+    }
+  });
+
   it("generates permutations and cloze and persists inline card edits", async () => {
     const promptRuntime = createCardsDomainPromptRuntime();
     const { handlers, repository, dispose } = await setupHandlers({

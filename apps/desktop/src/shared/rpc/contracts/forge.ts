@@ -13,6 +13,9 @@ import {
   ForgeGenerateCardPermutationsErrorSchema,
   ForgeGenerateCardPermutationsInputSchema,
   ForgeGenerateCardPermutationsResultSchema,
+  ForgeGenerateSelectedTopicCardsErrorSchema,
+  ForgeGenerateSelectedTopicCardsInputSchema,
+  ForgeGenerateSelectedTopicCardsResultSchema,
   ForgeGenerateTopicCardsErrorSchema,
   ForgeGenerateTopicCardsInputSchema,
   ForgeGenerateTopicCardsResultSchema,
@@ -106,6 +109,13 @@ export const ForgeGenerateTopicCards = rpc(
   ForgeGenerateTopicCardsInputSchema,
   ForgeGenerateTopicCardsResultSchema,
   ForgeGenerateTopicCardsErrorSchema,
+);
+
+export const ForgeGenerateSelectedTopicCards = rpc(
+  "ForgeGenerateSelectedTopicCards",
+  ForgeGenerateSelectedTopicCardsInputSchema,
+  ForgeGenerateSelectedTopicCardsResultSchema,
+  ForgeGenerateSelectedTopicCardsErrorSchema,
 );
 
 export const ForgeGetCardPermutations = rpc(

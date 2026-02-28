@@ -28,7 +28,7 @@ const groupTopicsByChunk = () => [
 const createCardsInvoke = () => {
   const sessionId = 77;
 
-  return vi.fn().mockImplementation(async (method: string) => {
+  return vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
     if (method === "ForgePreviewChunks") {
       return { type: "success", data: { textLength: 230, totalPages: 4, chunkCount: 2 } };
     }
@@ -127,6 +127,24 @@ const createCardsInvoke = () => {
             { id: 9001, question: "Q1", answer: "A1" },
             { id: 9002, question: "Q2", answer: "A2" },
           ],
+        },
+      };
+    }
+    if (method === "ForgeGenerateSelectedTopicCards") {
+      const input = payload as {
+        sessionId: number;
+        topics: Array<{ chunkId: number; topicIndex: number }>;
+      };
+      return {
+        type: "success",
+        data: {
+          sessionId: input.sessionId,
+          results: input.topics.map((topic) => ({
+            chunkId: topic.chunkId,
+            topicIndex: topic.topicIndex,
+            status: "generated",
+            message: null,
+          })),
         },
       };
     }
@@ -256,6 +274,23 @@ describe("Forge cards sidebar multi-select", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Generate cards" }));
     await expect.poll(() => screen.getByText("selected", { exact: false }).query()).toBeNull();
+
+    await expect
+      .poll(() =>
+        invoke.mock.calls.find(
+          ([method]: unknown[]) => method === "ForgeGenerateSelectedTopicCards",
+        ) as [string, { sessionId: number; topics: Array<{ chunkId: number; topicIndex: number }> }] | undefined,
+      )
+      .toBeTruthy();
+
+    const generateCall = invoke.mock.calls.find(
+      ([method]: unknown[]) => method === "ForgeGenerateSelectedTopicCards",
+    ) as [string, { sessionId: number; topics: Array<{ chunkId: number; topicIndex: number }> }] | undefined;
+    expect(generateCall?.[1]).toEqual({
+      sessionId: 77,
+      topics: [{ chunkId: 101, topicIndex: 1 }],
+      concurrencyLimit: 3,
+    });
   });
 
   it("clicking a topic row navigates without entering selection mode", async () => {

@@ -190,6 +190,48 @@ export type ForgeGenerateTopicCardsInput = typeof ForgeGenerateTopicCardsInputSc
 export const ForgeGenerateTopicCardsResultSchema = ForgeGetTopicCardsResultSchema;
 export type ForgeGenerateTopicCardsResult = typeof ForgeGenerateTopicCardsResultSchema.Type;
 
+export const ForgeGenerateSelectedTopicCardsInputSchema = Schema.Struct({
+  sessionId: PositiveIntSchema,
+  topics: Schema.Array(
+    Schema.Struct({
+      chunkId: PositiveIntSchema,
+      topicIndex: NonNegativeIntSchema,
+    }),
+  ),
+  instruction: Schema.optional(Schema.String),
+  model: Schema.optional(ModelIdSchema),
+  concurrencyLimit: Schema.optional(
+    Schema.Number.pipe(Schema.int(), Schema.positive(), Schema.lessThanOrEqualTo(8)),
+  ),
+});
+export type ForgeGenerateSelectedTopicCardsInput =
+  typeof ForgeGenerateSelectedTopicCardsInputSchema.Type;
+
+export const ForgeGenerateSelectedTopicCardsTopicStatusSchema = Schema.Literal(
+  "generated",
+  "already_generating",
+  "topic_not_found",
+  "error",
+);
+export type ForgeGenerateSelectedTopicCardsTopicStatus =
+  typeof ForgeGenerateSelectedTopicCardsTopicStatusSchema.Type;
+
+export const ForgeGenerateSelectedTopicCardsTopicResultSchema = Schema.Struct({
+  chunkId: PositiveIntSchema,
+  topicIndex: NonNegativeIntSchema,
+  status: ForgeGenerateSelectedTopicCardsTopicStatusSchema,
+  message: NullableStringSchema,
+});
+export type ForgeGenerateSelectedTopicCardsTopicResult =
+  typeof ForgeGenerateSelectedTopicCardsTopicResultSchema.Type;
+
+export const ForgeGenerateSelectedTopicCardsResultSchema = Schema.Struct({
+  sessionId: PositiveIntSchema,
+  results: Schema.Array(ForgeGenerateSelectedTopicCardsTopicResultSchema),
+});
+export type ForgeGenerateSelectedTopicCardsResult =
+  typeof ForgeGenerateSelectedTopicCardsResultSchema.Type;
+
 export const ForgePermutationSchema = Schema.Struct({
   id: PositiveIntSchema,
   question: Schema.String,
@@ -491,6 +533,14 @@ export const ForgeGenerateTopicCardsErrorSchema = Schema.Union(
   ForgeOperationError,
 );
 export type ForgeGenerateTopicCardsError = typeof ForgeGenerateTopicCardsErrorSchema.Type;
+
+export const ForgeGenerateSelectedTopicCardsErrorSchema = Schema.Union(
+  ForgeSessionNotFoundError,
+  ForgeSessionOperationError,
+  ForgeOperationError,
+);
+export type ForgeGenerateSelectedTopicCardsError =
+  typeof ForgeGenerateSelectedTopicCardsErrorSchema.Type;
 
 export const ForgeGetCardPermutationsErrorSchema = Schema.Union(
   ForgeCardNotFoundError,

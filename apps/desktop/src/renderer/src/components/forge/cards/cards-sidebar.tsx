@@ -17,6 +17,7 @@ type CardsSidebarProps = {
   readonly totalAdded: number;
   readonly totalCards: number;
   readonly checkedTopicKeys: ReadonlySet<string>;
+  readonly generatingChecked: boolean;
   readonly onSelectTopic: (topicKey: string) => void;
   readonly onCheckTopic: (topicKey: string) => void;
   readonly onClearChecked: () => void;
@@ -29,6 +30,7 @@ export function CardsSidebar({
   totalAdded,
   totalCards,
   checkedTopicKeys,
+  generatingChecked,
   onSelectTopic,
   onCheckTopic,
   onClearChecked,
@@ -79,8 +81,14 @@ export function CardsSidebar({
               </kbd>
             </button>
           </div>
-          <Button type="button" size="sm" className="mt-2.5 w-full" onClick={onGenerateChecked}>
-            Generate cards
+          <Button
+            type="button"
+            size="sm"
+            className="mt-2.5 w-full"
+            onClick={onGenerateChecked}
+            disabled={generatingChecked}
+          >
+            {generatingChecked ? "Generating..." : "Generate cards"}
           </Button>
         </div>
       )}

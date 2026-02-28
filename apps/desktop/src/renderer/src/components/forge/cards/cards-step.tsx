@@ -83,6 +83,7 @@ const deriveActiveStatus = ({
 
 const inFlightTopicKey = (sessionId: number, topicKeyValue: string): string =>
   `${sessionId}:${topicKeyValue}`;
+const TOPIC_BATCH_GENERATION_CONCURRENCY = 3;
 
 export function CardsStep() {
   const queryClient = useQueryClient();
@@ -137,11 +138,19 @@ export function CardsStep() {
     });
     return next;
   }, [cardsSnapshotQuery.data]);
+  const hasGeneratingTopicsInSnapshot = useMemo(
+    () => topics.some((topic) => summaryByTopicKey.get(topic.topicKey)?.status === "generating"),
+    [summaryByTopicKey, topics],
+  );
 
   const activeTopic = useMemo(
     () => topics.find((topic) => topic.topicKey === activeTopicKey) ?? null,
     [activeTopicKey, topics],
   );
+  const activeTopicRef = useRef<CardsTopic | null>(null);
+  useEffect(() => {
+    activeTopicRef.current = activeTopic;
+  }, [activeTopic]);
 
   const activeTopicCardsQuery = useForgeTopicCardsQuery(
     sessionId,
@@ -149,6 +158,7 @@ export function CardsStep() {
     activeTopic?.topicIndex ?? null,
   );
   const [checkedTopicKeys, setCheckedTopicKeys] = useState<ReadonlySet<string>>(new Set());
+  const [checkedTopicBatchInFlight, setCheckedTopicBatchInFlight] = useState(false);
 
   const handleCheckTopic = useCallback((topicKeyValue: string) => {
     setCheckedTopicKeys((prev) => {
@@ -167,8 +177,95 @@ export function CardsStep() {
   }, []);
 
   const handleGenerateChecked = useCallback(() => {
+    const checkedTopics = topics.filter((topic) => checkedTopicKeys.has(topic.topicKey));
+
+    if (sessionId === null || checkedTopics.length === 0 || checkedTopicBatchInFlight) {
+      return;
+    }
+
     setCheckedTopicKeys(new Set());
-  }, []);
+    setCheckedTopicBatchInFlight(true);
+
+    const checkedTopicKeySet = new Set(checkedTopics.map((topic) => topic.topicKey));
+    queryClient.setQueryData<{ topics: ReadonlyArray<ForgeTopicCardsSummary> }>(
+      queryKeys.forgeCardsSnapshot(sessionId),
+      (previous) => {
+        if (!previous) return previous;
+        return {
+          topics: previous.topics.map((topic) => {
+            const key = topicKey(topic.chunkId, topic.topicIndex);
+            if (!checkedTopicKeySet.has(key)) return topic;
+            return {
+              ...topic,
+              status: "generating" as const,
+              errorMessage: null,
+            };
+          }),
+        };
+      },
+    );
+
+    const currentActiveTopic = activeTopicRef.current;
+    if (currentActiveTopic && checkedTopicKeySet.has(currentActiveTopic.topicKey)) {
+      const activeTopicQueryKey = queryKeys.forgeTopicCards(
+        sessionId,
+        currentActiveTopic.chunkId,
+        currentActiveTopic.topicIndex,
+      );
+      queryClient.setQueryData<ForgeGetTopicCardsResult>(activeTopicQueryKey, (previous) => {
+        if (!previous) return previous;
+        return {
+          ...previous,
+          topic: {
+            ...previous.topic,
+            status: "generating",
+            errorMessage: null,
+          },
+        };
+      });
+    }
+
+    void runIpcEffect(
+      ipc.client
+        .ForgeGenerateSelectedTopicCards({
+          sessionId,
+          topics: checkedTopics.map((topic) => ({
+            chunkId: topic.chunkId,
+            topicIndex: topic.topicIndex,
+          })),
+          concurrencyLimit: TOPIC_BATCH_GENERATION_CONCURRENCY,
+        })
+        .pipe(
+          Effect.catchTag("RpcDefectError", (rpcDefect) => Effect.fail(toRpcDefectError(rpcDefect))),
+        ),
+    )
+      .catch(() => undefined)
+      .finally(() => {
+        setCheckedTopicBatchInFlight(false);
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.forgeCardsSnapshot(sessionId),
+          exact: true,
+        });
+        const latestActiveTopic = activeTopicRef.current;
+        if (latestActiveTopic) {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.forgeTopicCards(
+              sessionId,
+              latestActiveTopic.chunkId,
+              latestActiveTopic.topicIndex,
+            ),
+            exact: true,
+          });
+        }
+      });
+  }, [
+    checkedTopicBatchInFlight,
+    checkedTopicKeys,
+    ipc.client,
+    queryClient,
+    sessionId,
+    topics,
+  ]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -204,6 +301,39 @@ export function CardsStep() {
     inFlightTopicKeysRef.current = new Set();
     setInFlightTopicKeys(new Set());
   }, [sessionId]);
+
+  useEffect(() => {
+    if (sessionId === null) return;
+
+    const shouldPollGeneration =
+      checkedTopicBatchInFlight || inFlightTopicKeys.size > 0 || hasGeneratingTopicsInSnapshot;
+    if (!shouldPollGeneration) return;
+
+    const intervalId = window.setInterval(() => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.forgeCardsSnapshot(sessionId),
+        exact: true,
+      });
+
+      if (activeTopic) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.forgeTopicCards(sessionId, activeTopic.chunkId, activeTopic.topicIndex),
+          exact: true,
+        });
+      }
+    }, 1_000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [
+    activeTopic,
+    checkedTopicBatchInFlight,
+    hasGeneratingTopicsInSnapshot,
+    inFlightTopicKeys.size,
+    queryClient,
+    sessionId,
+  ]);
 
   const { mutate: updateCard } = useForgeUpdateCardMutation();
 
@@ -505,6 +635,7 @@ export function CardsStep() {
           totalAdded={totalAdded}
           totalCards={totalCards}
           checkedTopicKeys={checkedTopicKeys}
+          generatingChecked={checkedTopicBatchInFlight}
           onSelectTopic={(nextTopicKey) => curationActions.setActiveTopic(nextTopicKey)}
           onCheckTopic={handleCheckTopic}
           onClearChecked={handleClearChecked}
