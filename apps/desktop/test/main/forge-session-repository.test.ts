@@ -579,6 +579,15 @@ describe("forge session repository", () => {
           topics: ["alpha", "beta"],
         }),
       );
+      await Effect.runPromise(
+        repository.saveTopicSelections({
+          sessionId: session.id,
+          selections: [
+            { chunkId: 1, topicIndex: 0 },
+            { chunkId: 1, topicIndex: 1 },
+          ],
+        }),
+      );
 
       const topic = await Effect.runPromise(
         repository.getTopicByRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
@@ -600,6 +609,48 @@ describe("forge session repository", () => {
       expect(sessions).toHaveLength(1);
       expect(sessions[0]?.topicCount).toBe(2);
       expect(sessions[0]?.cardCount).toBe(2);
+    });
+
+    it("topicCount only counts selected topics", async () => {
+      const repository = makeInMemoryForgeSessionRepository();
+      const session = await Effect.runPromise(
+        repository.createSession({
+          sourceKind: "pdf",
+          sourceFilePath: "/tmp/selected-count.pdf",
+          deckPath: null,
+          sourceFingerprint: "fp:selected-count",
+        }),
+      );
+
+      await Effect.runPromise(
+        repository.saveChunks(session.id, [
+          {
+            text: "chunk-0",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: session.id,
+          sequenceOrder: 0,
+          topics: ["alpha", "beta", "gamma"],
+        }),
+      );
+
+      const before = await Effect.runPromise(repository.listRecentSessions());
+      expect(before[0]?.topicCount).toBe(0);
+
+      await Effect.runPromise(
+        repository.saveTopicSelections({
+          sessionId: session.id,
+          selections: [{ chunkId: 1, topicIndex: 0 }],
+        }),
+      );
+
+      const after = await Effect.runPromise(repository.listRecentSessions());
+      expect(after[0]?.topicCount).toBe(1);
     });
 
     it("returns correct status and errorMessage", async () => {

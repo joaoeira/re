@@ -1861,7 +1861,7 @@ export const makeSqliteForgeSessionRepository = ({
                 s.deck_path,
                 s.status,
                 s.error_message,
-                COUNT(DISTINCT t.id) AS topic_count,
+                COUNT(DISTINCT CASE WHEN t.selected = 1 THEN t.id END) AS topic_count,
                 COUNT(DISTINCT c.id) AS card_count,
                 s.created_at,
                 s.updated_at
@@ -2747,7 +2747,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
               deckPath: session.deckPath,
               status: session.status,
               errorMessage: session.errorMessage,
-              topicCount: sessionTopics.length,
+              topicCount: sessionTopics.filter((t) => t.selected).length,
               cardCount: sessionCardCount,
               createdAt: session.createdAt,
               updatedAt: session.updatedAt,
