@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import type { ForgeGeneratedCard } from "@shared/rpc/schemas/forge";
 
 import { ClozePanel } from "./cloze-panel";
+import { InlineEditor } from "./inline-editor";
 import { PermutationsPanel } from "./permutations-panel";
 
 type CardBlockProps = {
@@ -44,29 +45,19 @@ export function CardBlock({
           </div>
         )}
 
-        <div
-          contentEditable={!isAdded}
-          suppressContentEditableWarning
-          className={cn(
-            "-mx-2 px-2 py-1 text-[15px] font-medium leading-relaxed text-foreground outline-none transition-colors",
-            !isAdded && "hover:bg-muted/20 focus:bg-muted/20",
-          )}
-          onBlur={(event) => onEditQuestion(event.currentTarget.textContent ?? "")}
-        >
-          {card.question}
-        </div>
+        <InlineEditor
+          content={card.question}
+          onContentChange={onEditQuestion}
+          editable={!isAdded}
+          className="min-h-0 text-[15px] font-medium leading-relaxed"
+        />
 
-        <div
-          contentEditable={!isAdded}
-          suppressContentEditableWarning
-          className={cn(
-            "-mx-2 mt-1.5 px-2 py-1 text-sm leading-relaxed text-muted-foreground outline-none transition-colors",
-            !isAdded && "hover:bg-muted/20 focus:bg-muted/20",
-          )}
-          onBlur={(event) => onEditAnswer(event.currentTarget.textContent ?? "")}
-        >
-          {card.answer}
-        </div>
+        <InlineEditor
+          content={card.answer}
+          onContentChange={onEditAnswer}
+          editable={!isAdded}
+          className="mt-1.5 min-h-0 text-sm leading-relaxed text-muted-foreground"
+        />
       </div>
 
       <div
@@ -79,7 +70,13 @@ export function CardBlock({
       >
         {!isAdded && (
           <>
-            <Button type="button" variant="secondary" size="xs" className="gap-1.5" onClick={onAdd}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="xs"
+              className="gap-1.5"
+              onClick={onAdd}
+            >
               <Plus className="size-3" />
               Add to deck
             </Button>
@@ -118,7 +115,12 @@ export function CardBlock({
 
         <div className="flex-1" />
 
-        <Button type="button" variant="destructive" size="xs" onClick={onDelete}>
+        <Button
+          type="button"
+          variant="destructive"
+          size="xs"
+          onClick={onDelete}
+        >
           <Trash2 className="size-3" />
         </Button>
       </div>

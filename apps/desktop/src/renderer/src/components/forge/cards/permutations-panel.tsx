@@ -9,17 +9,22 @@ import { useForgeCardPermutationsQuery } from "@/hooks/queries/use-forge-card-pe
 import type { ForgeGenerateCardPermutationsInput } from "@shared/rpc/schemas/forge";
 import { Button } from "@/components/ui/button";
 
+import { InlineEditor } from "./inline-editor";
+
 type PermutationsPanelProps = {
   readonly sourceCardId: number;
 };
 
 export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
   const permutationsQuery = useForgeCardPermutationsQuery(sourceCardId);
-  const { mutate: regeneratePermutations, isPending } = useForgeGeneratePermutationsMutation();
+  const { mutate: regeneratePermutations, isPending } =
+    useForgeGeneratePermutationsMutation();
   const inFlightForSourceCardCount = useIsMutating({
     mutationKey: forgeCardsMutationKeys.generatePermutations,
     predicate: (mutation) => {
-      const variables = mutation.state.variables as ForgeGenerateCardPermutationsInput | undefined;
+      const variables = mutation.state.variables as
+        | ForgeGenerateCardPermutationsInput
+        | undefined;
       return variables?.sourceCardId === sourceCardId;
     },
   });
@@ -27,7 +32,8 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
   const autoRegeneratedCardIdRef = useRef<number | null>(null);
 
   const hasInFlightGeneration = inFlightForSourceCardCount > 0;
-  const loading = isPending || hasInFlightGeneration || permutationsQuery.isLoading;
+  const loading =
+    isPending || hasInFlightGeneration || permutationsQuery.isLoading;
   const permutations = permutationsQuery.data?.permutations ?? [];
 
   const handleRegenerate = useCallback(() => {
@@ -90,7 +96,9 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
       </div>
 
       {permutationsQuery.error ? (
-        <p className="text-[11px] text-destructive">{permutationsQuery.error.message}</p>
+        <p className="text-[11px] text-destructive">
+          {permutationsQuery.error.message}
+        </p>
       ) : null}
 
       {!loading &&
@@ -100,22 +108,30 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
             className="flex items-start gap-3 border-b border-border/20 py-3 last:border-b-0"
           >
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] leading-relaxed text-foreground/70">
-                {permutation.question}
-              </p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground/60">
-                {permutation.answer}
-              </p>
+              <InlineEditor
+                content={permutation.question}
+                editable
+                className="min-h-0 text-[13px] leading-relaxed text-foreground/70"
+              />
+              <InlineEditor
+                content={permutation.answer}
+                editable
+                className="mt-1 min-h-0 text-xs leading-relaxed text-muted-foreground/60"
+              />
             </div>
             {addedIds.has(permutation.id) ? (
-              <span className="shrink-0 pt-0.5 text-[11px] text-primary">✓</span>
+              <span className="shrink-0 pt-0.5 text-[11px] text-primary">
+                ✓
+              </span>
             ) : (
               <Button
                 type="button"
                 variant="default"
                 size="xs"
                 className="shrink-0"
-                onClick={() => setAddedIds((prev) => new Set([...prev, permutation.id]))}
+                onClick={() =>
+                  setAddedIds((prev) => new Set([...prev, permutation.id]))
+                }
               >
                 + Add
               </Button>

@@ -56,7 +56,7 @@ export function CardsCanvas({
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-[700px] px-12 py-7 pb-20">
+      <div className="mx-auto max-w-[900px] px-12 py-7 pb-20">
         {status === "generating" && (
           <div className="flex items-center gap-2.5 py-12 text-muted-foreground/50">
             <span className="inline-block size-3.5 animate-spin rounded-full border-[1.5px] border-muted-foreground/40 border-t-transparent" />
