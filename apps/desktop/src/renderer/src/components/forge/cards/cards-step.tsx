@@ -148,6 +148,38 @@ export function CardsStep() {
     activeTopic?.chunkId ?? null,
     activeTopic?.topicIndex ?? null,
   );
+  const [checkedTopicKeys, setCheckedTopicKeys] = useState<ReadonlySet<string>>(new Set());
+
+  const handleCheckTopic = useCallback((topicKeyValue: string) => {
+    setCheckedTopicKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(topicKeyValue)) {
+        next.delete(topicKeyValue);
+      } else {
+        next.add(topicKeyValue);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleClearChecked = useCallback(() => {
+    setCheckedTopicKeys(new Set());
+  }, []);
+
+  const handleGenerateChecked = useCallback(() => {
+    setCheckedTopicKeys(new Set());
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && checkedTopicKeys.size > 0) {
+        setCheckedTopicKeys(new Set());
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [checkedTopicKeys.size]);
+
   const [inFlightTopicKeys, setInFlightTopicKeys] = useState<ReadonlySet<string>>(new Set());
   const inFlightTopicKeysRef = useRef<Set<string>>(new Set());
   const activeTopicGenerationInFlight =
@@ -472,7 +504,11 @@ export function CardsStep() {
           activeTopicKey={activeTopicKey}
           totalAdded={totalAdded}
           totalCards={totalCards}
+          checkedTopicKeys={checkedTopicKeys}
           onSelectTopic={(nextTopicKey) => curationActions.setActiveTopic(nextTopicKey)}
+          onCheckTopic={handleCheckTopic}
+          onClearChecked={handleClearChecked}
+          onGenerateChecked={handleGenerateChecked}
         />
         <CardsCanvas
           topicText={activeTopicResult?.topic.topicText ?? activeTopic?.text ?? null}
