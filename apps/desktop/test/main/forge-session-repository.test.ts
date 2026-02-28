@@ -1,5 +1,5 @@
 import { Cause, Effect, Exit } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   ForgeSessionStatusTransitionError,
@@ -500,6 +500,155 @@ describe("forge session repository", () => {
     );
     const cloze = await Effect.runPromise(repository.getClozeForCard(sourceCardId));
     expect(cloze?.clozeText).toBe("{{c1::answer}}");
+  });
+
+  describe("listRecentSessions", () => {
+    it("returns empty array when no sessions exist", async () => {
+      const repository = makeInMemoryForgeSessionRepository();
+      const sessions = await Effect.runPromise(repository.listRecentSessions());
+      expect(sessions).toEqual([]);
+    });
+
+    it("returns sessions ordered by updatedAt descending", async () => {
+      vi.useFakeTimers({ now: new Date("2026-02-28T10:00:00.000Z") });
+      try {
+        const repository = makeInMemoryForgeSessionRepository();
+        const first = await Effect.runPromise(
+          repository.createSession({
+            sourceKind: "pdf",
+            sourceFilePath: "/tmp/first.pdf",
+            deckPath: null,
+            sourceFingerprint: "fp:first",
+          }),
+        );
+
+        vi.advanceTimersByTime(1000);
+
+        await Effect.runPromise(
+          repository.createSession({
+            sourceKind: "pdf",
+            sourceFilePath: "/tmp/second.pdf",
+            deckPath: null,
+            sourceFingerprint: "fp:second",
+          }),
+        );
+
+        vi.advanceTimersByTime(1000);
+
+        await Effect.runPromise(
+          repository.setSessionStatus({
+            sessionId: first.id,
+            status: "extracting",
+            errorMessage: null,
+          }),
+        );
+
+        const sessions = await Effect.runPromise(repository.listRecentSessions());
+        expect(sessions.length).toBe(2);
+        expect(sessions[0]?.sourceFilePath).toBe("/tmp/first.pdf");
+        expect(sessions[1]?.sourceFilePath).toBe("/tmp/second.pdf");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("includes topic and card counts", async () => {
+      const repository = makeInMemoryForgeSessionRepository();
+      const session = await Effect.runPromise(
+        repository.createSession({
+          sourceKind: "pdf",
+          sourceFilePath: "/tmp/counts.pdf",
+          deckPath: null,
+          sourceFingerprint: "fp:counts",
+        }),
+      );
+
+      await Effect.runPromise(
+        repository.saveChunks(session.id, [
+          {
+            text: "chunk-0",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: session.id,
+          sequenceOrder: 0,
+          topics: ["alpha", "beta"],
+        }),
+      );
+
+      const topic = await Effect.runPromise(
+        repository.getTopicByRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
+      );
+      if (!topic) throw new Error("Expected persisted topic.");
+
+      await Effect.runPromise(repository.tryStartTopicGeneration(topic.topicId));
+      await Effect.runPromise(
+        repository.replaceCardsForTopicAndFinishGenerationSuccess({
+          topicId: topic.topicId,
+          cards: [
+            { question: "Q1", answer: "A1" },
+            { question: "Q2", answer: "A2" },
+          ],
+        }),
+      );
+
+      const sessions = await Effect.runPromise(repository.listRecentSessions());
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0]?.topicCount).toBe(2);
+      expect(sessions[0]?.cardCount).toBe(2);
+    });
+
+    it("returns correct status and errorMessage", async () => {
+      const repository = makeInMemoryForgeSessionRepository();
+      const session = await Effect.runPromise(
+        repository.createSession({
+          sourceKind: "pdf",
+          sourceFilePath: "/tmp/error-session.pdf",
+          deckPath: null,
+          sourceFingerprint: "fp:error-session",
+        }),
+      );
+
+      await Effect.runPromise(
+        repository.setSessionStatus({
+          sessionId: session.id,
+          status: "extracting",
+          errorMessage: null,
+        }),
+      );
+      await Effect.runPromise(
+        repository.setSessionStatus({
+          sessionId: session.id,
+          status: "error",
+          errorMessage: "Something went wrong",
+        }),
+      );
+
+      const sessions = await Effect.runPromise(repository.listRecentSessions());
+      expect(sessions[0]?.status).toBe("error");
+      expect(sessions[0]?.errorMessage).toBe("Something went wrong");
+    });
+
+    it("reports zero counts for a session with no chunks", async () => {
+      const repository = makeInMemoryForgeSessionRepository();
+      await Effect.runPromise(
+        repository.createSession({
+          sourceKind: "pdf",
+          sourceFilePath: "/tmp/bare.pdf",
+          deckPath: null,
+          sourceFingerprint: "fp:bare",
+        }),
+      );
+
+      const sessions = await Effect.runPromise(repository.listRecentSessions());
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0]?.topicCount).toBe(0);
+      expect(sessions[0]?.cardCount).toBe(0);
+    });
   });
 
   it("recovers stale generating topics into error state", async () => {

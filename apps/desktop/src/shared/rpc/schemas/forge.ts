@@ -389,6 +389,29 @@ export class ForgeClozeGenerationError extends Schema.TaggedError<ForgeClozeGene
   message: Schema.String,
 }) {}
 
+export const ForgeSessionSummarySchema = Schema.Struct({
+  id: PositiveIntSchema,
+  sourceFilePath: Schema.String,
+  status: ForgeSessionStatusSchema,
+  errorMessage: NullableStringSchema,
+  topicCount: NonNegativeIntSchema,
+  cardCount: NonNegativeIntSchema,
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+});
+export type ForgeSessionSummary = typeof ForgeSessionSummarySchema.Type;
+
+export const ForgeListSessionsInputSchema = Schema.Struct({});
+export type ForgeListSessionsInput = typeof ForgeListSessionsInputSchema.Type;
+
+export const ForgeListSessionsResultSchema = Schema.Struct({
+  sessions: Schema.Array(ForgeSessionSummarySchema),
+});
+export type ForgeListSessionsResult = typeof ForgeListSessionsResultSchema.Type;
+
+export const ForgeListSessionsErrorSchema = ForgeOperationError;
+export type ForgeListSessionsError = typeof ForgeListSessionsErrorSchema.Type;
+
 export const ForgeCreateSessionErrorSchema = ForgeOperationError;
 export type ForgeCreateSessionError = typeof ForgeCreateSessionErrorSchema.Type;
 

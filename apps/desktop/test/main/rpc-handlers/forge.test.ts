@@ -339,6 +339,79 @@ describe("forge handlers", () => {
     }
   });
 
+  it("lists recent sessions with topic and card counts", async () => {
+    const repository = makeInMemoryForgeSessionRepository();
+    const { handlers, dispose } = await setupHandlers({ repository });
+
+    try {
+      const sessionA = await Effect.runPromise(
+        repository.createSession({
+          sourceKind: "pdf",
+          sourceFilePath: "/tmp/list-a.pdf",
+          deckPath: null,
+          sourceFingerprint: "fp:list-a",
+        }),
+      );
+
+      await Effect.runPromise(
+        repository.saveChunks(sessionA.id, [
+          { text: "chunk-0", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: sessionA.id,
+          sequenceOrder: 0,
+          topics: ["alpha", "beta"],
+        }),
+      );
+
+      const topic = await Effect.runPromise(
+        repository.getTopicByRef({ sessionId: sessionA.id, chunkId: 1, topicIndex: 0 }),
+      );
+      if (!topic) throw new Error("Expected persisted topic.");
+      await Effect.runPromise(repository.tryStartTopicGeneration(topic.topicId));
+      await Effect.runPromise(
+        repository.replaceCardsForTopicAndFinishGenerationSuccess({
+          topicId: topic.topicId,
+          cards: [{ question: "Q1", answer: "A1" }],
+        }),
+      );
+
+      await Effect.runPromise(
+        repository.createSession({
+          sourceKind: "pdf",
+          sourceFilePath: "/tmp/list-b.pdf",
+          deckPath: null,
+          sourceFingerprint: "fp:list-b",
+        }),
+      );
+
+      const result = await Effect.runPromise(handlers.ForgeListSessions({}));
+      expect(result.sessions).toHaveLength(2);
+
+      const a = result.sessions.find((s) => s.sourceFilePath === "/tmp/list-a.pdf");
+      const b = result.sessions.find((s) => s.sourceFilePath === "/tmp/list-b.pdf");
+      expect(a?.topicCount).toBe(2);
+      expect(a?.cardCount).toBe(1);
+      expect(b?.topicCount).toBe(0);
+      expect(b?.cardCount).toBe(0);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("returns empty sessions array when no sessions exist", async () => {
+    const { handlers, dispose } = await setupHandlers();
+
+    try {
+      const result = await Effect.runPromise(handlers.ForgeListSessions({}));
+      expect(result.sessions).toEqual([]);
+    } finally {
+      await dispose();
+    }
+  });
+
   it("persists chunks, updates status, and returns extraction summary", async () => {
     const sourceFilePath = "/tmp/forge-extract.pdf";
     const extractedText = "a".repeat(20_500);

@@ -9,6 +9,7 @@ import {
   type ForgeChunkPageBoundary,
   type ForgeSession,
   type ForgeSessionStatus,
+  type ForgeSessionSummary,
   type ForgeSourceKind,
   type ForgeTopicCardsStatus,
 } from "@shared/rpc/schemas/forge";
@@ -227,6 +228,10 @@ export interface ForgeSessionRepository {
     readonly message: string;
   }) => Effect.Effect<number, ForgeSessionRepositoryError>;
   readonly getChunkCount: (sessionId: number) => Effect.Effect<number, ForgeSessionRepositoryError>;
+  readonly listRecentSessions: () => Effect.Effect<
+    ReadonlyArray<ForgeSessionSummary>,
+    ForgeSessionRepositoryError
+  >;
 }
 
 type ForgeSessionRow = {
@@ -326,6 +331,17 @@ type ForgeCardPermutationRow = {
 type ForgeCardClozeRow = {
   source_card_id: number;
   cloze_text: string;
+};
+
+type ForgeSessionSummaryRow = {
+  id: number;
+  source_file_path: string;
+  status: ForgeSessionStatus;
+  error_message: string | null;
+  topic_count: number;
+  card_count: number;
+  created_at: string;
+  updated_at: string;
 };
 
 type CountRow = {
@@ -1712,6 +1728,48 @@ export const makeSqliteForgeSessionRepository = ({
           return Number.isFinite(count) && count >= 0 ? count : 0;
         }),
       ),
+
+    listRecentSessions: () =>
+      runSql(
+        "listRecentSessions.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const rows = yield* withSqlError(
+            "listRecentSessions.select",
+            sql<ForgeSessionSummaryRow>`
+              SELECT
+                s.id,
+                s.source_file_path,
+                s.status,
+                s.error_message,
+                COUNT(DISTINCT t.id) AS topic_count,
+                COUNT(DISTINCT c.id) AS card_count,
+                s.created_at,
+                s.updated_at
+              FROM forge_sessions s
+              LEFT JOIN forge_chunks ch ON ch.session_id = s.id
+              LEFT JOIN forge_topics t ON t.chunk_id = ch.id
+              LEFT JOIN forge_cards c ON c.topic_id = t.id
+              GROUP BY s.id
+              ORDER BY s.updated_at DESC
+              LIMIT 50
+            `,
+          );
+
+          return rows.map(
+            (row): ForgeSessionSummary => ({
+              id: Number(row.id),
+              sourceFilePath: row.source_file_path,
+              status: row.status,
+              errorMessage: row.error_message,
+              topicCount: Number(row.topic_count),
+              cardCount: Number(row.card_count),
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+            }),
+          );
+        }),
+      ),
   };
 };
 
@@ -2491,5 +2549,30 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
       }),
     getChunkCount: (sessionId) =>
       Effect.sync(() => chunks.filter((entry) => entry.sessionId === sessionId).length),
+    listRecentSessions: () =>
+      Effect.sync(() =>
+        sessions
+          .slice()
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+          .slice(0, 50)
+          .map((session): ForgeSessionSummary => {
+            const sessionChunkIds = new Set(
+              chunks.filter((c) => c.sessionId === session.id).map((c) => c.id),
+            );
+            const sessionTopics = topics.filter((t) => sessionChunkIds.has(t.chunkId));
+            const sessionTopicIds = new Set(sessionTopics.map((t) => t.id));
+            const sessionCardCount = cards.filter((c) => sessionTopicIds.has(c.topicId)).length;
+            return {
+              id: session.id,
+              sourceFilePath: session.sourceFilePath,
+              status: session.status,
+              errorMessage: session.errorMessage,
+              topicCount: sessionTopics.length,
+              cardCount: sessionCardCount,
+              createdAt: session.createdAt,
+              updatedAt: session.updatedAt,
+            };
+          }),
+      ),
   };
 };

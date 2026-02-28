@@ -3,25 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ForgePage } from "@/components/forge/forge-page";
 import { renderWithIpcProviders } from "./render-with-providers";
-
-const defaultOnStreamFrame: NonNullable<Window["desktopApi"]["onStreamFrame"]> = () => {
-  return () => undefined;
-};
-
-const mockDesktopGlobals = (invoke: (...args: unknown[]) => Promise<unknown>) => {
-  Object.defineProperty(window, "desktopApi", {
-    configurable: true,
-    value: {
-      invoke,
-      subscribe: () => () => undefined,
-      onStreamFrame: defaultOnStreamFrame,
-    },
-  });
-  Object.defineProperty(window, "desktopHost", {
-    configurable: true,
-    value: { getPathForFile: (file: File) => `/forge/${file.name}` },
-  });
-};
+import { mockDesktopGlobals, uploadPdf } from "./forge-test-helpers";
 
 const TOPICS_BY_CHUNK = [
   { chunkId: 101, sequenceOrder: 1, topics: ["biology", "cells"] },
@@ -72,20 +54,13 @@ const createSuccessInvoke = (topicsByChunk = TOPICS_BY_CHUNK) =>
         },
       };
     }
+    if (method === "ForgeListSessions") {
+      return { type: "success", data: { sessions: [] } };
+    }
     return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
   });
 
 const renderForgePage = async () => renderWithIpcProviders(<ForgePage />);
-
-const uploadPdf = async (name = "source.pdf") => {
-  const input = document.querySelector('input[type="file"]');
-  if (!(input instanceof HTMLInputElement)) throw new Error("Expected file input");
-
-  const transfer = new DataTransfer();
-  transfer.items.add(new File(["%PDF"], name, { type: "application/pdf" }));
-  Object.defineProperty(input, "files", { configurable: true, value: transfer.files });
-  input.dispatchEvent(new Event("change", { bubbles: true }));
-};
 
 const navigateToTopics = async (screen: Awaited<ReturnType<typeof renderForgePage>>) => {
   await uploadPdf();

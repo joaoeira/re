@@ -4,6 +4,9 @@ import {
   ForgeCreateSessionErrorSchema,
   ForgeCreateSessionInputSchema,
   ForgeCreateSessionResultSchema,
+  ForgeListSessionsErrorSchema,
+  ForgeListSessionsInputSchema,
+  ForgeListSessionsResultSchema,
   ForgeGenerateCardClozeErrorSchema,
   ForgeGenerateCardClozeInputSchema,
   ForgeGenerateCardClozeResultSchema,
@@ -132,6 +135,13 @@ export const ForgeUpdateCard = rpc(
   ForgeUpdateCardInputSchema,
   ForgeUpdateCardResultSchema,
   ForgeUpdateCardErrorSchema,
+);
+
+export const ForgeListSessions = rpc(
+  "ForgeListSessions",
+  ForgeListSessionsInputSchema,
+  ForgeListSessionsResultSchema,
+  ForgeListSessionsErrorSchema,
 );
 
 export const ForgeTopicChunkExtracted = event(

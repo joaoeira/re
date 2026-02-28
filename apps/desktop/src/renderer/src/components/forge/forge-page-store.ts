@@ -63,6 +63,7 @@ type ForgePageContext = {
   readonly addedCardIdsByTopicKey: TopicCardIdMap;
   readonly deletedCardIdsByTopicKey: TopicCardIdMap;
   readonly expandedCardPanelsByTopicKey: TopicExpandedCardPanelMap;
+  readonly resumeErrorMessage: string | null;
 };
 
 const emptyTopicKeys: ReadonlySet<string> = new Set<string>();
@@ -88,6 +89,7 @@ const initialForgePageContext = (): ForgePageContext => ({
   addedCardIdsByTopicKey: emptyTopicCardIdMap,
   deletedCardIdsByTopicKey: emptyTopicCardIdMap,
   expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
+  resumeErrorMessage: null,
 });
 
 const sortChunks = (chunks: ReadonlyArray<ChunkTopics>): ReadonlyArray<ChunkTopics> =>
@@ -275,6 +277,7 @@ export const createForgePageStore = () =>
         addedCardIdsByTopicKey: emptyTopicCardIdMap,
         deletedCardIdsByTopicKey: emptyTopicCardIdMap,
         expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
+        resumeErrorMessage: null,
       }),
       previewReady: (context, event: { summary: PreviewSummary }) => ({
         ...context,
@@ -591,6 +594,35 @@ export const createForgePageStore = () =>
       advanceToCards: (context) => ({
         ...context,
         currentStep: "cards" as const,
+      }),
+      resumeSession: (
+        _context,
+        event: {
+          currentStep: ForgeStep;
+          selectedPdf: SelectedPdf;
+          sessionId: number;
+          topicsByChunk: ReadonlyArray<ChunkTopics>;
+          selectedTopicKeys: ReadonlySet<string>;
+        },
+      ) => ({
+        ...initialForgePageContext(),
+        currentStep: event.currentStep,
+        selectedPdf: event.selectedPdf,
+        activeExtractionSessionId: event.sessionId,
+        extractSummary: {
+          sessionId: event.sessionId,
+          textLength: 0,
+          preview: "",
+          totalPages: 0,
+          chunkCount: 0,
+        },
+        extractState: { status: "idle" as const },
+        topicsByChunk: event.topicsByChunk,
+        selectedTopicKeys: event.selectedTopicKeys,
+      }),
+      resumeError: (context, event: { message: string }) => ({
+        ...context,
+        resumeErrorMessage: event.message,
       }),
     },
   });

@@ -6,6 +6,7 @@ import {
   type ChunkTopics,
   type ExtractSummary,
 } from "@/components/forge/forge-page-store";
+import { topicsSummaryToChunkTopics } from "@/components/forge/forge-page-context";
 
 const TWO_CHUNKS: ReadonlyArray<ChunkTopics> = [
   { chunkId: 10, sequenceOrder: 0, topics: ["alpha", "beta"] },
@@ -461,6 +462,127 @@ describe("forge-page-store topic selection", () => {
     });
   });
 
+  describe("resumeSession", () => {
+    it("resets to initial state then applies the resume payload", () => {
+      const store = storeWithTopics();
+      store.send({ type: "selectAllTopics" });
+      expect(ctx(store).selectedTopicKeys.size).toBe(3);
+
+      const resumeChunks: ReadonlyArray<ChunkTopics> = [
+        { chunkId: 50, sequenceOrder: 0, topics: ["resumed-alpha"] },
+        { chunkId: 60, sequenceOrder: 1, topics: ["resumed-beta", "resumed-gamma"] },
+      ];
+      const resumeKeys = new Set([topicKey(50, 0), topicKey(60, 0), topicKey(60, 1)]);
+
+      store.send({
+        type: "resumeSession",
+        currentStep: "cards",
+        selectedPdf: { fileName: "resume.pdf", sourceFilePath: "/tmp/resume.pdf" },
+        sessionId: 77,
+        topicsByChunk: resumeChunks,
+        selectedTopicKeys: resumeKeys,
+      });
+
+      const state = ctx(store);
+      expect(state.currentStep).toBe("cards");
+      expect(state.selectedPdf).toEqual({
+        fileName: "resume.pdf",
+        sourceFilePath: "/tmp/resume.pdf",
+      });
+      expect(state.activeExtractionSessionId).toBe(77);
+      expect(state.topicsByChunk).toEqual(resumeChunks);
+      expect(state.selectedTopicKeys).toBe(resumeKeys);
+      expect(state.extractState).toEqual({ status: "idle" });
+      expect(state.extractSummary?.sessionId).toBe(77);
+    });
+
+    it("sets step to topics when resuming a topics session", () => {
+      const store = createForgePageStore();
+      store.send({
+        type: "resumeSession",
+        currentStep: "topics",
+        selectedPdf: { fileName: "topics.pdf", sourceFilePath: "/tmp/topics.pdf" },
+        sessionId: 88,
+        topicsByChunk: TWO_CHUNKS,
+        selectedTopicKeys: new Set<string>(),
+      });
+
+      expect(ctx(store).currentStep).toBe("topics");
+      expect(ctx(store).selectedTopicKeys.size).toBe(0);
+    });
+
+    it("clears prior state from a dirty store", () => {
+      const store = storeWithTopics();
+      store.send({ type: "selectAllTopics" });
+      store.send({
+        type: "setCardExpandedPanelForTopic",
+        topicKey: topicKey(10, 0),
+        cardId: 101,
+        panel: "permutations",
+      });
+      store.send({
+        type: "markCardAddedToTopic",
+        topicKey: topicKey(10, 0),
+        cardId: 101,
+      });
+
+      store.send({
+        type: "resumeSession",
+        currentStep: "cards",
+        selectedPdf: { fileName: "clean.pdf", sourceFilePath: "/tmp/clean.pdf" },
+        sessionId: 99,
+        topicsByChunk: [],
+        selectedTopicKeys: new Set<string>(),
+      });
+
+      const state = ctx(store);
+      expect(state.addedCardIdsByTopicKey.size).toBe(0);
+      expect(state.deletedCardIdsByTopicKey.size).toBe(0);
+      expect(state.expandedCardPanelsByTopicKey.size).toBe(0);
+      expect(state.duplicateOfSessionId).toBeNull();
+      expect(state.activeTopicKey).toBeNull();
+      expect(state.topicSyncErrorMessage).toBeNull();
+    });
+  });
+
+  describe("resumeError", () => {
+    it("sets resumeErrorMessage", () => {
+      const store = createForgePageStore();
+      store.send({ type: "resumeError", message: "Load failed" });
+
+      expect(ctx(store).resumeErrorMessage).toBe("Load failed");
+    });
+
+    it("is cleared by resumeSession", () => {
+      const store = createForgePageStore();
+      store.send({ type: "resumeError", message: "Load failed" });
+      expect(ctx(store).resumeErrorMessage).toBe("Load failed");
+
+      store.send({
+        type: "resumeSession",
+        currentStep: "cards",
+        selectedPdf: { fileName: "f.pdf", sourceFilePath: "/f.pdf" },
+        sessionId: 1,
+        topicsByChunk: [],
+        selectedTopicKeys: new Set<string>(),
+      });
+
+      expect(ctx(store).resumeErrorMessage).toBeNull();
+    });
+
+    it("is cleared by setSelectedPdf", () => {
+      const store = createForgePageStore();
+      store.send({ type: "resumeError", message: "Load failed" });
+
+      store.send({
+        type: "setSelectedPdf",
+        selectedPdf: { fileName: "new.pdf", sourceFilePath: "/new.pdf" },
+      });
+
+      expect(ctx(store).resumeErrorMessage).toBeNull();
+    });
+  });
+
   describe("expanded card panels", () => {
     it("stores one expanded panel per card and allows switching panel types", () => {
       const store = storeWithTopics();
@@ -515,5 +637,49 @@ describe("forge-page-store topic selection", () => {
       store.send({ type: "toggleTopic", chunkId: 10, topicIndex: 0 });
       expect(ctx(store).expandedCardPanelsByTopicKey.get(alphaKey)).toBeUndefined();
     });
+  });
+});
+
+describe("topicsSummaryToChunkTopics", () => {
+  const makeSummary = (overrides: {
+    chunkId: number;
+    sequenceOrder: number;
+    topicIndex: number;
+    topicText: string;
+  }) => ({
+    topicId: overrides.chunkId * 100 + overrides.topicIndex,
+    chunkId: overrides.chunkId,
+    sequenceOrder: overrides.sequenceOrder,
+    topicIndex: overrides.topicIndex,
+    topicText: overrides.topicText,
+    status: "idle" as const,
+    errorMessage: null,
+    cardCount: 0,
+    generationRevision: 0,
+  });
+
+  it("groups topics by chunk and sorts by sequenceOrder then topicIndex", () => {
+    const result = topicsSummaryToChunkTopics([
+      makeSummary({ chunkId: 20, sequenceOrder: 1, topicIndex: 1, topicText: "beta" }),
+      makeSummary({ chunkId: 10, sequenceOrder: 0, topicIndex: 0, topicText: "alpha" }),
+      makeSummary({ chunkId: 20, sequenceOrder: 1, topicIndex: 0, topicText: "gamma" }),
+    ]);
+
+    expect(result).toEqual([
+      { chunkId: 10, sequenceOrder: 0, topics: ["alpha"] },
+      { chunkId: 20, sequenceOrder: 1, topics: ["gamma", "beta"] },
+    ]);
+  });
+
+  it("returns empty array for empty input", () => {
+    expect(topicsSummaryToChunkTopics([])).toEqual([]);
+  });
+
+  it("handles a single topic", () => {
+    const result = topicsSummaryToChunkTopics([
+      makeSummary({ chunkId: 5, sequenceOrder: 0, topicIndex: 0, topicText: "only" }),
+    ]);
+
+    expect(result).toEqual([{ chunkId: 5, sequenceOrder: 0, topics: ["only"] }]);
   });
 });

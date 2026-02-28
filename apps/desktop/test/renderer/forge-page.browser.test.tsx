@@ -3,52 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ForgePage } from "@/components/forge/forge-page";
 import { renderWithIpcProviders } from "./render-with-providers";
-
-const defaultOnStreamFrame: NonNullable<Window["desktopApi"]["onStreamFrame"]> = () => {
-  return () => undefined;
-};
-
-const mockDesktopGlobals = (
-  invoke: (...args: unknown[]) => Promise<unknown>,
-  getPathForFile: (file: File) => string = (file) => `/forge/${file.name}`,
-  subscribe: (...args: unknown[]) => () => void = () => () => undefined,
-) => {
-  Object.defineProperty(window, "desktopApi", {
-    configurable: true,
-    value: {
-      invoke,
-      subscribe,
-      onStreamFrame: defaultOnStreamFrame,
-    },
-  });
-
-  Object.defineProperty(window, "desktopHost", {
-    configurable: true,
-    value: {
-      getPathForFile,
-    },
-  });
-};
+import { mockDesktopGlobals, uploadPdf } from "./forge-test-helpers";
 
 const renderForgePage = async () => renderWithIpcProviders(<ForgePage />);
 
-const uploadPdf = async (name = "source.pdf") => {
-  const input = document.querySelector('input[type="file"]');
-  if (!(input instanceof HTMLInputElement)) {
-    throw new Error("Expected Forge page file input.");
-  }
-
-  const transfer = new DataTransfer();
-  transfer.items.add(new File(["%PDF"], name, { type: "application/pdf" }));
-  Object.defineProperty(input, "files", {
-    configurable: true,
-    value: transfer.files,
-  });
-  input.dispatchEvent(new Event("change", { bubbles: true }));
-};
-
 const createSuccessInvoke = () =>
   vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
+    if (method === "ForgeListSessions") {
+      return { type: "success", data: { sessions: [] } };
+    }
+
     if (method === "ForgePreviewChunks") {
       return {
         type: "success",
@@ -173,6 +137,10 @@ describe("ForgePage", () => {
     let resolveStartExtraction: ((value: { type: "success"; data: unknown }) => void) | undefined;
 
     const invoke = vi.fn().mockImplementation(async (method: string, _payload?: unknown) => {
+      if (method === "ForgeListSessions") {
+        return { type: "success", data: { sessions: [] } };
+      }
+
       if (method === "ForgePreviewChunks") {
         return {
           type: "success",
@@ -291,6 +259,10 @@ describe("ForgePage", () => {
       });
 
     const invoke = vi.fn().mockImplementation(async (method: string) => {
+      if (method === "ForgeListSessions") {
+        return { type: "success", data: { sessions: [] } };
+      }
+
       if (method === "ForgePreviewChunks") {
         return {
           type: "success",
@@ -368,6 +340,10 @@ describe("ForgePage", () => {
 
   it("does not issue two start-extraction calls when Begin Extraction is double-clicked", async () => {
     const invoke = vi.fn().mockImplementation(async (method: string) => {
+      if (method === "ForgeListSessions") {
+        return { type: "success", data: { sessions: [] } };
+      }
+
       if (method === "ForgePreviewChunks") {
         return {
           type: "success",
@@ -462,6 +438,10 @@ describe("ForgePage", () => {
 
   it("renders preview error inline", async () => {
     const invoke = vi.fn().mockImplementation(async (method: string) => {
+      if (method === "ForgeListSessions") {
+        return { type: "success", data: { sessions: [] } };
+      }
+
       if (method === "ForgePreviewChunks") {
         return {
           type: "failure",
@@ -490,6 +470,10 @@ describe("ForgePage", () => {
 
   it("renders extraction error inline", async () => {
     const invoke = vi.fn().mockImplementation(async (method: string) => {
+      if (method === "ForgeListSessions") {
+        return { type: "success", data: { sessions: [] } };
+      }
+
       if (method === "ForgePreviewChunks") {
         return {
           type: "success",
@@ -537,6 +521,10 @@ describe("ForgePage", () => {
     }> = [];
 
     const invoke = vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
+      if (method === "ForgeListSessions") {
+        return { type: "success", data: { sessions: [] } };
+      }
+
       if (method === "ForgePreviewChunks") {
         const sourceFilePath = (payload as { sourceFilePath: string }).sourceFilePath;
         return await new Promise((resolve) => {

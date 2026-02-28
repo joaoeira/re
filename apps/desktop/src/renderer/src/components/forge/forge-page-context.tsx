@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "@xstate/store-react";
 import { Effect } from "effect";
@@ -9,6 +9,7 @@ import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
 import { ForgeTopicChunkExtracted } from "@shared/rpc/contracts";
+import type { ForgeSessionSummary, ForgeTopicCardsSummary } from "@shared/rpc/schemas/forge";
 import {
   createForgePageStore,
   type ForgeCardExpandedPanel,
@@ -28,6 +29,7 @@ type ForgePageActions = {
   readonly handleFileSelected: (file: File | null) => void;
   readonly beginExtraction: () => void;
   readonly advanceToCards: () => void;
+  readonly resumeSession: (session: ForgeSessionSummary) => void;
 };
 
 type ForgePageContextValue = {
@@ -84,6 +86,10 @@ export function useForgeExtractSummary(): ExtractSummary | null {
 
 export function useForgeTopicSyncErrorMessage(): string | null {
   return useForgePageSelector((snapshot) => snapshot.context.topicSyncErrorMessage);
+}
+
+export function useForgeResumeErrorMessage(): string | null {
+  return useForgePageSelector((snapshot) => snapshot.context.resumeErrorMessage);
 }
 
 export function useForgeTopicsByChunk(): ReadonlyArray<ChunkTopics> {
@@ -198,6 +204,30 @@ export function useForgeCardsCurationActions(): ForgeCardsCurationActions {
     }),
     [store],
   );
+}
+
+export function topicsSummaryToChunkTopics(
+  topics: ReadonlyArray<ForgeTopicCardsSummary>,
+): ReadonlyArray<ChunkTopics> {
+  const byChunkId = new Map<number, { sequenceOrder: number; topics: Map<number, string> }>();
+  for (const t of topics) {
+    let entry = byChunkId.get(t.chunkId);
+    if (!entry) {
+      entry = { sequenceOrder: t.sequenceOrder, topics: new Map() };
+      byChunkId.set(t.chunkId, entry);
+    }
+    entry.topics.set(t.topicIndex, t.topicText);
+  }
+
+  return Array.from(byChunkId.entries())
+    .map(([chunkId, entry]) => ({
+      chunkId,
+      sequenceOrder: entry.sequenceOrder,
+      topics: Array.from(entry.topics.entries())
+        .sort(([a], [b]) => a - b)
+        .map(([, text]) => text),
+    }))
+    .sort((a, b) => a.sequenceOrder - b.sequenceOrder);
 }
 
 export function ForgePageProvider({ children }: { children: React.ReactNode }) {
@@ -392,13 +422,71 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
     store.send({ type: "advanceToCards" });
   }, [store]);
 
+  const resumingRef = useRef(false);
+
+  const resumeSession = useCallback(
+    (session: ForgeSessionSummary) => {
+      if (resumingRef.current) return;
+      resumingRef.current = true;
+
+      const fileName = session.sourceFilePath.split("/").pop() ?? session.sourceFilePath;
+      const targetStep: ForgeStep = session.cardCount > 0 ? "cards" : "topics";
+
+      runIpcEffect(
+        ipc.client
+          .ForgeGetCardsSnapshot({ sessionId: session.id })
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
+          ),
+      )
+        .then((result) => {
+          const topicsByChunk = topicsSummaryToChunkTopics(result.topics);
+          let selectedTopicKeys: ReadonlySet<string> = new Set<string>();
+
+          if (targetStep === "cards") {
+            const allKeys = new Set<string>();
+            topicsByChunk.forEach((chunk) => {
+              chunk.topics.forEach((_, index) => {
+                allKeys.add(topicKey(chunk.chunkId, index));
+              });
+            });
+            selectedTopicKeys = allKeys;
+          }
+
+          store.send({
+            type: "resumeSession",
+            currentStep: targetStep,
+            selectedPdf: { fileName, sourceFilePath: session.sourceFilePath },
+            sessionId: session.id,
+            topicsByChunk,
+            selectedTopicKeys,
+          });
+
+          void queryClient.invalidateQueries({ queryKey: queryKeys.forgeSessionList });
+        })
+        .catch(() => {
+          store.send({
+            type: "resumeError",
+            message: `Failed to load session data for "${fileName}". Please try again.`,
+          });
+        })
+        .finally(() => {
+          resumingRef.current = false;
+        });
+    },
+    [ipc.client, queryClient, store],
+  );
+
   const actions = useMemo(
     () => ({
       handleFileSelected,
       beginExtraction,
       advanceToCards,
+      resumeSession,
     }),
-    [handleFileSelected, beginExtraction, advanceToCards],
+    [handleFileSelected, beginExtraction, advanceToCards, resumeSession],
   );
 
   const value = useMemo(

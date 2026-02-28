@@ -1,5 +1,6 @@
 export const queryKeys = {
   settings: ["settings"] as const,
+  forgeSessionList: ["forgeSessionList"] as const,
   apiKeysConfigured: ["apiKeysConfigured"] as const,
   workspaceSnapshotPrefix: ["workspaceSnapshot"] as const,
   workspaceSnapshot: (rootPath: string | null) => ["workspaceSnapshot", rootPath] as const,

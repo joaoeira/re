@@ -49,6 +49,7 @@ import {
 type ForgeHandlerKeys =
   | "ForgeCreateSession"
   | "ForgeExtractText"
+  | "ForgeListSessions"
   | "ForgePreviewChunks"
   | "ForgeStartTopicExtraction"
   | "ForgeGetTopicExtractionSnapshot"
@@ -411,6 +412,10 @@ export const createForgeHandlers = () =>
 
     const handlers: Pick<Implementations<AppContract, never>, ForgeHandlerKeys> = {
       ForgeCreateSession: ({ sourceFilePath }) => createSessionFromSourcePath(sourceFilePath),
+      ForgeListSessions: () =>
+        mapOperationError(forgeSessionRepository.listRecentSessions()).pipe(
+          Effect.map((sessions) => ({ sessions })),
+        ),
       ForgeExtractText: ({ sessionId }) =>
         Effect.gen(function* () {
           const begunSession = yield* mapOperationError(
