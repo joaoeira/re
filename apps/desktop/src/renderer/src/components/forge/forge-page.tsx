@@ -4,14 +4,12 @@ import { PdfUploadZone } from "@/components/forge/pdf-upload-zone";
 import { Button } from "@/components/ui/button";
 
 import { CardsStep } from "./cards/cards-step";
-import { DEV_SKIP_TO_CARDS } from "./cards/mock-cards-data";
 import {
   ForgePageProvider,
   useForgeCurrentStep,
   useForgeDuplicateOfSessionId,
   useForgeExtractState,
   useForgePageActions,
-  useForgePageStore,
   useForgePreviewState,
   useForgeSelectedPdf,
   useForgeSelectedTopicCount,
@@ -27,7 +25,6 @@ const isEditableTarget = (target: EventTarget | null): boolean => {
 
 function ForgePageContent() {
   const actions = useForgePageActions();
-  const store = useForgePageStore();
   const currentStep = useForgeCurrentStep();
   const selectedPdf = useForgeSelectedPdf();
   const duplicateOfSessionId = useForgeDuplicateOfSessionId();
@@ -118,17 +115,6 @@ function ForgePageContent() {
           {currentStep === "source" ? (
             <div className="shrink-0 border-t border-border bg-muted/30 px-6 py-2.5">
               <div className="mx-auto flex w-full items-center justify-end gap-3">
-                {import.meta.env.DEV && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="xs"
-                    className="text-muted-foreground/30"
-                    onClick={() => store.send({ type: "devSkipToCards", ...DEV_SKIP_TO_CARDS })}
-                  >
-                    [DEV] Skip to cards
-                  </Button>
-                )}
                 {selectedPdf && (
                   <Button
                     type="button"

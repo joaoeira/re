@@ -592,25 +592,6 @@ export const createForgePageStore = () =>
         ...context,
         currentStep: "cards" as const,
       }),
-      devSkipToCards: (
-        context,
-        event: {
-          topicsByChunk: ReadonlyArray<ChunkTopics>;
-          selectedTopicKeys: ReadonlySet<string>;
-          extractSummary: ExtractSummary;
-        },
-      ) => ({
-        ...context,
-        currentStep: "cards" as const,
-        topicsByChunk: event.topicsByChunk,
-        selectedTopicKeys: event.selectedTopicKeys,
-        extractSummary: event.extractSummary,
-        extractState: { status: "idle" as const },
-        activeTopicKey: null,
-        addedCardIdsByTopicKey: emptyTopicCardIdMap,
-        deletedCardIdsByTopicKey: emptyTopicCardIdMap,
-        expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
-      }),
     },
   });
 
