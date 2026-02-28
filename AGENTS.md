@@ -424,7 +424,7 @@ Dependencies: `@vitest/browser-playwright`, `vitest-browser-react`. Chromium ins
 - **Rendering**: `import { render } from "vitest-browser-react"`
 - **Assertions**: `await expect.element(screen.getByText("ok")).toBeVisible()` (NOT testing-library's `expect()`)
 - **Absence checks**: `expect(screen.getByText("missing").query()).toBeNull()`
-- **Interactions**: `import { userEvent } from "@vitest/browser/context"`
+- **Interactions**: `import { userEvent } from "vitest/browser"`
 - **File naming**: `*.browser.test.tsx` (picked up by browser project, excluded from unit project)
 
 ### Gotchas

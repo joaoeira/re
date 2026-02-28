@@ -40,6 +40,7 @@ import {
   ForgeCardNotFoundError,
   ForgeClozeGenerationError,
   ForgePermutationGenerationError,
+  ForgePermutationNotFoundError,
   ForgeTopicAlreadyGeneratingError,
   ForgeTopicNotFoundError,
   ForgeTopicExtractionError,
@@ -60,7 +61,8 @@ type ForgeHandlerKeys =
   | "ForgeGenerateCardPermutations"
   | "ForgeGetCardCloze"
   | "ForgeGenerateCardCloze"
-  | "ForgeUpdateCard";
+  | "ForgeUpdateCard"
+  | "ForgeUpdatePermutation";
 
 const PREVIEW_LENGTH = 500;
 
@@ -894,6 +896,30 @@ export const createForgeHandlers = () =>
               id: updatedCard.id,
               question: updatedCard.question,
               answer: updatedCard.answer,
+            },
+          };
+        }),
+      ForgeUpdatePermutation: ({ permutationId, question, answer }) =>
+        Effect.gen(function* () {
+          const updatedPermutation = yield* mapOperationError(
+            forgeSessionRepository.updatePermutationContent({
+              permutationId,
+              question,
+              answer,
+            }),
+          );
+
+          if (!updatedPermutation) {
+            return yield* Effect.fail(
+              new ForgePermutationNotFoundError({ permutationId }),
+            );
+          }
+
+          return {
+            permutation: {
+              id: updatedPermutation.id,
+              question: updatedPermutation.question,
+              answer: updatedPermutation.answer,
             },
           };
         }),

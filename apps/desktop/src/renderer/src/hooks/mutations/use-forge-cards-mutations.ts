@@ -11,12 +11,15 @@ import type {
   ForgeGenerateCardPermutationsResult,
   ForgeUpdateCardInput,
   ForgeUpdateCardResult,
+  ForgeUpdatePermutationInput,
+  ForgeUpdatePermutationResult,
 } from "@shared/rpc/schemas/forge";
 
 export const forgeCardsMutationKeys = {
   generatePermutations: ["forgeGenerateCardPermutations"] as const,
   generateCloze: ["forgeGenerateCardCloze"] as const,
   updateCard: ["forgeUpdateCard"] as const,
+  updatePermutation: ["forgeUpdatePermutation"] as const,
 };
 
 export function useForgeGeneratePermutationsMutation() {
@@ -76,6 +79,24 @@ export function useForgeUpdateCardMutation() {
       runIpcEffect(
         ipc.client
           .ForgeUpdateCard(input)
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
+          ),
+      ),
+  });
+}
+
+export function useForgeUpdatePermutationMutation() {
+  const ipc = useIpc();
+
+  return useMutation<ForgeUpdatePermutationResult, Error, ForgeUpdatePermutationInput>({
+    mutationKey: forgeCardsMutationKeys.updatePermutation,
+    mutationFn: (input) =>
+      runIpcEffect(
+        ipc.client
+          .ForgeUpdatePermutation(input)
           .pipe(
             Effect.catchTag("RpcDefectError", (rpcDefect) =>
               Effect.fail(toRpcDefectError(rpcDefect)),

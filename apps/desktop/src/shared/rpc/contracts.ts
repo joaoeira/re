@@ -28,6 +28,7 @@ import {
   ForgeStartTopicExtraction,
   ForgeTopicChunkExtracted,
   ForgeUpdateCard,
+  ForgeUpdatePermutation,
 } from "./contracts/forge";
 import {
   BuildReviewQueue,
@@ -101,6 +102,7 @@ export const appContract = defineContract({
     ForgeGetCardCloze,
     ForgeGenerateCardCloze,
     ForgeUpdateCard,
+    ForgeUpdatePermutation,
   ] as const,
   events: [
     WorkspaceSnapshotChanged,

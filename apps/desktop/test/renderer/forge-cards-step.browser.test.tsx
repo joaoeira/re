@@ -1,4 +1,4 @@
-import { userEvent } from "@vitest/browser/context";
+import { userEvent } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 
 import { ForgePage } from "@/components/forge/forge-page";
@@ -381,6 +381,43 @@ const createCardsInvoke = (options?: {
               question: input.question,
               answer: input.answer,
             },
+          },
+        };
+      }
+
+      if (method === "ForgeUpdatePermutation") {
+        const input = payload as {
+          permutationId: number;
+          question: string;
+          answer: string;
+        };
+        for (const permutations of permutationsByCardId.values()) {
+          const index = permutations.findIndex(
+            (p) => p.id === input.permutationId,
+          );
+          if (index >= 0) {
+            permutations[index] = {
+              id: input.permutationId,
+              question: input.question,
+              answer: input.answer,
+            };
+            return {
+              type: "success",
+              data: {
+                permutation: {
+                  id: input.permutationId,
+                  question: input.question,
+                  answer: input.answer,
+                },
+              },
+            };
+          }
+        }
+        return {
+          type: "failure",
+          error: {
+            _tag: "permutation_not_found",
+            permutationId: input.permutationId,
           },
         };
       }
@@ -923,6 +960,74 @@ describe("Forge cards step", () => {
       question: "edited question",
       answer: "editable answer",
     });
+  });
+
+  it("ForgeUpdatePermutation mock updates permutation data correctly", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "generated",
+          generationRevision: 1,
+          cards: [
+            {
+              id: 8_250,
+              question: "perm source question",
+              answer: "perm source answer",
+            },
+          ],
+        },
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Permutations" }),
+    );
+    await expect
+      .element(screen.getByText("Permutation for 8250"))
+      .toBeVisible();
+
+    const permutationId = 12_000;
+    const updateResult = await invoke(
+      "ForgeUpdatePermutation",
+      {
+        permutationId,
+        question: "updated question",
+        answer: "updated answer",
+      },
+    );
+
+    expect(updateResult).toEqual({
+      type: "success",
+      data: {
+        permutation: {
+          id: permutationId,
+          question: "updated question",
+          answer: "updated answer",
+        },
+      },
+    });
+
+    const getResult = await invoke("ForgeGetCardPermutations", {
+      sourceCardId: 8_250,
+    });
+    expect(getResult.data.permutations[0]).toEqual({
+      id: permutationId,
+      question: "updated question",
+      answer: "updated answer",
+    });
+
+    const notFoundResult = await invoke("ForgeUpdatePermutation", {
+      permutationId: 999_999,
+      question: "x",
+      answer: "y",
+    });
+    expect(notFoundResult.type).toBe("failure");
+    expect(notFoundResult.error._tag).toBe("permutation_not_found");
   });
 
   it("auto-generates permutations and cloze variants when panels open empty", async () => {

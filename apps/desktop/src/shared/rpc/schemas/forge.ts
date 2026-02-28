@@ -358,6 +358,12 @@ export class ForgeCardNotFoundError extends Schema.TaggedError<ForgeCardNotFound
   sourceCardId: PositiveIntSchema,
 }) {}
 
+export class ForgePermutationNotFoundError extends Schema.TaggedError<ForgePermutationNotFoundError>(
+  "@re/desktop/rpc/ForgePermutationNotFoundError",
+)("permutation_not_found", {
+  permutationId: PositiveIntSchema,
+}) {}
+
 export class ForgeCardGenerationError extends Schema.TaggedError<ForgeCardGenerationError>(
   "@re/desktop/rpc/ForgeCardGenerationError",
 )("card_generation_error", {
@@ -508,3 +514,21 @@ export const ForgeUpdateCardErrorSchema = Schema.Union(
   ForgeOperationError,
 );
 export type ForgeUpdateCardError = typeof ForgeUpdateCardErrorSchema.Type;
+
+export const ForgeUpdatePermutationInputSchema = Schema.Struct({
+  permutationId: PositiveIntSchema,
+  question: Schema.String,
+  answer: Schema.String,
+});
+export type ForgeUpdatePermutationInput = typeof ForgeUpdatePermutationInputSchema.Type;
+
+export const ForgeUpdatePermutationResultSchema = Schema.Struct({
+  permutation: ForgePermutationSchema,
+});
+export type ForgeUpdatePermutationResult = typeof ForgeUpdatePermutationResultSchema.Type;
+
+export const ForgeUpdatePermutationErrorSchema = Schema.Union(
+  ForgePermutationNotFoundError,
+  ForgeOperationError,
+);
+export type ForgeUpdatePermutationError = typeof ForgeUpdatePermutationErrorSchema.Type;

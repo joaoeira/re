@@ -215,6 +215,11 @@ export interface ForgeSessionRepository {
   readonly getPermutationsForCard: (
     sourceCardId: number,
   ) => Effect.Effect<ReadonlyArray<ForgeCardPermutation>, ForgeSessionRepositoryError>;
+  readonly updatePermutationContent: (input: {
+    readonly permutationId: number;
+    readonly question: string;
+    readonly answer: string;
+  }) => Effect.Effect<ForgeCardPermutation | null, ForgeSessionRepositoryError>;
   readonly upsertClozeForCard: (input: {
     readonly sourceCardId: number;
     readonly clozeText: string;
@@ -1643,6 +1648,27 @@ export const makeSqliteForgeSessionRepository = ({
       ),
     getPermutationsForCard: (sourceCardId) =>
       runSql("getPermutationsForCard.runtime", loadPermutationsBySourceCardIdSql(sourceCardId)),
+    updatePermutationContent: ({ permutationId, question, answer }) =>
+      runSql(
+        "updatePermutationContent.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const rows = yield* withSqlError(
+            "updatePermutationContent.update",
+            sql<ForgeCardPermutationRow>`
+              UPDATE forge_card_permutations
+              SET
+                question = ${question},
+                answer = ${answer}
+              WHERE id = ${permutationId}
+              RETURNING id, source_card_id, permutation_order, question, answer
+            `,
+          );
+
+          const row = rows[0];
+          return row ? toCardPermutation(row) : null;
+        }),
+      ),
     upsertClozeForCard: ({ sourceCardId, clozeText }) =>
       runSql(
         "upsertClozeForCard.runtime",
@@ -2495,6 +2521,23 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
             question: entry.question,
             answer: entry.answer,
           }));
+      }),
+    updatePermutationContent: ({ permutationId, question, answer }) =>
+      Effect.sync(() => {
+        const index = permutations.findIndex((entry) => entry.id === permutationId);
+        if (index < 0) return null;
+
+        const current = permutations[index]!;
+        const next = { ...current, question, answer };
+        permutations[index] = next;
+
+        return {
+          id: next.id,
+          sourceCardId: next.sourceCardId,
+          permutationOrder: next.permutationOrder,
+          question: next.question,
+          answer: next.answer,
+        };
       }),
     upsertClozeForCard: ({ sourceCardId, clozeText }) =>
       Effect.sync(() => {

@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useIsMutating } from "@tanstack/react-query";
+import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 
 import {
   forgeCardsMutationKeys,
   useForgeGeneratePermutationsMutation,
+  useForgeUpdatePermutationMutation,
 } from "@/hooks/mutations/use-forge-cards-mutations";
 import { useForgeCardPermutationsQuery } from "@/hooks/queries/use-forge-card-permutations-query";
-import type { ForgeGenerateCardPermutationsInput } from "@shared/rpc/schemas/forge";
+import { queryKeys } from "@/lib/query-keys";
+import type {
+  ForgeGenerateCardPermutationsInput,
+  ForgeGetCardPermutationsResult,
+} from "@shared/rpc/schemas/forge";
 import { Button } from "@/components/ui/button";
 
 import { InlineEditor } from "./inline-editor";
@@ -19,6 +24,8 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
   const permutationsQuery = useForgeCardPermutationsQuery(sourceCardId);
   const { mutate: regeneratePermutations, isPending } =
     useForgeGeneratePermutationsMutation();
+  const { mutate: updatePermutation } = useForgeUpdatePermutationMutation();
+  const queryClient = useQueryClient();
   const inFlightForSourceCardCount = useIsMutating({
     mutationKey: forgeCardsMutationKeys.generatePermutations,
     predicate: (mutation) => {
@@ -46,6 +53,43 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
       },
     );
   }, [regeneratePermutations, sourceCardId]);
+
+  const handleEditPermutation = useCallback(
+    (permutationId: number, field: "question" | "answer", value: string) => {
+      const permutationsQueryKey = queryKeys.forgeCardPermutations(sourceCardId);
+      const previous =
+        queryClient.getQueryData<ForgeGetCardPermutationsResult>(permutationsQueryKey);
+
+      const currentPermutation = previous?.permutations.find((p) => p.id === permutationId);
+      if (!currentPermutation) return;
+
+      const nextQuestion = field === "question" ? value : currentPermutation.question;
+      const nextAnswer = field === "answer" ? value : currentPermutation.answer;
+
+      queryClient.setQueryData(permutationsQueryKey, (current: typeof previous) => {
+        if (!current) return current;
+        return {
+          ...current,
+          permutations: current.permutations.map((p) =>
+            p.id === permutationId ? { ...p, question: nextQuestion, answer: nextAnswer } : p,
+          ),
+        };
+      });
+
+      updatePermutation(
+        { permutationId, question: nextQuestion, answer: nextAnswer },
+        {
+          onError: () => {
+            queryClient.setQueryData(permutationsQueryKey, previous);
+          },
+          onSettled: () => {
+            void queryClient.invalidateQueries({ queryKey: permutationsQueryKey, exact: true });
+          },
+        },
+      );
+    },
+    [queryClient, sourceCardId, updatePermutation],
+  );
 
   useEffect(() => {
     autoRegeneratedCardIdRef.current = null;
@@ -111,11 +155,17 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
               <InlineEditor
                 content={permutation.question}
                 editable
+                onContentChange={(value) =>
+                  handleEditPermutation(permutation.id, "question", value)
+                }
                 className="min-h-0 text-[13px] leading-relaxed text-foreground/70"
               />
               <InlineEditor
                 content={permutation.answer}
                 editable
+                onContentChange={(value) =>
+                  handleEditPermutation(permutation.id, "answer", value)
+                }
                 className="mt-1 min-h-0 text-xs leading-relaxed text-muted-foreground/60"
               />
             </div>

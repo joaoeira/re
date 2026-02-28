@@ -44,6 +44,9 @@ import {
   ForgeUpdateCardErrorSchema,
   ForgeUpdateCardInputSchema,
   ForgeUpdateCardResultSchema,
+  ForgeUpdatePermutationErrorSchema,
+  ForgeUpdatePermutationInputSchema,
+  ForgeUpdatePermutationResultSchema,
 } from "@shared/rpc/schemas/forge";
 
 export const ForgeCreateSession = rpc(
@@ -135,6 +138,13 @@ export const ForgeUpdateCard = rpc(
   ForgeUpdateCardInputSchema,
   ForgeUpdateCardResultSchema,
   ForgeUpdateCardErrorSchema,
+);
+
+export const ForgeUpdatePermutation = rpc(
+  "ForgeUpdatePermutation",
+  ForgeUpdatePermutationInputSchema,
+  ForgeUpdatePermutationResultSchema,
+  ForgeUpdatePermutationErrorSchema,
 );
 
 export const ForgeListSessions = rpc(

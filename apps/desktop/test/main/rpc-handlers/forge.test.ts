@@ -1437,4 +1437,80 @@ describe("forge handlers", () => {
       await dispose();
     }
   });
+
+  it("updates a permutation's content and returns permutation_not_found for missing id", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime();
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const sourceFilePath = "/tmp/forge-update-permutation.pdf";
+      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk text",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: created.session.id,
+          sequenceOrder: 0,
+          topics: ["Permutation topic"],
+        }),
+      );
+
+      const generated = await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          chunkId: 1,
+          topicIndex: 0,
+        }),
+      );
+      const sourceCardId = generated.cards[0]?.id;
+      if (!sourceCardId) {
+        throw new Error("Expected generated source card.");
+      }
+
+      const permutations = await Effect.runPromise(
+        handlers.ForgeGenerateCardPermutations({ sourceCardId }),
+      );
+      expect(permutations.permutations).toHaveLength(1);
+      const permutationId = permutations.permutations[0]!.id;
+
+      const updated = await Effect.runPromise(
+        handlers.ForgeUpdatePermutation({
+          permutationId,
+          question: "Updated permutation question?",
+          answer: "Updated permutation answer.",
+        }),
+      );
+      expect(updated.permutation.question).toBe("Updated permutation question?");
+      expect(updated.permutation.answer).toBe("Updated permutation answer.");
+      expect(updated.permutation.id).toBe(permutationId);
+
+      const notFoundExit = await Effect.runPromiseExit(
+        handlers.ForgeUpdatePermutation({
+          permutationId: 999_999,
+          question: "x",
+          answer: "y",
+        }),
+      );
+      expect(Exit.isFailure(notFoundExit)).toBe(true);
+      if (Exit.isFailure(notFoundExit)) {
+        const failure = Cause.failureOption(notFoundExit.cause);
+        expect(failure._tag).toBe("Some");
+        if (failure._tag === "Some") {
+          expect(failure.value._tag).toBe("permutation_not_found");
+        }
+      }
+    } finally {
+      await dispose();
+    }
+  });
 });
