@@ -1,19 +1,49 @@
-import { useEffect } from "react";
+import { Fragment, useEffect } from "react";
 import { Plus } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 
 import { useOpenEditorWindowMutation } from "@/hooks/mutations/use-open-editor-window-mutation";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
+type Crumb = { label: string; navigate?: () => void };
+
+function useBreadcrumbs(): ReadonlyArray<Crumb> {
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const forgeFile = useRouterState({
+    select: (s) => {
+      if (s.location.pathname !== "/forge") return null;
+      const file = (s.location.search as Record<string, unknown>).file;
+      return typeof file === "string" && file.length > 0 ? file : null;
+    },
+  });
+
+  const goHome = () => void navigate({ to: "/" });
+  const goForge = () => void navigate({ to: "/forge", search: { session: null, file: null } });
+
+  const crumbs: Crumb[] = [{ label: "home", navigate: goHome }];
+
+  if (pathname === "/forge" && forgeFile) {
+    crumbs.push({ label: "forge", navigate: goForge });
+    crumbs.push({ label: forgeFile });
+  } else if (pathname === "/forge") {
+    crumbs.push({ label: "forge" });
+  } else if (pathname === "/review") {
+    crumbs.push({ label: "review" });
+  } else if (pathname === "/settings") {
+    crumbs.push({ label: "settings" });
+  }
+
+  return crumbs;
+}
+
 export function Topbar() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isReview = pathname === "/review";
   const isSettings = pathname === "/settings";
-  const currentPageLabel =
-    pathname === "/forge" ? "forge" : isReview ? "review" : isSettings ? "settings" : "home";
-  const isNestedPage = currentPageLabel !== "home";
   const { mutate: openEditorWindow } = useOpenEditorWindowMutation();
+  const crumbs = useBreadcrumbs();
 
   useEffect(() => {
     if (!isReview) return;
@@ -40,26 +70,27 @@ export function Topbar() {
         >
           ~
         </button>
-        <span className="text-muted-foreground/40">/</span>
-        {isNestedPage ? (
-          <>
-            <button
-              type="button"
-              onClick={() => void navigate({ to: "/" })}
-              className="text-muted-foreground transition-colors hover:text-foreground"
-            >
-              home
-            </button>
-            <span className="text-muted-foreground/40">/</span>
-            <span className="text-foreground" aria-current="page">
-              {currentPageLabel}
-            </span>
-          </>
-        ) : (
-          <span className="text-foreground" aria-current="page">
-            home
-          </span>
-        )}
+        {crumbs.map((crumb, i) => {
+          const isLast = i === crumbs.length - 1;
+          return (
+            <Fragment key={crumb.label}>
+              <span className="text-muted-foreground/40">/</span>
+              {isLast ? (
+                <span className="text-foreground" aria-current="page">
+                  {crumb.label}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={crumb.navigate}
+                  className="text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {crumb.label}
+                </button>
+              )}
+            </Fragment>
+          );
+        })}
       </nav>
 
       {isReview ? (

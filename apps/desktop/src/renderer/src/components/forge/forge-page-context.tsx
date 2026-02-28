@@ -1,9 +1,18 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "@xstate/store-react";
 import { Effect } from "effect";
 
 import { useForgePreviewQuery } from "@/hooks/queries/use-forge-preview-query";
+import { useForgeSessionListQuery } from "@/hooks/queries/use-forge-session-list-query";
 import { useForgeTopicSnapshotQuery } from "@/hooks/queries/use-forge-topic-snapshot-query";
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
@@ -249,10 +258,26 @@ export function topicsSummaryToChunkTopics(
     .sort((a, b) => a.sequenceOrder - b.sequenceOrder);
 }
 
-export function ForgePageProvider({ children }: { children: React.ReactNode }) {
+type ForgePageProviderProps = {
+  readonly children: React.ReactNode;
+  readonly initialSessionId: number | null;
+  readonly onSessionChange: (session: { id: number; fileName: string } | null) => void;
+};
+
+export function ForgePageProvider({
+  children,
+  initialSessionId,
+  onSessionChange,
+}: ForgePageProviderProps) {
   const ipc = useIpc();
   const queryClient = useQueryClient();
   const store = useMemo(() => createForgePageStore(), []);
+
+  const onSessionChangeRef = useRef(onSessionChange);
+  onSessionChangeRef.current = onSessionChange;
+
+  const sessionListQuery = useForgeSessionListQuery();
+  const [autoResumeAttempted, setAutoResumeAttempted] = useState(false);
 
   const selectedPdf = useSelector(store, (snapshot) => snapshot.context.selectedPdf);
   const sourceFilePath = selectedPdf?.sourceFilePath ?? null;
@@ -339,6 +364,84 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
     });
   }, [ipc, store]);
 
+  const resumingRef = useRef(false);
+
+  const resumeSession = useCallback(
+    (session: ForgeSessionSummary) => {
+      if (resumingRef.current) return;
+      resumingRef.current = true;
+
+      const fileName = session.sourceFilePath.split("/").pop() ?? session.sourceFilePath;
+      const targetStep: ForgeStep = session.cardCount > 0 ? "cards" : "topics";
+
+      runIpcEffect(
+        ipc.client
+          .ForgeGetCardsSnapshot({ sessionId: session.id })
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
+          ),
+      )
+        .then((result) => {
+          const topicsByChunk = topicsSummaryToChunkTopics(result.topics);
+          const selectedKeys = new Set<string>();
+
+          for (const topic of result.topics) {
+            if (topic.selected) {
+              selectedKeys.add(topicKey(topic.chunkId, topic.topicIndex));
+            }
+          }
+
+          if (targetStep === "cards" && selectedKeys.size === 0) {
+            for (const chunk of topicsByChunk) {
+              chunk.topics.forEach((_, index) => {
+                selectedKeys.add(topicKey(chunk.chunkId, index));
+              });
+            }
+          }
+
+          const selectedTopicKeys: ReadonlySet<string> = selectedKeys;
+
+          store.send({
+            type: "resumeSession",
+            currentStep: targetStep,
+            selectedPdf: { fileName, sourceFilePath: session.sourceFilePath },
+            sessionId: session.id,
+            targetDeckPath: session.deckPath,
+            topicsByChunk,
+            selectedTopicKeys,
+          });
+
+          onSessionChangeRef.current({ id: session.id, fileName });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.forgeSessionList });
+        })
+        .catch(() => {
+          store.send({
+            type: "resumeError",
+            message: `Failed to load session data for "${fileName}". Please try again.`,
+          });
+        })
+        .finally(() => {
+          resumingRef.current = false;
+        });
+    },
+    [ipc.client, queryClient, store],
+  );
+
+  useEffect(() => {
+    if (autoResumeAttempted || !initialSessionId || !sessionListQuery.data) return;
+    setAutoResumeAttempted(true);
+
+    const match = sessionListQuery.data.sessions.find((s) => s.id === initialSessionId);
+    if (!match) {
+      onSessionChangeRef.current(null);
+      return;
+    }
+
+    resumeSession(match);
+  }, [autoResumeAttempted, initialSessionId, sessionListQuery.data, resumeSession]);
+
   const extractionMutation = useMutation({
     mutationFn: ({ selectedSourceFilePath }: { selectedSourceFilePath: string }) =>
       runIpcEffect(
@@ -369,6 +472,14 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
         extraction: result.extraction,
         topicsByChunk: result.topicsByChunk,
       });
+
+      const selectedFileName = store.getSnapshot().context.selectedPdf?.fileName;
+      if (selectedFileName) {
+        onSessionChangeRef.current({
+          id: result.extraction.sessionId,
+          fileName: selectedFileName,
+        });
+      }
     },
     onError: (error, variables) => {
       const currentSourcePath = store.getSnapshot().context.selectedPdf?.sourceFilePath;
@@ -386,6 +497,7 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
     (file: File | null) => {
       if (!file) {
         store.send({ type: "resetForNoFile" });
+        onSessionChangeRef.current(null);
         return;
       }
 
@@ -466,70 +578,6 @@ export function ForgePageProvider({ children }: { children: React.ReactNode }) {
         store.send({ type: "advanceToCards" });
       });
   }, [ipc.client, store]);
-
-  const resumingRef = useRef(false);
-
-  const resumeSession = useCallback(
-    (session: ForgeSessionSummary) => {
-      if (resumingRef.current) return;
-      resumingRef.current = true;
-
-      const fileName = session.sourceFilePath.split("/").pop() ?? session.sourceFilePath;
-      const targetStep: ForgeStep = session.cardCount > 0 ? "cards" : "topics";
-
-      runIpcEffect(
-        ipc.client
-          .ForgeGetCardsSnapshot({ sessionId: session.id })
-          .pipe(
-            Effect.catchTag("RpcDefectError", (rpcDefect) =>
-              Effect.fail(toRpcDefectError(rpcDefect)),
-            ),
-          ),
-      )
-        .then((result) => {
-          const topicsByChunk = topicsSummaryToChunkTopics(result.topics);
-          const selectedKeys = new Set<string>();
-
-          for (const topic of result.topics) {
-            if (topic.selected) {
-              selectedKeys.add(topicKey(topic.chunkId, topic.topicIndex));
-            }
-          }
-
-          if (targetStep === "cards" && selectedKeys.size === 0) {
-            for (const chunk of topicsByChunk) {
-              chunk.topics.forEach((_, index) => {
-                selectedKeys.add(topicKey(chunk.chunkId, index));
-              });
-            }
-          }
-
-          const selectedTopicKeys: ReadonlySet<string> = selectedKeys;
-
-          store.send({
-            type: "resumeSession",
-            currentStep: targetStep,
-            selectedPdf: { fileName, sourceFilePath: session.sourceFilePath },
-            sessionId: session.id,
-            targetDeckPath: session.deckPath,
-            topicsByChunk,
-            selectedTopicKeys,
-          });
-
-          void queryClient.invalidateQueries({ queryKey: queryKeys.forgeSessionList });
-        })
-        .catch(() => {
-          store.send({
-            type: "resumeError",
-            message: `Failed to load session data for "${fileName}". Please try again.`,
-          });
-        })
-        .finally(() => {
-          resumingRef.current = false;
-        });
-    },
-    [ipc.client, queryClient, store],
-  );
 
   const actions = useMemo(
     () => ({

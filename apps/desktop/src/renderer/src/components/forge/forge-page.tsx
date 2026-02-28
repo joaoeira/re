@@ -192,9 +192,19 @@ function ForgePageContent() {
   );
 }
 
-export function ForgePage() {
+const noopSessionChange = () => {};
+
+type ForgePageProps = {
+  readonly initialSessionId?: number | null;
+  readonly onSessionChange?: (session: { id: number; fileName: string } | null) => void;
+};
+
+export function ForgePage({
+  initialSessionId = null,
+  onSessionChange = noopSessionChange,
+}: ForgePageProps = {}) {
   return (
-    <ForgePageProvider>
+    <ForgePageProvider initialSessionId={initialSessionId} onSessionChange={onSessionChange}>
       <ForgePageContent />
     </ForgePageProvider>
   );
