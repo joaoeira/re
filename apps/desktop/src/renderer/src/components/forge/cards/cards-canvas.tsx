@@ -42,6 +42,10 @@ export function CardsCanvas({
   onRegenerate,
   onGenerateCards,
 }: CardsCanvasProps) {
+  const visible = status ? visibleCards(cards, deletedCardIds) : [];
+  const addedCount = visible.filter((card) => addedCardIds.has(card.id)).length;
+  const hasUnadded = visible.some((card) => !addedCardIds.has(card.id));
+
   if (!topicText || !status) {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -49,10 +53,6 @@ export function CardsCanvas({
       </div>
     );
   }
-
-  const visible = visibleCards(cards, deletedCardIds);
-  const addedCount = visible.filter((card) => addedCardIds.has(card.id)).length;
-  const hasUnadded = visible.some((card) => !addedCardIds.has(card.id));
 
   return (
     <div className="flex-1 overflow-y-auto">

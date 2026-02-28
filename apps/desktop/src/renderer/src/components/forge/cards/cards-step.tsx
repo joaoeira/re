@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Effect } from "effect";
 
 import {
   useForgeActiveTopicKey,
@@ -12,14 +13,17 @@ import {
   useForgeTopicsByChunk,
 } from "../forge-page-context";
 import { topicKey } from "../forge-page-store";
-import {
-  useForgeGenerateTopicCardsMutation,
-  useForgeUpdateCardMutation,
-} from "@/hooks/mutations/use-forge-cards-mutations";
+import { useForgeUpdateCardMutation } from "@/hooks/mutations/use-forge-cards-mutations";
 import { useForgeCardsSnapshotQuery } from "@/hooks/queries/use-forge-cards-snapshot-query";
 import { useForgeTopicCardsQuery } from "@/hooks/queries/use-forge-topic-cards-query";
+import { useIpc } from "@/lib/ipc-context";
+import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
-import type { ForgeGetTopicCardsResult, ForgeTopicCardsSummary } from "@shared/rpc/schemas/forge";
+import type {
+  ForgeGetTopicCardsResult,
+  ForgeTopicCardsStatus,
+  ForgeTopicCardsSummary,
+} from "@shared/rpc/schemas/forge";
 import { CardsCanvas } from "./cards-canvas";
 import { CardsFooter } from "./cards-footer";
 import { CardsSidebar } from "./cards-sidebar";
@@ -31,8 +35,58 @@ type CardsTopic = {
   readonly text: string;
 };
 
+type ActiveStatusInput = {
+  readonly hasTopicQueryError: boolean;
+  readonly inFlight: boolean;
+  readonly summaryStatus: ForgeTopicCardsStatus | null;
+  readonly topicQueryStatus: ForgeTopicCardsStatus | null;
+  readonly topicQueryCardCount: number;
+  readonly hasTopicQueryResult: boolean;
+  readonly hasActiveTopic: boolean;
+};
+
+const deriveActiveStatus = ({
+  hasTopicQueryError,
+  inFlight,
+  summaryStatus,
+  topicQueryStatus,
+  topicQueryCardCount,
+  hasTopicQueryResult,
+  hasActiveTopic,
+}: ActiveStatusInput): ForgeTopicCardsStatus | null => {
+  if (hasTopicQueryError && !hasTopicQueryResult) {
+    return "error";
+  }
+
+  if (inFlight) {
+    return "generating";
+  }
+
+  if (summaryStatus === "generating") {
+    const topicQueryReady =
+      topicQueryCardCount > 0 || topicQueryStatus === "generated" || topicQueryStatus === "error";
+    if (!topicQueryReady) {
+      return "generating";
+    }
+  }
+
+  if (hasTopicQueryResult && topicQueryStatus) {
+    return topicQueryStatus;
+  }
+
+  if (summaryStatus) {
+    return summaryStatus;
+  }
+
+  return hasActiveTopic ? "idle" : null;
+};
+
+const inFlightTopicKey = (sessionId: number, topicKeyValue: string): string =>
+  `${sessionId}:${topicKeyValue}`;
+
 export function CardsStep() {
   const queryClient = useQueryClient();
+  const ipc = useIpc();
   const extractSummary = useForgeExtractSummary();
   const sessionId = extractSummary?.sessionId ?? null;
 
@@ -94,8 +148,31 @@ export function CardsStep() {
     activeTopic?.chunkId ?? null,
     activeTopic?.topicIndex ?? null,
   );
+  const [inFlightTopicKeys, setInFlightTopicKeys] = useState<ReadonlySet<string>>(new Set());
+  const inFlightTopicKeysRef = useRef<Set<string>>(new Set());
+  const activeTopicGenerationInFlight =
+    activeTopicKey !== null && sessionId !== null
+      ? inFlightTopicKeys.has(inFlightTopicKey(sessionId, activeTopicKey))
+      : false;
 
-  const { mutate: generateTopicCards } = useForgeGenerateTopicCardsMutation();
+  const setTopicInFlight = useCallback(
+    (nextSessionId: number, nextTopicKey: string, inFlight: boolean) => {
+      const scopedTopicKey = inFlightTopicKey(nextSessionId, nextTopicKey);
+      if (inFlight) {
+        inFlightTopicKeysRef.current.add(scopedTopicKey);
+      } else {
+        inFlightTopicKeysRef.current.delete(scopedTopicKey);
+      }
+      setInFlightTopicKeys(new Set(inFlightTopicKeysRef.current));
+    },
+    [],
+  );
+
+  useEffect(() => {
+    inFlightTopicKeysRef.current = new Set();
+    setInFlightTopicKeys(new Set());
+  }, [sessionId]);
+
   const { mutate: updateCard } = useForgeUpdateCardMutation();
 
   const generationRevisionByTopicKeyRef = useRef<Map<string, number>>(new Map());
@@ -166,8 +243,35 @@ export function CardsStep() {
   const requestTopicGeneration = useCallback(
     (topic: CardsTopic) => {
       if (sessionId === null) return;
+      const scopedTopicKey = inFlightTopicKey(sessionId, topic.topicKey);
+      if (inFlightTopicKeysRef.current.has(scopedTopicKey)) {
+        return;
+      }
 
       const existing = summaryByTopicKey.get(topic.topicKey);
+      const topicQueryKey = queryKeys.forgeTopicCards(sessionId, topic.chunkId, topic.topicIndex);
+      setTopicInFlight(sessionId, topic.topicKey, true);
+      queryClient.setQueryData<ForgeGetTopicCardsResult>(topicQueryKey, (previous) => {
+        if (previous) {
+          return {
+            ...previous,
+            topic: {
+              ...previous.topic,
+              status: "generating",
+              errorMessage: null,
+            },
+          };
+        }
+        if (!existing) return previous;
+        return {
+          topic: {
+            ...existing,
+            status: "generating",
+            errorMessage: null,
+          },
+          cards: [],
+        };
+      });
       if (existing) {
         patchSnapshotTopicSummary(
           {
@@ -179,34 +283,45 @@ export function CardsStep() {
         );
       }
 
-      generateTopicCards(
-        {
-          sessionId,
-          chunkId: topic.chunkId,
-          topicIndex: topic.topicIndex,
-        },
-        {
-          onSuccess: (result) => {
-            queryClient.setQueryData<ForgeGetTopicCardsResult>(
-              queryKeys.forgeTopicCards(sessionId, topic.chunkId, topic.topicIndex),
-              () => result,
-            );
-            patchSnapshotTopicSummary(result.topic, true);
-          },
-          onError: () => {
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.forgeCardsSnapshot(sessionId),
-              exact: true,
-            });
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.forgeTopicCards(sessionId, topic.chunkId, topic.topicIndex),
-              exact: true,
-            });
-          },
-        },
-      );
+      void runIpcEffect(
+        ipc.client
+          .ForgeGenerateTopicCards({
+            sessionId,
+            chunkId: topic.chunkId,
+            topicIndex: topic.topicIndex,
+          })
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
+          ),
+      )
+        .then((result) => {
+          queryClient.setQueryData<ForgeGetTopicCardsResult>(topicQueryKey, () => result);
+          patchSnapshotTopicSummary(result.topic, true);
+        })
+        .catch(() => {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.forgeCardsSnapshot(sessionId),
+            exact: true,
+          });
+          void queryClient.invalidateQueries({
+            queryKey: topicQueryKey,
+            exact: true,
+          });
+        })
+        .finally(() => {
+          setTopicInFlight(sessionId, topic.topicKey, false);
+        });
     },
-    [generateTopicCards, patchSnapshotTopicSummary, queryClient, sessionId, summaryByTopicKey],
+    [
+      ipc.client,
+      patchSnapshotTopicSummary,
+      queryClient,
+      sessionId,
+      setTopicInFlight,
+      summaryByTopicKey,
+    ],
   );
 
   const autoStartedSessionIdRef = useRef<number | null>(null);
@@ -284,19 +399,15 @@ export function CardsStep() {
   const activeSummary = activeTopic ? (summaryByTopicKey.get(activeTopic.topicKey) ?? null) : null;
   const activeTopicResult = activeTopicCardsQuery.data;
 
-  const activeStatus = (() => {
-    if (activeTopicCardsQuery.error && !activeTopicResult) {
-      return "error" as const;
-    }
-
-    if (activeSummary?.status === "generating") {
-      return "generating" as const;
-    }
-
-    return (
-      activeTopicResult?.topic.status ?? activeSummary?.status ?? (activeTopic ? "idle" : null)
-    );
-  })();
+  const activeStatus = deriveActiveStatus({
+    hasTopicQueryError: Boolean(activeTopicCardsQuery.error),
+    inFlight: activeTopicGenerationInFlight,
+    summaryStatus: activeSummary?.status ?? null,
+    topicQueryStatus: activeTopicResult?.topic.status ?? null,
+    topicQueryCardCount: activeTopicResult?.cards.length ?? 0,
+    hasTopicQueryResult: Boolean(activeTopicResult),
+    hasActiveTopic: activeTopic !== null,
+  });
 
   const activeErrorMessage =
     activeTopicCardsQuery.error?.message ??
@@ -381,11 +492,8 @@ export function CardsStep() {
           onTogglePanel={(cardId, panel) => {
             if (!activeTopicKey) return;
             const current = activeExpandedPanels.get(cardId) ?? null;
-            curationActions.setCardExpandedPanel(
-              activeTopicKey,
-              cardId,
-              current === panel ? null : panel,
-            );
+            const next = current === panel ? null : panel;
+            curationActions.setCardExpandedPanel(activeTopicKey, cardId, next);
           }}
           onEditCard={handleEditCard}
           onRegenerate={() => {

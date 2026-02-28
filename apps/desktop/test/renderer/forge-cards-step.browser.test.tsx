@@ -93,10 +93,16 @@ const createCardsInvoke = (options?: {
   readonly sessionId?: number;
   readonly initialByTopicKey?: Readonly<Record<string, InitialTopicState>>;
   readonly snapshotSummaryOverridesByTopicKey?: Readonly<Record<string, SnapshotSummaryOverride>>;
+  readonly topicGenerationDelayByTopicKey?: Readonly<Record<string, number>>;
+  readonly topicGenerationFailureByTopicKey?: Readonly<Record<string, string>>;
+  readonly permutationsGenerationDelayMs?: number;
+  readonly clozeGenerationDelayMs?: number;
 }) => {
   const sessionId = options?.sessionId ?? 77;
   let nextCardId = 9_000;
   let nextPermutationId = 12_000;
+  const permutationsGenerationDelayMs = options?.permutationsGenerationDelayMs ?? 0;
+  const clozeGenerationDelayMs = options?.clozeGenerationDelayMs ?? 0;
 
   const topicByKey = new Map<string, TopicState>();
   TOPICS.forEach((topic) => {
@@ -269,6 +275,30 @@ const createCardsInvoke = (options?: {
           },
         };
       }
+      const generationDelayMs =
+        options?.topicGenerationDelayByTopicKey?.[topicKey(state.topic)] ?? 0;
+      if (generationDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, generationDelayMs));
+      }
+      const generationFailureMessage =
+        options?.topicGenerationFailureByTopicKey?.[topicKey(state.topic)] ?? null;
+      if (generationFailureMessage) {
+        state.status = "error";
+        state.errorMessage = generationFailureMessage;
+        state.cards = [];
+        state.generationRevision += 1;
+
+        return {
+          type: "failure",
+          error: {
+            _tag: "card_generation_error",
+            sessionId,
+            chunkId: state.topic.chunkId,
+            topicIndex: state.topic.topicIndex,
+            message: generationFailureMessage,
+          },
+        };
+      }
 
       const nextRevision = state.generationRevision + 1;
       const nextCards =
@@ -348,6 +378,9 @@ const createCardsInvoke = (options?: {
 
     if (method === "ForgeGenerateCardPermutations") {
       const input = payload as { sourceCardId: number };
+      if (permutationsGenerationDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, permutationsGenerationDelayMs));
+      }
       const permutations = [
         {
           id: nextPermutationId++,
@@ -378,6 +411,9 @@ const createCardsInvoke = (options?: {
 
     if (method === "ForgeGenerateCardCloze") {
       const input = payload as { sourceCardId: number };
+      if (clozeGenerationDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, clozeGenerationDelayMs));
+      }
       const cloze = `The answer is {{c1::${input.sourceCardId}}}.`;
       clozeByCardId.set(input.sourceCardId, cloze);
       return {
@@ -486,6 +522,97 @@ describe("Forge cards step", () => {
       .toBe(0);
   });
 
+  it("applies all auto-start generation results when completions are out of order", async () => {
+    const invoke = createCardsInvoke({
+      topicGenerationDelayByTopicKey: {
+        "101:0": 240,
+        "101:1": 170,
+        "102:0": 30,
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateTopicCards",
+        ).length;
+      })
+      .toBe(3);
+
+    await expect.element(screen.getByText("Q alpha")).toBeVisible();
+
+    const betaRow = screen.getByText("beta").element().closest("button");
+    const gammaRow = screen.getByText("gamma").element().closest("button");
+    if (!(betaRow instanceof HTMLElement) || !(gammaRow instanceof HTMLElement)) {
+      throw new Error("Expected beta and gamma sidebar rows.");
+    }
+
+    betaRow.click();
+    await expect.element(screen.getByText("Q beta")).toBeVisible();
+
+    gammaRow.click();
+    await expect.element(screen.getByText("Q gamma")).toBeVisible();
+  });
+
+  it("keeps successful auto-start topics while failed topics enter error and can retry", async () => {
+    const invoke = createCardsInvoke({
+      topicGenerationFailureByTopicKey: {
+        "101:1": "beta auto-start failed",
+      },
+      topicGenerationDelayByTopicKey: {
+        "101:0": 80,
+        "102:0": 40,
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateTopicCards",
+        ).length;
+      })
+      .toBe(3);
+
+    await expect.element(screen.getByText("Q alpha")).toBeVisible();
+
+    const gammaRow = screen.getByText("gamma").element().closest("button");
+    const betaRow = screen.getByText("beta").element().closest("button");
+    if (!(betaRow instanceof HTMLElement) || !(gammaRow instanceof HTMLElement)) {
+      throw new Error("Expected beta and gamma sidebar rows.");
+    }
+
+    gammaRow.click();
+    await expect.element(screen.getByText("Q gamma")).toBeVisible();
+
+    betaRow.click();
+    await expect.element(screen.getByText("beta auto-start failed")).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+
+    const retryButton = screen.getByRole("button", { name: "Retry", exact: true }).element();
+    if (!(retryButton instanceof HTMLButtonElement)) {
+      throw new Error("Expected retry button element.");
+    }
+    retryButton.click();
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(([method, payload]: unknown[]) => {
+          if (method !== "ForgeGenerateTopicCards") return false;
+          const input = payload as { chunkId: number; topicIndex: number };
+          return input.chunkId === 101 && input.topicIndex === 1;
+        }).length;
+      })
+      .toBe(2);
+  });
+
   it("switches topics from the sidebar and renders the selected topic cards", async () => {
     const invoke = createCardsInvoke({
       initialByTopicKey: {
@@ -541,6 +668,47 @@ describe("Forge cards step", () => {
     await expect.element(screen.getByText("Q alpha")).toBeVisible();
   });
 
+  it("ignores duplicate Generate cards clicks while the same topic is in flight", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "idle",
+          cards: [],
+        },
+      },
+      topicGenerationDelayByTopicKey: {
+        "101:0": 300,
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    const generateButton = screen
+      .getByRole("button", { name: "Generate cards", exact: true })
+      .element();
+    if (!(generateButton instanceof HTMLButtonElement)) {
+      throw new Error("Expected generate cards button element.");
+    }
+
+    generateButton.click();
+    generateButton.click();
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(([method, payload]: unknown[]) => {
+          if (method !== "ForgeGenerateTopicCards") return false;
+          const input = payload as { chunkId: number; topicIndex: number };
+          return input.chunkId === 101 && input.topicIndex === 0;
+        }).length;
+      })
+      .toBe(1);
+
+    await expect.element(screen.getByText("Q alpha")).toBeVisible();
+  });
+
   it("renders generated cards when the topic query is newer than the snapshot summary", async () => {
     const invoke = createCardsInvoke({
       initialByTopicKey: {
@@ -574,6 +742,58 @@ describe("Forge cards step", () => {
       .toBe(1);
 
     await expect.element(screen.getByText("Q alpha")).toBeVisible();
+  });
+
+  it("renders generated cards when snapshot status is stale as generating", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "generated",
+          generationRevision: 2,
+          cards: [{ id: 8_120, question: "alpha already generated", answer: "alpha answer" }],
+        },
+      },
+      snapshotSummaryOverridesByTopicKey: {
+        "101:0": {
+          status: "generating",
+          cardCount: 0,
+          generationRevision: 1,
+        },
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await expect.element(screen.getByText("alpha already generated")).toBeVisible();
+  });
+
+  it("keeps rendering generating when snapshot is generating and topic query is stale idle", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "idle",
+          cards: [],
+        },
+      },
+      snapshotSummaryOverridesByTopicKey: {
+        "101:0": {
+          status: "generating",
+          cardCount: 0,
+          generationRevision: 0,
+        },
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await expect.element(screen.getByText("Generating cards…")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Generate cards" }).query()).toBeNull();
   });
 
   it("renders topic error state and retries generation", async () => {
@@ -701,6 +921,66 @@ describe("Forge cards step", () => {
           ([method]: unknown[]) => method === "ForgeGenerateCardCloze",
         ).length;
       })
+      .toBe(1);
+  });
+
+  it("does not trigger duplicate panel generation when reopening while generation is in flight", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "generated",
+          generationRevision: 1,
+          cards: [{ id: 8_450, question: "in-flight question", answer: "in-flight answer" }],
+        },
+      },
+      permutationsGenerationDelayMs: 300,
+      clozeGenerationDelayMs: 300,
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await userEvent.click(screen.getByRole("button", { name: "Permutations" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cloze" }));
+    await userEvent.click(screen.getByRole("button", { name: "Permutations" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cloze" }));
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateCardPermutations",
+        ).length;
+      })
+      .toBe(1);
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateCardCloze",
+        ).length;
+      })
+      .toBe(1);
+
+    await expect.element(screen.getByText("Cloze conversion")).toBeVisible();
+
+    await expect
+      .poll(
+        () =>
+          invoke.mock.calls.filter(
+            ([method]: unknown[]) => method === "ForgeGenerateCardPermutations",
+          ).length,
+        { timeout: 700, interval: 50 },
+      )
+      .toBe(1);
+
+    await expect
+      .poll(
+        () =>
+          invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeGenerateCardCloze")
+            .length,
+        { timeout: 700, interval: 50 },
+      )
       .toBe(1);
   });
 

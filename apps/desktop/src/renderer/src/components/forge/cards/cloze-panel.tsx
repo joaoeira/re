@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useIsMutating } from "@tanstack/react-query";
 
 import { ClozePreview } from "@/components/editor/cloze-preview";
-import { useForgeGenerateClozeMutation } from "@/hooks/mutations/use-forge-cards-mutations";
+import {
+  forgeCardsMutationKeys,
+  useForgeGenerateClozeMutation,
+} from "@/hooks/mutations/use-forge-cards-mutations";
 import { useForgeCardClozeQuery } from "@/hooks/queries/use-forge-card-cloze-query";
-import { queryKeys } from "@/lib/query-keys";
+import type { ForgeGenerateCardClozeInput } from "@shared/rpc/schemas/forge";
 import { Button } from "@/components/ui/button";
 
 type ClozePanelProps = {
@@ -12,26 +15,32 @@ type ClozePanelProps = {
 };
 
 export function ClozePanel({ sourceCardId }: ClozePanelProps) {
-  const queryClient = useQueryClient();
   const clozeQuery = useForgeCardClozeQuery(sourceCardId);
   const { mutate: regenerateCloze, isPending } = useForgeGenerateClozeMutation();
+  const inFlightForSourceCardCount = useIsMutating({
+    mutationKey: forgeCardsMutationKeys.generateCloze,
+    predicate: (mutation) => {
+      const variables = mutation.state.variables as ForgeGenerateCardClozeInput | undefined;
+      return variables?.sourceCardId === sourceCardId;
+    },
+  });
   const [added, setAdded] = useState(false);
   const autoRegeneratedCardIdRef = useRef<number | null>(null);
 
-  const loading = isPending || clozeQuery.isLoading;
+  const hasInFlightGeneration = inFlightForSourceCardCount > 0;
+  const loading = isPending || hasInFlightGeneration || clozeQuery.isLoading;
   const clozeText = clozeQuery.data?.cloze ?? null;
 
   const handleRegenerate = useCallback(() => {
     regenerateCloze(
       { sourceCardId },
       {
-        onSuccess: (result) => {
-          queryClient.setQueryData(queryKeys.forgeCardCloze(sourceCardId), () => result);
+        onSuccess: () => {
           setAdded(false);
         },
       },
     );
-  }, [queryClient, regenerateCloze, sourceCardId]);
+  }, [regenerateCloze, sourceCardId]);
 
   useEffect(() => {
     autoRegeneratedCardIdRef.current = null;
@@ -39,12 +48,23 @@ export function ClozePanel({ sourceCardId }: ClozePanelProps) {
 
   useEffect(() => {
     if (!clozeQuery.isSuccess) return;
+    if (clozeQuery.isFetching) return;
     if (clozeText !== null) return;
-    if (isPending) return;
+    if (hasInFlightGeneration) return;
     if (autoRegeneratedCardIdRef.current === sourceCardId) return;
+
     autoRegeneratedCardIdRef.current = sourceCardId;
     handleRegenerate();
-  }, [clozeQuery.isSuccess, clozeText, handleRegenerate, isPending, sourceCardId]);
+  }, [
+    clozeQuery.fetchStatus,
+    clozeQuery.isFetching,
+    clozeQuery.isSuccess,
+    clozeQuery.status,
+    clozeText,
+    handleRegenerate,
+    hasInFlightGeneration,
+    sourceCardId,
+  ]);
 
   return (
     <div className="mt-3 border-t border-dashed border-border/40 pt-3">

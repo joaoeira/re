@@ -1,36 +1,45 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useIsMutating } from "@tanstack/react-query";
 
-import { useForgeGeneratePermutationsMutation } from "@/hooks/mutations/use-forge-cards-mutations";
+import {
+  forgeCardsMutationKeys,
+  useForgeGeneratePermutationsMutation,
+} from "@/hooks/mutations/use-forge-cards-mutations";
 import { useForgeCardPermutationsQuery } from "@/hooks/queries/use-forge-card-permutations-query";
+import type { ForgeGenerateCardPermutationsInput } from "@shared/rpc/schemas/forge";
 import { Button } from "@/components/ui/button";
-import { queryKeys } from "@/lib/query-keys";
 
 type PermutationsPanelProps = {
   readonly sourceCardId: number;
 };
 
 export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
-  const queryClient = useQueryClient();
   const permutationsQuery = useForgeCardPermutationsQuery(sourceCardId);
   const { mutate: regeneratePermutations, isPending } = useForgeGeneratePermutationsMutation();
+  const inFlightForSourceCardCount = useIsMutating({
+    mutationKey: forgeCardsMutationKeys.generatePermutations,
+    predicate: (mutation) => {
+      const variables = mutation.state.variables as ForgeGenerateCardPermutationsInput | undefined;
+      return variables?.sourceCardId === sourceCardId;
+    },
+  });
   const [addedIds, setAddedIds] = useState<ReadonlySet<number>>(new Set());
   const autoRegeneratedCardIdRef = useRef<number | null>(null);
 
-  const loading = isPending || permutationsQuery.isLoading;
+  const hasInFlightGeneration = inFlightForSourceCardCount > 0;
+  const loading = isPending || hasInFlightGeneration || permutationsQuery.isLoading;
   const permutations = permutationsQuery.data?.permutations ?? [];
 
   const handleRegenerate = useCallback(() => {
     regeneratePermutations(
       { sourceCardId },
       {
-        onSuccess: (result) => {
-          queryClient.setQueryData(queryKeys.forgeCardPermutations(sourceCardId), () => result);
+        onSuccess: () => {
           setAddedIds(new Set());
         },
       },
     );
-  }, [queryClient, regeneratePermutations, sourceCardId]);
+  }, [regeneratePermutations, sourceCardId]);
 
   useEffect(() => {
     autoRegeneratedCardIdRef.current = null;
@@ -38,12 +47,23 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
 
   useEffect(() => {
     if (!permutationsQuery.isSuccess) return;
+    if (permutationsQuery.isFetching) return;
     if (permutations.length > 0) return;
-    if (isPending) return;
+    if (hasInFlightGeneration) return;
     if (autoRegeneratedCardIdRef.current === sourceCardId) return;
+
     autoRegeneratedCardIdRef.current = sourceCardId;
     handleRegenerate();
-  }, [handleRegenerate, isPending, permutations.length, permutationsQuery.isSuccess, sourceCardId]);
+  }, [
+    handleRegenerate,
+    hasInFlightGeneration,
+    permutations.length,
+    permutationsQuery.isSuccess,
+    permutationsQuery.status,
+    permutationsQuery.fetchStatus,
+    permutationsQuery.isFetching,
+    sourceCardId,
+  ]);
 
   return (
     <div className="mt-3 border-t border-dashed border-border/40 pt-3">

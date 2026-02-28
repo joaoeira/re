@@ -686,7 +686,7 @@ export const createForgeHandlers = () =>
               );
             }
 
-            return {
+            const payload = {
               topic: {
                 topicId: result.topic.topicId,
                 chunkId: result.topic.chunkId,
@@ -704,6 +704,8 @@ export const createForgeHandlers = () =>
                 answer: card.answer,
               })),
             };
+
+            return payload;
           });
 
           return yield* generationEffect.pipe(
@@ -785,7 +787,7 @@ export const createForgeHandlers = () =>
             forgeSessionRepository.getPermutationsForCard(sourceCardId),
           );
 
-          return {
+          const payload = {
             sourceCardId,
             permutations: list.map((entry) => ({
               id: entry.id,
@@ -793,6 +795,8 @@ export const createForgeHandlers = () =>
               answer: entry.answer,
             })),
           };
+
+          return payload;
         }),
       ForgeGetCardCloze: ({ sourceCardId }) =>
         Effect.gen(function* () {
@@ -849,10 +853,12 @@ export const createForgeHandlers = () =>
             }),
           );
 
-          return {
+          const payload = {
             sourceCardId,
             cloze: cloze.clozeText,
           };
+
+          return payload;
         }),
       ForgeUpdateCard: ({ cardId, question, answer }) =>
         Effect.gen(function* () {

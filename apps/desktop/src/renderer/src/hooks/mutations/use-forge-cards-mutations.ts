@@ -1,46 +1,36 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Effect } from "effect";
 
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
+import { queryKeys } from "@/lib/query-keys";
 import type {
   ForgeGenerateCardClozeInput,
   ForgeGenerateCardClozeResult,
   ForgeGenerateCardPermutationsInput,
   ForgeGenerateCardPermutationsResult,
-  ForgeGenerateTopicCardsInput,
-  ForgeGenerateTopicCardsResult,
   ForgeUpdateCardInput,
   ForgeUpdateCardResult,
 } from "@shared/rpc/schemas/forge";
 
-export function useForgeGenerateTopicCardsMutation() {
-  const ipc = useIpc();
-
-  return useMutation<ForgeGenerateTopicCardsResult, Error, ForgeGenerateTopicCardsInput>({
-    mutationFn: (input) =>
-      runIpcEffect(
-        ipc.client
-          .ForgeGenerateTopicCards(input)
-          .pipe(
-            Effect.catchTag("RpcDefectError", (rpcDefect) =>
-              Effect.fail(toRpcDefectError(rpcDefect)),
-            ),
-          ),
-      ),
-  });
-}
+export const forgeCardsMutationKeys = {
+  generatePermutations: ["forgeGenerateCardPermutations"] as const,
+  generateCloze: ["forgeGenerateCardCloze"] as const,
+  updateCard: ["forgeUpdateCard"] as const,
+};
 
 export function useForgeGeneratePermutationsMutation() {
   const ipc = useIpc();
+  const queryClient = useQueryClient();
 
   return useMutation<
     ForgeGenerateCardPermutationsResult,
     Error,
     ForgeGenerateCardPermutationsInput
   >({
-    mutationFn: (input) =>
-      runIpcEffect(
+    mutationKey: forgeCardsMutationKeys.generatePermutations,
+    mutationFn: async (input) => {
+      const result = await runIpcEffect(
         ipc.client
           .ForgeGenerateCardPermutations(input)
           .pipe(
@@ -48,16 +38,21 @@ export function useForgeGeneratePermutationsMutation() {
               Effect.fail(toRpcDefectError(rpcDefect)),
             ),
           ),
-      ),
+      );
+      queryClient.setQueryData(queryKeys.forgeCardPermutations(input.sourceCardId), () => result);
+      return result;
+    },
   });
 }
 
 export function useForgeGenerateClozeMutation() {
   const ipc = useIpc();
+  const queryClient = useQueryClient();
 
   return useMutation<ForgeGenerateCardClozeResult, Error, ForgeGenerateCardClozeInput>({
-    mutationFn: (input) =>
-      runIpcEffect(
+    mutationKey: forgeCardsMutationKeys.generateCloze,
+    mutationFn: async (input) => {
+      const result = await runIpcEffect(
         ipc.client
           .ForgeGenerateCardCloze(input)
           .pipe(
@@ -65,7 +60,10 @@ export function useForgeGenerateClozeMutation() {
               Effect.fail(toRpcDefectError(rpcDefect)),
             ),
           ),
-      ),
+      );
+      queryClient.setQueryData(queryKeys.forgeCardCloze(input.sourceCardId), () => result);
+      return result;
+    },
   });
 }
 
@@ -73,6 +71,7 @@ export function useForgeUpdateCardMutation() {
   const ipc = useIpc();
 
   return useMutation<ForgeUpdateCardResult, Error, ForgeUpdateCardInput>({
+    mutationKey: forgeCardsMutationKeys.updateCard,
     mutationFn: (input) =>
       runIpcEffect(
         ipc.client
