@@ -57,6 +57,14 @@ export function CardsCanvas({
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="mx-auto max-w-[900px] px-12 py-7 pb-20">
+        <TopicHeaderCard
+          topicText={topicText}
+          cardCount={visible.length}
+          addedCount={addedCount}
+          hasUnadded={hasUnadded}
+          onRegenerate={onRegenerate}
+        />
+
         {status === "generating" && (
           <div className="flex items-center gap-2.5 py-12 text-muted-foreground/50">
             <span className="inline-block size-3.5 animate-spin rounded-full border-[1.5px] border-muted-foreground/40 border-t-transparent" />
@@ -94,32 +102,22 @@ export function CardsCanvas({
         )}
 
         {status === "generated" && (
-          <>
-            <TopicHeaderCard
-              topicText={topicText}
-              cardCount={visible.length}
-              addedCount={addedCount}
-              hasUnadded={hasUnadded}
-              onRegenerate={onRegenerate}
-            />
-
-            <div className="mt-4">
-              {visible.map((card) => (
-                <CardBlock
-                  key={card.id}
-                  card={card}
-                  isAdded={addedCardIds.has(card.id)}
-                  expandedPanel={expandedPanels.get(card.id) ?? null}
-                  onAdd={() => onAddCard(card.id)}
-                  onDelete={() => onDeleteCard(card.id)}
-                  onTogglePermutations={() => onTogglePanel(card.id, "permutations")}
-                  onToggleCloze={() => onTogglePanel(card.id, "cloze")}
-                  onEditQuestion={(value) => onEditCard(card.id, "question", value)}
-                  onEditAnswer={(value) => onEditCard(card.id, "answer", value)}
-                />
-              ))}
-            </div>
-          </>
+          <div className="mt-4">
+            {visible.map((card) => (
+              <CardBlock
+                key={card.id}
+                card={card}
+                isAdded={addedCardIds.has(card.id)}
+                expandedPanel={expandedPanels.get(card.id) ?? null}
+                onAdd={() => onAddCard(card.id)}
+                onDelete={() => onDeleteCard(card.id)}
+                onTogglePermutations={() => onTogglePanel(card.id, "permutations")}
+                onToggleCloze={() => onTogglePanel(card.id, "cloze")}
+                onEditQuestion={(value) => onEditCard(card.id, "question", value)}
+                onEditAnswer={(value) => onEditCard(card.id, "answer", value)}
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>
