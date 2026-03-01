@@ -111,13 +111,13 @@ export const ForgeStartTopicExtractionResultSchema = Schema.Struct({
 export type ForgeStartTopicExtractionResult = typeof ForgeStartTopicExtractionResultSchema.Type;
 
 export const ForgeGetTopicExtractionSnapshotInputSchema = Schema.Struct({
-  sourceFilePath: Schema.String.pipe(Schema.nonEmptyString()),
+  sessionId: PositiveIntSchema,
 });
 export type ForgeGetTopicExtractionSnapshotInput =
   typeof ForgeGetTopicExtractionSnapshotInputSchema.Type;
 
 export const ForgeGetTopicExtractionSnapshotResultSchema = Schema.Struct({
-  session: Schema.Union(ForgeSessionSchema, Schema.Null),
+  session: ForgeSessionSchema,
   topicsByChunk: Schema.Array(ForgeChunkTopicsSchema),
 });
 export type ForgeGetTopicExtractionSnapshotResult =
@@ -325,11 +325,16 @@ export const ForgeSetSessionDeckPathResultSchema = Schema.Struct({});
 export type ForgeSetSessionDeckPathResult = typeof ForgeSetSessionDeckPathResultSchema.Type;
 
 export const ForgeTopicChunkExtractedEventSchema = Schema.Struct({
-  sourceFilePath: Schema.String,
   sessionId: PositiveIntSchema,
   chunk: ForgeChunkTopicsSchema,
 });
+
+export const ForgeExtractionSessionCreatedEventSchema = Schema.Struct({
+  sessionId: PositiveIntSchema,
+});
 export type ForgeTopicChunkExtractedEvent = typeof ForgeTopicChunkExtractedEventSchema.Type;
+export type ForgeExtractionSessionCreatedEvent =
+  typeof ForgeExtractionSessionCreatedEventSchema.Type;
 
 export class ForgeOperationError extends Schema.TaggedError<ForgeOperationError>(
   "@re/desktop/rpc/ForgeOperationError",
@@ -516,6 +521,7 @@ export type ForgeStartTopicExtractionError = typeof ForgeStartTopicExtractionErr
 
 export const ForgeGetTopicExtractionSnapshotErrorSchema = Schema.Union(
   ForgeOperationError,
+  ForgeSessionNotFoundError,
   ForgeSessionOperationError,
 );
 export type ForgeGetTopicExtractionSnapshotError =

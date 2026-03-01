@@ -44,6 +44,7 @@ import {
   ForgeStartTopicExtractionInputSchema,
   ForgeStartTopicExtractionResultSchema,
   ForgeTopicChunkExtractedEventSchema,
+  ForgeExtractionSessionCreatedEventSchema,
   ForgeUpdateCardErrorSchema,
   ForgeUpdateCardInputSchema,
   ForgeUpdateCardResultSchema,
@@ -197,4 +198,9 @@ export const ForgeAddCardToDeck = rpc(
 export const ForgeTopicChunkExtracted = event(
   "ForgeTopicChunkExtracted",
   ForgeTopicChunkExtractedEventSchema,
+);
+
+export const ForgeExtractionSessionCreated = event(
+  "ForgeExtractionSessionCreated",
+  ForgeExtractionSessionCreatedEventSchema,
 );

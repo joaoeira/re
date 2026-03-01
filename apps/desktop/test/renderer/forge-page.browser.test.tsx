@@ -191,11 +191,15 @@ describe("ForgePage", () => {
     await expect.element(screen.getByText("Waiting for first chunk...")).toBeVisible();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
+    const onSessionCreated = eventHandlers.get("ForgeExtractionSessionCreated");
+    expect(onSessionCreated).toBeDefined();
+    onSessionCreated?.({ sessionId: 12 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
     const onChunkExtracted = eventHandlers.get("ForgeTopicChunkExtracted");
     expect(onChunkExtracted).toBeDefined();
 
     onChunkExtracted?.({
-      sourceFilePath: "/forge/source.pdf",
       sessionId: 12,
       chunk: {
         chunkId: 101,
@@ -311,11 +315,15 @@ describe("ForgePage", () => {
     await expect.element(screen.getByText("Select topics")).toBeVisible();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
+    const onSessionCreated = eventHandlers.get("ForgeExtractionSessionCreated");
+    expect(onSessionCreated).toBeDefined();
+    onSessionCreated?.({ sessionId: 500 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
     const onChunkExtracted = eventHandlers.get("ForgeTopicChunkExtracted");
     expect(onChunkExtracted).toBeDefined();
 
     onChunkExtracted?.({
-      sourceFilePath: "/forge/source.pdf",
       sessionId: 499,
       chunk: {
         chunkId: 101,
@@ -327,7 +335,6 @@ describe("ForgePage", () => {
     expect(screen.getByText("stale-topic").query()).toBeNull();
 
     onChunkExtracted?.({
-      sourceFilePath: "/forge/source.pdf",
       sessionId: 500,
       chunk: {
         chunkId: 102,

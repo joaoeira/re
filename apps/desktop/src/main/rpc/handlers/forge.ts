@@ -31,7 +31,11 @@ import {
 } from "@main/forge/services/forge-session-repository";
 import type { PdfTextExtractError } from "@main/forge/services/pdf-extractor";
 import { toErrorMessage } from "@main/utils/format";
-import { ForgeTopicChunkExtracted, type AppContract } from "@shared/rpc/contracts";
+import {
+  ForgeTopicChunkExtracted,
+  ForgeExtractionSessionCreated,
+  type AppContract,
+} from "@shared/rpc/contracts";
 import {
   ForgeEmptySourceTextError,
   ForgeOperationError,
@@ -249,7 +253,6 @@ export const createForgeHandlers = () =>
         );
 
     const publishChunkExtractedBestEffort = (payload: {
-      readonly sourceFilePath: string;
       readonly sessionId: number;
       readonly chunkId: number;
       readonly sequenceOrder: number;
@@ -257,7 +260,6 @@ export const createForgeHandlers = () =>
     }): Effect.Effect<void> =>
       appEventPublisher
         .publish(ForgeTopicChunkExtracted, {
-          sourceFilePath: payload.sourceFilePath,
           sessionId: payload.sessionId,
           chunk: {
             chunkId: payload.chunkId,
@@ -652,33 +654,16 @@ export const createForgeHandlers = () =>
             chunkCount: chunkResult.chunkCount,
           };
         }),
-      ForgeGetTopicExtractionSnapshot: ({ sourceFilePath }) =>
+      ForgeGetTopicExtractionSnapshot: ({ sessionId }) =>
         Effect.gen(function* () {
-          if (!path.isAbsolute(sourceFilePath)) {
-            return yield* Effect.fail(
-              new ForgeOperationError({
-                message: `Forge sourceFilePath must be absolute: ${sourceFilePath}`,
-              }),
-            );
-          }
-
-          const session = yield* mapOperationError(
-            forgeSessionRepository.findLatestBySourceFilePath({
-              sourceKind: "pdf",
-              sourceFilePath,
-            }),
-          );
-
-          if (!session) {
-            return {
-              session: null,
-              topicsByChunk: [],
-            };
-          }
+          const session = yield* mapSessionRepositoryError(
+            sessionId,
+            forgeSessionRepository.getSession(sessionId),
+          ).pipe(Effect.flatMap((s) => ensureSessionExists(s, sessionId)));
 
           const topicsByChunk = yield* mapSessionRepositoryError(
-            session.id,
-            forgeSessionRepository.getTopicsBySession(session.id),
+            sessionId,
+            forgeSessionRepository.getTopicsBySession(sessionId),
           );
 
           return {
@@ -1060,6 +1045,20 @@ export const createForgeHandlers = () =>
                 }),
               ).pipe(Effect.flatMap((current) => ensureSessionExistsForStart(current, session.id)));
 
+              yield* appEventPublisher
+                .publish(ForgeExtractionSessionCreated, { sessionId: session.id })
+                .pipe(
+                  Effect.catchAll((error) =>
+                    Effect.sync(() => {
+                      console.error("[forge/start] failed to publish session created event", {
+                        sessionId: session.id,
+                        error: toErrorMessage(error),
+                      });
+                    }),
+                  ),
+                  Effect.asVoid,
+                );
+
               const extractedAndChunked = yield* extractAndChunkForSession(
                 session.id,
                 session.sourceFilePath,
@@ -1133,7 +1132,6 @@ export const createForgeHandlers = () =>
                         ).pipe(
                           Effect.zipRight(
                             publishChunkExtractedBestEffort({
-                              sourceFilePath: session.sourceFilePath,
                               sessionId: session.id,
                               chunkId: write.chunkId,
                               sequenceOrder: write.sequenceOrder,

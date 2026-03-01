@@ -313,6 +313,14 @@ export const createForgePageStore = () =>
         deletedCardIdsByTopicKey: emptyTopicCardIdMap,
         expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
       }),
+      extractionSessionCreated: (context, event: { sessionId: number }) => {
+        if (context.extractState.status !== "extracting") return context;
+        if (context.activeExtractionSessionId !== null) return context;
+        return {
+          ...context,
+          activeExtractionSessionId: event.sessionId,
+        };
+      },
       topicChunkExtracted: (
         context,
         event: {
@@ -349,15 +357,11 @@ export const createForgePageStore = () =>
       topicSnapshotSynced: (
         context,
         event: {
-          sessionId: number | null;
-          sessionCreatedAt: string | null;
+          sessionId: number;
+          sessionCreatedAt: string;
           topicsByChunk: ReadonlyArray<ChunkTopics>;
         },
       ) => {
-        if (event.sessionId === null) {
-          return context;
-        }
-
         if (
           context.activeExtractionSessionId !== null &&
           context.activeExtractionSessionId !== event.sessionId
@@ -369,7 +373,6 @@ export const createForgePageStore = () =>
           context.activeExtractionSessionId === null &&
           context.extractState.status === "extracting" &&
           context.activeExtractionStartedAt &&
-          event.sessionCreatedAt &&
           Date.parse(event.sessionCreatedAt) < Date.parse(context.activeExtractionStartedAt)
         ) {
           return context;

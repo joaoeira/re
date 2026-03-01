@@ -31,6 +31,7 @@ import {
   ForgeSetSessionDeckPath,
   ForgeStartTopicExtraction,
   ForgeTopicChunkExtracted,
+  ForgeExtractionSessionCreated,
   ForgeUpdateCard,
   ForgeUpdatePermutation,
 } from "./contracts/forge";
@@ -118,6 +119,7 @@ export const appContract = defineContract({
     CardsDeleted,
     EditorNavigateRequest,
     ForgeTopicChunkExtracted,
+    ForgeExtractionSessionCreated,
   ] as const,
   streamMethods: [AiStreamText] as const,
 });

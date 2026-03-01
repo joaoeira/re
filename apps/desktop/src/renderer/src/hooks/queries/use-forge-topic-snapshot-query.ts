@@ -10,25 +10,26 @@ type UseForgeTopicSnapshotQueryOptions = {
 };
 
 export function useForgeTopicSnapshotQuery(
-  sourceFilePath: string | null,
+  sessionId: number | null,
   options: UseForgeTopicSnapshotQueryOptions = {},
 ) {
   const ipc = useIpc();
 
   return useQuery({
-    queryKey: queryKeys.forgeTopicSnapshot(sourceFilePath),
-    queryFn: sourceFilePath
-      ? () =>
-          runIpcEffect(
-            ipc.client
-              .ForgeGetTopicExtractionSnapshot({ sourceFilePath })
-              .pipe(
-                Effect.catchTag("RpcDefectError", (rpcDefect) =>
-                  Effect.fail(toRpcDefectError(rpcDefect)),
+    queryKey: queryKeys.forgeTopicSnapshot(sessionId),
+    queryFn:
+      sessionId !== null
+        ? () =>
+            runIpcEffect(
+              ipc.client
+                .ForgeGetTopicExtractionSnapshot({ sessionId })
+                .pipe(
+                  Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                    Effect.fail(toRpcDefectError(rpcDefect)),
+                  ),
                 ),
-              ),
-          )
-      : skipToken,
+            )
+        : skipToken,
     refetchInterval: options.refetchIntervalMs ?? false,
   });
 }

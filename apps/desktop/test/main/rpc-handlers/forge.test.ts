@@ -30,7 +30,7 @@ import {
 } from "@main/forge/services/pdf-extractor";
 import { AiCompletionError } from "@shared/rpc/schemas/ai";
 import type { ForgeChunkPageBoundary } from "@shared/rpc/schemas/forge";
-import { ForgeTopicChunkExtracted } from "@shared/rpc/contracts";
+import { ForgeTopicChunkExtracted, ForgeExtractionSessionCreated } from "@shared/rpc/contracts";
 
 import { createHandlersWithOverrides } from "./helpers";
 
@@ -826,7 +826,7 @@ describe("forge handlers", () => {
     }
   });
 
-  it("returns the latest topic snapshot for a source path", async () => {
+  it("returns the topic snapshot for a session id", async () => {
     const sourceFilePath = "/tmp/forge-topic-snapshot.pdf";
     const extractor = createPdfExtractor({
       textByPath: {
@@ -848,7 +848,7 @@ describe("forge handlers", () => {
 
       const snapshot = await Effect.runPromise(
         handlers.ForgeGetTopicExtractionSnapshot({
-          sourceFilePath,
+          sessionId: extracted.session.id,
         }),
       );
 
@@ -881,7 +881,6 @@ describe("forge handlers", () => {
     );
 
     const publishedChunks: Array<{
-      readonly sourceFilePath: string;
       readonly sessionId: number;
       readonly chunk: {
         readonly chunkId: number;
@@ -889,12 +888,12 @@ describe("forge handlers", () => {
         readonly topics: readonly string[];
       };
     }> = [];
+    const publishedSessionCreated: Array<{ readonly sessionId: number }> = [];
 
     const publish = vi.fn().mockImplementation((event: unknown, payload: unknown) => {
       if (event === ForgeTopicChunkExtracted) {
         publishedChunks.push(
           payload as {
-            readonly sourceFilePath: string;
             readonly sessionId: number;
             readonly chunk: {
               readonly chunkId: number;
@@ -903,6 +902,9 @@ describe("forge handlers", () => {
             };
           },
         );
+      }
+      if (event === ForgeExtractionSessionCreated) {
+        publishedSessionCreated.push(payload as { readonly sessionId: number });
       }
       return Effect.void;
     });
@@ -920,8 +922,13 @@ describe("forge handlers", () => {
         }),
       );
 
+      expect(publishedSessionCreated).toHaveLength(1);
+      expect(publishedSessionCreated[0]!.sessionId).toBeGreaterThan(0);
+
       expect(publishedChunks).toHaveLength(2);
-      expect(publishedChunks.every((entry) => entry.sourceFilePath === sourceFilePath)).toBe(true);
+      const sessionIds = new Set(publishedChunks.map((entry) => entry.sessionId));
+      expect(sessionIds.size).toBe(1);
+      expect(sessionIds.has(publishedSessionCreated[0]!.sessionId)).toBe(true);
       expect(publishedChunks.map((entry) => entry.chunk.sequenceOrder).sort()).toEqual([0, 1]);
     } finally {
       await dispose();

@@ -9,7 +9,7 @@ import { useForgeTopicSnapshotQuery } from "@/hooks/queries/use-forge-topic-snap
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
-import { ForgeTopicChunkExtracted } from "@shared/rpc/contracts";
+import { ForgeTopicChunkExtracted, ForgeExtractionSessionCreated } from "@shared/rpc/contracts";
 import type { ForgeSessionSummary, ForgeTopicCardsSummary } from "@shared/rpc/schemas/forge";
 import {
   createForgePageStore,
@@ -274,10 +274,14 @@ export function ForgePageProvider({
   const sourceFilePath = selectedPdf?.sourceFilePath ?? null;
   const currentStep = useSelector(store, (snapshot) => snapshot.context.currentStep);
   const extractState = useSelector(store, (snapshot) => snapshot.context.extractState);
+  const activeExtractionSessionId = useSelector(
+    store,
+    (snapshot) => snapshot.context.activeExtractionSessionId,
+  );
 
   const previewQuery = useForgePreviewQuery(sourceFilePath);
   const topicSnapshotQuery = useForgeTopicSnapshotQuery(
-    currentStep === "topics" ? sourceFilePath : null,
+    currentStep === "topics" ? activeExtractionSessionId : null,
     {
       refetchIntervalMs: extractState.status === "extracting" ? 2_000 : false,
     },
@@ -302,31 +306,27 @@ export function ForgePageProvider({
   }, [sourceFilePath, previewQuery.error, previewQuery.errorUpdatedAt, store]);
 
   useEffect(() => {
-    if (!sourceFilePath || currentStep !== "topics" || !topicSnapshotQuery.data) return;
-
-    const currentSourcePath = store.getSnapshot().context.selectedPdf?.sourceFilePath;
-    if (currentSourcePath !== sourceFilePath) return;
+    if (activeExtractionSessionId === null || currentStep !== "topics" || !topicSnapshotQuery.data)
+      return;
 
     store.send({
       type: "topicSnapshotSynced",
-      sessionId: topicSnapshotQuery.data.session?.id ?? null,
-      sessionCreatedAt: topicSnapshotQuery.data.session?.createdAt ?? null,
+      sessionId: topicSnapshotQuery.data.session.id,
+      sessionCreatedAt: topicSnapshotQuery.data.session.createdAt,
       topicsByChunk: topicSnapshotQuery.data.topicsByChunk,
     });
   }, [
     currentStep,
-    sourceFilePath,
+    activeExtractionSessionId,
     topicSnapshotQuery.data,
     topicSnapshotQuery.dataUpdatedAt,
     store,
   ]);
 
   useEffect(() => {
-    if (currentStep !== "topics" || !sourceFilePath || !topicSnapshotQuery.error) return;
+    if (currentStep !== "topics" || activeExtractionSessionId === null || !topicSnapshotQuery.error)
+      return;
     if (store.getSnapshot().context.extractState.status !== "extracting") return;
-
-    const currentSourcePath = store.getSnapshot().context.selectedPdf?.sourceFilePath;
-    if (currentSourcePath !== sourceFilePath) return;
 
     store.send({
       type: "topicSnapshotError",
@@ -334,7 +334,7 @@ export function ForgePageProvider({
     });
   }, [
     currentStep,
-    sourceFilePath,
+    activeExtractionSessionId,
     topicSnapshotQuery.error,
     topicSnapshotQuery.errorUpdatedAt,
     store,
@@ -343,14 +343,26 @@ export function ForgePageProvider({
   useEffect(() => {
     return ipc.events.subscribe(ForgeTopicChunkExtracted, (event) => {
       const context = store.getSnapshot().context;
-      const currentSourcePath = context.selectedPdf?.sourceFilePath;
-      if (currentSourcePath !== event.sourceFilePath) return;
-      if (context.activeExtractionSessionId === null) return;
-      if (context.activeExtractionSessionId !== event.sessionId) return;
+
+      if (context.activeExtractionSessionId === null) {
+        store.send({ type: "extractionSessionCreated", sessionId: event.sessionId });
+        if (store.getSnapshot().context.activeExtractionSessionId !== event.sessionId) return;
+      } else if (context.activeExtractionSessionId !== event.sessionId) {
+        return;
+      }
 
       store.send({
         type: "topicChunkExtracted",
         chunk: event.chunk,
+      });
+    });
+  }, [ipc, store]);
+
+  useEffect(() => {
+    return ipc.events.subscribe(ForgeExtractionSessionCreated, (event) => {
+      store.send({
+        type: "extractionSessionCreated",
+        sessionId: event.sessionId,
       });
     });
   }, [ipc, store]);
@@ -442,12 +454,8 @@ export function ForgePageProvider({
             ),
           ),
       ),
-    onMutate: ({ selectedSourceFilePath }) => {
+    onMutate: () => {
       store.send({ type: "setExtracting", startedAt: new Date().toISOString() });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.forgeTopicSnapshot(selectedSourceFilePath),
-        exact: true,
-      });
     },
     onSuccess: (result, variables) => {
       const currentSourcePath = store.getSnapshot().context.selectedPdf?.sourceFilePath;
@@ -502,10 +510,6 @@ export function ForgePageProvider({
       if (previousSourceFilePath === selectedSourceFilePath) {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.forgePreview(selectedSourceFilePath),
-          exact: true,
-        });
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.forgeTopicSnapshot(selectedSourceFilePath),
           exact: true,
         });
       }
