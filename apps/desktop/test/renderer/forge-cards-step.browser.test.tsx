@@ -1364,7 +1364,7 @@ describe("Forge cards step", () => {
     await expect.element(screen.getByText("Permutation for 8400")).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "Cloze" }));
-    expect(screen.getByText("Permutation for 8400").query()).toBeNull();
+    await expect.element(screen.getByText("Permutation for 8400")).not.toBeVisible();
     await expect
       .poll(() => {
         return invoke.mock.calls.filter(

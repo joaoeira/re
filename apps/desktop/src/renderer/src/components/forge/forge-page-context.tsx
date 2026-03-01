@@ -424,6 +424,9 @@ export function ForgePageProvider({
             type: "resumeError",
             message: `Failed to load session data for "${fileName}". Please try again.`,
           });
+        })
+        .finally(() => {
+          resumingRef.current = false;
         });
     },
     [ipc.client, queryClient, store],
@@ -561,10 +564,12 @@ export function ForgePageProvider({
       });
   }, [ipc.client, store]);
 
-  const resumeSession = useCallback((session: ForgeSessionSummary) => {
-    const fileName = session.sourceFilePath.split("/").pop() ?? session.sourceFilePath;
-    onSessionChangeRef.current({ id: session.id, fileName });
-  }, []);
+  const resumeSession = useCallback(
+    (session: ForgeSessionSummary) => {
+      loadSessionData(session);
+    },
+    [loadSessionData],
+  );
 
   const actions = useMemo(
     () => ({

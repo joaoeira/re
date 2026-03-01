@@ -139,17 +139,15 @@ export function CardBlock({
 
       {(showPermutations || permutationsMounted) && (
         <div
-          className={cn(
-            "ml-5 mt-2 border-l-2 border-border/30 pl-5",
-            !showPermutations && "hidden",
-          )}
+          hidden={!showPermutations}
+          className="ml-5 mt-2 border-l-2 border-border/30 pl-5"
         >
           <PermutationsPanel sourceCardId={card.id} />
         </div>
       )}
 
       {(showCloze || clozeMounted) && (
-        <div className={cn("ml-5 mt-2 border-l-2 border-border/30 pl-5", !showCloze && "hidden")}>
+        <div hidden={!showCloze} className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
           <ClozePanel sourceCardId={card.id} />
         </div>
       )}

@@ -367,6 +367,15 @@ describe("forge handlers", () => {
           topics: ["alpha", "beta"],
         }),
       );
+      await Effect.runPromise(
+        repository.saveTopicSelections({
+          sessionId: sessionA.id,
+          selections: [
+            { chunkId: 1, topicIndex: 0 },
+            { chunkId: 1, topicIndex: 1 },
+          ],
+        }),
+      );
 
       const topic = await Effect.runPromise(
         repository.getTopicByRef({ sessionId: sessionA.id, chunkId: 1, topicIndex: 0 }),
