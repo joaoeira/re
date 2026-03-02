@@ -868,12 +868,21 @@ export const createForgeHandlers = () =>
             })),
           };
         }),
-      ForgeGenerateCardPermutations: ({ sourceCardId, instruction, model }) =>
+      ForgeGenerateCardPermutations: ({
+        sourceCardId,
+        sourceQuestion,
+        sourceAnswer,
+        instruction,
+        model,
+      }) =>
         Effect.gen(function* () {
           const sourceCard = yield* forgeSessionRepository.getCardById(sourceCardId).pipe(
             Effect.mapError(toForgeOperationError),
             Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
           );
+
+          const currentSourceQuestion = sourceQuestion ?? sourceCard.question;
+          const currentSourceAnswer = sourceAnswer ?? sourceCard.answer;
 
           const promptResult = yield* forgePromptRuntime
             .run(
@@ -881,8 +890,8 @@ export const createForgeHandlers = () =>
               {
                 chunkText: sourceCard.chunkText,
                 source: {
-                  question: sourceCard.question,
-                  answer: sourceCard.answer,
+                  question: currentSourceQuestion,
+                  answer: currentSourceAnswer,
                 },
                 ...(instruction ? { instruction } : {}),
               },
@@ -941,12 +950,21 @@ export const createForgeHandlers = () =>
             addedCount: cloze?.addedCount ?? 0,
           };
         }),
-      ForgeGenerateCardCloze: ({ sourceCardId, instruction, model }) =>
+      ForgeGenerateCardCloze: ({
+        sourceCardId,
+        sourceQuestion,
+        sourceAnswer,
+        instruction,
+        model,
+      }) =>
         Effect.gen(function* () {
           const sourceCard = yield* forgeSessionRepository.getCardById(sourceCardId).pipe(
             Effect.mapError(toForgeOperationError),
             Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
           );
+
+          const currentSourceQuestion = sourceQuestion ?? sourceCard.question;
+          const currentSourceAnswer = sourceAnswer ?? sourceCard.answer;
 
           const promptResult = yield* forgePromptRuntime
             .run(
@@ -954,8 +972,8 @@ export const createForgeHandlers = () =>
               {
                 chunkText: sourceCard.chunkText,
                 source: {
-                  question: sourceCard.question,
-                  answer: sourceCard.answer,
+                  question: currentSourceQuestion,
+                  answer: currentSourceAnswer,
                 },
                 ...(instruction ? { instruction } : {}),
               },

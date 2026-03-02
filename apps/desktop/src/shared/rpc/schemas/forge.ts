@@ -255,6 +255,8 @@ export type ForgeGetCardPermutationsResult = typeof ForgeGetCardPermutationsResu
 
 export const ForgeGenerateCardPermutationsInputSchema = Schema.Struct({
   sourceCardId: PositiveIntSchema,
+  sourceQuestion: Schema.optional(Schema.String),
+  sourceAnswer: Schema.optional(Schema.String),
   instruction: Schema.optional(Schema.String),
   model: Schema.optional(ModelIdSchema),
 });
@@ -286,6 +288,8 @@ export type ForgeGetCardClozeResult = typeof ForgeGetCardClozeResultSchema.Type;
 
 export const ForgeGenerateCardClozeInputSchema = Schema.Struct({
   sourceCardId: PositiveIntSchema,
+  sourceQuestion: Schema.optional(Schema.String),
+  sourceAnswer: Schema.optional(Schema.String),
   instruction: Schema.optional(Schema.String),
   model: Schema.optional(ModelIdSchema),
 });

@@ -143,13 +143,21 @@ export function CardBlock({
 
       {(showPermutations || permutationsMounted) && (
         <div hidden={!showPermutations} className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
-          <PermutationsPanel sourceCardId={card.id} />
+          <PermutationsPanel
+            sourceCardId={card.id}
+            sourceQuestion={card.question}
+            sourceAnswer={card.answer}
+          />
         </div>
       )}
 
       {(showCloze || clozeMounted) && (
         <div hidden={!showCloze} className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
-          <ClozePanel sourceCardId={card.id} />
+          <ClozePanel
+            sourceCardId={card.id}
+            sourceQuestion={card.question}
+            sourceAnswer={card.answer}
+          />
         </div>
       )}
     </div>

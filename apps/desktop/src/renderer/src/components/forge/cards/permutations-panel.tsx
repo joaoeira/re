@@ -21,9 +21,15 @@ import { InlineEditor } from "./inline-editor";
 
 type PermutationsPanelProps = {
   readonly sourceCardId: number;
+  readonly sourceQuestion: string;
+  readonly sourceAnswer: string;
 };
 
-export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
+export function PermutationsPanel({
+  sourceCardId,
+  sourceQuestion,
+  sourceAnswer,
+}: PermutationsPanelProps) {
   const permutationsQuery = useForgeCardPermutationsQuery(sourceCardId);
   const { mutate: regeneratePermutations, isPending } = useForgeGeneratePermutationsMutation();
   const { mutate: updatePermutation } = useForgeUpdatePermutationMutation();
@@ -47,8 +53,12 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
   const permutations = permutationsQuery.data?.permutations ?? [];
 
   const handleRegenerate = useCallback(() => {
-    regeneratePermutations({ sourceCardId });
-  }, [regeneratePermutations, sourceCardId]);
+    regeneratePermutations({
+      sourceCardId,
+      sourceQuestion,
+      sourceAnswer,
+    });
+  }, [regeneratePermutations, sourceAnswer, sourceCardId, sourceQuestion]);
 
   const handleEditPermutation = useCallback(
     (permutationId: number, field: "question" | "answer", value: string) => {
@@ -86,6 +96,52 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
     [permutationsQueryKey, queryClient, updatePermutation],
   );
 
+  const handleAddPermutation = useCallback(
+    (permutationId: number, question: string, answer: string) => {
+      if (!targetDeckPath || addingIds.has(permutationId)) return;
+
+      setAddingIds((prev) => new Set([...prev, permutationId]));
+      setAddError(null);
+      addCardToDeck(
+        {
+          deckPath: targetDeckPath,
+          content: formatQAContent(question, answer),
+          cardType: "qa",
+          permutationId,
+        },
+        {
+          onSuccess: (result) => {
+            queryClient.setQueryData<ForgeGetCardPermutationsResult>(
+              permutationsQueryKey,
+              (previous) => {
+                if (!previous) return previous;
+                return {
+                  ...previous,
+                  permutations: previous.permutations.map((entry) =>
+                    entry.id === permutationId
+                      ? {
+                          ...entry,
+                          addedCount: entry.addedCount + result.cardIds.length,
+                        }
+                      : entry,
+                  ),
+                };
+              },
+            );
+          },
+          onError: (error) => setAddError(error.message),
+          onSettled: () =>
+            setAddingIds((prev) => {
+              const next = new Set(prev);
+              next.delete(permutationId);
+              return next;
+            }),
+        },
+      );
+    },
+    [addCardToDeck, addingIds, permutationsQueryKey, queryClient, targetDeckPath],
+  );
+
   useEffect(() => {
     autoRegeneratedCardIdRef.current = null;
   }, [sourceCardId]);
@@ -104,8 +160,6 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
     hasInFlightGeneration,
     permutations.length,
     permutationsQuery.isSuccess,
-    permutationsQuery.status,
-    permutationsQuery.fetchStatus,
     permutationsQuery.isFetching,
     sourceCardId,
   ]);
@@ -173,47 +227,9 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
                 size="xs"
                 className="shrink-0"
                 disabled={addingIds.has(permutation.id) || !targetDeckPath}
-                onClick={() => {
-                  if (!targetDeckPath || addingIds.has(permutation.id)) return;
-                  setAddingIds((prev) => new Set([...prev, permutation.id]));
-                  setAddError(null);
-                  addCardToDeck(
-                    {
-                      deckPath: targetDeckPath,
-                      content: formatQAContent(permutation.question, permutation.answer),
-                      cardType: "qa",
-                      permutationId: permutation.id,
-                    },
-                    {
-                      onSuccess: (result) => {
-                        queryClient.setQueryData<ForgeGetCardPermutationsResult>(
-                          permutationsQueryKey,
-                          (previous) => {
-                            if (!previous) return previous;
-                            return {
-                              ...previous,
-                              permutations: previous.permutations.map((entry) =>
-                                entry.id === permutation.id
-                                  ? {
-                                      ...entry,
-                                      addedCount: entry.addedCount + result.cardIds.length,
-                                    }
-                                  : entry,
-                              ),
-                            };
-                          },
-                        );
-                      },
-                      onError: (error) => setAddError(error.message),
-                      onSettled: () =>
-                        setAddingIds((prev) => {
-                          const next = new Set(prev);
-                          next.delete(permutation.id);
-                          return next;
-                        }),
-                    },
-                  );
-                }}
+                onClick={() =>
+                  handleAddPermutation(permutation.id, permutation.question, permutation.answer)
+                }
               >
                 + Add
               </Button>

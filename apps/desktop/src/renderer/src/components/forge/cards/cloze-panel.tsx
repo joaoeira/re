@@ -18,9 +18,11 @@ import { useForgeTargetDeckPath } from "../forge-page-context";
 
 type ClozePanelProps = {
   readonly sourceCardId: number;
+  readonly sourceQuestion: string;
+  readonly sourceAnswer: string;
 };
 
-export function ClozePanel({ sourceCardId }: ClozePanelProps) {
+export function ClozePanel({ sourceCardId, sourceQuestion, sourceAnswer }: ClozePanelProps) {
   const clozeQuery = useForgeCardClozeQuery(sourceCardId);
   const { mutate: regenerateCloze, isPending } = useForgeGenerateClozeMutation();
   const { mutate: addCardToDeck } = useForgeAddCardToDeckMutation();
@@ -44,8 +46,43 @@ export function ClozePanel({ sourceCardId }: ClozePanelProps) {
   const hasBeenAdded = addedCount > 0;
 
   const handleRegenerate = useCallback(() => {
-    regenerateCloze({ sourceCardId });
-  }, [regenerateCloze, sourceCardId]);
+    regenerateCloze({
+      sourceCardId,
+      sourceQuestion,
+      sourceAnswer,
+    });
+  }, [regenerateCloze, sourceAnswer, sourceCardId, sourceQuestion]);
+
+  const handleAddCloze = useCallback(() => {
+    if (!targetDeckPath || !clozeText || addingCloze) return;
+
+    setAddingCloze(true);
+    setAddError(null);
+    addCardToDeck(
+      {
+        deckPath: targetDeckPath,
+        content: clozeText,
+        cardType: "cloze",
+        sourceCardId,
+      },
+      {
+        onSuccess: (result) => {
+          queryClient.setQueryData<ForgeGetCardClozeResult>(
+            queryKeys.forgeCardCloze(sourceCardId),
+            (previous) => {
+              if (!previous) return previous;
+              return {
+                ...previous,
+                addedCount: previous.addedCount + result.cardIds.length,
+              };
+            },
+          );
+        },
+        onError: (error) => setAddError(error.message),
+        onSettled: () => setAddingCloze(false),
+      },
+    );
+  }, [addCardToDeck, addingCloze, clozeText, queryClient, sourceCardId, targetDeckPath]);
 
   useEffect(() => {
     autoRegeneratedCardIdRef.current = null;
@@ -61,10 +98,8 @@ export function ClozePanel({ sourceCardId }: ClozePanelProps) {
     autoRegeneratedCardIdRef.current = sourceCardId;
     handleRegenerate();
   }, [
-    clozeQuery.fetchStatus,
     clozeQuery.isFetching,
     clozeQuery.isSuccess,
-    clozeQuery.status,
     clozeText,
     handleRegenerate,
     hasInFlightGeneration,
@@ -116,35 +151,7 @@ export function ClozePanel({ sourceCardId }: ClozePanelProps) {
                 variant="secondary"
                 size="xs"
                 disabled={addingCloze || !targetDeckPath || !clozeText}
-                onClick={() => {
-                  if (!targetDeckPath || !clozeText || addingCloze) return;
-                  setAddingCloze(true);
-                  setAddError(null);
-                  addCardToDeck(
-                    {
-                      deckPath: targetDeckPath,
-                      content: clozeText,
-                      cardType: "cloze",
-                      sourceCardId,
-                    },
-                    {
-                      onSuccess: (result) => {
-                        queryClient.setQueryData<ForgeGetCardClozeResult>(
-                          queryKeys.forgeCardCloze(sourceCardId),
-                          (previous) => {
-                            if (!previous) return previous;
-                            return {
-                              ...previous,
-                              addedCount: previous.addedCount + result.cardIds.length,
-                            };
-                          },
-                        );
-                      },
-                      onError: (error) => setAddError(error.message),
-                      onSettled: () => setAddingCloze(false),
-                    },
-                  );
-                }}
+                onClick={handleAddCloze}
               >
                 + Add to deck
               </Button>

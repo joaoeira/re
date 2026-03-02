@@ -537,11 +537,16 @@ const createCardsInvoke = (options?: {
     }
 
     if (method === "ForgeGenerateCardCloze") {
-      const input = payload as { sourceCardId: number };
+      const input = payload as {
+        sourceCardId: number;
+        sourceQuestion?: string;
+        sourceAnswer?: string;
+      };
       if (clozeGenerationDelayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, clozeGenerationDelayMs));
       }
-      const cloze = `The answer is {{c1::${input.sourceCardId}}}.`;
+      const answerToken = (input.sourceAnswer ?? String(input.sourceCardId)).trim().split(/\s+/)[0];
+      const cloze = `The answer is {{c1::${answerToken}}}.`;
       const previousCloze = clozeByCardId.get(input.sourceCardId);
       clozeByCardId.set(input.sourceCardId, cloze);
       if (previousCloze !== cloze) {
@@ -1306,6 +1311,180 @@ describe("Forge cards step", () => {
       cardId: 8_200,
       question: "edited question",
       answer: "editable answer",
+    });
+  });
+
+  it("uses edited source card content when regenerating permutations", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "generated",
+          generationRevision: 1,
+          cards: [
+            {
+              id: 8_210,
+              question: "editable source question",
+              answer: "editable source answer",
+            },
+          ],
+        },
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    const questionEditor = await vi.waitFor(() => {
+      const el = document.querySelector<HTMLElement>(".editor-prosemirror[contenteditable='true']");
+      if (!el) throw new Error("tiptap editor not found");
+      return el;
+    });
+    questionEditor.focus();
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- no replacement API for contenteditable editing in tests
+    document.execCommand("selectAll");
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    document.execCommand("insertText", false, "edited source question");
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeUpdateCard")
+          .length;
+      })
+      .toBeGreaterThanOrEqual(1);
+
+    const sourceUpdateCall = invoke.mock.calls.findLast(
+      ([method]: unknown[]) => method === "ForgeUpdateCard",
+    ) as [string, { cardId: number; question: string; answer: string }] | undefined;
+    expect(sourceUpdateCall?.[1]).toEqual({
+      cardId: 8_210,
+      question: "edited source question",
+      answer: "editable source answer",
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Permutations" }));
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateCardPermutations",
+        ).length;
+      })
+      .toBe(1);
+
+    const firstGenerateCall = invoke.mock.calls.find(
+      ([method]: unknown[]) => method === "ForgeGenerateCardPermutations",
+    ) as [string, { sourceCardId: number; sourceQuestion: string; sourceAnswer: string }];
+    expect(firstGenerateCall[1]).toEqual({
+      sourceCardId: 8_210,
+      sourceQuestion: "edited source question",
+      sourceAnswer: "editable source answer",
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "regenerate", exact: true }));
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateCardPermutations",
+        ).length;
+      })
+      .toBe(2);
+
+    const regenerateCall = invoke.mock.calls
+      .filter(([method]: unknown[]) => method === "ForgeGenerateCardPermutations")
+      .at(-1) as [string, { sourceCardId: number; sourceQuestion: string; sourceAnswer: string }];
+
+    expect(regenerateCall[1]).toEqual({
+      sourceCardId: 8_210,
+      sourceQuestion: "edited source question",
+      sourceAnswer: "editable source answer",
+    });
+  });
+
+  it("uses edited source card content when regenerating cloze", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "generated",
+          generationRevision: 1,
+          cards: [
+            {
+              id: 8_220,
+              question: "editable cloze question",
+              answer: "editable cloze answer",
+            },
+          ],
+        },
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    const answerEditor = await vi.waitFor(() => {
+      const editors = Array.from(
+        document.querySelectorAll<HTMLElement>(".editor-prosemirror[contenteditable='true']"),
+      );
+      const sourceEditor = editors.find((editor) =>
+        editor.textContent?.includes("editable cloze answer"),
+      );
+      if (!sourceEditor) throw new Error("cloze answer editor not found");
+      return sourceEditor;
+    });
+    answerEditor.focus();
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- no replacement API for contenteditable editing in tests
+    document.execCommand("selectAll");
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    document.execCommand("insertText", false, "edited cloze answer");
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeUpdateCard")
+          .length;
+      })
+      .toBeGreaterThanOrEqual(1);
+
+    await userEvent.click(screen.getByRole("button", { name: "Cloze" }));
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateCardCloze",
+        ).length;
+      })
+      .toBe(1);
+
+    const firstGenerateCall = invoke.mock.calls.find(
+      ([method]: unknown[]) => method === "ForgeGenerateCardCloze",
+    ) as [string, { sourceCardId: number; sourceQuestion: string; sourceAnswer: string }];
+    expect(firstGenerateCall[1]).toEqual({
+      sourceCardId: 8_220,
+      sourceQuestion: "editable cloze question",
+      sourceAnswer: "edited cloze answer",
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "regenerate", exact: true }));
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateCardCloze",
+        ).length;
+      })
+      .toBe(2);
+
+    const regenerateCall = invoke.mock.calls
+      .filter(([method]: unknown[]) => method === "ForgeGenerateCardCloze")
+      .at(-1) as [string, { sourceCardId: number; sourceQuestion: string; sourceAnswer: string }];
+
+    expect(regenerateCall[1]).toEqual({
+      sourceCardId: 8_220,
+      sourceQuestion: "editable cloze question",
+      sourceAnswer: "edited cloze answer",
     });
   });
 

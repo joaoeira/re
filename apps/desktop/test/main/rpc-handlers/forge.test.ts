@@ -114,7 +114,7 @@ const createCardsDomainPromptRuntime = (options?: {
 }): ForgePromptRuntime => ({
   run: <Input, Output>(
     spec: PromptSpec<Input, Output>,
-    _input: Input,
+    input: Input,
     runOptions?: PromptRunOptions,
   ) =>
     Effect.gen(function* () {
@@ -153,12 +153,15 @@ const createCardsDomainPromptRuntime = (options?: {
       }
 
       if (spec.promptId === "forge/generate-permutations") {
+        const permutationsInput = input as {
+          readonly source: { readonly question: string; readonly answer: string };
+        };
         return {
           output: {
             permutations: [
               {
-                question: "What molecule is the energy currency of the cell?",
-                answer: "ATP",
+                question: `Permutation of: ${permutationsInput.source.question}`,
+                answer: permutationsInput.source.answer,
               },
             ],
           } as unknown as Output,
@@ -175,9 +178,13 @@ const createCardsDomainPromptRuntime = (options?: {
       }
 
       if (spec.promptId === "forge/generate-cloze") {
+        const clozeInput = input as {
+          readonly source: { readonly question: string; readonly answer: string };
+        };
+        const answerToken = clozeInput.source.answer.trim().split(/\s+/)[0];
         return {
           output: {
-            cloze: "The energy currency of the cell is {{c1::ATP}}.",
+            cloze: `The energy currency of the cell is {{c1::${answerToken}}}.`,
           } as unknown as Output,
           rawText: '{"cloze":"x"}',
           metadata: {
@@ -1750,6 +1757,13 @@ describe("forge handlers", () => {
 
       const cloze = await Effect.runPromise(handlers.ForgeGenerateCardCloze({ sourceCardId }));
       expect(cloze.cloze).toContain("{{c1::ATP}}");
+      const clozeWithQuestionOnlyOverride = await Effect.runPromise(
+        handlers.ForgeGenerateCardCloze({
+          sourceCardId,
+          sourceQuestion: "Question-only override",
+        }),
+      );
+      expect(clozeWithQuestionOnlyOverride.cloze).toContain("{{c1::ATP}}");
 
       const updated = await Effect.runPromise(
         handlers.ForgeUpdateCard({
@@ -1759,6 +1773,24 @@ describe("forge handlers", () => {
         }),
       );
       expect(updated.card.question).toBe("Updated question?");
+
+      const regeneratedPermutations = await Effect.runPromise(
+        handlers.ForgeGenerateCardPermutations({
+          sourceCardId,
+          sourceQuestion: updated.card.question,
+          sourceAnswer: updated.card.answer,
+        }),
+      );
+      expect(regeneratedPermutations.permutations[0]?.question).toContain("Updated question?");
+      expect(regeneratedPermutations.permutations[0]?.answer).toBe("Updated answer.");
+      const regeneratedCloze = await Effect.runPromise(
+        handlers.ForgeGenerateCardCloze({
+          sourceCardId,
+          sourceQuestion: updated.card.question,
+          sourceAnswer: updated.card.answer,
+        }),
+      );
+      expect(regeneratedCloze.cloze).toContain("{{c1::Updated}}");
 
       const topicCards = await Effect.runPromise(
         handlers.ForgeGetTopicCards({
