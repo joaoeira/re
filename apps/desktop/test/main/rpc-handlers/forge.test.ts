@@ -1879,6 +1879,192 @@ describe("forge handlers", () => {
     }
   });
 
+  it("persists card-added state for source cards when sourceCardId is provided", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-add-mark-source-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const sourceFilePath = "/tmp/forge-mark-source.pdf";
+    const { handlers, repository, dispose } = await setupHandlers();
+
+    try {
+      await fs.writeFile(deckPath, "", "utf8");
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const session = await Effect.runPromise(
+        repository.createSession({
+          sourceKind: "pdf",
+          sourceFilePath,
+          deckPath: null,
+          sourceFingerprint: "fp:forge-mark-source",
+        }),
+      );
+      await Effect.runPromise(
+        repository.saveChunks(session.id, [
+          {
+            text: "chunk-0",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: session.id,
+          sequenceOrder: 0,
+          topics: ["topic-a"],
+        }),
+      );
+
+      const topic = await Effect.runPromise(
+        repository.getTopicByRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
+      );
+      if (!topic) throw new Error("Expected topic for source card.");
+
+      await Effect.runPromise(
+        repository.replaceCardsForTopic({
+          topicId: topic.topicId,
+          cards: [{ question: "What is ATP?", answer: "Cellular energy currency." }],
+        }),
+      );
+
+      const detailBefore = await Effect.runPromise(
+        repository.getCardsForTopicRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
+      );
+      const sourceCardId = detailBefore?.cards[0]?.id;
+      if (!sourceCardId) throw new Error("Expected source card id.");
+      expect(detailBefore?.cards[0]?.addedToDeck).toBe(false);
+
+      await Effect.runPromise(
+        handlers.ForgeAddCardToDeck({
+          deckPath,
+          content: "What is ATP?\n---\nCellular energy currency.\n",
+          cardType: "qa",
+          sourceCardId,
+        }),
+      );
+
+      const detailAfter = await Effect.runPromise(
+        repository.getCardsForTopicRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
+      );
+      expect(detailAfter?.cards[0]?.addedToDeck).toBe(true);
+
+      const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+      expect(snapshot[0]?.addedCount).toBe(1);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await dispose();
+    }
+  });
+
+  it("increments permutation addedCount when adding with permutationId", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-permutation-added-count-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const sourceFilePath = "/tmp/forge-permutation-added-count.pdf";
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime: createCardsDomainPromptRuntime(),
+    });
+
+    try {
+      await fs.writeFile(deckPath, "", "utf8");
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const session = await Effect.runPromise(
+        repository.createSession({
+          sourceKind: "pdf",
+          sourceFilePath,
+          deckPath: null,
+          sourceFingerprint: "fp:forge-permutation-added-count",
+        }),
+      );
+      await Effect.runPromise(
+        repository.saveChunks(session.id, [
+          {
+            text: "chunk-0",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: session.id,
+          sequenceOrder: 0,
+          topics: ["topic-a"],
+        }),
+      );
+
+      const generated = await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: session.id,
+          chunkId: 1,
+          topicIndex: 0,
+        }),
+      );
+      const sourceCardId = generated.cards[0]?.id;
+      if (!sourceCardId) throw new Error("Expected source card id.");
+
+      const permutations = await Effect.runPromise(
+        handlers.ForgeGenerateCardPermutations({ sourceCardId }),
+      );
+      const permutationId = permutations.permutations[0]?.id;
+      if (!permutationId) throw new Error("Expected permutation id.");
+      expect(permutations.permutations[0]?.addedCount).toBe(0);
+
+      await Effect.runPromise(
+        handlers.ForgeAddCardToDeck({
+          deckPath,
+          content:
+            "What molecule is the energy currency of the cell?\n---\nATP\n",
+          cardType: "qa",
+          permutationId,
+        }),
+      );
+
+      const permutationsAfterAdd = await Effect.runPromise(
+        handlers.ForgeGetCardPermutations({ sourceCardId }),
+      );
+      expect(permutationsAfterAdd.permutations[0]?.addedCount).toBe(1);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await dispose();
+    }
+  });
+
+  it("fails when both sourceCardId and permutationId are provided", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-add-card-conflict-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const { handlers, dispose } = await setupHandlers();
+
+    try {
+      await fs.writeFile(deckPath, "", "utf8");
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const exit = await Effect.runPromiseExit(
+        handlers.ForgeAddCardToDeck({
+          deckPath,
+          content: "What is ATP?\n---\nCellular energy currency.\n",
+          cardType: "qa",
+          sourceCardId: 1,
+          permutationId: 2,
+        }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failure = Cause.failureOption(exit.cause);
+        expect(failure._tag).toBe("Some");
+        if (failure._tag === "Some") {
+          expect(failure.value._tag).toBe("forge_operation_error");
+          expect(failure.value.message).toContain(
+            "Provide either sourceCardId or permutationId, not both.",
+          );
+        }
+      }
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await dispose();
+    }
+  });
+
   it("adds a cloze card to a deck file", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-add-cloze-"));
     const deckPath = path.join(rootPath, "deck.md");
@@ -1928,6 +2114,83 @@ describe("forge handlers", () => {
       const parsed = await Effect.runPromise(parseFile(await fs.readFile(deckPath, "utf8")));
       expect(parsed.items).toHaveLength(1);
       expect(parsed.items[0]!.cards).toHaveLength(2);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await dispose();
+    }
+  });
+
+  it("increments cloze addedCount when adding cloze with sourceCardId", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-cloze-added-count-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const sourceFilePath = "/tmp/forge-cloze-added-count.pdf";
+    const { handlers, repository, dispose } = await setupHandlers();
+
+    try {
+      await fs.writeFile(deckPath, "", "utf8");
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const session = await Effect.runPromise(
+        repository.createSession({
+          sourceKind: "pdf",
+          sourceFilePath,
+          deckPath: null,
+          sourceFingerprint: "fp:forge-cloze-added-count",
+        }),
+      );
+      await Effect.runPromise(
+        repository.saveChunks(session.id, [
+          {
+            text: "chunk-0",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceTopicsForChunk({
+          sessionId: session.id,
+          sequenceOrder: 0,
+          topics: ["topic-a"],
+        }),
+      );
+
+      const topic = await Effect.runPromise(
+        repository.getTopicByRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
+      );
+      if (!topic) throw new Error("Expected topic for source card.");
+
+      await Effect.runPromise(
+        repository.replaceCardsForTopic({
+          topicId: topic.topicId,
+          cards: [{ question: "What is ATP?", answer: "Cellular energy currency." }],
+        }),
+      );
+
+      const detail = await Effect.runPromise(
+        repository.getCardsForTopicRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
+      );
+      const sourceCardId = detail?.cards[0]?.id;
+      if (!sourceCardId) throw new Error("Expected source card id.");
+
+      await Effect.runPromise(
+        repository.upsertClozeForCard({
+          sourceCardId,
+          clozeText: "{{c1::ATP}} is produced in {{c2::mitochondria}}.",
+        }),
+      );
+
+      await Effect.runPromise(
+        handlers.ForgeAddCardToDeck({
+          deckPath,
+          content: "{{c1::ATP}} is produced in {{c2::mitochondria}}.",
+          cardType: "cloze",
+          sourceCardId,
+        }),
+      );
+
+      const cloze = await Effect.runPromise(repository.getClozeForCard(sourceCardId));
+      expect(cloze?.addedCount).toBe(2);
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
       await dispose();

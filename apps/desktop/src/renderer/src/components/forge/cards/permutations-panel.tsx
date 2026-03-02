@@ -30,6 +30,7 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
   const { mutate: addCardToDeck } = useForgeAddCardToDeckMutation();
   const targetDeckPath = useForgeTargetDeckPath();
   const queryClient = useQueryClient();
+  const permutationsQueryKey = queryKeys.forgeCardPermutations(sourceCardId);
   const inFlightForSourceCardCount = useIsMutating({
     mutationKey: forgeCardsMutationKeys.generatePermutations,
     predicate: (mutation) => {
@@ -37,7 +38,6 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
       return variables?.sourceCardId === sourceCardId;
     },
   });
-  const [addedIds, setAddedIds] = useState<ReadonlySet<number>>(new Set());
   const [addingIds, setAddingIds] = useState<ReadonlySet<number>>(new Set());
   const [addError, setAddError] = useState<string | null>(null);
   const autoRegeneratedCardIdRef = useRef<number | null>(null);
@@ -47,19 +47,11 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
   const permutations = permutationsQuery.data?.permutations ?? [];
 
   const handleRegenerate = useCallback(() => {
-    regeneratePermutations(
-      { sourceCardId },
-      {
-        onSuccess: () => {
-          setAddedIds(new Set());
-        },
-      },
-    );
+    regeneratePermutations({ sourceCardId });
   }, [regeneratePermutations, sourceCardId]);
 
   const handleEditPermutation = useCallback(
     (permutationId: number, field: "question" | "answer", value: string) => {
-      const permutationsQueryKey = queryKeys.forgeCardPermutations(sourceCardId);
       const previous =
         queryClient.getQueryData<ForgeGetCardPermutationsResult>(permutationsQueryKey);
 
@@ -91,7 +83,7 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
         },
       );
     },
-    [queryClient, sourceCardId, updatePermutation],
+    [permutationsQueryKey, queryClient, updatePermutation],
   );
 
   useEffect(() => {
@@ -170,8 +162,10 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
                 className="mt-1 min-h-0 text-xs leading-relaxed text-muted-foreground/60"
               />
             </div>
-            {addedIds.has(permutation.id) ? (
-              <span className="shrink-0 pt-0.5 text-[11px] text-primary">✓</span>
+            {permutation.addedCount > 0 ? (
+              <span className="shrink-0 pt-0.5 text-[11px] text-primary">
+                ✓ {permutation.addedCount}
+              </span>
             ) : (
               <Button
                 type="button"
@@ -188,9 +182,28 @@ export function PermutationsPanel({ sourceCardId }: PermutationsPanelProps) {
                       deckPath: targetDeckPath,
                       content: formatQAContent(permutation.question, permutation.answer),
                       cardType: "qa",
+                      permutationId: permutation.id,
                     },
                     {
-                      onSuccess: () => setAddedIds((prev) => new Set([...prev, permutation.id])),
+                      onSuccess: (result) => {
+                        queryClient.setQueryData<ForgeGetCardPermutationsResult>(
+                          permutationsQueryKey,
+                          (previous) => {
+                            if (!previous) return previous;
+                            return {
+                              ...previous,
+                              permutations: previous.permutations.map((entry) =>
+                                entry.id === permutation.id
+                                  ? {
+                                      ...entry,
+                                      addedCount: entry.addedCount + result.cardIds.length,
+                                    }
+                                  : entry,
+                              ),
+                            };
+                          },
+                        );
+                      },
                       onError: (error) => setAddError(error.message),
                       onSettled: () =>
                         setAddingIds((prev) => {

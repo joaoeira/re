@@ -61,7 +61,6 @@ type ForgePageContext = {
   readonly topicsByChunk: ReadonlyArray<ChunkTopics>;
   readonly selectedTopicKeys: ReadonlySet<string>;
   readonly activeTopicKey: string | null;
-  readonly addedCardIdsByTopicKey: TopicCardIdMap;
   readonly deletedCardIdsByTopicKey: TopicCardIdMap;
   readonly expandedCardPanelsByTopicKey: TopicExpandedCardPanelMap;
   readonly resumeErrorMessage: string | null;
@@ -88,7 +87,6 @@ const initialForgePageContext = (): ForgePageContext => ({
   topicsByChunk: [],
   selectedTopicKeys: emptyTopicKeys,
   activeTopicKey: null,
-  addedCardIdsByTopicKey: emptyTopicCardIdMap,
   deletedCardIdsByTopicKey: emptyTopicCardIdMap,
   expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
   resumeErrorMessage: null,
@@ -277,7 +275,6 @@ export const createForgePageStore = () =>
         topicsByChunk: [],
         selectedTopicKeys: emptyTopicKeys,
         activeTopicKey: null,
-        addedCardIdsByTopicKey: emptyTopicCardIdMap,
         deletedCardIdsByTopicKey: emptyTopicCardIdMap,
         expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
         resumeErrorMessage: null,
@@ -309,7 +306,6 @@ export const createForgePageStore = () =>
         topicsByChunk: [],
         selectedTopicKeys: emptyTopicKeys,
         activeTopicKey: null,
-        addedCardIdsByTopicKey: emptyTopicCardIdMap,
         deletedCardIdsByTopicKey: emptyTopicCardIdMap,
         expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
       }),
@@ -340,10 +336,6 @@ export const createForgePageStore = () =>
             context.activeTopicKey && nextSelectedTopicKeys.has(context.activeTopicKey)
               ? context.activeTopicKey
               : null,
-          addedCardIdsByTopicKey: pruneTopicCardIdMap(
-            context.addedCardIdsByTopicKey,
-            nextSelectedTopicKeys,
-          ),
           deletedCardIdsByTopicKey: pruneTopicCardIdMap(
             context.deletedCardIdsByTopicKey,
             nextSelectedTopicKeys,
@@ -394,10 +386,6 @@ export const createForgePageStore = () =>
             context.activeTopicKey && nextSelectedTopicKeys.has(context.activeTopicKey)
               ? context.activeTopicKey
               : null,
-          addedCardIdsByTopicKey: pruneTopicCardIdMap(
-            context.addedCardIdsByTopicKey,
-            nextSelectedTopicKeys,
-          ),
           deletedCardIdsByTopicKey: pruneTopicCardIdMap(
             context.deletedCardIdsByTopicKey,
             nextSelectedTopicKeys,
@@ -441,10 +429,6 @@ export const createForgePageStore = () =>
             context.activeTopicKey && nextSelectedTopicKeys.has(context.activeTopicKey)
               ? context.activeTopicKey
               : null,
-          addedCardIdsByTopicKey: pruneTopicCardIdMap(
-            context.addedCardIdsByTopicKey,
-            nextSelectedTopicKeys,
-          ),
           deletedCardIdsByTopicKey: pruneTopicCardIdMap(
             context.deletedCardIdsByTopicKey,
             nextSelectedTopicKeys,
@@ -467,7 +451,6 @@ export const createForgePageStore = () =>
           message: event.message,
         },
         activeTopicKey: null,
-        addedCardIdsByTopicKey: emptyTopicCardIdMap,
         deletedCardIdsByTopicKey: emptyTopicCardIdMap,
         expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
       }),
@@ -483,7 +466,6 @@ export const createForgePageStore = () =>
             context.activeTopicKey && next.has(context.activeTopicKey)
               ? context.activeTopicKey
               : null,
-          addedCardIdsByTopicKey: pruneTopicCardIdMap(context.addedCardIdsByTopicKey, next),
           deletedCardIdsByTopicKey: pruneTopicCardIdMap(context.deletedCardIdsByTopicKey, next),
           expandedCardPanelsByTopicKey: pruneExpandedCardPanelMap(
             context.expandedCardPanelsByTopicKey,
@@ -507,7 +489,6 @@ export const createForgePageStore = () =>
             context.activeTopicKey && next.has(context.activeTopicKey)
               ? context.activeTopicKey
               : null,
-          addedCardIdsByTopicKey: pruneTopicCardIdMap(context.addedCardIdsByTopicKey, next),
           deletedCardIdsByTopicKey: pruneTopicCardIdMap(context.deletedCardIdsByTopicKey, next),
           expandedCardPanelsByTopicKey: pruneExpandedCardPanelMap(
             context.expandedCardPanelsByTopicKey,
@@ -523,7 +504,6 @@ export const createForgePageStore = () =>
         return {
           ...context,
           selectedTopicKeys: next,
-          addedCardIdsByTopicKey: pruneTopicCardIdMap(context.addedCardIdsByTopicKey, next),
           deletedCardIdsByTopicKey: pruneTopicCardIdMap(context.deletedCardIdsByTopicKey, next),
           expandedCardPanelsByTopicKey: pruneExpandedCardPanelMap(
             context.expandedCardPanelsByTopicKey,
@@ -535,7 +515,6 @@ export const createForgePageStore = () =>
         ...context,
         selectedTopicKeys: emptyTopicKeys,
         activeTopicKey: null,
-        addedCardIdsByTopicKey: emptyTopicCardIdMap,
         deletedCardIdsByTopicKey: emptyTopicCardIdMap,
         expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
       }),
@@ -559,19 +538,6 @@ export const createForgePageStore = () =>
           event.panel,
         ),
       }),
-      markCardAddedToTopic: (context, event: { topicKey: string; cardId: number }) => ({
-        ...context,
-        addedCardIdsByTopicKey: withTopicCardId(
-          withoutTopicCardId(context.addedCardIdsByTopicKey, event.topicKey, event.cardId),
-          event.topicKey,
-          event.cardId,
-        ),
-        deletedCardIdsByTopicKey: withoutTopicCardId(
-          context.deletedCardIdsByTopicKey,
-          event.topicKey,
-          event.cardId,
-        ),
-      }),
       markCardDeletedFromTopic: (context, event: { topicKey: string; cardId: number }) => ({
         ...context,
         deletedCardIdsByTopicKey: withTopicCardId(
@@ -579,20 +545,12 @@ export const createForgePageStore = () =>
           event.topicKey,
           event.cardId,
         ),
-        addedCardIdsByTopicKey: withoutTopicCardId(
-          context.addedCardIdsByTopicKey,
-          event.topicKey,
-          event.cardId,
-        ),
       }),
       clearTopicCuration: (context, event: { topicKey: string }) => {
-        const nextAdded = new Map(context.addedCardIdsByTopicKey);
         const nextDeleted = new Map(context.deletedCardIdsByTopicKey);
-        nextAdded.delete(event.topicKey);
         nextDeleted.delete(event.topicKey);
         return {
           ...context,
-          addedCardIdsByTopicKey: nextAdded,
           deletedCardIdsByTopicKey: nextDeleted,
           expandedCardPanelsByTopicKey: withoutExpandedCardPanelsForTopic(
             context.expandedCardPanelsByTopicKey,

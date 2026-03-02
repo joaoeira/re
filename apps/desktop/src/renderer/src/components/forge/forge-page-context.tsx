@@ -109,10 +109,6 @@ export function useForgeTargetDeckPath(): string | null {
   return useForgePageSelector((snapshot) => snapshot.context.targetDeckPath);
 }
 
-export function useForgeAddedCardIdsByTopicKey(): TopicCardIdMap {
-  return useForgePageSelector((snapshot) => snapshot.context.addedCardIdsByTopicKey);
-}
-
 export function useForgeDeletedCardIdsByTopicKey(): TopicCardIdMap {
   return useForgePageSelector((snapshot) => snapshot.context.deletedCardIdsByTopicKey);
 }
@@ -179,7 +175,6 @@ export function useForgeTopicActions(): ForgeTopicActions {
 
 export type ForgeCardsCurationActions = {
   readonly setActiveTopic: (topicKey: string | null) => void;
-  readonly markCardAdded: (topicKey: string, cardId: number) => void;
   readonly markCardDeleted: (topicKey: string, cardId: number) => void;
   readonly setCardExpandedPanel: (
     topicKey: string,
@@ -195,8 +190,6 @@ export function useForgeCardsCurationActions(): ForgeCardsCurationActions {
     () => ({
       setActiveTopic: (topicKey: string | null) =>
         store.send({ type: "setActiveCardsTopic", topicKey }),
-      markCardAdded: (topicKey: string, cardId: number) =>
-        store.send({ type: "markCardAddedToTopic", topicKey, cardId }),
       markCardDeleted: (topicKey: string, cardId: number) =>
         store.send({ type: "markCardDeletedFromTopic", topicKey, cardId }),
       setCardExpandedPanel: (

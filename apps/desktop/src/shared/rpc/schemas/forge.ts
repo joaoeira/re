@@ -142,6 +142,7 @@ export const ForgeGeneratedCardSchema = Schema.Struct({
   id: PositiveIntSchema,
   question: Schema.String,
   answer: Schema.String,
+  addedToDeck: Schema.Boolean,
 });
 export type ForgeGeneratedCard = typeof ForgeGeneratedCardSchema.Type;
 
@@ -154,6 +155,7 @@ export const ForgeTopicCardsSummarySchema = Schema.Struct({
   status: ForgeTopicCardsStatusSchema,
   errorMessage: NullableStringSchema,
   cardCount: NonNegativeIntSchema,
+  addedCount: NonNegativeIntSchema,
   generationRevision: NonNegativeIntSchema,
   selected: Schema.Boolean,
 });
@@ -236,6 +238,7 @@ export const ForgePermutationSchema = Schema.Struct({
   id: PositiveIntSchema,
   question: Schema.String,
   answer: Schema.String,
+  addedCount: NonNegativeIntSchema,
 });
 export type ForgePermutation = typeof ForgePermutationSchema.Type;
 
@@ -265,6 +268,7 @@ export type ForgeGenerateCardPermutationsResult =
 export const ForgeCardClozeSchema = Schema.Struct({
   sourceCardId: PositiveIntSchema,
   cloze: Schema.String,
+  addedCount: NonNegativeIntSchema,
 });
 export type ForgeCardCloze = typeof ForgeCardClozeSchema.Type;
 
@@ -276,6 +280,7 @@ export type ForgeGetCardClozeInput = typeof ForgeGetCardClozeInputSchema.Type;
 export const ForgeGetCardClozeResultSchema = Schema.Struct({
   sourceCardId: PositiveIntSchema,
   cloze: Schema.Union(Schema.String, Schema.Null),
+  addedCount: NonNegativeIntSchema,
 });
 export type ForgeGetCardClozeResult = typeof ForgeGetCardClozeResultSchema.Type;
 
@@ -632,6 +637,8 @@ export const ForgeAddCardToDeckInputSchema = Schema.Struct({
   deckPath: Schema.String.pipe(Schema.nonEmptyString()),
   content: Schema.String.pipe(Schema.nonEmptyString()),
   cardType: Schema.Literal("qa", "cloze"),
+  sourceCardId: Schema.optional(PositiveIntSchema),
+  permutationId: Schema.optional(PositiveIntSchema),
 });
 export type ForgeAddCardToDeckInput = typeof ForgeAddCardToDeckInputSchema.Type;
 

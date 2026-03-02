@@ -308,7 +308,25 @@ const setupSqliteRepository = async () => {
       expect(snapshot).toHaveLength(1);
       expect(snapshot[0]?.status).toBe("generated");
       expect(snapshot[0]?.cardCount).toBe(1);
+      expect(snapshot[0]?.addedCount).toBe(0);
       expect(snapshot[0]?.generationRevision).toBe(1);
+
+      const detail = await Effect.runPromise(
+        repository.getCardsForTopicRef({
+          sessionId: session.id,
+          chunkId: 1,
+          topicIndex: 0,
+        }),
+      );
+      const sourceCardId = detail?.cards[0]?.id;
+      if (!sourceCardId) {
+        throw new Error("Expected generated card id.");
+      }
+
+      await Effect.runPromise(repository.markCardAddedToDeck(sourceCardId));
+
+      const snapshotAfterAdd = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+      expect(snapshotAfterAdd[0]?.addedCount).toBe(1);
     } finally {
       await dispose();
     }

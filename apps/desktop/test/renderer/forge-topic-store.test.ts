@@ -608,7 +608,7 @@ describe("forge-page-store topic selection", () => {
         panel: "permutations",
       });
       store.send({
-        type: "markCardAddedToTopic",
+        type: "markCardDeletedFromTopic",
         topicKey: topicKey(10, 0),
         cardId: 101,
       });
@@ -624,7 +624,6 @@ describe("forge-page-store topic selection", () => {
       });
 
       const state = ctx(store);
-      expect(state.addedCardIdsByTopicKey.size).toBe(0);
       expect(state.deletedCardIdsByTopicKey.size).toBe(0);
       expect(state.expandedCardPanelsByTopicKey.size).toBe(0);
       expect(state.duplicateOfSessionId).toBeNull();
@@ -745,6 +744,7 @@ describe("topicsSummaryToChunkTopics", () => {
     status: "idle" as const,
     errorMessage: null,
     cardCount: 0,
+    addedCount: 0,
     generationRevision: 0,
     selected: false,
   });

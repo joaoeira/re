@@ -83,6 +83,7 @@ export type ForgeGeneratedCard = {
   readonly cardOrder: number;
   readonly question: string;
   readonly answer: string;
+  readonly addedToDeck: boolean;
 };
 
 export type ForgeTopicCardsSnapshotRow = {
@@ -94,6 +95,7 @@ export type ForgeTopicCardsSnapshotRow = {
   readonly status: ForgeTopicCardsStatus;
   readonly errorMessage: string | null;
   readonly cardCount: number;
+  readonly addedCount: number;
   readonly generationRevision: number;
   readonly selected: boolean;
 };
@@ -118,11 +120,13 @@ export type ForgeCardPermutation = {
   readonly permutationOrder: number;
   readonly question: string;
   readonly answer: string;
+  readonly addedCount: number;
 };
 
 export type ForgeCardCloze = {
   readonly sourceCardId: number;
   readonly clozeText: string;
+  readonly addedCount: number;
 };
 
 export interface ForgeSessionRepository {
@@ -214,6 +218,9 @@ export interface ForgeSessionRepository {
     readonly question: string;
     readonly answer: string;
   }) => Effect.Effect<ForgeGeneratedCard | null, ForgeSessionRepositoryError>;
+  readonly markCardAddedToDeck: (
+    cardId: number,
+  ) => Effect.Effect<ForgeGeneratedCard | null, ForgeSessionRepositoryError>;
   readonly getCardById: (
     cardId: number,
   ) => Effect.Effect<ForgeCardWithTopicContext | null, ForgeSessionRepositoryError>;
@@ -229,6 +236,10 @@ export interface ForgeSessionRepository {
     readonly question: string;
     readonly answer: string;
   }) => Effect.Effect<ForgeCardPermutation | null, ForgeSessionRepositoryError>;
+  readonly incrementPermutationAddedCount: (input: {
+    readonly permutationId: number;
+    readonly incrementBy: number;
+  }) => Effect.Effect<ForgeCardPermutation | null, ForgeSessionRepositoryError>;
   readonly upsertClozeForCard: (input: {
     readonly sourceCardId: number;
     readonly clozeText: string;
@@ -236,6 +247,10 @@ export interface ForgeSessionRepository {
   readonly getClozeForCard: (
     sourceCardId: number,
   ) => Effect.Effect<ForgeCardCloze | null, ForgeSessionRepositoryError>;
+  readonly incrementClozeAddedCount: (input: {
+    readonly sourceCardId: number;
+    readonly incrementBy: number;
+  }) => Effect.Effect<ForgeCardCloze | null, ForgeSessionRepositoryError>;
   readonly recoverStaleGeneratingTopics: (input: {
     readonly sessionId: number;
     readonly staleBeforeIso: string;
@@ -309,6 +324,7 @@ type ForgeTopicCardsSnapshotRowDb = {
   status: ForgeTopicCardsStatus;
   error_message: string | null;
   card_count: number;
+  added_count: number;
   generation_revision: number;
   selected: number;
 };
@@ -319,6 +335,7 @@ type ForgeCardRow = {
   card_order: number;
   question: string;
   answer: string;
+  added_to_deck_at: string | null;
 };
 
 type ForgeCardWithTopicContextRow = {
@@ -327,6 +344,7 @@ type ForgeCardWithTopicContextRow = {
   card_order: number;
   question: string;
   answer: string;
+  added_to_deck_at: string | null;
   session_id: number;
   chunk_id: number;
   sequence_order: number;
@@ -341,11 +359,13 @@ type ForgeCardPermutationRow = {
   permutation_order: number;
   question: string;
   answer: string;
+  added_count: number;
 };
 
 type ForgeCardClozeRow = {
   source_card_id: number;
   cloze_text: string;
+  added_count: number;
 };
 
 type ForgeSessionSummaryRow = {
@@ -398,6 +418,7 @@ const toTopicCardsSnapshotRow = (
   status: row.status,
   errorMessage: row.error_message,
   cardCount: Number(row.card_count),
+  addedCount: Number(row.added_count),
   generationRevision: Number(row.generation_revision),
   selected: row.selected === 1,
 });
@@ -408,6 +429,7 @@ const toGeneratedCard = (row: ForgeCardRow): ForgeGeneratedCard => ({
   cardOrder: Number(row.card_order),
   question: row.question,
   answer: row.answer,
+  addedToDeck: row.added_to_deck_at !== null,
 });
 
 const toCardPermutation = (row: ForgeCardPermutationRow): ForgeCardPermutation => ({
@@ -416,6 +438,7 @@ const toCardPermutation = (row: ForgeCardPermutationRow): ForgeCardPermutation =
   permutationOrder: Number(row.permutation_order),
   question: row.question,
   answer: row.answer,
+  addedCount: Number(row.added_count),
 });
 
 const ALLOWED_TRANSITIONS: Record<ForgeSessionStatus, ReadonlySet<ForgeSessionStatus>> = {
@@ -648,6 +671,10 @@ export const makeSqliteForgeSessionRepository = ({
             COALESCE(forge_topic_generation.status, 'idle') AS status,
             forge_topic_generation.error_message AS error_message,
             COALESCE(COUNT(forge_cards.id), 0) AS card_count,
+            COALESCE(
+              SUM(CASE WHEN forge_cards.added_to_deck_at IS NOT NULL THEN 1 ELSE 0 END),
+              0
+            ) AS added_count,
             COALESCE(forge_topic_generation.generation_revision, 0) AS generation_revision,
             forge_topics.selected AS selected
           FROM forge_topics
@@ -664,7 +691,8 @@ export const makeSqliteForgeSessionRepository = ({
             forge_topics.topic_text,
             forge_topic_generation.status,
             forge_topic_generation.error_message,
-            forge_topic_generation.generation_revision
+            forge_topic_generation.generation_revision,
+            forge_topics.selected
           ORDER BY forge_chunks.sequence_order ASC, forge_topics.topic_order ASC, forge_topics.id ASC
         `,
       );
@@ -710,7 +738,7 @@ export const makeSqliteForgeSessionRepository = ({
       const rows = yield* withSqlError(
         "getCardsForTopic.select",
         sql<ForgeCardRow>`
-          SELECT id, topic_id, card_order, question, answer
+          SELECT id, topic_id, card_order, question, answer, added_to_deck_at
           FROM forge_cards
           WHERE topic_id = ${topicId}
           ORDER BY card_order ASC, id ASC
@@ -767,6 +795,7 @@ export const makeSqliteForgeSessionRepository = ({
             forge_cards.card_order AS card_order,
             forge_cards.question AS question,
             forge_cards.answer AS answer,
+            forge_cards.added_to_deck_at AS added_to_deck_at,
             forge_chunks.session_id AS session_id,
             forge_chunks.id AS chunk_id,
             forge_chunks.sequence_order AS sequence_order,
@@ -790,6 +819,7 @@ export const makeSqliteForgeSessionRepository = ({
         cardOrder: Number(row.card_order),
         question: row.question,
         answer: row.answer,
+        addedToDeck: row.added_to_deck_at !== null,
         sessionId: Number(row.session_id),
         chunkId: Number(row.chunk_id),
         sequenceOrder: Number(row.sequence_order),
@@ -811,7 +841,7 @@ export const makeSqliteForgeSessionRepository = ({
       const rows = yield* withSqlError(
         "getPermutationsForCard.select",
         sql<ForgeCardPermutationRow>`
-          SELECT id, source_card_id, permutation_order, question, answer
+          SELECT id, source_card_id, permutation_order, question, answer, added_count
           FROM forge_card_permutations
           WHERE source_card_id = ${sourceCardId}
           ORDER BY permutation_order ASC, id ASC
@@ -829,7 +859,7 @@ export const makeSqliteForgeSessionRepository = ({
       const rows = yield* withSqlError(
         "getClozeForCard.select",
         sql<ForgeCardClozeRow>`
-          SELECT source_card_id, cloze_text
+          SELECT source_card_id, cloze_text, added_count
           FROM forge_card_cloze
           WHERE source_card_id = ${sourceCardId}
           LIMIT 1
@@ -841,6 +871,7 @@ export const makeSqliteForgeSessionRepository = ({
       return {
         sourceCardId: Number(row.source_card_id),
         clozeText: row.cloze_text,
+        addedCount: Number(row.added_count),
       };
     });
 
@@ -1687,7 +1718,30 @@ export const makeSqliteForgeSessionRepository = ({
                 question = ${question},
                 answer = ${answer}
               WHERE id = ${cardId}
-              RETURNING id, topic_id, card_order, question, answer
+              RETURNING id, topic_id, card_order, question, answer, added_to_deck_at
+            `,
+          );
+
+          const row = rows[0];
+          return row ? toGeneratedCard(row) : null;
+        }),
+      ),
+    markCardAddedToDeck: (cardId) =>
+      runSql(
+        "markCardAddedToDeck.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const rows = yield* withSqlError(
+            "markCardAddedToDeck.update",
+            sql<ForgeCardRow>`
+              UPDATE forge_cards
+              SET
+                added_to_deck_at = COALESCE(
+                  added_to_deck_at,
+                  (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                )
+              WHERE id = ${cardId}
+              RETURNING id, topic_id, card_order, question, answer, added_to_deck_at
             `,
           );
 
@@ -1715,12 +1769,14 @@ export const makeSqliteForgeSessionRepository = ({
                     source_card_id,
                     permutation_order,
                     question,
-                    answer
+                    answer,
+                    added_count
                   ) VALUES (
                     ${sourceCardId},
                     ${permutationOrder},
                     ${permutation.question},
-                    ${permutation.answer}
+                    ${permutation.answer},
+                    0
                   )
                 `,
               { discard: true },
@@ -1753,7 +1809,27 @@ export const makeSqliteForgeSessionRepository = ({
                 question = ${question},
                 answer = ${answer}
               WHERE id = ${permutationId}
-              RETURNING id, source_card_id, permutation_order, question, answer
+              RETURNING id, source_card_id, permutation_order, question, answer, added_count
+            `,
+          );
+
+          const row = rows[0];
+          return row ? toCardPermutation(row) : null;
+        }),
+      ),
+    incrementPermutationAddedCount: ({ permutationId, incrementBy }) =>
+      runSql(
+        "incrementPermutationAddedCount.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const rows = yield* withSqlError(
+            "incrementPermutationAddedCount.update",
+            sql<ForgeCardPermutationRow>`
+              UPDATE forge_card_permutations
+              SET
+                added_count = added_count + ${Math.max(0, incrementBy)}
+              WHERE id = ${permutationId}
+              RETURNING id, source_card_id, permutation_order, question, answer, added_count
             `,
           );
 
@@ -1772,16 +1848,23 @@ export const makeSqliteForgeSessionRepository = ({
               INSERT INTO forge_card_cloze (
                 source_card_id,
                 cloze_text,
+                added_count,
                 created_at,
                 updated_at
               ) VALUES (
                 ${sourceCardId},
                 ${clozeText},
+                0,
                 (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
                 (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
               )
               ON CONFLICT(source_card_id) DO UPDATE SET
                 cloze_text = excluded.cloze_text,
+                added_count = CASE
+                  WHEN forge_card_cloze.cloze_text = excluded.cloze_text
+                    THEN forge_card_cloze.added_count
+                  ELSE 0
+                END,
                 updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
             `,
           );
@@ -1798,6 +1881,32 @@ export const makeSqliteForgeSessionRepository = ({
       ),
     getClozeForCard: (sourceCardId) =>
       runSql("getClozeForCard.runtime", loadClozeBySourceCardIdSql(sourceCardId)),
+    incrementClozeAddedCount: ({ sourceCardId, incrementBy }) =>
+      runSql(
+        "incrementClozeAddedCount.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const rows = yield* withSqlError(
+            "incrementClozeAddedCount.update",
+            sql<ForgeCardClozeRow>`
+              UPDATE forge_card_cloze
+              SET
+                added_count = added_count + ${Math.max(0, incrementBy)},
+                updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+              WHERE source_card_id = ${sourceCardId}
+              RETURNING source_card_id, cloze_text, added_count
+            `,
+          );
+
+          const row = rows[0];
+          if (!row) return null;
+          return {
+            sourceCardId: Number(row.source_card_id),
+            clozeText: row.cloze_text,
+            addedCount: Number(row.added_count),
+          };
+        }),
+      ),
     recoverStaleGeneratingTopics: ({ sessionId, staleBeforeIso, message }) =>
       runSql(
         "recoverStaleGeneratingTopics.runtime",
@@ -1919,6 +2028,7 @@ type InMemoryCard = {
   readonly cardOrder: number;
   readonly question: string;
   readonly answer: string;
+  readonly addedToDeckAt: string | null;
 };
 
 type InMemoryCardPermutation = ForgeCardPermutation;
@@ -2008,7 +2118,9 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
       .map((topic) => {
         const ownerChunk = chunkById.get(topic.chunkId)!;
         const generation = topicGeneration.get(topic.id);
-        const cardCount = cards.filter((card) => card.topicId === topic.id).length;
+        const cardsForTopic = cards.filter((card) => card.topicId === topic.id);
+        const cardCount = cardsForTopic.length;
+        const addedCount = cardsForTopic.filter((card) => card.addedToDeckAt !== null).length;
 
         return {
           topicId: topic.id,
@@ -2019,6 +2131,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           status: generation?.status ?? "idle",
           errorMessage: generation?.errorMessage ?? null,
           cardCount,
+          addedCount,
           generationRevision: generation?.generationRevision ?? 0,
           selected: topic.selected,
         };
@@ -2039,6 +2152,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
       cardOrder,
       question: card.question,
       answer: card.answer,
+      addedToDeckAt: null,
     }));
 
     cards.length = 0;
@@ -2482,6 +2596,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
             cardOrder: card.cardOrder,
             question: card.question,
             answer: card.answer,
+            addedToDeck: card.addedToDeckAt !== null,
           }));
 
         return {
@@ -2599,6 +2714,39 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           cardOrder: next.cardOrder,
           question: next.question,
           answer: next.answer,
+          addedToDeck: next.addedToDeckAt !== null,
+        };
+      }),
+    markCardAddedToDeck: (cardId) =>
+      Effect.sync(() => {
+        const index = cards.findIndex((card) => card.id === cardId);
+        if (index < 0) return null;
+
+        const current = cards[index]!;
+        if (current.addedToDeckAt !== null) {
+          return {
+            id: current.id,
+            topicId: current.topicId,
+            cardOrder: current.cardOrder,
+            question: current.question,
+            answer: current.answer,
+            addedToDeck: true,
+          };
+        }
+
+        const next: InMemoryCard = {
+          ...current,
+          addedToDeckAt: nowIso(),
+        };
+        cards[index] = next;
+
+        return {
+          id: next.id,
+          topicId: next.topicId,
+          cardOrder: next.cardOrder,
+          question: next.question,
+          answer: next.answer,
+          addedToDeck: true,
         };
       }),
     getCardById: (cardId) =>
@@ -2618,6 +2766,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           cardOrder: card.cardOrder,
           question: card.question,
           answer: card.answer,
+          addedToDeck: card.addedToDeckAt !== null,
           sessionId: chunk.sessionId,
           chunkId: chunk.id,
           sequenceOrder: chunk.sequenceOrder,
@@ -2637,6 +2786,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           permutationOrder,
           question: permutation.question,
           answer: permutation.answer,
+          addedCount: 0,
         }));
 
         permutations.length = 0;
@@ -2656,6 +2806,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
             permutationOrder: entry.permutationOrder,
             question: entry.question,
             answer: entry.answer,
+            addedCount: entry.addedCount,
           }));
       }),
     updatePermutationContent: ({ permutationId, question, answer }) =>
@@ -2673,13 +2824,38 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           permutationOrder: next.permutationOrder,
           question: next.question,
           answer: next.answer,
+          addedCount: next.addedCount,
+        };
+      }),
+    incrementPermutationAddedCount: ({ permutationId, incrementBy }) =>
+      Effect.sync(() => {
+        const index = permutations.findIndex((entry) => entry.id === permutationId);
+        if (index < 0) return null;
+
+        const current = permutations[index]!;
+        const next = {
+          ...current,
+          addedCount: current.addedCount + Math.max(0, incrementBy),
+        };
+        permutations[index] = next;
+
+        return {
+          id: next.id,
+          sourceCardId: next.sourceCardId,
+          permutationOrder: next.permutationOrder,
+          question: next.question,
+          answer: next.answer,
+          addedCount: next.addedCount,
         };
       }),
     upsertClozeForCard: ({ sourceCardId, clozeText }) =>
       Effect.sync(() => {
+        const existing = clozeBySourceCardId.get(sourceCardId);
         const next: InMemoryCardCloze = {
           sourceCardId,
           clozeText,
+          addedCount:
+            existing && existing.clozeText === clozeText ? existing.addedCount : 0,
         };
         clozeBySourceCardId.set(sourceCardId, next);
         return { ...next };
@@ -2688,6 +2864,18 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
       Effect.sync(() => {
         const cloze = clozeBySourceCardId.get(sourceCardId);
         return cloze ? { ...cloze } : null;
+      }),
+    incrementClozeAddedCount: ({ sourceCardId, incrementBy }) =>
+      Effect.sync(() => {
+        const existing = clozeBySourceCardId.get(sourceCardId);
+        if (!existing) return null;
+
+        const next: InMemoryCardCloze = {
+          ...existing,
+          addedCount: existing.addedCount + Math.max(0, incrementBy),
+        };
+        clozeBySourceCardId.set(sourceCardId, next);
+        return { ...next };
       }),
     recoverStaleGeneratingTopics: ({ sessionId, staleBeforeIso, message }) =>
       Effect.sync(() => {

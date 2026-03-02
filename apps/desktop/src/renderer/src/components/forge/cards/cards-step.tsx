@@ -5,7 +5,6 @@ import { Effect } from "effect";
 
 import {
   useForgeActiveTopicKey,
-  useForgeAddedCardIdsByTopicKey,
   useForgeCardsCurationActions,
   useForgeDeckTargetActions,
   useForgeDeletedCardIdsByTopicKey,
@@ -118,7 +117,6 @@ export function CardsStep() {
 
   const curationActions = useForgeCardsCurationActions();
   const activeTopicKey = useForgeActiveTopicKey();
-  const addedByTopicKey = useForgeAddedCardIdsByTopicKey();
   const deletedByTopicKey = useForgeDeletedCardIdsByTopicKey();
   const expandedPanelsByTopicKey = useForgeExpandedCardPanelsByTopicKey();
   const topicsByChunk = useForgeTopicsByChunk();
@@ -556,6 +554,7 @@ export function CardsStep() {
         readonly status: "idle" | "generating" | "generated" | "error";
         readonly errorMessage: string | null;
         readonly cardCount: number;
+        readonly addedCount: number;
         readonly generationRevision: number;
         readonly selected: boolean;
       },
@@ -698,11 +697,16 @@ export function CardsStep() {
   }, [cardsSnapshotQuery.data, requestTopicGeneration, sessionId, summaryByTopicKey, topics]);
 
   const activeAddedCardIds = useMemo(
-    () =>
-      activeTopicKey
-        ? (addedByTopicKey.get(activeTopicKey) ?? new Set<number>())
-        : new Set<number>(),
-    [activeTopicKey, addedByTopicKey],
+    () => {
+      const next = new Set<number>();
+      for (const card of activeTopicCardsQuery.data?.cards ?? []) {
+        if (card.addedToDeck) {
+          next.add(card.id);
+        }
+      }
+      return next;
+    },
+    [activeTopicCardsQuery.data],
   );
   const activeDeletedCardIds = useMemo(
     () =>
@@ -724,7 +728,7 @@ export function CardsStep() {
     return topics.map((topic) => {
       const summary = summaryByTopicKey.get(topic.topicKey);
       const deletedCount = deletedByTopicKey.get(topic.topicKey)?.size ?? 0;
-      const addedCount = addedByTopicKey.get(topic.topicKey)?.size ?? 0;
+      const addedCount = summary?.addedCount ?? 0;
       const cardCount = Math.max(0, (summary?.cardCount ?? 0) - deletedCount);
 
       return {
@@ -735,7 +739,7 @@ export function CardsStep() {
         addedCount: Math.min(addedCount, cardCount),
       };
     });
-  }, [addedByTopicKey, deletedByTopicKey, summaryByTopicKey, topics]);
+  }, [deletedByTopicKey, summaryByTopicKey, topics]);
 
   const { totalCards, totalAdded } = useMemo(() => {
     return sidebarTopics.reduce(
@@ -859,10 +863,15 @@ export function CardsStep() {
           addDisabled={!targetDeckPath}
           addCardError={addCardError}
           onAddCard={(cardId) => {
-            if (!activeTopicKey || !targetDeckPath) return;
+            if (!activeTopicKey || !activeTopic || sessionId === null || !targetDeckPath) return;
             if (addingCardIds.has(cardId)) return;
             const card = activeCards.find((c) => c.id === cardId);
             if (!card) return;
+            const topicQueryKey = queryKeys.forgeTopicCards(
+              sessionId,
+              activeTopic.chunkId,
+              activeTopic.topicIndex,
+            );
             setAddingCardIds((prev) => new Set([...prev, cardId]));
             setAddCardError(null);
             addCardToDeck(
@@ -870,9 +879,41 @@ export function CardsStep() {
                 deckPath: targetDeckPath,
                 content: formatQAContent(card.question, card.answer),
                 cardType: "qa",
+                sourceCardId: cardId,
               },
               {
-                onSuccess: () => curationActions.markCardAdded(activeTopicKey, cardId),
+                onSuccess: () => {
+                  queryClient.setQueryData<ForgeGetTopicCardsResult>(topicQueryKey, (previous) => {
+                    if (!previous) return previous;
+                    return {
+                      ...previous,
+                      cards: previous.cards.map((entry) =>
+                        entry.id === cardId ? { ...entry, addedToDeck: true } : entry,
+                      ),
+                    };
+                  });
+
+                  queryClient.setQueryData<{ topics: ReadonlyArray<ForgeTopicCardsSummary> }>(
+                    queryKeys.forgeCardsSnapshot(sessionId),
+                    (previous) => {
+                      if (!previous) return previous;
+                      return {
+                        topics: previous.topics.map((topic) => {
+                          if (
+                            topic.chunkId !== activeTopic.chunkId ||
+                            topic.topicIndex !== activeTopic.topicIndex
+                          ) {
+                            return topic;
+                          }
+                          return {
+                            ...topic,
+                            addedCount: Math.min(topic.cardCount, topic.addedCount + 1),
+                          };
+                        }),
+                      };
+                    },
+                  );
+                },
                 onError: (error) => setAddCardError(error.message),
                 onSettled: () =>
                   setAddingCardIds((prev) => {

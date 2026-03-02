@@ -224,6 +224,27 @@ const REVIEW_HISTORY_MIGRATIONS = {
       UPDATE forge_topics SET selected = 1
     `;
   }),
+  "0008_add_forge_cards_added_to_deck_at": Effect.gen(function* () {
+    const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+    yield* sql`
+      ALTER TABLE forge_cards ADD COLUMN added_to_deck_at TEXT
+    `;
+  }),
+  "0009_add_forge_card_cloze_added_count": Effect.gen(function* () {
+    const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+    yield* sql`
+      ALTER TABLE forge_card_cloze ADD COLUMN added_count INTEGER NOT NULL DEFAULT 0
+    `;
+  }),
+  "0010_add_forge_card_permutations_added_count": Effect.gen(function* () {
+    const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+    yield* sql`
+      ALTER TABLE forge_card_permutations ADD COLUMN added_count INTEGER NOT NULL DEFAULT 0
+    `;
+  }),
 } satisfies Record<string, Effect.Effect<void, unknown, SqlClient.SqlClient>>;
 
 const toMigrationError = (message: string): Migrator.MigrationError =>

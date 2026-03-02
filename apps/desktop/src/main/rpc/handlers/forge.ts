@@ -521,6 +521,7 @@ export const createForgeHandlers = () =>
               status: result.topic.status,
               errorMessage: result.topic.errorMessage,
               cardCount: result.topic.cardCount,
+              addedCount: result.topic.addedCount,
               generationRevision: result.topic.generationRevision,
               selected: result.topic.selected,
             },
@@ -528,6 +529,7 @@ export const createForgeHandlers = () =>
               id: card.id,
               question: card.question,
               answer: card.answer,
+              addedToDeck: card.addedToDeck,
             })),
           };
         });
@@ -691,14 +693,15 @@ export const createForgeHandlers = () =>
               chunkId: row.chunkId,
               sequenceOrder: row.sequenceOrder,
               topicIndex: row.topicIndex,
-              topicText: row.topicText,
-              status: row.status,
-              errorMessage: row.errorMessage,
-              cardCount: row.cardCount,
-              generationRevision: row.generationRevision,
-              selected: row.selected,
-            })),
-          };
+            topicText: row.topicText,
+            status: row.status,
+            errorMessage: row.errorMessage,
+            cardCount: row.cardCount,
+            addedCount: row.addedCount,
+            generationRevision: row.generationRevision,
+            selected: row.selected,
+          })),
+        };
         }),
       ForgeGetTopicCards: ({ sessionId, chunkId, topicIndex }) =>
         Effect.gen(function* () {
@@ -730,6 +733,7 @@ export const createForgeHandlers = () =>
               status: result.topic.status,
               errorMessage: result.topic.errorMessage,
               cardCount: result.topic.cardCount,
+              addedCount: result.topic.addedCount,
               generationRevision: result.topic.generationRevision,
               selected: result.topic.selected,
             },
@@ -737,6 +741,7 @@ export const createForgeHandlers = () =>
               id: card.id,
               question: card.question,
               answer: card.answer,
+              addedToDeck: card.addedToDeck,
             })),
           };
         }),
@@ -859,6 +864,7 @@ export const createForgeHandlers = () =>
               id: entry.id,
               question: entry.question,
               answer: entry.answer,
+              addedCount: entry.addedCount,
             })),
           };
         }),
@@ -911,6 +917,7 @@ export const createForgeHandlers = () =>
               id: entry.id,
               question: entry.question,
               answer: entry.answer,
+              addedCount: entry.addedCount,
             })),
           };
 
@@ -931,6 +938,7 @@ export const createForgeHandlers = () =>
           return {
             sourceCardId,
             cloze: cloze?.clozeText ?? null,
+            addedCount: cloze?.addedCount ?? 0,
           };
         }),
       ForgeGenerateCardCloze: ({ sourceCardId, instruction, model }) =>
@@ -974,6 +982,7 @@ export const createForgeHandlers = () =>
           const payload = {
             sourceCardId,
             cloze: cloze.clozeText,
+            addedCount: cloze.addedCount,
           };
 
           return payload;
@@ -1007,6 +1016,7 @@ export const createForgeHandlers = () =>
               id: updatedCard.id,
               question: updatedCard.question,
               answer: updatedCard.answer,
+              addedToDeck: updatedCard.addedToDeck,
             },
           };
         }),
@@ -1269,8 +1279,16 @@ export const createForgeHandlers = () =>
 
           return {};
         }),
-      ForgeAddCardToDeck: ({ deckPath, content, cardType }) =>
+      ForgeAddCardToDeck: ({ deckPath, content, cardType, sourceCardId, permutationId }) =>
         Effect.gen(function* () {
+          if (typeof sourceCardId === "number" && typeof permutationId === "number") {
+            return yield* Effect.fail(
+              new ForgeOperationError({
+                message: "Provide either sourceCardId or permutationId, not both.",
+              }),
+            );
+          }
+
           yield* validateDeckAccessAs(
             settingsRepository,
             deckPath,
@@ -1289,6 +1307,60 @@ export const createForgeHandlers = () =>
             deckPath,
             deckManager.appendItem(deckPath, { cards, content }, itemType),
           );
+
+          if (typeof sourceCardId === "number" && cardType === "qa") {
+            yield* forgeSessionRepository.markCardAddedToDeck(sourceCardId).pipe(
+              Effect.catchTag("ForgeSessionRepositoryError", (error) =>
+                Effect.sync(() => {
+                  console.warn("[forge/cards] failed to persist card added marker", {
+                    sourceCardId,
+                    error: error.message,
+                  });
+                }),
+              ),
+              Effect.asVoid,
+            );
+          }
+
+          if (typeof sourceCardId === "number" && cardType === "cloze") {
+            yield* forgeSessionRepository
+              .incrementClozeAddedCount({
+                sourceCardId,
+                incrementBy: cardCount,
+              })
+              .pipe(
+                Effect.catchTag("ForgeSessionRepositoryError", (error) =>
+                  Effect.sync(() => {
+                    console.warn("[forge/cards] failed to persist cloze added count", {
+                      sourceCardId,
+                      cardCount,
+                      error: error.message,
+                    });
+                  }),
+                ),
+                Effect.asVoid,
+              );
+          }
+
+          if (typeof permutationId === "number" && cardType === "qa") {
+            yield* forgeSessionRepository
+              .incrementPermutationAddedCount({
+                permutationId,
+                incrementBy: cardCount,
+              })
+              .pipe(
+                Effect.catchTag("ForgeSessionRepositoryError", (error) =>
+                  Effect.sync(() => {
+                    console.warn("[forge/cards] failed to persist permutation added count", {
+                      permutationId,
+                      cardCount,
+                      error: error.message,
+                    });
+                  }),
+                ),
+                Effect.asVoid,
+              );
+          }
 
           return { cardIds: cards.map((card) => card.id) };
         }).pipe(Effect.provide(DeckManagerServicesLive), Effect.mapError(toForgeOperationError)),

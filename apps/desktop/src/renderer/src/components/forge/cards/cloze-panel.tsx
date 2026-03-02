@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useIsMutating } from "@tanstack/react-query";
+import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 
 import { ClozePreview } from "@/components/editor/cloze-preview";
 import {
@@ -8,7 +8,8 @@ import {
   useForgeGenerateClozeMutation,
 } from "@/hooks/mutations/use-forge-cards-mutations";
 import { useForgeCardClozeQuery } from "@/hooks/queries/use-forge-card-cloze-query";
-import type { ForgeGenerateCardClozeInput } from "@shared/rpc/schemas/forge";
+import { queryKeys } from "@/lib/query-keys";
+import type { ForgeGenerateCardClozeInput, ForgeGetCardClozeResult } from "@shared/rpc/schemas/forge";
 import { Button } from "@/components/ui/button";
 import { useForgeTargetDeckPath } from "../forge-page-context";
 
@@ -20,6 +21,7 @@ export function ClozePanel({ sourceCardId }: ClozePanelProps) {
   const clozeQuery = useForgeCardClozeQuery(sourceCardId);
   const { mutate: regenerateCloze, isPending } = useForgeGenerateClozeMutation();
   const { mutate: addCardToDeck } = useForgeAddCardToDeckMutation();
+  const queryClient = useQueryClient();
   const targetDeckPath = useForgeTargetDeckPath();
   const inFlightForSourceCardCount = useIsMutating({
     mutationKey: forgeCardsMutationKeys.generateCloze,
@@ -28,7 +30,6 @@ export function ClozePanel({ sourceCardId }: ClozePanelProps) {
       return variables?.sourceCardId === sourceCardId;
     },
   });
-  const [added, setAdded] = useState(false);
   const [addingCloze, setAddingCloze] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const autoRegeneratedCardIdRef = useRef<number | null>(null);
@@ -36,16 +37,11 @@ export function ClozePanel({ sourceCardId }: ClozePanelProps) {
   const hasInFlightGeneration = inFlightForSourceCardCount > 0;
   const loading = isPending || hasInFlightGeneration || clozeQuery.isLoading;
   const clozeText = clozeQuery.data?.cloze ?? null;
+  const addedCount = clozeQuery.data?.addedCount ?? 0;
+  const hasBeenAdded = addedCount > 0;
 
   const handleRegenerate = useCallback(() => {
-    regenerateCloze(
-      { sourceCardId },
-      {
-        onSuccess: () => {
-          setAdded(false);
-        },
-      },
-    );
+    regenerateCloze({ sourceCardId });
   }, [regenerateCloze, sourceCardId]);
 
   useEffect(() => {
@@ -107,8 +103,10 @@ export function ClozePanel({ sourceCardId }: ClozePanelProps) {
           )}
 
           <div className="mt-3">
-            {added ? (
-              <span className="text-[11px] text-primary">✓ Added to deck</span>
+            {hasBeenAdded ? (
+              <span className="text-[11px] text-primary">
+                ✓ Added to deck ({addedCount} card{addedCount === 1 ? "" : "s"})
+              </span>
             ) : (
               <Button
                 type="button"
@@ -120,9 +118,25 @@ export function ClozePanel({ sourceCardId }: ClozePanelProps) {
                   setAddingCloze(true);
                   setAddError(null);
                   addCardToDeck(
-                    { deckPath: targetDeckPath, content: clozeText, cardType: "cloze" },
                     {
-                      onSuccess: () => setAdded(true),
+                      deckPath: targetDeckPath,
+                      content: clozeText,
+                      cardType: "cloze",
+                      sourceCardId,
+                    },
+                    {
+                      onSuccess: (result) => {
+                        queryClient.setQueryData<ForgeGetCardClozeResult>(
+                          queryKeys.forgeCardCloze(sourceCardId),
+                          (previous) => {
+                            if (!previous) return previous;
+                            return {
+                              ...previous,
+                              addedCount: previous.addedCount + result.cardIds.length,
+                            };
+                          },
+                        );
+                      },
                       onError: (error) => setAddError(error.message),
                       onSettled: () => setAddingCloze(false),
                     },

@@ -25,6 +25,7 @@ type Card = {
   readonly id: number;
   readonly question: string;
   readonly answer: string;
+  readonly addedToDeck: boolean;
 };
 
 type TopicState = {
@@ -43,6 +44,7 @@ type InitialTopicState = {
     readonly id?: number;
     readonly question: string;
     readonly answer: string;
+    readonly addedToDeck?: boolean;
   }>;
 };
 
@@ -50,6 +52,7 @@ type SnapshotSummaryOverride = {
   readonly status?: TopicState["status"];
   readonly errorMessage?: string | null;
   readonly cardCount?: number;
+  readonly addedCount?: number;
   readonly generationRevision?: number;
 };
 
@@ -136,6 +139,7 @@ const createCardsInvoke = (options?: {
         id: card.id ?? nextCardId++,
         question: card.question,
         answer: card.answer,
+        addedToDeck: card.addedToDeck ?? false,
       })) ?? [];
 
     topicByKey.set(key, {
@@ -149,9 +153,10 @@ const createCardsInvoke = (options?: {
 
   const permutationsByCardId = new Map<
     number,
-    Array<{ id: number; question: string; answer: string }>
+    Array<{ id: number; question: string; answer: string; addedCount: number }>
   >();
   const clozeByCardId = new Map<number, string>();
+  const clozeAddedCountByCardId = new Map<number, number>();
 
   const findTopicState = (input: { chunkId: number; topicIndex: number }) => {
     return topicByKey.get(`${input.chunkId}:${input.topicIndex}`) ?? null;
@@ -173,6 +178,7 @@ const createCardsInvoke = (options?: {
     status: state.status,
     errorMessage: state.errorMessage,
     cardCount: state.cards.length,
+    addedCount: state.cards.filter((card) => card.addedToDeck).length,
     generationRevision: state.generationRevision,
     selected: true,
   });
@@ -189,6 +195,7 @@ const createCardsInvoke = (options?: {
       errorMessage:
         override.errorMessage !== undefined ? override.errorMessage : summary.errorMessage,
       cardCount: override.cardCount ?? summary.cardCount,
+      addedCount: override.addedCount ?? summary.addedCount,
       generationRevision: override.generationRevision ?? summary.generationRevision,
     };
   };
@@ -323,6 +330,7 @@ const createCardsInvoke = (options?: {
             id: card.id,
             question: card.question,
             answer: card.answer,
+            addedToDeck: card.addedToDeck,
           })),
         },
       };
@@ -374,12 +382,14 @@ const createCardsInvoke = (options?: {
               id: card.id,
               question: `${state.topic.topicText} regenerated ${nextRevision}-${index + 1}`,
               answer: `A ${state.topic.topicText} ${nextRevision}-${index + 1}`,
+              addedToDeck: false,
             }))
           : [
               {
                 id: nextCardId++,
                 question: `Q ${state.topic.topicText}`,
                 answer: `A ${state.topic.topicText}`,
+                addedToDeck: false,
               },
             ];
 
@@ -396,6 +406,7 @@ const createCardsInvoke = (options?: {
             id: card.id,
             question: card.question,
             answer: card.answer,
+            addedToDeck: card.addedToDeck,
           })),
         },
       };
@@ -420,7 +431,12 @@ const createCardsInvoke = (options?: {
 
       state.cards = state.cards.map((card) =>
         card.id === input.cardId
-          ? { id: card.id, question: input.question, answer: input.answer }
+          ? {
+              id: card.id,
+              question: input.question,
+              answer: input.answer,
+              addedToDeck: card.addedToDeck,
+            }
           : card,
       );
 
@@ -431,6 +447,7 @@ const createCardsInvoke = (options?: {
             id: input.cardId,
             question: input.question,
             answer: input.answer,
+            addedToDeck: state.cards.find((card) => card.id === input.cardId)?.addedToDeck ?? false,
           },
         },
       };
@@ -449,6 +466,7 @@ const createCardsInvoke = (options?: {
             id: input.permutationId,
             question: input.question,
             answer: input.answer,
+            addedCount: permutations[index]?.addedCount ?? 0,
           };
           return {
             type: "success",
@@ -457,6 +475,7 @@ const createCardsInvoke = (options?: {
                 id: input.permutationId,
                 question: input.question,
                 answer: input.answer,
+                addedCount: permutations[index]?.addedCount ?? 0,
               },
             },
           };
@@ -492,6 +511,7 @@ const createCardsInvoke = (options?: {
           id: nextPermutationId++,
           question: `Permutation for ${input.sourceCardId}`,
           answer: "Permutation answer",
+          addedCount: 0,
         },
       ];
       permutationsByCardId.set(input.sourceCardId, permutations);
@@ -511,6 +531,7 @@ const createCardsInvoke = (options?: {
         data: {
           sourceCardId: input.sourceCardId,
           cloze: clozeByCardId.get(input.sourceCardId) ?? null,
+          addedCount: clozeAddedCountByCardId.get(input.sourceCardId) ?? 0,
         },
       };
     }
@@ -521,12 +542,17 @@ const createCardsInvoke = (options?: {
         await new Promise((resolve) => setTimeout(resolve, clozeGenerationDelayMs));
       }
       const cloze = `The answer is {{c1::${input.sourceCardId}}}.`;
+      const previousCloze = clozeByCardId.get(input.sourceCardId);
       clozeByCardId.set(input.sourceCardId, cloze);
+      if (previousCloze !== cloze) {
+        clozeAddedCountByCardId.set(input.sourceCardId, 0);
+      }
       return {
         type: "success",
         data: {
           sourceCardId: input.sourceCardId,
           cloze,
+          addedCount: clozeAddedCountByCardId.get(input.sourceCardId) ?? 0,
         },
       };
     }
@@ -536,9 +562,59 @@ const createCardsInvoke = (options?: {
     }
 
     if (method === "ForgeAddCardToDeck") {
+      const input = payload as {
+        sourceCardId?: number;
+        permutationId?: number;
+        cardType: "qa" | "cloze";
+        content: string;
+      };
+      const clozeCardCountFromContent = (content: string): number => {
+        const indices = new Set(
+          Array.from(content.matchAll(/\{\{c(\d+)::/g), (match) => Number(match[1])),
+        );
+        return Math.max(1, indices.size);
+      };
+      if (typeof input.sourceCardId === "number") {
+        if (input.cardType === "qa") {
+          const state = findTopicStateByCardId(input.sourceCardId);
+          if (state) {
+            state.cards = state.cards.map((card) =>
+              card.id === input.sourceCardId ? { ...card, addedToDeck: true } : card,
+            );
+          }
+        }
+        if (input.cardType === "cloze") {
+          const clozeCardCount = clozeCardCountFromContent(input.content);
+          clozeAddedCountByCardId.set(
+            input.sourceCardId,
+            (clozeAddedCountByCardId.get(input.sourceCardId) ?? 0) + clozeCardCount,
+          );
+        }
+      }
+      if (typeof input.permutationId === "number" && input.cardType === "qa") {
+        for (const [sourceCardId, permutations] of permutationsByCardId.entries()) {
+          const index = permutations.findIndex((entry) => entry.id === input.permutationId);
+          if (index < 0) continue;
+          const current = permutations[index]!;
+          const next = {
+            ...current,
+            addedCount: current.addedCount + 1,
+          };
+          permutationsByCardId.set(sourceCardId, [
+            ...permutations.slice(0, index),
+            next,
+            ...permutations.slice(index + 1),
+          ]);
+          break;
+        }
+      }
+      const cardCountForResult =
+        input.cardType === "cloze" ? clozeCardCountFromContent(input.content) : 1;
       return {
         type: "success",
-        data: { cardIds: [`forge-added-${nextCardId++}`] },
+        data: {
+          cardIds: Array.from({ length: cardCountForResult }, () => `forge-added-${nextCardId++}`),
+        },
       };
     }
 
@@ -1272,6 +1348,7 @@ describe("Forge cards step", () => {
           id: permutationId,
           question: "updated question",
           answer: "updated answer",
+          addedCount: 0,
         },
       },
     });
@@ -1283,6 +1360,7 @@ describe("Forge cards step", () => {
       id: permutationId,
       question: "updated question",
       answer: "updated answer",
+      addedCount: 0,
     });
 
     const notFoundResult = await invoke("ForgeUpdatePermutation", {

@@ -415,6 +415,7 @@ describe("forge session repository", () => {
     expect(snapshot).toHaveLength(1);
     expect(snapshot[0]?.status).toBe("generated");
     expect(snapshot[0]?.cardCount).toBe(2);
+    expect(snapshot[0]?.addedCount).toBe(0);
 
     const detail = await Effect.runPromise(
       repository.getCardsForTopicRef({
@@ -425,6 +426,26 @@ describe("forge session repository", () => {
     );
     expect(detail?.cards).toHaveLength(2);
     expect(detail?.cards[0]?.question).toBe("Q1");
+    expect(detail?.cards[0]?.addedToDeck).toBe(false);
+
+    const firstCardId = detail?.cards[0]?.id;
+    if (!firstCardId) {
+      throw new Error("Expected first generated card id.");
+    }
+
+    await Effect.runPromise(repository.markCardAddedToDeck(firstCardId));
+
+    const snapshotAfterAdd = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+    expect(snapshotAfterAdd[0]?.addedCount).toBe(1);
+
+    const detailAfterAdd = await Effect.runPromise(
+      repository.getCardsForTopicRef({
+        sessionId: session.id,
+        chunkId: 1,
+        topicIndex: 0,
+      }),
+    );
+    expect(detailAfterAdd?.cards[0]?.addedToDeck).toBe(true);
   });
 
   it("replaces permutations and upserts cloze for a card", async () => {
@@ -491,6 +512,23 @@ describe("forge session repository", () => {
     );
     const permutations = await Effect.runPromise(repository.getPermutationsForCard(sourceCardId));
     expect(permutations).toHaveLength(2);
+    expect(permutations[0]?.addedCount).toBe(0);
+
+    const firstPermutationId = permutations[0]?.id;
+    if (!firstPermutationId) {
+      throw new Error("Expected persisted permutation id.");
+    }
+
+    await Effect.runPromise(
+      repository.incrementPermutationAddedCount({
+        permutationId: firstPermutationId,
+        incrementBy: 1,
+      }),
+    );
+    const permutationsAfterAdd = await Effect.runPromise(
+      repository.getPermutationsForCard(sourceCardId),
+    );
+    expect(permutationsAfterAdd[0]?.addedCount).toBe(1);
 
     await Effect.runPromise(
       repository.upsertClozeForCard({
@@ -500,6 +538,36 @@ describe("forge session repository", () => {
     );
     const cloze = await Effect.runPromise(repository.getClozeForCard(sourceCardId));
     expect(cloze?.clozeText).toBe("{{c1::answer}}");
+    expect(cloze?.addedCount).toBe(0);
+
+    await Effect.runPromise(
+      repository.incrementClozeAddedCount({
+        sourceCardId,
+        incrementBy: 2,
+      }),
+    );
+    const clozeAfterAdd = await Effect.runPromise(repository.getClozeForCard(sourceCardId));
+    expect(clozeAfterAdd?.addedCount).toBe(2);
+
+    await Effect.runPromise(
+      repository.upsertClozeForCard({
+        sourceCardId,
+        clozeText: "{{c1::answer}}",
+      }),
+    );
+    const clozeAfterSameTextUpsert = await Effect.runPromise(repository.getClozeForCard(sourceCardId));
+    expect(clozeAfterSameTextUpsert?.addedCount).toBe(2);
+
+    await Effect.runPromise(
+      repository.upsertClozeForCard({
+        sourceCardId,
+        clozeText: "{{c1::different}}",
+      }),
+    );
+    const clozeAfterChangedTextUpsert = await Effect.runPromise(
+      repository.getClozeForCard(sourceCardId),
+    );
+    expect(clozeAfterChangedTextUpsert?.addedCount).toBe(0);
   });
 
   describe("listRecentSessions", () => {
