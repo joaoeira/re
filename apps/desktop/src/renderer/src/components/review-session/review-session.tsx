@@ -7,6 +7,7 @@ import { useOpenEditorWindowMutation } from "@/hooks/mutations/use-open-editor-w
 import { useReviewSession } from "@/hooks/useReviewSession";
 import { CardContent } from "@/components/review-session/card-content";
 import { ReviewActionBar } from "@/components/review-session/review-action-bar";
+import { SessionProgress } from "@/components/review-session/session-progress";
 import { SessionSummary } from "@/components/review-session/session-summary";
 import { Button } from "@/components/ui/button";
 import { useIpc } from "@/lib/ipc-context";
@@ -174,7 +175,14 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
 
   return (
     <>
-      <div className="flex flex-1 flex-col overflow-auto px-6 py-5">
+      <div className="relative flex flex-1 flex-col overflow-auto px-6 py-5">
+        {!isComplete && (
+          <SessionProgress
+            current={snapshot.context.currentIndex + 1}
+            total={snapshot.context.queue.length}
+          />
+        )}
+
         {notice && <p className="mb-4 text-center text-sm text-sky-700">{notice}</p>}
         {snapshot.context.error && (
           <p className="mb-4 text-center text-sm text-destructive">{snapshot.context.error}</p>
