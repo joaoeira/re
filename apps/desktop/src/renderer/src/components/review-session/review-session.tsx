@@ -190,12 +190,11 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
         ) : isLoadingCard || snapshot.context.currentCard === null ? (
           <p className="text-center text-sm text-muted-foreground">Loading card...</p>
         ) : (
-          <>
-            <CardContent
-              card={snapshot.context.currentCard}
-              isRevealed={isShowingAnswer || isGrading}
-            />
-          </>
+          <CardContent
+            card={snapshot.context.currentCard}
+            deckName={snapshot.context.queue[snapshot.context.currentIndex]?.deckName ?? ""}
+            isRevealed={isShowingAnswer || isGrading}
+          />
         )}
       </div>
 

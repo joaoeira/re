@@ -4,13 +4,21 @@ import { MarkdownRenderer } from "@/components/markdown-renderer";
 
 type CardContentProps = {
   readonly card: ReviewCardContent;
+  readonly deckName: string;
   readonly isRevealed: boolean;
 };
 
-export function CardContent({ card, isRevealed }: CardContentProps) {
+function formatDeckLabel(deckName: string): string {
+  return deckName.replace(/[-_]/g, " ").toUpperCase();
+}
+
+export function CardContent({ card, deckName, isRevealed }: CardContentProps) {
   if (card.cardType === "cloze") {
     return (
       <div className="mx-auto w-full max-w-[70ch]">
+        <p className="mb-4 text-[10px] uppercase tracking-[0.2em] text-muted-foreground/40">
+          {formatDeckLabel(deckName)}
+        </p>
         <MarkdownRenderer content={isRevealed ? card.reveal : card.prompt} />
       </div>
     );
@@ -18,6 +26,9 @@ export function CardContent({ card, isRevealed }: CardContentProps) {
 
   return (
     <div className="mx-auto w-full max-w-[70ch]">
+      <p className="mb-4 text-[10px] uppercase tracking-[0.2em] text-muted-foreground/40">
+        {formatDeckLabel(deckName)}
+      </p>
       <MarkdownRenderer content={card.prompt} />
       {isRevealed && (
         <>
