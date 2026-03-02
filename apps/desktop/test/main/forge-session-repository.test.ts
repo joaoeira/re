@@ -435,7 +435,9 @@ describe("forge session repository", () => {
 
     await Effect.runPromise(repository.markCardAddedToDeck(firstCardId));
 
-    const snapshotAfterAdd = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+    const snapshotAfterAdd = await Effect.runPromise(
+      repository.getCardsSnapshotBySession(session.id),
+    );
     expect(snapshotAfterAdd[0]?.addedCount).toBe(1);
 
     const detailAfterAdd = await Effect.runPromise(
@@ -555,7 +557,9 @@ describe("forge session repository", () => {
         clozeText: "{{c1::answer}}",
       }),
     );
-    const clozeAfterSameTextUpsert = await Effect.runPromise(repository.getClozeForCard(sourceCardId));
+    const clozeAfterSameTextUpsert = await Effect.runPromise(
+      repository.getClozeForCard(sourceCardId),
+    );
     expect(clozeAfterSameTextUpsert?.addedCount).toBe(2);
 
     await Effect.runPromise(

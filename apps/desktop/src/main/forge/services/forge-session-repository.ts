@@ -2854,8 +2854,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
         const next: InMemoryCardCloze = {
           sourceCardId,
           clozeText,
-          addedCount:
-            existing && existing.clozeText === clozeText ? existing.addedCount : 0,
+          addedCount: existing && existing.clozeText === clozeText ? existing.addedCount : 0,
         };
         clozeBySourceCardId.set(sourceCardId, next);
         return { ...next };

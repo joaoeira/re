@@ -693,15 +693,15 @@ export const createForgeHandlers = () =>
               chunkId: row.chunkId,
               sequenceOrder: row.sequenceOrder,
               topicIndex: row.topicIndex,
-            topicText: row.topicText,
-            status: row.status,
-            errorMessage: row.errorMessage,
-            cardCount: row.cardCount,
-            addedCount: row.addedCount,
-            generationRevision: row.generationRevision,
-            selected: row.selected,
-          })),
-        };
+              topicText: row.topicText,
+              status: row.status,
+              errorMessage: row.errorMessage,
+              cardCount: row.cardCount,
+              addedCount: row.addedCount,
+              generationRevision: row.generationRevision,
+              selected: row.selected,
+            })),
+          };
         }),
       ForgeGetTopicCards: ({ sessionId, chunkId, topicIndex }) =>
         Effect.gen(function* () {
@@ -1039,6 +1039,7 @@ export const createForgeHandlers = () =>
               id: updatedPermutation.id,
               question: updatedPermutation.question,
               answer: updatedPermutation.answer,
+              addedCount: updatedPermutation.addedCount,
             },
           };
         }),

@@ -325,7 +325,9 @@ const setupSqliteRepository = async () => {
 
       await Effect.runPromise(repository.markCardAddedToDeck(sourceCardId));
 
-      const snapshotAfterAdd = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+      const snapshotAfterAdd = await Effect.runPromise(
+        repository.getCardsSnapshotBySession(session.id),
+      );
       expect(snapshotAfterAdd[0]?.addedCount).toBe(1);
     } finally {
       await dispose();

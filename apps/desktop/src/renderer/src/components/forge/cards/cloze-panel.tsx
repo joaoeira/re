@@ -9,7 +9,10 @@ import {
 } from "@/hooks/mutations/use-forge-cards-mutations";
 import { useForgeCardClozeQuery } from "@/hooks/queries/use-forge-card-cloze-query";
 import { queryKeys } from "@/lib/query-keys";
-import type { ForgeGenerateCardClozeInput, ForgeGetCardClozeResult } from "@shared/rpc/schemas/forge";
+import type {
+  ForgeGenerateCardClozeInput,
+  ForgeGetCardClozeResult,
+} from "@shared/rpc/schemas/forge";
 import { Button } from "@/components/ui/button";
 import { useForgeTargetDeckPath } from "../forge-page-context";
 

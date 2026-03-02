@@ -2012,8 +2012,7 @@ describe("forge handlers", () => {
       await Effect.runPromise(
         handlers.ForgeAddCardToDeck({
           deckPath,
-          content:
-            "What molecule is the energy currency of the cell?\n---\nATP\n",
+          content: "What molecule is the energy currency of the cell?\n---\nATP\n",
           cardType: "qa",
           permutationId,
         }),

@@ -448,13 +448,14 @@ describe("renderer integration", () => {
       throw new Error("Expected to resolve selected deck row.");
     }
 
-    selectedRow.click();
-    selectedRow.focus();
+    const selectedRowElement = selectedRow as HTMLElement;
+    selectedRowElement.click();
+    selectedRowElement.focus();
     await userEvent.keyboard(" ");
 
-    await expect.poll(() =>
-      invoke.mock.calls.filter(([method]) => method === "BuildReviewQueue").length,
-    ).toBe(1);
+    await expect
+      .poll(() => invoke.mock.calls.filter(([method]) => method === "BuildReviewQueue").length)
+      .toBe(1);
 
     const buildQueueCall = invoke.mock.calls.find(([method]) => method === "BuildReviewQueue");
     expect(buildQueueCall).toBeDefined();

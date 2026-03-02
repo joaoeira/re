@@ -142,10 +142,7 @@ export function CardBlock({
       </div>
 
       {(showPermutations || permutationsMounted) && (
-        <div
-          hidden={!showPermutations}
-          className="ml-5 mt-2 border-l-2 border-border/30 pl-5"
-        >
+        <div hidden={!showPermutations} className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
           <PermutationsPanel sourceCardId={card.id} />
         </div>
       )}

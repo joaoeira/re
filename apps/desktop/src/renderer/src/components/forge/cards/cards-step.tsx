@@ -696,18 +696,15 @@ export function CardsStep() {
     });
   }, [cardsSnapshotQuery.data, requestTopicGeneration, sessionId, summaryByTopicKey, topics]);
 
-  const activeAddedCardIds = useMemo(
-    () => {
-      const next = new Set<number>();
-      for (const card of activeTopicCardsQuery.data?.cards ?? []) {
-        if (card.addedToDeck) {
-          next.add(card.id);
-        }
+  const activeAddedCardIds = useMemo(() => {
+    const next = new Set<number>();
+    for (const card of activeTopicCardsQuery.data?.cards ?? []) {
+      if (card.addedToDeck) {
+        next.add(card.id);
       }
-      return next;
-    },
-    [activeTopicCardsQuery.data],
-  );
+    }
+    return next;
+  }, [activeTopicCardsQuery.data]);
   const activeDeletedCardIds = useMemo(
     () =>
       activeTopicKey
