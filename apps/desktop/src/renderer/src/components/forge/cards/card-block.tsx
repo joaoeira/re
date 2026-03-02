@@ -84,22 +84,26 @@ export function CardBlock({
             : "translate-y-0.5 opacity-0 group-hover:translate-y-0 group-hover:opacity-100",
         )}
       >
-        {!isAdded && (
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              size="xs"
-              className="gap-1.5"
-              disabled={isAdding || addDisabled}
-              onClick={onAdd}
-            >
-              {isAdding ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
-              Add to deck
-            </Button>
-            <div className="mx-1 h-4 w-px bg-border/30" />
-          </>
-        )}
+        <>
+          <Button
+            type="button"
+            variant="secondary"
+            size="xs"
+            className="gap-1.5"
+            disabled={isAdded || isAdding || addDisabled}
+            onClick={onAdd}
+          >
+            {isAdded ? (
+              <Check className="size-3" />
+            ) : isAdding ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <Plus className="size-3" />
+            )}
+            {isAdded ? "Card added" : "Add to deck"}
+          </Button>
+          <div className="mx-1 h-4 w-px bg-border/30" />
+        </>
 
         <div className="flex items-center gap-px p-px">
           <Button
