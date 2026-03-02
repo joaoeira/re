@@ -74,7 +74,7 @@ export function DeckRow({ node, depth, descendantDeckPaths }: DeckRowProps) {
   };
 
   const handleRowKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === " " || e.key === "Enter") {
+    if (e.key === "Enter") {
       e.preventDefault();
       handleToggleSelection();
     }

@@ -163,7 +163,7 @@ describe("DeckRow", () => {
   });
 
   describe("keyboard selection", () => {
-    it("toggles selection with Space key", async () => {
+    it("does not toggle selection with Space key", async () => {
       const stores = createStores();
       const { screen } = await renderWithProviders(
         <DeckRow node={healthyLeaf} depth={0} descendantDeckPaths={[]} />,
@@ -174,7 +174,9 @@ describe("DeckRow", () => {
       (row.element() as HTMLElement).focus();
       await userEvent.keyboard(" ");
 
-      expect(stores.deckSelection.getSnapshot().context.selected).toHaveProperty("algorithms.md");
+      expect(stores.deckSelection.getSnapshot().context.selected).not.toHaveProperty(
+        "algorithms.md",
+      );
     });
 
     it("toggles selection with Enter key", async () => {

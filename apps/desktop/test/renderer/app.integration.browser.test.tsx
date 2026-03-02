@@ -1,5 +1,6 @@
 import { RouterProvider, createHashHistory, createRouter } from "@tanstack/react-router";
 import { describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 
 import { StoresProvider, createStores } from "@shared/state/stores-context";
 import { routeTree } from "../../src/renderer/src/routeTree.gen";
@@ -21,6 +22,7 @@ const mockDesktopApi = (
 };
 
 const renderApp = async (stores: ReturnType<typeof createStores>) => {
+  window.location.hash = "#/";
   const router = createRouter({ routeTree, history: createHashHistory() });
   return renderWithIpcProviders(
     <StoresProvider stores={stores}>
@@ -372,6 +374,94 @@ describe("renderer integration", () => {
 
     await expect.element(screen.getByText("deck", { exact: true })).toBeVisible();
     await expect.element(screen.getByText("Review")).toBeVisible();
+  });
+
+  it("starts review for selected decks when Space is pressed in the deck browser", async () => {
+    const invoke = vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
+      if (method === "GetSettings") {
+        return {
+          type: "success",
+          data: {
+            settingsVersion: 1,
+            workspace: { rootPath: "/workspace" },
+          },
+        };
+      }
+
+      if (method === "GetWorkspaceSnapshot") {
+        const rootPath = (payload as { rootPath: string }).rootPath;
+        return {
+          type: "success",
+          data: {
+            rootPath,
+            asOf: "2025-01-10T00:00:00.000Z",
+            decks: [
+              {
+                absolutePath: `${rootPath}/deck-a.md`,
+                relativePath: "deck-a.md",
+                name: "deck-a",
+                status: "ok" as const,
+                totalCards: 5,
+                dueCards: 2,
+                stateCounts: { new: 1, learning: 1, review: 1, relearning: 0 },
+              },
+              {
+                absolutePath: `${rootPath}/deck-b.md`,
+                relativePath: "deck-b.md",
+                name: "deck-b",
+                status: "ok" as const,
+                totalCards: 6,
+                dueCards: 3,
+                stateCounts: { new: 2, learning: 1, review: 1, relearning: 0 },
+              },
+            ],
+          },
+        };
+      }
+
+      if (method === "BuildReviewQueue") {
+        return {
+          type: "success",
+          data: {
+            items: [],
+            totalDue: 0,
+            totalNew: 0,
+          },
+        };
+      }
+
+      return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+    });
+
+    const subscribe = vi.fn().mockReturnValue(() => undefined);
+    mockDesktopApi(invoke, subscribe);
+
+    const stores = createStores();
+    const screen = await renderApp(stores);
+
+    await expect.element(screen.getByText("deck-a", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("deck-b", { exact: true })).toBeVisible();
+
+    const selectedRowLabel = screen.getByText("deck-a", { exact: true });
+    const selectedRow = selectedRowLabel.element()?.closest('[role="option"]');
+    if (!selectedRow) {
+      throw new Error("Expected to resolve selected deck row.");
+    }
+
+    selectedRow.click();
+    selectedRow.focus();
+    await userEvent.keyboard(" ");
+
+    await expect.poll(() =>
+      invoke.mock.calls.filter(([method]) => method === "BuildReviewQueue").length,
+    ).toBe(1);
+
+    const buildQueueCall = invoke.mock.calls.find(([method]) => method === "BuildReviewQueue");
+    expect(buildQueueCall).toBeDefined();
+    expect(buildQueueCall![1]).toEqual({
+      deckPaths: ["/workspace/deck-a.md"],
+      rootPath: "/workspace",
+    });
   });
 
   it("disables review when no decks have reviewable cards", async () => {
