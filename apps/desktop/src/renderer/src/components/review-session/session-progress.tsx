@@ -1,12 +1,12 @@
 type SessionProgressProps = {
-  readonly current: number;
+  readonly done: number;
   readonly total: number;
 };
 
-export function SessionProgress({ current, total }: SessionProgressProps) {
+export function SessionProgress({ done, total }: SessionProgressProps) {
   return (
     <span className="absolute right-6 top-5 text-[10px] text-muted-foreground/70">
-      {current} / {total}
+      {total - done} remaining
     </span>
   );
 }

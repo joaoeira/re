@@ -4,21 +4,21 @@ import { describe, expect, it } from "vitest";
 import { SessionProgress } from "@/components/review-session/session-progress";
 
 describe("SessionProgress", () => {
-  it("renders current and total with spaced separator", async () => {
-    const screen = await render(<SessionProgress current={3} total={30} />);
+  it("renders the number of cards remaining", async () => {
+    const screen = await render(<SessionProgress done={3} total={30} />);
 
-    await expect.element(screen.getByText("3 / 30")).toBeVisible();
+    await expect.element(screen.getByText("27 remaining")).toBeVisible();
   });
 
-  it("renders 1-based index at start of session", async () => {
-    const screen = await render(<SessionProgress current={1} total={15} />);
+  it("renders full total remaining at start of session", async () => {
+    const screen = await render(<SessionProgress done={0} total={15} />);
 
-    await expect.element(screen.getByText("1 / 15")).toBeVisible();
+    await expect.element(screen.getByText("15 remaining")).toBeVisible();
   });
 
-  it("renders final card index", async () => {
-    const screen = await render(<SessionProgress current={15} total={15} />);
+  it("renders zero remaining after all cards are done", async () => {
+    const screen = await render(<SessionProgress done={15} total={15} />);
 
-    await expect.element(screen.getByText("15 / 15")).toBeVisible();
+    await expect.element(screen.getByText("0 remaining")).toBeVisible();
   });
 });

@@ -178,7 +178,7 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
       <div className="relative flex flex-1 flex-col overflow-auto px-6 py-5">
         {!isComplete && (
           <SessionProgress
-            current={snapshot.context.currentIndex + 1}
+            done={snapshot.context.currentIndex}
             total={snapshot.context.queue.length}
           />
         )}
