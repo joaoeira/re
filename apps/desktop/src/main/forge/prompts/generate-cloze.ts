@@ -12,18 +12,24 @@ export const GenerateClozePromptInputSchema = Schema.Struct({
   source: SourceCardSchema,
   instruction: Schema.optional(Schema.String),
 });
-export type GenerateClozePromptInput = typeof GenerateClozePromptInputSchema.Type;
+export type GenerateClozePromptInput =
+  typeof GenerateClozePromptInputSchema.Type;
 
-const NormalizedClozeTextSchema = Schema.transform(Schema.String, Schema.String, {
-  strict: true,
-  decode: (clozeText) => clozeText.trim(),
-  encode: (clozeText) => clozeText,
-});
+const NormalizedClozeTextSchema = Schema.transform(
+  Schema.String,
+  Schema.String,
+  {
+    strict: true,
+    decode: (clozeText) => clozeText.trim(),
+    encode: (clozeText) => clozeText,
+  },
+);
 
 export const GenerateClozePromptOutputSchema = Schema.Struct({
   cloze: NormalizedClozeTextSchema.pipe(Schema.minLength(1)),
 });
-export type GenerateClozePromptOutput = typeof GenerateClozePromptOutputSchema.Type;
+export type GenerateClozePromptOutput =
+  typeof GenerateClozePromptOutputSchema.Type;
 
 const renderInstructionBlock = (instruction: string | undefined): string => {
   const trimmedInstruction = instruction?.trim();

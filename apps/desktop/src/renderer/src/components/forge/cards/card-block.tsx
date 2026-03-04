@@ -54,13 +54,6 @@ export function CardBlock({
   return (
     <div className="group relative border-b border-border/30 px-2 py-5">
       <div className={cn("transition-opacity", isAdded && "opacity-40")}>
-        {isAdded && (
-          <div className="mb-3 flex items-center gap-1.5 text-[11px] text-primary">
-            <Check className="size-3" />
-            Added to deck
-          </div>
-        )}
-
         <InlineEditor
           content={card.question}
           onContentChange={onEditQuestion}

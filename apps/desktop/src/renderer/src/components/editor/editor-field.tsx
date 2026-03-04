@@ -136,7 +136,7 @@ export function EditorField({
           <Pin className={cn("size-2.5", frozen ? "fill-current" : "")} />
         </button>
       </div>
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto ">
         {editor ? (
           <EditorContent editor={editor} />
         ) : (

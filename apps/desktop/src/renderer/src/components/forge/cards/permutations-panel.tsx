@@ -120,9 +120,9 @@ export function PermutationsPanel({
                   permutations: previous.permutations.map((entry) =>
                     entry.id === permutationId
                       ? {
-                          ...entry,
-                          addedCount: entry.addedCount + result.cardIds.length,
-                        }
+                        ...entry,
+                        addedCount: entry.addedCount + result.cardIds.length,
+                      }
                       : entry,
                   ),
                 };
@@ -218,7 +218,7 @@ export function PermutationsPanel({
             </div>
             {permutation.addedCount > 0 ? (
               <span className="shrink-0 pt-0.5 text-[11px] text-primary">
-                ✓ {permutation.addedCount}
+                ✓
               </span>
             ) : (
               <Button
