@@ -7,12 +7,9 @@ export const GetTopicsPromptInputSchema = Schema.Struct({
 });
 export type GetTopicsPromptInput = typeof GetTopicsPromptInputSchema.Type;
 
-const collapseWhitespace = (value: string): string =>
-  value.replace(/\s+/g, " ").trim();
+const collapseWhitespace = (value: string): string => value.replace(/\s+/g, " ").trim();
 
-const normalizeTopicList = (
-  topics: ReadonlyArray<string>,
-): ReadonlyArray<string> => {
+const normalizeTopicList = (topics: ReadonlyArray<string>): ReadonlyArray<string> => {
   const normalizedTopics: string[] = [];
 
   for (const topic of topics) {
@@ -88,10 +85,7 @@ const renderRepairInstruction = (context: PromptAttemptContext): string => {
   ].join("\n");
 };
 
-export const GetTopicsPromptSpec: PromptSpec<
-  GetTopicsPromptInput,
-  GetTopicsPromptOutput
-> = {
+export const GetTopicsPromptSpec: PromptSpec<GetTopicsPromptInput, GetTopicsPromptOutput> = {
   promptId: "forge/get-topics",
   version: "1",
   inputSchema: GetTopicsPromptInputSchema,

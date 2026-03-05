@@ -18,12 +18,9 @@ const RawCardSchema = Schema.Struct({
 
 type RawCard = typeof RawCardSchema.Type;
 
-const collapseWhitespace = (value: string): string =>
-  value.replace(/\s+/g, " ").trim();
+const collapseWhitespace = (value: string): string => value.replace(/\s+/g, " ").trim();
 
-const normalizeCards = (
-  cards: ReadonlyArray<RawCard>,
-): ReadonlyArray<RawCard> => {
+const normalizeCards = (cards: ReadonlyArray<RawCard>): ReadonlyArray<RawCard> => {
   const normalizedCards: RawCard[] = [];
   const seen = new Set<string>();
 
@@ -130,10 +127,7 @@ const renderRepairInstruction = (context: PromptAttemptContext): string => {
   ].join("\n");
 };
 
-export const CreateCardsPromptSpec: PromptSpec<
-  CreateCardsPromptInput,
-  CreateCardsPromptOutput
-> = {
+export const CreateCardsPromptSpec: PromptSpec<CreateCardsPromptInput, CreateCardsPromptOutput> = {
   promptId: "forge/create-cards",
   version: "1",
   inputSchema: CreateCardsPromptInputSchema,
