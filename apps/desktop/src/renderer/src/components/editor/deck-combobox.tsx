@@ -66,18 +66,25 @@ export function DeckCombobox({
     return trimmed.endsWith(".md") ? trimmed : `${trimmed}.md`;
   }, [inputValue]);
 
+  const commitCreateDeck = useCallback(
+    (relativePath: string) => {
+      onCreateDeck(relativePath);
+      setInputValue("");
+      setOpen(false);
+    },
+    [onCreateDeck],
+  );
+
   const handleValueChange = useCallback(
     (value: ComboboxValue | null) => {
       if (value && isCreateAction(value)) {
-        onCreateDeck(value.relativePath);
-        setInputValue("");
-        setOpen(false);
+        commitCreateDeck(value.relativePath);
         return;
       }
       onChange(value ? (value as DeckOption).absolutePath : null);
       setInputValue("");
     },
-    [onChange, onCreateDeck],
+    [commitCreateDeck, onChange],
   );
 
   return (
@@ -114,6 +121,16 @@ export function DeckCombobox({
             autoFocus
             placeholder="Search or create deck..."
             className="font-mono text-xs text-muted-foreground"
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+              if (event.nativeEvent.isComposing) return;
+              if (!canCreate) return;
+
+              event.preventDefault();
+              event.stopPropagation();
+              commitCreateDeck(createRelativePath);
+            }}
           />
         </div>
         <ComboboxList>

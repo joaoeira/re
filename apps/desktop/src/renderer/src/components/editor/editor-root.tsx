@@ -16,6 +16,12 @@ export function EditorRoot({ search }: EditorRootProps) {
   const session = useEditorSession(search);
   const { context } = session;
   const isCloze = context.cardType === "cloze";
+  const deckSelectionDisabled =
+    session.loading ||
+    session.rootPath === null ||
+    session.creatingDeck ||
+    context.mode === "edit" ||
+    context.isSubmitting;
 
   return (
     <div className="flex h-screen min-h-0 flex-col bg-background">
@@ -47,7 +53,7 @@ export function EditorRoot({ search }: EditorRootProps) {
             <DeckCombobox
               deckPath={context.deckPath}
               decks={session.decks}
-              disabled={context.mode === "edit" || context.isSubmitting}
+              disabled={deckSelectionDisabled}
               onChange={session.setDeckPath}
               onCreateDeck={session.createDeck}
             />

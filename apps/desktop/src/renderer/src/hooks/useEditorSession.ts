@@ -250,6 +250,7 @@ export function useEditorSession(search: EditorSearchParams) {
   const rootPath = snapshot?.context.rootPath ?? null;
   const loading = snapshot?.context.loading ?? true;
   const flashMessage = snapshot?.context.flashMessage ?? null;
+  const creatingDeck = snapshot?.matches({ ready: { operations: "creatingDeck" } }) ?? false;
   const canSubmit = snapshot ? canSubmitEditorSession(snapshot.context) : false;
 
   const submit = useCallback(() => {
@@ -283,6 +284,7 @@ export function useEditorSession(search: EditorSearchParams) {
     decks,
     rootPath,
     loading,
+    creatingDeck,
     canSubmit,
     flashMessage,
     submit,

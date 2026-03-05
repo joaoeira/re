@@ -27,6 +27,12 @@ const secondaryDeck = deck({
   name: "deck-b",
 });
 
+const createdDeck = deck({
+  absolutePath: "/workspace/new-deck.md",
+  relativePath: "new-deck.md",
+  name: "new-deck",
+});
+
 const createServices = (overrides: Partial<EditorSessionServices> = {}): EditorSessionServices => ({
   getSettings: async () => ({
     workspace: {
@@ -138,6 +144,40 @@ describe("editorSessionMachine", () => {
     } finally {
       actor.stop();
       vi.useRealTimers();
+    }
+  });
+
+  it("creates a deck and selects it in create mode", async () => {
+    const scanDecks = vi
+      .fn<EditorSessionServices["scanDecks"]>()
+      .mockResolvedValueOnce({ decks: [primaryDeck, secondaryDeck] })
+      .mockResolvedValueOnce({ decks: [primaryDeck, secondaryDeck, createdDeck] });
+    const createDeck = vi.fn(async () => ({
+      absolutePath: createdDeck.absolutePath,
+    }));
+    const services = createServices({ scanDecks, createDeck });
+    const actor = startSession({ mode: "create" }, services);
+
+    try {
+      await waitForSnapshot(actor, (snapshot) => snapshot.matches("ready"));
+
+      actor.send({ type: "CREATE_DECK", relativePath: createdDeck.relativePath });
+
+      const ready = await waitForSnapshot(
+        actor,
+        (snapshot) =>
+          snapshot.matches({ ready: { operations: "idle" } }) &&
+          snapshot.context.deckPath === createdDeck.absolutePath,
+      );
+
+      expect(createDeck).toHaveBeenCalledWith({
+        relativePath: createdDeck.relativePath,
+        createParents: true,
+      });
+      expect(ready.context.decks).toEqual([primaryDeck, secondaryDeck, createdDeck]);
+      expect(ready.context.lastError).toBeNull();
+    } finally {
+      actor.stop();
     }
   });
 

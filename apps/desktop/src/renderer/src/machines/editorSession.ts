@@ -646,13 +646,21 @@ export const createEditorSessionMachine = (
                       pendingSubmit: ({ context }) => createPendingSubmitSnapshot(context),
                     }),
                   },
-                  CREATE_DECK: {
-                    guard: "hasRootPath",
-                    target: "creatingDeck",
-                    actions: assign({
-                      pendingCreateDeckRelativePath: ({ event }) => event.relativePath,
-                    }),
-                  },
+                  CREATE_DECK: [
+                    {
+                      guard: "hasRootPath",
+                      target: "creatingDeck",
+                      actions: assign({
+                        pendingCreateDeckRelativePath: ({ event }) => event.relativePath,
+                        lastError: () => null,
+                      }),
+                    },
+                    {
+                      actions: assign({
+                        lastError: () => NO_WORKSPACE_ERROR,
+                      }),
+                    },
+                  ],
                   REQUEST_LOAD: {
                     target: "#editorSession.booting",
                     actions: assign({
