@@ -12,7 +12,7 @@ import {
   useForgeExtractState,
   useForgePageActions,
   useForgePreviewState,
-  useForgeSelectedPdf,
+  useForgeSelectedSource,
   useForgeResumeErrorMessage,
   useForgeSelectedTopicCount,
 } from "./forge-page-context";
@@ -29,7 +29,7 @@ const isEditableTarget = (target: EventTarget | null): boolean => {
 function ForgePageContent() {
   const actions = useForgePageActions();
   const currentStep = useForgeCurrentStep();
-  const selectedPdf = useForgeSelectedPdf();
+  const selectedSource = useForgeSelectedSource();
   const duplicateOfSessionId = useForgeDuplicateOfSessionId();
   const previewState = useForgePreviewState();
   const extractState = useForgeExtractState();
@@ -37,13 +37,13 @@ function ForgePageContent() {
   const resumeErrorMessage = useForgeResumeErrorMessage();
   const sessionListQuery = useForgeSessionListQuery();
 
-  const isSourceEmpty = currentStep === "source" && !selectedPdf;
+  const isSourceEmpty = currentStep === "source" && !selectedSource;
   const resumableSessions = sessionListQuery.data?.sessions.filter((s) => s.topicCount > 0) ?? [];
   const showSessionBrowser = isSourceEmpty && resumableSessions.length > 0;
   const showSourceStep = !isSourceEmpty || (!sessionListQuery.isLoading && !showSessionBrowser);
 
   useEffect(() => {
-    if (currentStep === "source" && !selectedPdf) return;
+    if (currentStep === "source" && !selectedSource) return;
     if (currentStep === "cards") return;
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -59,7 +59,7 @@ function ForgePageContent() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [actions, currentStep, selectedPdf]);
+  }, [actions, currentStep, selectedSource]);
 
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-background">
@@ -81,9 +81,9 @@ function ForgePageContent() {
                   <>
                     <PdfUploadZone onFileSelected={actions.handleFileSelected} />
 
-                    {selectedPdf ? (
+                    {selectedSource ? (
                       <p className="text-xs text-muted-foreground">
-                        Selected: {selectedPdf.fileName}
+                        Selected: {selectedSource.sourceLabel}
                       </p>
                     ) : null}
 
@@ -114,7 +114,7 @@ function ForgePageContent() {
 
                     {extractState.status === "extracting" ? (
                       <p className="text-xs text-muted-foreground">
-                        Running extraction and topic analysis for the selected PDF...
+                        Running extraction and topic analysis for the selected source...
                       </p>
                     ) : null}
 
@@ -131,7 +131,7 @@ function ForgePageContent() {
             ) : null}
           </div>
 
-          {currentStep === "source" && selectedPdf ? (
+          {currentStep === "source" && selectedSource ? (
             <div className="shrink-0 border-t border-border bg-muted/30 px-6 py-2.5">
               <div className="mx-auto flex w-full items-center justify-end gap-3">
                 <Button
@@ -196,7 +196,7 @@ const noopSessionChange = () => {};
 
 type ForgePageProps = {
   readonly initialSessionId?: number | null;
-  readonly onSessionChange?: (session: { id: number; fileName: string } | null) => void;
+  readonly onSessionChange?: (session: { id: number; sourceLabel: string } | null) => void;
 };
 
 export function ForgePage({

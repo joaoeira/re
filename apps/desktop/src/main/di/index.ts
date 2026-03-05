@@ -31,6 +31,10 @@ export {
   type ForgePromptRuntimeService as ForgePromptRuntime,
 } from "./services/ForgePromptRuntimeService";
 export {
+  ForgeSourceResolverService,
+  ForgeSourceResolverServiceLive,
+} from "./services/ForgeSourceResolverService";
+export {
   DuplicateIndexInvalidationService,
   DuplicateIndexInvalidationBridgeLive,
   DuplicateIndexInvalidationServiceLive,

@@ -4,9 +4,29 @@ import { ModelIdSchema } from "./ai";
 const PositiveIntSchema = Schema.Number.pipe(Schema.int(), Schema.positive());
 const NonNegativeIntSchema = Schema.Number.pipe(Schema.int(), Schema.nonNegative());
 const NullableStringSchema = Schema.Union(Schema.String, Schema.Null);
+const NonEmptyStringSchema = Schema.String.pipe(Schema.nonEmptyString());
 
-export const ForgeSourceKindSchema = Schema.Literal("pdf", "web");
+export const ForgeSourceKindSchema = Schema.Literal("pdf", "text");
 export type ForgeSourceKind = typeof ForgeSourceKindSchema.Type;
+
+export const ForgePdfSourceInputSchema = Schema.Struct({
+  kind: Schema.Literal("pdf"),
+  sourceFilePath: NonEmptyStringSchema,
+});
+export type ForgePdfSourceInput = typeof ForgePdfSourceInputSchema.Type;
+
+export const ForgeTextSourceInputSchema = Schema.Struct({
+  kind: Schema.Literal("text"),
+  text: NonEmptyStringSchema,
+  sourceLabel: Schema.optional(NonEmptyStringSchema),
+});
+export type ForgeTextSourceInput = typeof ForgeTextSourceInputSchema.Type;
+
+export const ForgeSourceInputSchema = Schema.Union(
+  ForgePdfSourceInputSchema,
+  ForgeTextSourceInputSchema,
+);
+export type ForgeSourceInput = typeof ForgeSourceInputSchema.Type;
 
 export const ForgeSessionStatusSchema = Schema.Literal(
   "created",
@@ -23,7 +43,8 @@ export type ForgeSessionStatus = typeof ForgeSessionStatusSchema.Type;
 export const ForgeSessionSchema = Schema.Struct({
   id: PositiveIntSchema,
   sourceKind: ForgeSourceKindSchema,
-  sourceFilePath: Schema.String,
+  sourceLabel: NonEmptyStringSchema,
+  sourceFilePath: NullableStringSchema,
   deckPath: NullableStringSchema,
   sourceFingerprint: Schema.String,
   status: ForgeSessionStatusSchema,
@@ -34,7 +55,7 @@ export const ForgeSessionSchema = Schema.Struct({
 export type ForgeSession = typeof ForgeSessionSchema.Type;
 
 export const ForgeCreateSessionInputSchema = Schema.Struct({
-  sourceFilePath: Schema.String.pipe(Schema.nonEmptyString()),
+  source: ForgeSourceInputSchema,
 });
 export type ForgeCreateSessionInput = typeof ForgeCreateSessionInputSchema.Type;
 
@@ -46,6 +67,7 @@ export type ForgeCreateSessionResult = typeof ForgeCreateSessionResultSchema.Typ
 
 export const ForgeExtractTextInputSchema = Schema.Struct({
   sessionId: PositiveIntSchema,
+  source: ForgeSourceInputSchema,
 });
 export type ForgeExtractTextInput = typeof ForgeExtractTextInputSchema.Type;
 
@@ -75,7 +97,7 @@ export const ForgeExtractTextResultSchema = Schema.Struct({
 export type ForgeExtractTextResult = typeof ForgeExtractTextResultSchema.Type;
 
 export const ForgePreviewChunksInputSchema = Schema.Struct({
-  sourceFilePath: Schema.String.pipe(Schema.nonEmptyString()),
+  source: ForgeSourceInputSchema,
 });
 export type ForgePreviewChunksInput = typeof ForgePreviewChunksInputSchema.Type;
 
@@ -87,7 +109,7 @@ export const ForgePreviewChunksResultSchema = Schema.Struct({
 export type ForgePreviewChunksResult = typeof ForgePreviewChunksResultSchema.Type;
 
 export const ForgeStartTopicExtractionInputSchema = Schema.Struct({
-  sourceFilePath: Schema.String.pipe(Schema.nonEmptyString()),
+  source: ForgeSourceInputSchema,
   maxTopicsPerChunk: Schema.optional(
     Schema.Number.pipe(Schema.int(), Schema.positive(), Schema.lessThanOrEqualTo(100)),
   ),
@@ -374,37 +396,45 @@ export class ForgeSessionBusyError extends Schema.TaggedError<ForgeSessionBusyEr
 export class ForgeEmptySourceTextError extends Schema.TaggedError<ForgeEmptySourceTextError>(
   "@re/desktop/rpc/ForgeEmptySourceTextError",
 )("empty_text", {
-  sessionId: PositiveIntSchema,
-  sourceFilePath: Schema.String,
+  sessionId: Schema.optional(PositiveIntSchema),
+  sourceKind: ForgeSourceKindSchema,
+  sourceLabel: NonEmptyStringSchema,
   message: Schema.String,
 }) {}
 
-export class PdfExtractionError extends Schema.TaggedError<PdfExtractionError>(
-  "@re/desktop/rpc/PdfExtractionError",
-)("pdf_extraction_error", {
-  sessionId: PositiveIntSchema,
-  sourceFilePath: Schema.String,
+export class ForgeSourceResolveError extends Schema.TaggedError<ForgeSourceResolveError>(
+  "@re/desktop/rpc/ForgeSourceResolveError",
+)("source_resolve_error", {
+  sessionId: Schema.optional(PositiveIntSchema),
+  sourceKind: ForgeSourceKindSchema,
+  sourceLabel: NonEmptyStringSchema,
   message: Schema.String,
 }) {}
 
 export class ForgePreviewOperationError extends Schema.TaggedError<ForgePreviewOperationError>(
   "@re/desktop/rpc/ForgePreviewOperationError",
 )("preview_operation_error", {
-  sourceFilePath: Schema.String,
+  sourceKind: ForgeSourceKindSchema,
+  sourceLabel: NonEmptyStringSchema,
   message: Schema.String,
 }) {}
 
 export class ForgePreviewEmptySourceTextError extends Schema.TaggedError<ForgePreviewEmptySourceTextError>(
   "@re/desktop/rpc/ForgePreviewEmptySourceTextError",
 )("preview_empty_text", {
-  sourceFilePath: Schema.String,
+  sourceKind: ForgeSourceKindSchema,
+  sourceLabel: NonEmptyStringSchema,
   message: Schema.String,
 }) {}
 
-export class ForgePreviewPdfExtractionError extends Schema.TaggedError<ForgePreviewPdfExtractionError>(
-  "@re/desktop/rpc/ForgePreviewPdfExtractionError",
-)("preview_pdf_extraction_error", {
-  sourceFilePath: Schema.String,
+export class ForgeSourceMismatchError extends Schema.TaggedError<ForgeSourceMismatchError>(
+  "@re/desktop/rpc/ForgeSourceMismatchError",
+)("source_mismatch", {
+  sessionId: PositiveIntSchema,
+  expectedSourceKind: ForgeSourceKindSchema,
+  expectedSourceLabel: NonEmptyStringSchema,
+  actualSourceKind: ForgeSourceKindSchema,
+  actualSourceLabel: NonEmptyStringSchema,
   message: Schema.String,
 }) {}
 
@@ -477,7 +507,9 @@ export class ForgeClozeGenerationError extends Schema.TaggedError<ForgeClozeGene
 
 export const ForgeSessionSummarySchema = Schema.Struct({
   id: PositiveIntSchema,
-  sourceFilePath: Schema.String,
+  sourceKind: ForgeSourceKindSchema,
+  sourceLabel: NonEmptyStringSchema,
+  sourceFilePath: NullableStringSchema,
   deckPath: NullableStringSchema,
   status: ForgeSessionStatusSchema,
   errorMessage: NullableStringSchema,
@@ -499,7 +531,11 @@ export type ForgeListSessionsResult = typeof ForgeListSessionsResultSchema.Type;
 export const ForgeListSessionsErrorSchema = ForgeOperationError;
 export type ForgeListSessionsError = typeof ForgeListSessionsErrorSchema.Type;
 
-export const ForgeCreateSessionErrorSchema = ForgeOperationError;
+export const ForgeCreateSessionErrorSchema = Schema.Union(
+  ForgeOperationError,
+  ForgeEmptySourceTextError,
+  ForgeSourceResolveError,
+);
 export type ForgeCreateSessionError = typeof ForgeCreateSessionErrorSchema.Type;
 
 export const ForgeExtractTextErrorSchema = Schema.Union(
@@ -507,22 +543,24 @@ export const ForgeExtractTextErrorSchema = Schema.Union(
   ForgeSessionNotFoundError,
   ForgeSessionAlreadyChunkedError,
   ForgeSessionBusyError,
+  ForgeSourceMismatchError,
   ForgeEmptySourceTextError,
-  PdfExtractionError,
+  ForgeSourceResolveError,
 );
 export type ForgeExtractTextError = typeof ForgeExtractTextErrorSchema.Type;
 
 export const ForgePreviewChunksErrorSchema = Schema.Union(
   ForgePreviewOperationError,
   ForgePreviewEmptySourceTextError,
-  ForgePreviewPdfExtractionError,
+  ForgeSourceResolveError,
 );
 export type ForgePreviewChunksError = typeof ForgePreviewChunksErrorSchema.Type;
 
 export const ForgeStartTopicExtractionErrorSchema = Schema.Union(
   ForgeOperationError,
   ForgeEmptySourceTextError,
-  PdfExtractionError,
+  ForgeSourceResolveError,
+  ForgeSourceMismatchError,
   ForgeTopicExtractionError,
   ForgeSessionOperationError,
 );

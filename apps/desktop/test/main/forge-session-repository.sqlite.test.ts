@@ -65,6 +65,292 @@ const setupSqliteRepository = async () => {
 };
 
 (sqliteBindingAvailable ? describe : describe.skip)("sqlite forge session repository", () => {
+  it("migrates legacy forge session data without dropping child rows and preserves timestamp defaults", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(tmpdir(), "re-forge-sqlite-migration-"));
+    const dbPath = path.join(tempRoot, "re.db");
+    const journalPath = path.join(tempRoot, "journal.json");
+    // @ts-expect-error better-sqlite3 types are not installed in this workspace.
+    const Database = (await import("better-sqlite3")).default;
+    const db = new Database(dbPath);
+
+    try {
+      db.pragma("foreign_keys = ON");
+      db.exec(`
+        CREATE TABLE effect_sql_migrations (
+          migration_id integer PRIMARY KEY NOT NULL,
+          created_at datetime NOT NULL DEFAULT current_timestamp,
+          name VARCHAR(255) NOT NULL
+        );
+
+        CREATE TABLE forge_sessions (
+          id INTEGER PRIMARY KEY,
+          source_kind TEXT NOT NULL CHECK (source_kind IN ('pdf', 'web')),
+          source_file_path TEXT NOT NULL,
+          deck_path TEXT,
+          source_fingerprint TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'created' CHECK (
+            status IN (
+              'created',
+              'extracting',
+              'extracted',
+              'topics_extracting',
+              'topics_extracted',
+              'generating',
+              'ready',
+              'error'
+            )
+          ),
+          error_message TEXT,
+          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+          updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+        );
+
+        CREATE TABLE forge_chunks (
+          id INTEGER PRIMARY KEY,
+          session_id INTEGER NOT NULL REFERENCES forge_sessions(id) ON DELETE CASCADE,
+          text TEXT NOT NULL,
+          sequence_order INTEGER NOT NULL CHECK (sequence_order >= 0),
+          page_boundaries TEXT NOT NULL DEFAULT '[]',
+          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+        );
+
+        CREATE TABLE forge_topics (
+          id INTEGER PRIMARY KEY,
+          chunk_id INTEGER NOT NULL REFERENCES forge_chunks(id) ON DELETE CASCADE,
+          topic_order INTEGER NOT NULL CHECK (topic_order >= 0),
+          topic_text TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+          selected INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE forge_topic_generation (
+          id INTEGER PRIMARY KEY,
+          topic_id INTEGER NOT NULL REFERENCES forge_topics(id) ON DELETE CASCADE,
+          status TEXT NOT NULL CHECK (status IN ('idle', 'generating', 'generated', 'error')),
+          error_message TEXT,
+          generation_started_at TEXT,
+          status_changed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+          generation_revision INTEGER NOT NULL DEFAULT 0,
+          UNIQUE(topic_id)
+        );
+
+        CREATE TABLE forge_cards (
+          id INTEGER PRIMARY KEY,
+          topic_id INTEGER NOT NULL REFERENCES forge_topics(id) ON DELETE CASCADE,
+          card_order INTEGER NOT NULL CHECK (card_order >= 0),
+          question TEXT NOT NULL,
+          answer TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+          added_to_deck_at TEXT,
+          UNIQUE(topic_id, card_order)
+        );
+
+        CREATE TABLE forge_card_permutations (
+          id INTEGER PRIMARY KEY,
+          source_card_id INTEGER NOT NULL REFERENCES forge_cards(id) ON DELETE CASCADE,
+          permutation_order INTEGER NOT NULL CHECK (permutation_order >= 0),
+          question TEXT NOT NULL,
+          answer TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+          added_count INTEGER NOT NULL DEFAULT 0,
+          UNIQUE(source_card_id, permutation_order)
+        );
+
+        CREATE TABLE forge_card_cloze (
+          id INTEGER PRIMARY KEY,
+          source_card_id INTEGER NOT NULL UNIQUE REFERENCES forge_cards(id) ON DELETE CASCADE,
+          cloze_text TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+          updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+          added_count INTEGER NOT NULL DEFAULT 0
+        );
+      `);
+
+      const insertMigration = db.prepare(`
+        INSERT INTO effect_sql_migrations (migration_id, name)
+        VALUES (?, ?)
+      `);
+      for (let migrationId = 1; migrationId <= 10; migrationId += 1) {
+        insertMigration.run(migrationId, `migration_${migrationId}`);
+      }
+
+      db.prepare(`
+        INSERT INTO forge_sessions (
+          id,
+          source_kind,
+          source_file_path,
+          deck_path,
+          source_fingerprint,
+          status,
+          error_message,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        1,
+        "pdf",
+        "/tmp/legacy.pdf",
+        null,
+        "fp:legacy",
+        "ready",
+        null,
+        "2025-01-01T00:00:00.000Z",
+        "2025-01-01T00:00:00.000Z",
+      );
+      db.prepare(`
+        INSERT INTO forge_chunks (
+          id,
+          session_id,
+          text,
+          sequence_order,
+          page_boundaries,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(10, 1, "legacy chunk", 0, '[{"offset":0,"page":1}]', "2025-01-01T00:00:00.000Z");
+      db.prepare(`
+        INSERT INTO forge_topics (
+          id,
+          chunk_id,
+          topic_order,
+          topic_text,
+          created_at,
+          selected
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(20, 10, 0, "legacy topic", "2025-01-01T00:00:00.000Z", 1);
+      db.prepare(`
+        INSERT INTO forge_topic_generation (
+          id,
+          topic_id,
+          status,
+          error_message,
+          generation_started_at,
+          status_changed_at,
+          generation_revision
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(30, 20, "generated", null, "2025-01-01T00:00:00.000Z", "2025-01-01T00:00:00.000Z", 1);
+      db.prepare(`
+        INSERT INTO forge_cards (
+          id,
+          topic_id,
+          card_order,
+          question,
+          answer,
+          created_at,
+          added_to_deck_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        40,
+        20,
+        0,
+        "Legacy question?",
+        "Legacy answer.",
+        "2025-01-01T00:00:00.000Z",
+        "2025-01-02T00:00:00.000Z",
+      );
+      db.prepare(`
+        INSERT INTO forge_card_permutations (
+          id,
+          source_card_id,
+          permutation_order,
+          question,
+          answer,
+          created_at,
+          added_count
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(50, 40, 0, "Legacy permutation?", "Legacy answer.", "2025-01-01T00:00:00.000Z", 1);
+      db.prepare(`
+        INSERT INTO forge_card_cloze (
+          id,
+          source_card_id,
+          cloze_text,
+          created_at,
+          updated_at,
+          added_count
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        60,
+        40,
+        "Legacy {{c1::answer}}.",
+        "2025-01-01T00:00:00.000Z",
+        "2025-01-01T00:00:00.000Z",
+        1,
+      );
+    } finally {
+      db.close();
+    }
+
+    const analyticsBundle = createSqliteReviewAnalyticsRuntimeBundle({
+      dbPath,
+      journalPath,
+    });
+
+    try {
+      await analyticsBundle.runtime.runPromise(analyticsBundle.startupEffect);
+
+      const repository = makeSqliteForgeSessionRepository({
+        runtime: analyticsBundle.runtime,
+      });
+
+      const legacySession = await Effect.runPromise(repository.getSession(1));
+      expect(legacySession?.sourceLabel).toBe("legacy.pdf");
+      expect(legacySession?.sourceFilePath).toBe("/tmp/legacy.pdf");
+
+      const childCounts = await analyticsBundle.runtime.runPromise(
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const readCount = (
+            effect: Effect.Effect<ReadonlyArray<{ count: number }>, unknown, SqlClient.SqlClient>,
+          ) => effect.pipe(Effect.map((rows) => Number(rows[0]?.count ?? 0)));
+
+          return {
+            chunks: yield* readCount(
+              sql<{ count: number }>`SELECT COUNT(*) AS count FROM forge_chunks`,
+            ),
+            topics: yield* readCount(
+              sql<{ count: number }>`SELECT COUNT(*) AS count FROM forge_topics`,
+            ),
+            topicGeneration: yield* readCount(
+              sql<{ count: number }>`SELECT COUNT(*) AS count FROM forge_topic_generation`,
+            ),
+            cards: yield* readCount(
+              sql<{ count: number }>`SELECT COUNT(*) AS count FROM forge_cards`,
+            ),
+            permutations: yield* readCount(
+              sql<{ count: number }>`SELECT COUNT(*) AS count FROM forge_card_permutations`,
+            ),
+            cloze: yield* readCount(
+              sql<{ count: number }>`SELECT COUNT(*) AS count FROM forge_card_cloze`,
+            ),
+          };
+        }),
+      );
+
+      expect(childCounts).toEqual({
+        chunks: 1,
+        topics: 1,
+        topicGeneration: 1,
+        cards: 1,
+        permutations: 1,
+        cloze: 1,
+      });
+
+      const created = await Effect.runPromise(
+        repository.createSession({
+          sourceKind: "text",
+          sourceLabel: "Pasted text",
+          sourceFilePath: null,
+          deckPath: null,
+          sourceFingerprint: "fp:new-text",
+        }),
+      );
+      expect(created.createdAt.length).toBeGreaterThan(0);
+      expect(created.updatedAt.length).toBeGreaterThan(0);
+    } finally {
+      await analyticsBundle.runtime.dispose();
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it("updates and persists session deck_path", async () => {
     const { repository, dispose } = await setupSqliteRepository();
 
@@ -72,6 +358,7 @@ const setupSqliteRepository = async () => {
       const session = await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath: "/tmp/sqlite-deck-target.pdf",
           deckPath: null,
           sourceFingerprint: "fp:sqlite-deck-target",
@@ -101,6 +388,7 @@ const setupSqliteRepository = async () => {
       const session = await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath: "/tmp/sqlite-empty-topics.pdf",
           deckPath: null,
           sourceFingerprint: "fp:sqlite-empty-topics",
@@ -160,6 +448,7 @@ const setupSqliteRepository = async () => {
       const session = await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath: "/tmp/sqlite-invalid-json.pdf",
           deckPath: null,
           sourceFingerprint: "fp:sqlite-invalid-json",
@@ -211,6 +500,7 @@ const setupSqliteRepository = async () => {
       const session = await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath: "/tmp/sqlite-invalid-schema.pdf",
           deckPath: null,
           sourceFingerprint: "fp:sqlite-invalid-schema",
@@ -262,6 +552,7 @@ const setupSqliteRepository = async () => {
       const session = await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath: "/tmp/sqlite-cards-domain.pdf",
           deckPath: null,
           sourceFingerprint: "fp:sqlite-cards-domain",

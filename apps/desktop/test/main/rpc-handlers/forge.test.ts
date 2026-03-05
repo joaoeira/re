@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 
 import { Cause, Effect, Exit } from "effect";
@@ -238,6 +239,99 @@ describe("forge handlers", () => {
     };
   };
 
+  type ForgeHandlers = Awaited<ReturnType<typeof setupHandlers>>["handlers"];
+
+  const pdfSource = (sourceFilePath: string) => ({
+    kind: "pdf" as const,
+    sourceFilePath,
+  });
+
+  const textSource = (input: { readonly text: string; readonly sourceLabel?: string }) => ({
+    kind: "text" as const,
+    text: input.text,
+    ...(input.sourceLabel ? { sourceLabel: input.sourceLabel } : {}),
+  });
+
+  const createPdfSession = (handlers: ForgeHandlers, sourceFilePath: string) =>
+    handlers.ForgeCreateSession({ source: pdfSource(sourceFilePath) });
+
+  const createTextSession = (
+    handlers: ForgeHandlers,
+    input: {
+      readonly text: string;
+      readonly sourceLabel?: string;
+    },
+  ) => handlers.ForgeCreateSession({ source: textSource(input) });
+
+  const previewPdfChunks = (handlers: ForgeHandlers, sourceFilePath: string) =>
+    handlers.ForgePreviewChunks({ source: pdfSource(sourceFilePath) });
+
+  const previewTextChunks = (
+    handlers: ForgeHandlers,
+    input: {
+      readonly text: string;
+      readonly sourceLabel?: string;
+    },
+  ) => handlers.ForgePreviewChunks({ source: textSource(input) });
+
+  const extractPdfText = (
+    handlers: ForgeHandlers,
+    input: {
+      readonly sessionId: number;
+      readonly sourceFilePath?: string;
+    },
+  ) =>
+    handlers.ForgeExtractText({
+      sessionId: input.sessionId,
+      source: pdfSource(input.sourceFilePath ?? "/tmp/forge-test-source.pdf"),
+    });
+
+  const extractTextSource = (
+    handlers: ForgeHandlers,
+    input: {
+      readonly sessionId: number;
+      readonly text: string;
+      readonly sourceLabel?: string;
+    },
+  ) =>
+    handlers.ForgeExtractText({
+      sessionId: input.sessionId,
+      source: textSource(input),
+    });
+
+  const startPdfTopicExtraction = (
+    handlers: ForgeHandlers,
+    input: {
+      readonly sourceFilePath: string;
+      readonly model?: string;
+      readonly maxTopicsPerChunk?: number;
+    },
+  ) =>
+    handlers.ForgeStartTopicExtraction({
+      source: pdfSource(input.sourceFilePath),
+      ...(input.model ? { model: input.model } : {}),
+      ...(typeof input.maxTopicsPerChunk === "number"
+        ? { maxTopicsPerChunk: input.maxTopicsPerChunk }
+        : {}),
+    });
+
+  const startTextTopicExtraction = (
+    handlers: ForgeHandlers,
+    input: {
+      readonly text: string;
+      readonly sourceLabel?: string;
+      readonly model?: string;
+      readonly maxTopicsPerChunk?: number;
+    },
+  ) =>
+    handlers.ForgeStartTopicExtraction({
+      source: textSource(input),
+      ...(input.model ? { model: input.model } : {}),
+      ...(typeof input.maxTopicsPerChunk === "number"
+        ? { maxTopicsPerChunk: input.maxTopicsPerChunk }
+        : {}),
+    });
+
   it("creates a session with source_kind=pdf and stores the computed fingerprint", async () => {
     const sourceFilePath = "/tmp/forge-a.pdf";
     const sourceFingerprint = "fingerprint:forge-a";
@@ -249,7 +343,7 @@ describe("forge handlers", () => {
     const { handlers, repository, dispose } = await setupHandlers({ extractor });
 
     try {
-      const result = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const result = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
 
       expect(result.duplicateOfSessionId).toBeNull();
       expect(result.session.sourceKind).toBe("pdf");
@@ -276,8 +370,8 @@ describe("forge handlers", () => {
     const { handlers, dispose } = await setupHandlers({ extractor });
 
     try {
-      const first = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
-      const second = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const first = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
+      const second = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
 
       expect(second.duplicateOfSessionId).toBe(first.session.id);
       expect(second.session.id).not.toBe(first.session.id);
@@ -287,7 +381,7 @@ describe("forge handlers", () => {
     }
   });
 
-  it("returns forge_operation_error when fingerprint resolution fails", async () => {
+  it("returns source_resolve_error when fingerprint resolution fails", async () => {
     const sourceFilePath = "/tmp/forge-fingerprint-failure.pdf";
     const extractor: PdfExtractor = {
       resolveFingerprint: () =>
@@ -308,7 +402,7 @@ describe("forge handlers", () => {
     const { handlers, dispose } = await setupHandlers({ extractor });
 
     try {
-      const exit = await Effect.runPromiseExit(handlers.ForgeCreateSession({ sourceFilePath }));
+      const exit = await Effect.runPromiseExit(createPdfSession(handlers, sourceFilePath));
 
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isSuccess(exit)) {
@@ -318,20 +412,18 @@ describe("forge handlers", () => {
       const failure = Cause.failureOption(exit.cause);
       expect(failure._tag).toBe("Some");
       if (failure._tag === "Some") {
-        expect(failure.value._tag).toBe("forge_operation_error");
+        expect(failure.value._tag).toBe("source_resolve_error");
       }
     } finally {
       await dispose();
     }
   });
 
-  it("rejects relative source paths at handler boundary", async () => {
+  it("rejects relative source paths with source_resolve_error", async () => {
     const { handlers, dispose } = await setupHandlers();
 
     try {
-      const exit = await Effect.runPromiseExit(
-        handlers.ForgeCreateSession({ sourceFilePath: "./relative.pdf" }),
-      );
+      const exit = await Effect.runPromiseExit(createPdfSession(handlers, "./relative.pdf"));
 
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isSuccess(exit)) {
@@ -341,8 +433,32 @@ describe("forge handlers", () => {
       const failure = Cause.failureOption(exit.cause);
       expect(failure._tag).toBe("Some");
       if (failure._tag === "Some") {
-        expect(failure.value._tag).toBe("forge_operation_error");
+        expect(failure.value._tag).toBe("source_resolve_error");
       }
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("creates a session with source_kind=text and stores a normalized fingerprint", async () => {
+    const text = "  Alpha\r\nBeta  ";
+    const expectedFingerprint = createHash("sha256").update("Alpha\nBeta", "utf8").digest("hex");
+    const { handlers, dispose } = await setupHandlers();
+
+    try {
+      const result = await Effect.runPromise(
+        createTextSession(handlers, {
+          text,
+          sourceLabel: "Pasted notes",
+        }),
+      );
+
+      expect(result.duplicateOfSessionId).toBeNull();
+      expect(result.session.sourceKind).toBe("text");
+      expect(result.session.sourceLabel).toBe("Pasted notes");
+      expect(result.session.sourceFilePath).toBeNull();
+      expect(result.session.sourceFingerprint).toBe(expectedFingerprint);
+      expect(result.session.status).toBe("created");
     } finally {
       await dispose();
     }
@@ -356,6 +472,7 @@ describe("forge handlers", () => {
       const sessionA = await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath: "/tmp/list-a.pdf",
           deckPath: null,
           sourceFingerprint: "fp:list-a",
@@ -399,6 +516,7 @@ describe("forge handlers", () => {
       await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath: "/tmp/list-b.pdf",
           deckPath: null,
           sourceFingerprint: "fp:list-b",
@@ -435,7 +553,7 @@ describe("forge handlers", () => {
     const { handlers, repository, dispose } = await setupHandlers();
 
     try {
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
       const deckPath = "/workspace/decks/biology.md";
 
       const result = await Effect.runPromise(
@@ -476,9 +594,9 @@ describe("forge handlers", () => {
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     try {
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
       const extracted = await Effect.runPromise(
-        handlers.ForgeExtractText({ sessionId: created.session.id }),
+        extractPdfText(handlers, { sessionId: created.session.id, sourceFilePath }),
       );
 
       expect(extracted.sessionId).toBe(created.session.id);
@@ -502,6 +620,81 @@ describe("forge handlers", () => {
       expect(chunkCount).toBe(2);
     } finally {
       consoleSpy.mockRestore();
+      await dispose();
+    }
+  });
+
+  it("persists chunks for text sources and returns a synthetic single-page extraction summary", async () => {
+    const text = "A".repeat(20_500);
+    const { handlers, repository, dispose } = await setupHandlers();
+
+    try {
+      const created = await Effect.runPromise(
+        createTextSession(handlers, {
+          text,
+          sourceLabel: "Pasted text",
+        }),
+      );
+      const extracted = await Effect.runPromise(
+        extractTextSource(handlers, {
+          sessionId: created.session.id,
+          text,
+          sourceLabel: "Pasted text",
+        }),
+      );
+
+      expect(extracted.sessionId).toBe(created.session.id);
+      expect(extracted.textLength).toBe(text.length);
+      expect(extracted.totalPages).toBe(1);
+      expect(extracted.chunkCount).toBe(2);
+
+      const stored = await Effect.runPromise(repository.getSession(created.session.id));
+      expect(stored?.status).toBe("extracted");
+      expect(stored?.sourceKind).toBe("text");
+      expect(stored?.sourceFilePath).toBeNull();
+
+      const chunks = await Effect.runPromise(repository.getChunks(created.session.id));
+      expect(chunks).toHaveLength(2);
+      expect(chunks[0]?.pageBoundaries).toEqual([{ offset: 0, page: 1 }]);
+      expect(chunks[1]?.pageBoundaries).toEqual([{ offset: 0, page: 1 }]);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("returns source_mismatch when the provided text does not match the created session", async () => {
+    const { handlers, repository, dispose } = await setupHandlers();
+
+    try {
+      const created = await Effect.runPromise(
+        createTextSession(handlers, {
+          text: "alpha beta gamma",
+          sourceLabel: "Session text",
+        }),
+      );
+      const exit = await Effect.runPromiseExit(
+        extractTextSource(handlers, {
+          sessionId: created.session.id,
+          text: "different text",
+          sourceLabel: "Session text",
+        }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected ForgeExtractText to fail for mismatched text.");
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("source_mismatch");
+      }
+
+      const stored = await Effect.runPromise(repository.getSession(created.session.id));
+      expect(stored?.status).toBe("created");
+      expect(stored?.errorMessage).toBeNull();
+    } finally {
       await dispose();
     }
   });
@@ -536,9 +729,9 @@ describe("forge handlers", () => {
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     try {
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
       const exit = await Effect.runPromiseExit(
-        handlers.ForgeExtractText({ sessionId: created.session.id }),
+        extractPdfText(handlers, { sessionId: created.session.id, sourceFilePath }),
       );
 
       expect(Exit.isFailure(exit)).toBe(true);
@@ -570,9 +763,9 @@ describe("forge handlers", () => {
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     try {
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
       const exit = await Effect.runPromiseExit(
-        handlers.ForgeExtractText({ sessionId: created.session.id }),
+        extractPdfText(handlers, { sessionId: created.session.id, sourceFilePath }),
       );
 
       expect(Exit.isFailure(exit)).toBe(true);
@@ -583,7 +776,7 @@ describe("forge handlers", () => {
       const failure = Cause.failureOption(exit.cause);
       expect(failure._tag).toBe("Some");
       if (failure._tag === "Some") {
-        expect(failure.value._tag).toBe("pdf_extraction_error");
+        expect(failure.value._tag).toBe("source_resolve_error");
       }
 
       const stored = await Effect.runPromise(repository.getSession(created.session.id));
@@ -611,9 +804,9 @@ describe("forge handlers", () => {
     const { handlers, repository, dispose } = await setupHandlers({ extractor });
 
     try {
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
       const exit = await Effect.runPromiseExit(
-        handlers.ForgeExtractText({ sessionId: created.session.id }),
+        extractPdfText(handlers, { sessionId: created.session.id, sourceFilePath }),
       );
 
       expect(Exit.isFailure(exit)).toBe(true);
@@ -651,11 +844,13 @@ describe("forge handlers", () => {
     const { handlers, repository, dispose } = await setupHandlers({ extractor });
 
     try {
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
-      await Effect.runPromise(handlers.ForgeExtractText({ sessionId: created.session.id }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
+      await Effect.runPromise(
+        extractPdfText(handlers, { sessionId: created.session.id, sourceFilePath }),
+      );
 
       const retryExit = await Effect.runPromiseExit(
-        handlers.ForgeExtractText({ sessionId: created.session.id }),
+        extractPdfText(handlers, { sessionId: created.session.id, sourceFilePath }),
       );
 
       expect(Exit.isFailure(retryExit)).toBe(true);
@@ -682,7 +877,7 @@ describe("forge handlers", () => {
     const { handlers, repository, dispose } = await setupHandlers();
 
     try {
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
       await Effect.runPromise(
         repository.setSessionStatus({
           sessionId: created.session.id,
@@ -692,7 +887,7 @@ describe("forge handlers", () => {
       );
 
       const exit = await Effect.runPromiseExit(
-        handlers.ForgeExtractText({ sessionId: created.session.id }),
+        extractPdfText(handlers, { sessionId: created.session.id, sourceFilePath }),
       );
 
       expect(Exit.isFailure(exit)).toBe(true);
@@ -730,7 +925,7 @@ describe("forge handlers", () => {
     const { handlers, repository, dispose } = await setupHandlers({ extractor });
 
     try {
-      const preview = await Effect.runPromise(handlers.ForgePreviewChunks({ sourceFilePath }));
+      const preview = await Effect.runPromise(previewPdfChunks(handlers, sourceFilePath));
       expect(preview.textLength).toBe(20_500);
       expect(preview.totalPages).toBe(3);
       expect(preview.chunkCount).toBe(2);
@@ -739,6 +934,32 @@ describe("forge handlers", () => {
         repository.findLatestBySourceFingerprint({
           sourceKind: "pdf",
           sourceFingerprint: `fp:${sourceFilePath}`,
+        }),
+      );
+      expect(latestDuplicate).toBeNull();
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("previews chunk estimates for pasted text without creating a session", async () => {
+    const { handlers, repository, dispose } = await setupHandlers();
+
+    try {
+      const preview = await Effect.runPromise(
+        previewTextChunks(handlers, {
+          text: "A".repeat(20_500),
+          sourceLabel: "Pasted notes",
+        }),
+      );
+      expect(preview.textLength).toBe(20_500);
+      expect(preview.totalPages).toBe(1);
+      expect(preview.chunkCount).toBe(2);
+
+      const latestDuplicate = await Effect.runPromise(
+        repository.findLatestBySourceFingerprint({
+          sourceKind: "text",
+          sourceFingerprint: createHash("sha256").update("A".repeat(20_500), "utf8").digest("hex"),
         }),
       );
       expect(latestDuplicate).toBeNull();
@@ -757,7 +978,7 @@ describe("forge handlers", () => {
     const { handlers, dispose } = await setupHandlers({ extractor });
 
     try {
-      const exit = await Effect.runPromiseExit(handlers.ForgePreviewChunks({ sourceFilePath }));
+      const exit = await Effect.runPromiseExit(previewPdfChunks(handlers, sourceFilePath));
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isSuccess(exit)) {
         throw new Error("Expected ForgePreviewChunks to fail.");
@@ -773,7 +994,7 @@ describe("forge handlers", () => {
     }
   });
 
-  it("returns preview_pdf_extraction_error for unreadable preview PDFs", async () => {
+  it("returns source_resolve_error for unreadable preview PDFs", async () => {
     const sourceFilePath = "/tmp/forge-preview-failing.pdf";
     const extractor = createPdfExtractor({
       failingPaths: new Set([sourceFilePath]),
@@ -781,7 +1002,7 @@ describe("forge handlers", () => {
     const { handlers, dispose } = await setupHandlers({ extractor });
 
     try {
-      const exit = await Effect.runPromiseExit(handlers.ForgePreviewChunks({ sourceFilePath }));
+      const exit = await Effect.runPromiseExit(previewPdfChunks(handlers, sourceFilePath));
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isSuccess(exit)) {
         throw new Error("Expected ForgePreviewChunks to fail.");
@@ -790,7 +1011,7 @@ describe("forge handlers", () => {
       const failure = Cause.failureOption(exit.cause);
       expect(failure._tag).toBe("Some");
       if (failure._tag === "Some") {
-        expect(failure.value._tag).toBe("preview_pdf_extraction_error");
+        expect(failure.value._tag).toBe("source_resolve_error");
       }
     } finally {
       await dispose();
@@ -820,7 +1041,7 @@ describe("forge handlers", () => {
 
     try {
       const result = await Effect.runPromise(
-        handlers.ForgeStartTopicExtraction({
+        startPdfTopicExtraction(handlers, {
           sourceFilePath,
           maxTopicsPerChunk: 3,
         }),
@@ -831,6 +1052,40 @@ describe("forge handlers", () => {
       expect(result.extraction.chunkCount).toBe(1);
       expect(result.topicsByChunk).toHaveLength(1);
       expect(result.topicsByChunk[0]?.sequenceOrder).toBe(0);
+      expect(result.topicsByChunk[0]?.topics).toEqual(["cell", "biology"]);
+
+      const persistedTopics = await Effect.runPromise(
+        repository.getTopicsBySession(result.session.id),
+      );
+      expect(persistedTopics).toEqual(result.topicsByChunk);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("runs start-topic-extraction for text sources through persisted topics", async () => {
+    const promptRuntime = createPromptRuntime(({ chunkText }) =>
+      Effect.succeed([chunkText.slice(0, 4), "biology"]),
+    );
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const result = await Effect.runPromise(
+        startTextTopicExtraction(handlers, {
+          text: "cell membrane nucleus mitochondria",
+          sourceLabel: "Lecture notes",
+          maxTopicsPerChunk: 3,
+        }),
+      );
+
+      expect(result.duplicateOfSessionId).toBeNull();
+      expect(result.session.sourceKind).toBe("text");
+      expect(result.session.sourceLabel).toBe("Lecture notes");
+      expect(result.session.sourceFilePath).toBeNull();
+      expect(result.session.status).toBe("topics_extracted");
+      expect(result.extraction.totalPages).toBe(1);
       expect(result.topicsByChunk[0]?.topics).toEqual(["cell", "biology"]);
 
       const persistedTopics = await Effect.runPromise(
@@ -857,7 +1112,7 @@ describe("forge handlers", () => {
 
     try {
       const extracted = await Effect.runPromise(
-        handlers.ForgeStartTopicExtraction({
+        startPdfTopicExtraction(handlers, {
           sourceFilePath,
         }),
       );
@@ -933,7 +1188,7 @@ describe("forge handlers", () => {
 
     try {
       await Effect.runPromise(
-        handlers.ForgeStartTopicExtraction({
+        startPdfTopicExtraction(handlers, {
           sourceFilePath,
         }),
       );
@@ -980,7 +1235,7 @@ describe("forge handlers", () => {
 
     try {
       const result = await Effect.runPromise(
-        handlers.ForgeStartTopicExtraction({
+        startPdfTopicExtraction(handlers, {
           sourceFilePath,
         }),
       );
@@ -1014,12 +1269,12 @@ describe("forge handlers", () => {
 
     try {
       const first = await Effect.runPromise(
-        handlers.ForgeStartTopicExtraction({
+        startPdfTopicExtraction(handlers, {
           sourceFilePath,
         }),
       );
       const second = await Effect.runPromise(
-        handlers.ForgeStartTopicExtraction({
+        startPdfTopicExtraction(handlers, {
           sourceFilePath,
         }),
       );
@@ -1027,6 +1282,45 @@ describe("forge handlers", () => {
       expect(second.duplicateOfSessionId).toBe(first.session.id);
       expect(second.session.id).not.toBe(first.session.id);
       expect(second.session.sourceFingerprint).toBe(sourceFingerprint);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("fails with source_mismatch when source content diverges after session creation", async () => {
+    const sourceFilePath = "/tmp/forge-start-source-mismatch.pdf";
+    const extractor: PdfExtractor = {
+      resolveFingerprint: () => Effect.succeed("fp:metadata"),
+      extractText: () =>
+        Effect.succeed({
+          text: "content changed after metadata read",
+          pageBreaks: [{ offset: 0, page: 1 }],
+          totalPages: 1,
+          sourceFingerprint: "fp:content",
+        }),
+    };
+    const { handlers, repository, dispose } = await setupHandlers({ extractor });
+
+    try {
+      const exit = await Effect.runPromiseExit(
+        startPdfTopicExtraction(handlers, {
+          sourceFilePath,
+        }),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected ForgeStartTopicExtraction to fail.");
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("source_mismatch");
+        if ("sessionId" in failure.value && typeof failure.value.sessionId === "number") {
+          const stored = await Effect.runPromise(repository.getSession(failure.value.sessionId));
+          expect(stored?.status).toBe("error");
+        }
+      }
     } finally {
       await dispose();
     }
@@ -1051,7 +1345,7 @@ describe("forge handlers", () => {
 
     try {
       const exit = await Effect.runPromiseExit(
-        handlers.ForgeStartTopicExtraction({
+        startPdfTopicExtraction(handlers, {
           sourceFilePath,
         }),
       );
@@ -1119,7 +1413,7 @@ describe("forge handlers", () => {
 
     try {
       const exit = await Effect.runPromiseExit(
-        handlers.ForgeStartTopicExtraction({
+        startPdfTopicExtraction(handlers, {
           sourceFilePath,
         }),
       );
@@ -1193,7 +1487,7 @@ describe("forge handlers", () => {
 
       try {
         const exit = await Effect.runPromiseExit(
-          handlers.ForgeStartTopicExtraction({
+          startPdfTopicExtraction(handlers, {
             sourceFilePath,
           }),
         );
@@ -1217,7 +1511,12 @@ describe("forge handlers", () => {
     const { handlers, dispose } = await setupHandlers();
 
     try {
-      const exit = await Effect.runPromiseExit(handlers.ForgeExtractText({ sessionId: 999 }));
+      const exit = await Effect.runPromiseExit(
+        extractPdfText(handlers, {
+          sessionId: 999,
+          sourceFilePath: "/tmp/forge-missing-session.pdf",
+        }),
+      );
 
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isSuccess(exit)) {
@@ -1242,7 +1541,7 @@ describe("forge handlers", () => {
 
     try {
       const sourceFilePath = "/tmp/forge-cards-topic.pdf";
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
 
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
@@ -1298,7 +1597,7 @@ describe("forge handlers", () => {
 
     try {
       const sourceFilePath = "/tmp/forge-cards-race.pdf";
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
 
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
@@ -1369,7 +1668,7 @@ describe("forge handlers", () => {
 
     try {
       const sourceFilePath = "/tmp/forge-cards-failure.pdf";
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
 
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
@@ -1464,7 +1763,7 @@ describe("forge handlers", () => {
 
     try {
       const sourceFilePath = "/tmp/forge-cards-batch-concurrency.pdf";
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
 
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
@@ -1530,7 +1829,7 @@ describe("forge handlers", () => {
 
     try {
       const sourceFilePath = "/tmp/forge-cards-batch-regenerate.pdf";
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
 
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
@@ -1641,7 +1940,7 @@ describe("forge handlers", () => {
 
     try {
       const sourceFilePath = "/tmp/forge-cards-batch-statuses.pdf";
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
 
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
@@ -1719,7 +2018,7 @@ describe("forge handlers", () => {
 
     try {
       const sourceFilePath = "/tmp/forge-cards-variants.pdf";
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
 
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
@@ -1813,7 +2112,7 @@ describe("forge handlers", () => {
 
     try {
       const sourceFilePath = "/tmp/forge-update-permutation.pdf";
-      const created = await Effect.runPromise(handlers.ForgeCreateSession({ sourceFilePath }));
+      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
 
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
@@ -1924,6 +2223,7 @@ describe("forge handlers", () => {
       const session = await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath,
           deckPath: null,
           sourceFingerprint: "fp:forge-mark-source",
@@ -2002,6 +2302,7 @@ describe("forge handlers", () => {
       const session = await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath,
           deckPath: null,
           sourceFingerprint: "fp:forge-permutation-added-count",
@@ -2164,6 +2465,7 @@ describe("forge handlers", () => {
       const session = await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath,
           deckPath: null,
           sourceFingerprint: "fp:forge-cloze-added-count",

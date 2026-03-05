@@ -7,6 +7,7 @@ import {
   type ExtractSummary,
 } from "@/components/forge/forge-page-store";
 import { topicsSummaryToChunkTopics } from "@/components/forge/forge-page-context";
+import { createPdfSelectedSource } from "@/components/forge/forge-source";
 
 const TWO_CHUNKS: ReadonlyArray<ChunkTopics> = [
   { chunkId: 10, sequenceOrder: 0, topics: ["alpha", "beta"] },
@@ -20,6 +21,12 @@ const EXTRACTION: ExtractSummary = {
   totalPages: 4,
   chunkCount: 2,
 };
+
+const pdfSource = (sourceFilePath: string) =>
+  createPdfSelectedSource({
+    sourceLabel: sourceFilePath.split("/").pop() ?? sourceFilePath,
+    sourceFilePath,
+  });
 
 const storeWithTopics = (chunks = TWO_CHUNKS) => {
   const store = createForgePageStore();
@@ -399,15 +406,15 @@ describe("forge-page-store topic selection", () => {
     });
   });
 
-  describe("setSelectedPdf", () => {
+  describe("setSelectedSource", () => {
     it("clears selectedTopicKeys when a new PDF is selected", () => {
       const store = storeWithTopics();
       store.send({ type: "selectAllTopics" });
       expect(ctx(store).selectedTopicKeys.size).toBe(3);
 
       store.send({
-        type: "setSelectedPdf",
-        selectedPdf: { fileName: "new.pdf", sourceFilePath: "/new.pdf" },
+        type: "setSelectedSource",
+        selectedSource: pdfSource("/new.pdf"),
       });
       expect(ctx(store).selectedTopicKeys.size).toBe(0);
     });
@@ -417,19 +424,19 @@ describe("forge-page-store topic selection", () => {
       store.send({ type: "setTargetDeckPath", deckPath: "/workspace/decks/alpha.md" });
 
       store.send({
-        type: "setSelectedPdf",
-        selectedPdf: { fileName: "new.pdf", sourceFilePath: "/new.pdf" },
+        type: "setSelectedSource",
+        selectedSource: pdfSource("/new.pdf"),
       });
 
       expect(ctx(store).targetDeckPath).toBeNull();
     });
   });
 
-  describe("resetForNoFile", () => {
+  describe("resetForNoSource", () => {
     it("clears selectedTopicKeys on full reset", () => {
       const store = storeWithTopics();
       store.send({ type: "selectAllTopics" });
-      store.send({ type: "resetForNoFile" });
+      store.send({ type: "resetForNoSource" });
 
       expect(ctx(store).selectedTopicKeys.size).toBe(0);
     });
@@ -437,25 +444,25 @@ describe("forge-page-store topic selection", () => {
     it("clears targetDeckPath on full reset", () => {
       const store = storeWithTopics();
       store.send({ type: "setTargetDeckPath", deckPath: "/workspace/decks/alpha.md" });
-      store.send({ type: "resetForNoFile" });
+      store.send({ type: "resetForNoSource" });
 
       expect(ctx(store).targetDeckPath).toBeNull();
     });
   });
 
-  describe("setFileSelectionError", () => {
+  describe("setSourceSelectionError", () => {
     it("clears selectedTopicKeys", () => {
       const store = storeWithTopics();
       store.send({ type: "selectAllTopics" });
       expect(ctx(store).selectedTopicKeys.size).toBe(3);
 
-      store.send({ type: "setFileSelectionError", message: "bad file" });
+      store.send({ type: "setSourceSelectionError", message: "bad file" });
       expect(ctx(store).selectedTopicKeys.size).toBe(0);
     });
 
     it("resets to source step with error preview", () => {
       const store = storeWithTopics();
-      store.send({ type: "setFileSelectionError", message: "bad file" });
+      store.send({ type: "setSourceSelectionError", message: "bad file" });
 
       expect(ctx(store).currentStep).toBe("source");
       expect(ctx(store).previewState).toEqual({ status: "error", message: "bad file" });
@@ -465,7 +472,7 @@ describe("forge-page-store topic selection", () => {
       const store = storeWithTopics();
       store.send({ type: "setTargetDeckPath", deckPath: "/workspace/decks/alpha.md" });
 
-      store.send({ type: "setFileSelectionError", message: "bad file" });
+      store.send({ type: "setSourceSelectionError", message: "bad file" });
 
       expect(ctx(store).targetDeckPath).toBeNull();
     });
@@ -560,7 +567,7 @@ describe("forge-page-store topic selection", () => {
       store.send({
         type: "resumeSession",
         currentStep: "cards",
-        selectedPdf: { fileName: "resume.pdf", sourceFilePath: "/tmp/resume.pdf" },
+        selectedSource: pdfSource("/tmp/resume.pdf"),
         sessionId: 77,
         targetDeckPath: "/workspace/decks/resume.md",
         topicsByChunk: resumeChunks,
@@ -569,10 +576,7 @@ describe("forge-page-store topic selection", () => {
 
       const state = ctx(store);
       expect(state.currentStep).toBe("cards");
-      expect(state.selectedPdf).toEqual({
-        fileName: "resume.pdf",
-        sourceFilePath: "/tmp/resume.pdf",
-      });
+      expect(state.selectedSource).toEqual(pdfSource("/tmp/resume.pdf"));
       expect(state.activeExtractionSessionId).toBe(77);
       expect(state.topicsByChunk).toEqual(resumeChunks);
       expect(state.selectedTopicKeys).toBe(resumeKeys);
@@ -586,7 +590,7 @@ describe("forge-page-store topic selection", () => {
       store.send({
         type: "resumeSession",
         currentStep: "topics",
-        selectedPdf: { fileName: "topics.pdf", sourceFilePath: "/tmp/topics.pdf" },
+        selectedSource: pdfSource("/tmp/topics.pdf"),
         sessionId: 88,
         targetDeckPath: null,
         topicsByChunk: TWO_CHUNKS,
@@ -595,6 +599,29 @@ describe("forge-page-store topic selection", () => {
 
       expect(ctx(store).currentStep).toBe("topics");
       expect(ctx(store).selectedTopicKeys.size).toBe(0);
+    });
+
+    it("can resume a text-backed session without a source file path", () => {
+      const store = createForgePageStore();
+      store.send({
+        type: "resumeSession",
+        currentStep: "topics",
+        selectedSource: {
+          kind: "text",
+          sourceLabel: "Pasted text",
+          text: null,
+        },
+        sessionId: 89,
+        targetDeckPath: null,
+        topicsByChunk: TWO_CHUNKS,
+        selectedTopicKeys: new Set<string>(),
+      });
+
+      expect(ctx(store).selectedSource).toEqual({
+        kind: "text",
+        sourceLabel: "Pasted text",
+        text: null,
+      });
     });
 
     it("clears prior state from a dirty store", () => {
@@ -616,7 +643,7 @@ describe("forge-page-store topic selection", () => {
       store.send({
         type: "resumeSession",
         currentStep: "cards",
-        selectedPdf: { fileName: "clean.pdf", sourceFilePath: "/tmp/clean.pdf" },
+        selectedSource: pdfSource("/tmp/clean.pdf"),
         sessionId: 99,
         targetDeckPath: null,
         topicsByChunk: [],
@@ -649,7 +676,7 @@ describe("forge-page-store topic selection", () => {
       store.send({
         type: "resumeSession",
         currentStep: "cards",
-        selectedPdf: { fileName: "f.pdf", sourceFilePath: "/f.pdf" },
+        selectedSource: pdfSource("/f.pdf"),
         sessionId: 1,
         targetDeckPath: null,
         topicsByChunk: [],
@@ -659,13 +686,13 @@ describe("forge-page-store topic selection", () => {
       expect(ctx(store).resumeErrorMessage).toBeNull();
     });
 
-    it("is cleared by setSelectedPdf", () => {
+    it("is cleared by setSelectedSource", () => {
       const store = createForgePageStore();
       store.send({ type: "resumeError", message: "Load failed" });
 
       store.send({
-        type: "setSelectedPdf",
-        selectedPdf: { fileName: "new.pdf", sourceFilePath: "/new.pdf" },
+        type: "setSelectedSource",
+        selectedSource: pdfSource("/new.pdf"),
       });
 
       expect(ctx(store).resumeErrorMessage).toBeNull();

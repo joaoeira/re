@@ -25,13 +25,21 @@ const createSuccessInvoke = () =>
     }
 
     if (method === "ForgeStartTopicExtraction") {
-      const sourceFilePath = (payload as { sourceFilePath: string }).sourceFilePath;
+      const sourceFilePath = (
+        payload as {
+          source: {
+            kind: "pdf";
+            sourceFilePath: string;
+          };
+        }
+      ).source.sourceFilePath;
       return {
         type: "success",
         data: {
           session: {
             id: 12,
             sourceKind: "pdf",
+            sourceLabel: "source.pdf",
             sourceFilePath,
             deckPath: null,
             sourceFingerprint: "fp:start",
@@ -159,6 +167,7 @@ describe("ForgePage", () => {
             session: {
               id: 12,
               sourceKind: "pdf",
+              sourceLabel: "source.pdf",
               sourceFilePath: "/forge/source.pdf",
               deckPath: null,
               sourceFingerprint: "fp:start",
@@ -217,6 +226,7 @@ describe("ForgePage", () => {
         session: {
           id: 12,
           sourceKind: "pdf",
+          sourceLabel: "source.pdf",
           sourceFilePath: "/forge/source.pdf",
           deckPath: null,
           sourceFingerprint: "fp:start",
@@ -285,6 +295,7 @@ describe("ForgePage", () => {
             session: {
               id: 500,
               sourceKind: "pdf",
+              sourceLabel: "source.pdf",
               sourceFilePath: "/forge/source.pdf",
               deckPath: null,
               sourceFingerprint: "fp:start",
@@ -453,10 +464,11 @@ describe("ForgePage", () => {
         return {
           type: "failure",
           error: {
-            tag: "preview_pdf_extraction_error",
+            tag: "source_resolve_error",
             data: {
-              _tag: "preview_pdf_extraction_error",
-              sourceFilePath: "/forge/source.pdf",
+              _tag: "source_resolve_error",
+              sourceKind: "pdf",
+              sourceLabel: "source.pdf",
               message: "Preview failed",
             },
           },
@@ -533,7 +545,14 @@ describe("ForgePage", () => {
       }
 
       if (method === "ForgePreviewChunks") {
-        const sourceFilePath = (payload as { sourceFilePath: string }).sourceFilePath;
+        const sourceFilePath = (
+          payload as {
+            source: {
+              kind: "pdf";
+              sourceFilePath: string;
+            };
+          }
+        ).source.sourceFilePath;
         return await new Promise((resolve) => {
           pendingPreviews.push({ sourceFilePath, resolve });
         });
@@ -546,6 +565,7 @@ describe("ForgePage", () => {
             session: {
               id: 99,
               sourceKind: "pdf",
+              sourceLabel: "second.pdf",
               sourceFilePath: "/forge/second.pdf",
               deckPath: null,
               sourceFingerprint: "fp",

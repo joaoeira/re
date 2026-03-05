@@ -1,3 +1,29 @@
+import type { ForgeSourceInput } from "@shared/rpc/schemas/forge";
+
+const normalizeForgeSourceText = (text: string): string => text.replace(/\r\n?/g, "\n").trim();
+
+const hashForgeSourceText = (text: string): string => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+};
+
+export const forgeSourceCacheKey = (source: ForgeSourceInput | null): string | null => {
+  if (!source) return null;
+
+  switch (source.kind) {
+    case "pdf":
+      return `pdf:${source.sourceFilePath}`;
+    case "text": {
+      const normalizedText = normalizeForgeSourceText(source.text);
+      return `text:${normalizedText.length}:${hashForgeSourceText(normalizedText)}`;
+    }
+  }
+};
+
 export const queryKeys = {
   settings: ["settings"] as const,
   forgeSessionList: ["forgeSessionList"] as const,
@@ -5,7 +31,8 @@ export const queryKeys = {
   workspaceSnapshotPrefix: ["workspaceSnapshot"] as const,
   workspaceSnapshot: (rootPath: string | null) => ["workspaceSnapshot", rootPath] as const,
   scanDecks: (rootPath: string | null) => ["scanDecks", rootPath] as const,
-  forgePreview: (sourceFilePath: string | null) => ["forgePreview", sourceFilePath] as const,
+  forgePreview: (source: ForgeSourceInput | null) =>
+    ["forgePreview", forgeSourceCacheKey(source)] as const,
   forgeTopicSnapshot: (sessionId: number | null) => ["forgeTopicSnapshot", sessionId] as const,
   forgeCardsSnapshot: (sessionId: number | null) => ["forgeCardsSnapshot", sessionId] as const,
   forgeTopicCards: (sessionId: number | null, chunkId: number | null, topicIndex: number | null) =>

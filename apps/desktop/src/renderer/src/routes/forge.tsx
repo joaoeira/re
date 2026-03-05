@@ -4,7 +4,7 @@ import { ForgePage } from "@/components/forge/forge-page";
 
 type ForgeSearch = {
   session: number | null;
-  file: string | null;
+  source: string | null;
 };
 
 const normalizeSession = (value: unknown): number | null => {
@@ -22,15 +22,16 @@ const normalizeSession = (value: unknown): number | null => {
   return null;
 };
 
-const normalizeFile = (value: unknown): string | null =>
+const normalizeSource = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 ? value : null;
 
 export const Route = createFileRoute("/forge")({
   validateSearch: (search): ForgeSearch => {
-    const session = normalizeSession((search as Record<string, unknown>).session);
+    const searchRecord = search as Record<string, unknown>;
+    const session = normalizeSession(searchRecord.session);
     return {
       session,
-      file: session !== null ? normalizeFile((search as Record<string, unknown>).file) : null,
+      source: session !== null ? normalizeSource(searchRecord.source ?? searchRecord.file) : null,
     };
   },
   component: ForgeRoute,
@@ -40,9 +41,11 @@ function ForgeRoute() {
   const { session } = Route.useSearch();
   const navigate = Route.useNavigate();
 
-  const onSessionChange = (next: { id: number; fileName: string } | null) => {
+  const onSessionChange = (next: { id: number; sourceLabel: string } | null) => {
     void navigate({
-      search: next ? { session: next.id, file: next.fileName } : { session: null, file: null },
+      search: next
+        ? { session: next.id, source: next.sourceLabel }
+        : { session: null, source: null },
       replace: true,
     });
   };

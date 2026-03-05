@@ -8,9 +8,13 @@ import { useForgeSessionListQuery } from "@/hooks/queries/use-forge-session-list
 import { useForgeTopicSnapshotQuery } from "@/hooks/queries/use-forge-topic-snapshot-query";
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
-import { queryKeys } from "@/lib/query-keys";
+import { forgeSourceCacheKey, queryKeys } from "@/lib/query-keys";
 import { ForgeTopicChunkExtracted, ForgeExtractionSessionCreated } from "@shared/rpc/contracts";
-import type { ForgeSessionSummary, ForgeTopicCardsSummary } from "@shared/rpc/schemas/forge";
+import type {
+  ForgeSessionSummary,
+  ForgeSourceInput,
+  ForgeTopicCardsSummary,
+} from "@shared/rpc/schemas/forge";
 import {
   createForgePageStore,
   type ForgeCardExpandedPanel,
@@ -21,10 +25,16 @@ import {
   type ForgePageStore,
   type ForgeStep,
   type PreviewState,
-  type SelectedPdf,
   type TopicCardIdMap,
   type TopicExpandedCardPanelMap,
 } from "./forge-page-store";
+import {
+  createPdfSelectedSource,
+  forgeSelectedSourceCacheKey,
+  forgeSelectedSourceFromSession,
+  toForgeSourceInput,
+  type ForgeSelectedSource,
+} from "./forge-source";
 
 type ForgePageActions = {
   readonly handleFileSelected: (file: File | null) => void;
@@ -65,8 +75,8 @@ export function useForgeCurrentStep(): ForgeStep {
   return useForgePageSelector((snapshot) => snapshot.context.currentStep);
 }
 
-export function useForgeSelectedPdf(): SelectedPdf | null {
-  return useForgePageSelector((snapshot) => snapshot.context.selectedPdf);
+export function useForgeSelectedSource(): ForgeSelectedSource | null {
+  return useForgePageSelector((snapshot) => snapshot.context.selectedSource);
 }
 
 export function useForgeDuplicateOfSessionId(): number | null {
@@ -246,7 +256,7 @@ export function topicsSummaryToChunkTopics(
 type ForgePageProviderProps = {
   readonly children: React.ReactNode;
   readonly initialSessionId: number | null;
-  readonly onSessionChange: (session: { id: number; fileName: string } | null) => void;
+  readonly onSessionChange: (session: { id: number; sourceLabel: string } | null) => void;
 };
 
 export function ForgePageProvider({
@@ -263,8 +273,9 @@ export function ForgePageProvider({
 
   const sessionListQuery = useForgeSessionListQuery();
 
-  const selectedPdf = useSelector(store, (snapshot) => snapshot.context.selectedPdf);
-  const sourceFilePath = selectedPdf?.sourceFilePath ?? null;
+  const selectedSource = useSelector(store, (snapshot) => snapshot.context.selectedSource);
+  const selectedSourceInput = toForgeSourceInput(selectedSource);
+  const selectedSourceCacheKey = forgeSelectedSourceCacheKey(selectedSource);
   const currentStep = useSelector(store, (snapshot) => snapshot.context.currentStep);
   const extractState = useSelector(store, (snapshot) => snapshot.context.extractState);
   const activeExtractionSessionId = useSelector(
@@ -272,7 +283,7 @@ export function ForgePageProvider({
     (snapshot) => snapshot.context.activeExtractionSessionId,
   );
 
-  const previewQuery = useForgePreviewQuery(sourceFilePath);
+  const previewQuery = useForgePreviewQuery(selectedSourceInput);
   const topicSnapshotQuery = useForgeTopicSnapshotQuery(
     currentStep === "topics" ? activeExtractionSessionId : null,
     {
@@ -281,22 +292,22 @@ export function ForgePageProvider({
   );
 
   useEffect(() => {
-    if (!sourceFilePath || !previewQuery.data) return;
+    if (!selectedSourceCacheKey || !previewQuery.data) return;
 
     store.send({
       type: "previewReady",
       summary: previewQuery.data,
     });
-  }, [sourceFilePath, previewQuery.data, previewQuery.dataUpdatedAt, store]);
+  }, [selectedSourceCacheKey, previewQuery.data, previewQuery.dataUpdatedAt, store]);
 
   useEffect(() => {
-    if (!sourceFilePath || !previewQuery.error) return;
+    if (!selectedSourceCacheKey || !previewQuery.error) return;
 
     store.send({
       type: "previewError",
       message: previewQuery.error.message,
     });
-  }, [sourceFilePath, previewQuery.error, previewQuery.errorUpdatedAt, store]);
+  }, [selectedSourceCacheKey, previewQuery.error, previewQuery.errorUpdatedAt, store]);
 
   useEffect(() => {
     if (activeExtractionSessionId === null || currentStep !== "topics" || !topicSnapshotQuery.data)
@@ -367,7 +378,7 @@ export function ForgePageProvider({
       if (resumingRef.current) return;
       resumingRef.current = true;
 
-      const fileName = session.sourceFilePath.split("/").pop() ?? session.sourceFilePath;
+      const selectedSource = forgeSelectedSourceFromSession(session);
       const targetStep: ForgeStep = session.cardCount > 0 ? "cards" : "topics";
 
       runIpcEffect(
@@ -402,20 +413,20 @@ export function ForgePageProvider({
           store.send({
             type: "resumeSession",
             currentStep: targetStep,
-            selectedPdf: { fileName, sourceFilePath: session.sourceFilePath },
+            selectedSource,
             sessionId: session.id,
             targetDeckPath: session.deckPath,
             topicsByChunk,
             selectedTopicKeys,
           });
 
-          onSessionChangeRef.current({ id: session.id, fileName });
+          onSessionChangeRef.current({ id: session.id, sourceLabel: session.sourceLabel });
           void queryClient.invalidateQueries({ queryKey: queryKeys.forgeSessionList });
         })
         .catch(() => {
           store.send({
             type: "resumeError",
-            message: `Failed to load session data for "${fileName}". Please try again.`,
+            message: `Failed to load session data for "${session.sourceLabel}". Please try again.`,
           });
         })
         .finally(() => {
@@ -438,11 +449,16 @@ export function ForgePageProvider({
   }, [initialSessionId, sessionListQuery.data, loadSessionData]);
 
   const extractionMutation = useMutation({
-    mutationFn: ({ selectedSourceFilePath }: { selectedSourceFilePath: string }) =>
+    mutationFn: ({
+      source,
+    }: {
+      readonly source: ForgeSourceInput;
+      readonly sourceCacheKey: string;
+    }) =>
       runIpcEffect(
         ipc.client
           .ForgeStartTopicExtraction({
-            sourceFilePath: selectedSourceFilePath,
+            source,
           })
           .pipe(
             Effect.catchTag("RpcDefectError", (rpcDefect) =>
@@ -454,8 +470,10 @@ export function ForgePageProvider({
       store.send({ type: "setExtracting", startedAt: new Date().toISOString() });
     },
     onSuccess: (result, variables) => {
-      const currentSourcePath = store.getSnapshot().context.selectedPdf?.sourceFilePath;
-      if (currentSourcePath !== variables.selectedSourceFilePath) return;
+      const currentSourceCacheKey = forgeSelectedSourceCacheKey(
+        store.getSnapshot().context.selectedSource,
+      );
+      if (currentSourceCacheKey !== variables.sourceCacheKey) return;
 
       store.send({
         type: "extractionSuccess",
@@ -465,8 +483,10 @@ export function ForgePageProvider({
       });
     },
     onError: (error, variables) => {
-      const currentSourcePath = store.getSnapshot().context.selectedPdf?.sourceFilePath;
-      if (currentSourcePath !== variables.selectedSourceFilePath) return;
+      const currentSourceCacheKey = forgeSelectedSourceCacheKey(
+        store.getSnapshot().context.selectedSource,
+      );
+      if (currentSourceCacheKey !== variables.sourceCacheKey) return;
 
       store.send({
         type: "extractionError",
@@ -479,33 +499,39 @@ export function ForgePageProvider({
   const handleFileSelected = useCallback(
     (file: File | null) => {
       if (!file) {
-        store.send({ type: "resetForNoFile" });
+        store.send({ type: "resetForNoSource" });
         return;
       }
 
       const selectedSourceFilePath = window.desktopHost.getPathForFile(file);
       if (selectedSourceFilePath.length === 0) {
         store.send({
-          type: "setFileSelectionError",
+          type: "setSourceSelectionError",
           message: "Unable to resolve a local file path for the selected PDF.",
         });
         return;
       }
 
-      const previousSourceFilePath =
-        store.getSnapshot().context.selectedPdf?.sourceFilePath ?? null;
+      const nextSelectedSource = createPdfSelectedSource({
+        sourceLabel: file.name,
+        sourceFilePath: selectedSourceFilePath,
+      });
+      const previousSourceCacheKey = forgeSelectedSourceCacheKey(
+        store.getSnapshot().context.selectedSource,
+      );
+      const nextSourceInput = toForgeSourceInput(nextSelectedSource);
 
       store.send({
-        type: "setSelectedPdf",
-        selectedPdf: {
-          fileName: file.name,
-          sourceFilePath: selectedSourceFilePath,
-        },
+        type: "setSelectedSource",
+        selectedSource: nextSelectedSource,
       });
 
-      if (previousSourceFilePath === selectedSourceFilePath) {
+      if (
+        previousSourceCacheKey !== null &&
+        previousSourceCacheKey === forgeSourceCacheKey(nextSourceInput)
+      ) {
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.forgePreview(selectedSourceFilePath),
+          queryKey: queryKeys.forgePreview(nextSourceInput),
           exact: true,
         });
       }
@@ -515,12 +541,17 @@ export function ForgePageProvider({
 
   const beginExtraction = useCallback(() => {
     const snapshot = store.getSnapshot().context;
-    if (!snapshot.selectedPdf || snapshot.extractState.status === "extracting") {
+    if (!snapshot.selectedSource || snapshot.extractState.status === "extracting") {
       return;
     }
 
+    const source = toForgeSourceInput(snapshot.selectedSource);
+    const sourceCacheKey = source ? forgeSourceCacheKey(source) : null;
+    if (!source || !sourceCacheKey) return;
+
     startTopicExtractionMutation({
-      selectedSourceFilePath: snapshot.selectedPdf.sourceFilePath,
+      source,
+      sourceCacheKey,
     });
   }, [startTopicExtractionMutation, store]);
 

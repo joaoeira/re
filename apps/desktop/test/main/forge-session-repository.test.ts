@@ -7,11 +7,35 @@ import {
 } from "@main/forge/services/forge-session-repository";
 
 describe("forge session repository", () => {
+  it("stores text sessions with a nullable sourceFilePath", async () => {
+    const repository = makeInMemoryForgeSessionRepository();
+
+    const session = await Effect.runPromise(
+      repository.createSession({
+        sourceKind: "text",
+        sourceLabel: "Pasted text",
+        sourceFilePath: null,
+        deckPath: null,
+        sourceFingerprint: "fp:text-session",
+      }),
+    );
+
+    expect(session.sourceKind).toBe("text");
+    expect(session.sourceLabel).toBe("Pasted text");
+    expect(session.sourceFilePath).toBeNull();
+
+    const sessions = await Effect.runPromise(repository.listRecentSessions());
+    expect(sessions[0]?.sourceKind).toBe("text");
+    expect(sessions[0]?.sourceLabel).toBe("Pasted text");
+    expect(sessions[0]?.sourceFilePath).toBeNull();
+  });
+
   it("saveChunks inserts all rows on success", async () => {
     const repository = makeInMemoryForgeSessionRepository();
     const session = await Effect.runPromise(
       repository.createSession({
         sourceKind: "pdf",
+        sourceLabel: "Test PDF",
         sourceFilePath: "/tmp/repo-save-success.pdf",
         deckPath: null,
         sourceFingerprint: "fp:repo-save-success",
@@ -42,6 +66,7 @@ describe("forge session repository", () => {
     const session = await Effect.runPromise(
       repository.createSession({
         sourceKind: "pdf",
+        sourceLabel: "Test PDF",
         sourceFilePath: "/tmp/repo-get-chunks.pdf",
         deckPath: null,
         sourceFingerprint: "fp:repo-get-chunks",
@@ -80,6 +105,7 @@ describe("forge session repository", () => {
     const session = await Effect.runPromise(
       repository.createSession({
         sourceKind: "pdf",
+        sourceLabel: "Test PDF",
         sourceFilePath: "/tmp/repo-save-rollback.pdf",
         deckPath: null,
         sourceFingerprint: "fp:repo-save-rollback",
@@ -118,6 +144,7 @@ describe("forge session repository", () => {
     const session = await Effect.runPromise(
       repository.createSession({
         sourceKind: "pdf",
+        sourceLabel: "Test PDF",
         sourceFilePath: "/tmp/repo-begin-extraction.pdf",
         deckPath: null,
         sourceFingerprint: "fp:repo-begin-extraction",
@@ -155,6 +182,7 @@ describe("forge session repository", () => {
     const firstSession = await Effect.runPromise(
       repository.createSession({
         sourceKind: "pdf",
+        sourceLabel: "Test PDF",
         sourceFilePath: "/tmp/repo-topics-first.pdf",
         deckPath: null,
         sourceFingerprint: "fp:repo-topics-first",
@@ -163,6 +191,7 @@ describe("forge session repository", () => {
     const secondSession = await Effect.runPromise(
       repository.createSession({
         sourceKind: "pdf",
+        sourceLabel: "Test PDF",
         sourceFilePath: "/tmp/repo-topics-second.pdf",
         deckPath: null,
         sourceFingerprint: "fp:repo-topics-second",
@@ -255,6 +284,7 @@ describe("forge session repository", () => {
     const session = await Effect.runPromise(
       repository.createSession({
         sourceKind: "pdf",
+        sourceLabel: "Test PDF",
         sourceFilePath: "/tmp/forge-transition.pdf",
         deckPath: null,
         sourceFingerprint: "fp-transition",
@@ -286,6 +316,7 @@ describe("forge session repository", () => {
     const session = await Effect.runPromise(
       repository.createSession({
         sourceKind: "pdf",
+        sourceLabel: "Test PDF",
         sourceFilePath: "/tmp/forge-ready-cycle.pdf",
         deckPath: null,
         sourceFingerprint: "fp-ready-cycle",
@@ -326,6 +357,7 @@ describe("forge session repository", () => {
     const session = await Effect.runPromise(
       repository.createSession({
         sourceKind: "pdf",
+        sourceLabel: "Test PDF",
         sourceFilePath: "/tmp/forge-topic-generation-start.pdf",
         deckPath: null,
         sourceFingerprint: "fp-topic-generation-start",
@@ -370,6 +402,7 @@ describe("forge session repository", () => {
     const session = await Effect.runPromise(
       repository.createSession({
         sourceKind: "pdf",
+        sourceLabel: "Test PDF",
         sourceFilePath: "/tmp/forge-cards-snapshot.pdf",
         deckPath: null,
         sourceFingerprint: "fp-cards-snapshot",
@@ -455,6 +488,7 @@ describe("forge session repository", () => {
     const session = await Effect.runPromise(
       repository.createSession({
         sourceKind: "pdf",
+        sourceLabel: "Test PDF",
         sourceFilePath: "/tmp/forge-card-variants.pdf",
         deckPath: null,
         sourceFingerprint: "fp-card-variants",
@@ -588,6 +622,7 @@ describe("forge session repository", () => {
         const first = await Effect.runPromise(
           repository.createSession({
             sourceKind: "pdf",
+            sourceLabel: "Test PDF",
             sourceFilePath: "/tmp/first.pdf",
             deckPath: null,
             sourceFingerprint: "fp:first",
@@ -599,6 +634,7 @@ describe("forge session repository", () => {
         await Effect.runPromise(
           repository.createSession({
             sourceKind: "pdf",
+            sourceLabel: "Test PDF",
             sourceFilePath: "/tmp/second.pdf",
             deckPath: null,
             sourceFingerprint: "fp:second",
@@ -629,6 +665,7 @@ describe("forge session repository", () => {
       const session = await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath: "/tmp/counts.pdf",
           deckPath: null,
           sourceFingerprint: "fp:counts",
@@ -688,6 +725,7 @@ describe("forge session repository", () => {
       const session = await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath: "/tmp/selected-count.pdf",
           deckPath: null,
           sourceFingerprint: "fp:selected-count",
@@ -730,6 +768,7 @@ describe("forge session repository", () => {
       const session = await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath: "/tmp/error-session.pdf",
           deckPath: null,
           sourceFingerprint: "fp:error-session",
@@ -761,6 +800,7 @@ describe("forge session repository", () => {
       const session = await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath: "/tmp/deck-target.pdf",
           deckPath: null,
           sourceFingerprint: "fp:deck-target",
@@ -783,6 +823,7 @@ describe("forge session repository", () => {
       await Effect.runPromise(
         repository.createSession({
           sourceKind: "pdf",
+          sourceLabel: "Test PDF",
           sourceFilePath: "/tmp/bare.pdf",
           deckPath: null,
           sourceFingerprint: "fp:bare",
@@ -801,6 +842,7 @@ describe("forge session repository", () => {
     const session = await Effect.runPromise(
       repository.createSession({
         sourceKind: "pdf",
+        sourceLabel: "Test PDF",
         sourceFilePath: "/tmp/forge-stale-recovery.pdf",
         deckPath: null,
         sourceFingerprint: "fp-stale-recovery",

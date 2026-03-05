@@ -13,13 +13,13 @@ function useBreadcrumbs(): ReadonlyArray<Crumb> {
   const forgeFile = useRouterState({
     select: (s) => {
       if (s.location.pathname !== "/forge") return null;
-      const file = (s.location.search as Record<string, unknown>).file;
-      return typeof file === "string" && file.length > 0 ? file : null;
+      const source = (s.location.search as Record<string, unknown>).source;
+      return typeof source === "string" && source.length > 0 ? source : null;
     },
   });
 
   const goHome = () => void navigate({ to: "/" });
-  const goForge = () => void navigate({ to: "/forge", search: { session: null, file: null } });
+  const goForge = () => void navigate({ to: "/forge", search: { session: null, source: null } });
 
   const crumbs: Crumb[] = [{ label: "home", navigate: goHome }];
 

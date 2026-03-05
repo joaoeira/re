@@ -132,17 +132,14 @@ export type ForgeCardCloze = {
 export interface ForgeSessionRepository {
   readonly createSession: (input: {
     readonly sourceKind: ForgeSourceKind;
-    readonly sourceFilePath: string;
+    readonly sourceLabel: string;
+    readonly sourceFilePath: string | null;
     readonly deckPath: string | null;
     readonly sourceFingerprint: string;
   }) => Effect.Effect<ForgeSession, ForgeSessionRepositoryError>;
   readonly findLatestBySourceFingerprint: (input: {
     readonly sourceKind: ForgeSourceKind;
     readonly sourceFingerprint: string;
-  }) => Effect.Effect<ForgeSession | null, ForgeSessionRepositoryError>;
-  readonly findLatestBySourceFilePath: (input: {
-    readonly sourceKind: ForgeSourceKind;
-    readonly sourceFilePath: string;
   }) => Effect.Effect<ForgeSession | null, ForgeSessionRepositoryError>;
   readonly getSession: (
     sessionId: number,
@@ -266,7 +263,8 @@ export interface ForgeSessionRepository {
 type ForgeSessionRow = {
   id: number;
   source_kind: ForgeSourceKind;
-  source_file_path: string;
+  source_label: string;
+  source_file_path: string | null;
   deck_path: string | null;
   source_fingerprint: string;
   status: ForgeSessionStatus;
@@ -370,7 +368,9 @@ type ForgeCardClozeRow = {
 
 type ForgeSessionSummaryRow = {
   id: number;
-  source_file_path: string;
+  source_kind: ForgeSourceKind;
+  source_label: string;
+  source_file_path: string | null;
   deck_path: string | null;
   status: ForgeSessionStatus;
   error_message: string | null;
@@ -387,6 +387,7 @@ type CountRow = {
 const fromRow = (row: ForgeSessionRow): ForgeSession => ({
   id: Number(row.id),
   sourceKind: row.source_kind,
+  sourceLabel: row.source_label,
   sourceFilePath: row.source_file_path,
   deckPath: row.deck_path,
   sourceFingerprint: row.source_fingerprint,
@@ -568,6 +569,7 @@ export const makeSqliteForgeSessionRepository = ({
           SELECT
             id,
             source_kind,
+            source_label,
             source_file_path,
             deck_path,
             source_fingerprint,
@@ -924,6 +926,7 @@ export const makeSqliteForgeSessionRepository = ({
             sql`
               INSERT INTO forge_sessions (
                 source_kind,
+                source_label,
                 source_file_path,
                 deck_path,
                 source_fingerprint,
@@ -931,6 +934,7 @@ export const makeSqliteForgeSessionRepository = ({
                 error_message
               ) VALUES (
                 ${input.sourceKind},
+                ${input.sourceLabel},
                 ${input.sourceFilePath},
                 ${input.deckPath},
                 ${input.sourceFingerprint},
@@ -981,6 +985,7 @@ export const makeSqliteForgeSessionRepository = ({
               SELECT
                 id,
                 source_kind,
+                source_label,
                 source_file_path,
                 deck_path,
                 source_fingerprint,
@@ -991,36 +996,6 @@ export const makeSqliteForgeSessionRepository = ({
               FROM forge_sessions
               WHERE source_kind = ${sourceKind}
                 AND source_fingerprint = ${sourceFingerprint}
-              ORDER BY created_at DESC, id DESC
-              LIMIT 1
-            `,
-          );
-
-          const row = rows[0];
-          return row ? fromRow(row) : null;
-        }),
-      ),
-    findLatestBySourceFilePath: ({ sourceKind, sourceFilePath }) =>
-      runSql(
-        "findLatestBySourceFilePath.runtime",
-        Effect.gen(function* () {
-          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
-          const rows = yield* withSqlError(
-            "findLatestBySourceFilePath.select",
-            sql<ForgeSessionRow>`
-              SELECT
-                id,
-                source_kind,
-                source_file_path,
-                deck_path,
-                source_fingerprint,
-                status,
-                error_message,
-                created_at,
-                updated_at
-              FROM forge_sessions
-              WHERE source_kind = ${sourceKind}
-                AND source_file_path = ${sourceFilePath}
               ORDER BY created_at DESC, id DESC
               LIMIT 1
             `,
@@ -1049,6 +1024,7 @@ export const makeSqliteForgeSessionRepository = ({
               RETURNING
                 id,
                 source_kind,
+                source_label,
                 source_file_path,
                 deck_path,
                 source_fingerprint,
@@ -1096,6 +1072,7 @@ export const makeSqliteForgeSessionRepository = ({
               RETURNING
                 id,
                 source_kind,
+                source_label,
                 source_file_path,
                 deck_path,
                 source_fingerprint,
@@ -1139,6 +1116,7 @@ export const makeSqliteForgeSessionRepository = ({
               RETURNING
                 id,
                 source_kind,
+                source_label,
                 source_file_path,
                 deck_path,
                 source_fingerprint,
@@ -1966,6 +1944,8 @@ export const makeSqliteForgeSessionRepository = ({
             sql<ForgeSessionSummaryRow>`
               SELECT
                 s.id,
+                s.source_kind,
+                s.source_label,
                 s.source_file_path,
                 s.deck_path,
                 s.status,
@@ -1987,6 +1967,8 @@ export const makeSqliteForgeSessionRepository = ({
           return rows.map(
             (row): ForgeSessionSummary => ({
               id: Number(row.id),
+              sourceKind: row.source_kind,
+              sourceLabel: row.source_label,
               sourceFilePath: row.source_file_path,
               deckPath: row.deck_path,
               status: row.status,
@@ -2180,6 +2162,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
         const session: ForgeSession = {
           id: nextSessionId,
           sourceKind: input.sourceKind,
+          sourceLabel: input.sourceLabel,
           sourceFilePath: input.sourceFilePath,
           deckPath: input.deckPath,
           sourceFingerprint: input.sourceFingerprint,
@@ -2204,19 +2187,6 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
             session.sourceKind === sourceKind &&
             session.sourceFingerprint === sourceFingerprint
           ) {
-            return cloneSession(session);
-          }
-        }
-
-        return null;
-      }),
-    findLatestBySourceFilePath: ({ sourceKind, sourceFilePath }) =>
-      Effect.sync(() => {
-        for (let index = sessions.length - 1; index >= 0; index -= 1) {
-          const session = sessions[index];
-          if (!session) continue;
-
-          if (session.sourceKind === sourceKind && session.sourceFilePath === sourceFilePath) {
             return cloneSession(session);
           }
         }
@@ -2930,6 +2900,8 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
             const sessionCardCount = cards.filter((c) => sessionTopicIds.has(c.topicId)).length;
             return {
               id: session.id,
+              sourceKind: session.sourceKind,
+              sourceLabel: session.sourceLabel,
               sourceFilePath: session.sourceFilePath,
               deckPath: session.deckPath,
               status: session.status,

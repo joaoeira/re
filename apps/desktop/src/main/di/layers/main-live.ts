@@ -22,6 +22,7 @@ import {
   ForgePromptRuntimeServiceLive,
   type ForgePromptRuntimeService as ForgePromptRuntime,
 } from "../services/ForgePromptRuntimeService";
+import { ForgeSourceResolverServiceLive } from "../services/ForgeSourceResolverService";
 import {
   DuplicateIndexInvalidationBridgeLive,
   DuplicateIndexInvalidationServiceLive,
@@ -74,6 +75,10 @@ const MainStaticLive = ({
   const forgePromptRuntimeLayer = forgePromptRuntime
     ? Layer.succeed(ForgePromptRuntimeService, forgePromptRuntime)
     : ForgePromptRuntimeServiceLive.pipe(Layer.provide(aiClientLayer));
+  const pdfExtractorLayer = PdfExtractorServiceLive(pdfExtractor ?? makeStubPdfExtractor());
+  const forgeSourceResolverLayer = ForgeSourceResolverServiceLive.pipe(
+    Layer.provide(pdfExtractorLayer),
+  );
 
   return Layer.mergeAll(
     SettingsRepositoryServiceLive(settingsRepository),
@@ -85,7 +90,8 @@ const MainStaticLive = ({
       forgeSessionRepository ?? makeInMemoryForgeSessionRepository(),
     ),
     forgePromptRuntimeLayer,
-    PdfExtractorServiceLive(pdfExtractor ?? makeStubPdfExtractor()),
+    pdfExtractorLayer,
+    forgeSourceResolverLayer,
     ChunkServiceLive(chunkService ?? makeChunkService()),
   );
 };

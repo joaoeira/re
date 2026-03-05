@@ -69,10 +69,6 @@ function stepMeta(status: ForgeSessionStatus): {
   }
 }
 
-function fileName(sourceFilePath: string): string {
-  return sourceFilePath.split("/").pop() ?? sourceFilePath;
-}
-
 function SessionRow({
   session,
   onResume,
@@ -93,9 +89,7 @@ function SessionRow({
           <span
             className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.colorClass} ${meta.pulse ? "animate-pulse" : ""}`}
           />
-          <span className="truncate text-sm text-foreground">
-            {fileName(session.sourceFilePath)}
-          </span>
+          <span className="truncate text-sm text-foreground">{session.sourceLabel}</span>
         </div>
         <div className="flex items-center gap-1.5 pl-3.5">
           <span className="text-xs text-muted-foreground">{meta.label}</span>

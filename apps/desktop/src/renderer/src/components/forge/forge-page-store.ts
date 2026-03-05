@@ -1,5 +1,7 @@
 import { createStore } from "@xstate/store";
 
+import type { ForgeSelectedSource } from "./forge-source";
+
 export type PreviewSummary = {
   readonly textLength: number;
   readonly totalPages: number;
@@ -33,11 +35,6 @@ export type ChunkTopics = {
 
 export type ForgeStep = "source" | "topics" | "cards";
 
-export type SelectedPdf = {
-  readonly fileName: string;
-  readonly sourceFilePath: string;
-};
-
 export const topicKey = (chunkId: number, topicIndex: number): string => `${chunkId}:${topicIndex}`;
 
 export type TopicCardIdMap = ReadonlyMap<string, ReadonlySet<number>>;
@@ -49,7 +46,7 @@ export type TopicExpandedCardPanelMap = ReadonlyMap<
 
 type ForgePageContext = {
   readonly currentStep: ForgeStep;
-  readonly selectedPdf: SelectedPdf | null;
+  readonly selectedSource: ForgeSelectedSource | null;
   readonly targetDeckPath: string | null;
   readonly duplicateOfSessionId: number | null;
   readonly previewState: PreviewState;
@@ -75,7 +72,7 @@ const emptyTopicExpandedCardPanelMap: TopicExpandedCardPanelMap = new Map<
 
 const initialForgePageContext = (): ForgePageContext => ({
   currentStep: "source",
-  selectedPdf: null,
+  selectedSource: null,
   targetDeckPath: null,
   duplicateOfSessionId: null,
   previewState: { status: "idle" },
@@ -252,18 +249,18 @@ export const createForgePageStore = () =>
   createStore({
     context: initialForgePageContext(),
     on: {
-      resetForNoFile: () => initialForgePageContext(),
-      setFileSelectionError: (_context, event: { message: string }) => ({
+      resetForNoSource: () => initialForgePageContext(),
+      setSourceSelectionError: (_context, event: { message: string }) => ({
         ...initialForgePageContext(),
         previewState: {
           status: "error" as const,
           message: event.message,
         },
       }),
-      setSelectedPdf: (context, event: { selectedPdf: SelectedPdf }) => ({
+      setSelectedSource: (context, event: { selectedSource: ForgeSelectedSource }) => ({
         ...context,
         currentStep: "source" as const,
-        selectedPdf: event.selectedPdf,
+        selectedSource: event.selectedSource,
         targetDeckPath: null,
         duplicateOfSessionId: null,
         previewState: { status: "loading" as const },
@@ -570,7 +567,7 @@ export const createForgePageStore = () =>
         _context,
         event: {
           currentStep: ForgeStep;
-          selectedPdf: SelectedPdf;
+          selectedSource: ForgeSelectedSource | null;
           sessionId: number;
           targetDeckPath: string | null;
           topicsByChunk: ReadonlyArray<ChunkTopics>;
@@ -579,7 +576,7 @@ export const createForgePageStore = () =>
       ) => ({
         ...initialForgePageContext(),
         currentStep: event.currentStep,
-        selectedPdf: event.selectedPdf,
+        selectedSource: event.selectedSource,
         targetDeckPath: event.targetDeckPath,
         activeExtractionSessionId: event.sessionId,
         extractSummary: {

@@ -1,5 +1,3 @@
-import path from "node:path";
-
 import { createMetadata } from "@re/core";
 import { ClozeType, QAType } from "@re/types";
 import { DeckManager } from "@re/workspace";
@@ -11,8 +9,8 @@ import {
   ChunkService,
   DeckWriteCoordinatorService,
   ForgePromptRuntimeService,
+  ForgeSourceResolverService,
   ForgeSessionRepositoryService,
-  PdfExtractorService,
   SettingsRepositoryService,
 } from "@main/di";
 import { DeckManagerServicesLive, validateDeckAccessAs } from "./shared";
@@ -29,7 +27,12 @@ import {
   type ForgeSessionRepositoryError,
   type ForgeSessionStatusTransitionError,
 } from "@main/forge/services/forge-session-repository";
-import type { PdfTextExtractError } from "@main/forge/services/pdf-extractor";
+import type {
+  ForgeSourceResolverEmptyTextError,
+  ForgeSourceResolverError,
+  ResolvedForgeSourceContent,
+  ResolvedForgeSourceMetadata,
+} from "@main/forge/services/source-resolver";
 import { toErrorMessage } from "@main/utils/format";
 import {
   ForgeTopicChunkExtracted,
@@ -40,8 +43,6 @@ import {
   ForgeEmptySourceTextError,
   ForgeOperationError,
   ForgePreviewEmptySourceTextError,
-  ForgePreviewOperationError,
-  ForgePreviewPdfExtractionError,
   ForgeSessionAlreadyChunkedError,
   ForgeSessionBusyError,
   ForgeSessionNotFoundError,
@@ -51,10 +52,13 @@ import {
   ForgeClozeGenerationError,
   ForgePermutationGenerationError,
   ForgePermutationNotFoundError,
+  type ForgeSession,
+  type ForgeSourceInput,
+  ForgeSourceMismatchError,
+  ForgeSourceResolveError,
   ForgeTopicAlreadyGeneratingError,
   ForgeTopicNotFoundError,
   ForgeTopicExtractionError,
-  PdfExtractionError,
 } from "@shared/rpc/schemas/forge";
 
 type ForgeHandlerKeys =
@@ -188,21 +192,112 @@ const ensureCardExists = (
       )
     : Effect.succeed(card);
 
-const toPdfExtractionError = (sessionId: number, error: PdfTextExtractError): PdfExtractionError =>
-  new PdfExtractionError({
-    sessionId,
-    sourceFilePath: error.sourceFilePath,
-    message: error.message,
+const toSourceResolveError = (input: {
+  readonly sessionId?: number;
+  readonly sourceKind: "pdf" | "text";
+  readonly sourceLabel: string;
+  readonly message: string;
+}): ForgeSourceResolveError =>
+  new ForgeSourceResolveError({
+    ...(typeof input.sessionId === "number" ? { sessionId: input.sessionId } : {}),
+    sourceKind: input.sourceKind,
+    sourceLabel: input.sourceLabel,
+    message: input.message,
   });
 
-const toPreviewPdfExtractionError = (
-  sourceFilePath: string,
-  error: PdfTextExtractError,
-): ForgePreviewPdfExtractionError =>
-  new ForgePreviewPdfExtractionError({
-    sourceFilePath,
-    message: error.message,
+const toEmptySourceTextError = (input: {
+  readonly sessionId?: number;
+  readonly sourceKind: "pdf" | "text";
+  readonly sourceLabel: string;
+  readonly message: string;
+}): ForgeEmptySourceTextError =>
+  new ForgeEmptySourceTextError({
+    ...(typeof input.sessionId === "number" ? { sessionId: input.sessionId } : {}),
+    sourceKind: input.sourceKind,
+    sourceLabel: input.sourceLabel,
+    message: input.message,
   });
+
+const toPreviewEmptySourceTextError = (input: {
+  readonly sourceKind: "pdf" | "text";
+  readonly sourceLabel: string;
+  readonly message: string;
+}): ForgePreviewEmptySourceTextError =>
+  new ForgePreviewEmptySourceTextError({
+    sourceKind: input.sourceKind,
+    sourceLabel: input.sourceLabel,
+    message: input.message,
+  });
+
+const mapSourceResolverErrorForSession = <A>(
+  sessionId: number | undefined,
+  effect: Effect.Effect<A, ForgeSourceResolverError | ForgeSourceResolverEmptyTextError>,
+): Effect.Effect<A, ForgeSourceResolveError | ForgeEmptySourceTextError> =>
+  effect.pipe(
+    Effect.catchTag("ForgeSourceResolverError", (error) =>
+      Effect.fail(
+        toSourceResolveError({
+          ...(typeof sessionId === "number" ? { sessionId } : {}),
+          sourceKind: error.sourceKind,
+          sourceLabel: error.sourceLabel,
+          message: error.message,
+        }),
+      ),
+    ),
+    Effect.catchTag("ForgeSourceResolverEmptyTextError", (error) =>
+      Effect.fail(
+        toEmptySourceTextError({
+          ...(typeof sessionId === "number" ? { sessionId } : {}),
+          sourceKind: error.sourceKind,
+          sourceLabel: error.sourceLabel,
+          message: error.message,
+        }),
+      ),
+    ),
+  );
+
+const mapSourceResolverErrorForPreview = <A>(
+  effect: Effect.Effect<A, ForgeSourceResolverError | ForgeSourceResolverEmptyTextError>,
+): Effect.Effect<A, ForgeSourceResolveError | ForgePreviewEmptySourceTextError> =>
+  effect.pipe(
+    Effect.catchTag("ForgeSourceResolverError", (error) =>
+      Effect.fail(
+        toSourceResolveError({
+          sourceKind: error.sourceKind,
+          sourceLabel: error.sourceLabel,
+          message: error.message,
+        }),
+      ),
+    ),
+    Effect.catchTag("ForgeSourceResolverEmptyTextError", (error) =>
+      Effect.fail(
+        toPreviewEmptySourceTextError({
+          sourceKind: error.sourceKind,
+          sourceLabel: error.sourceLabel,
+          message: error.message,
+        }),
+      ),
+    ),
+  );
+
+const ensureSessionSourceMatches = <T extends ResolvedForgeSourceMetadata>(
+  session: ForgeSession,
+  resolvedSource: T,
+): Effect.Effect<T, ForgeSourceMismatchError> =>
+  session.sourceKind === resolvedSource.sourceKind &&
+  session.sourceFingerprint === resolvedSource.sourceFingerprint
+    ? Effect.succeed(resolvedSource)
+    : Effect.fail(
+        new ForgeSourceMismatchError({
+          sessionId: session.id,
+          expectedSourceKind: session.sourceKind,
+          expectedSourceLabel: session.sourceLabel,
+          actualSourceKind: resolvedSource.sourceKind,
+          actualSourceLabel: resolvedSource.sourceLabel,
+          message:
+            "The provided forge source does not match the source originally used to create this session.",
+        }),
+      );
 
 const toFailureMessageFromCause = <E>(cause: Cause.Cause<E>): string => {
   const failure = Cause.failureOption(cause);
@@ -222,7 +317,7 @@ export const createForgeHandlers = () =>
   Effect.gen(function* () {
     const forgeSessionRepository = yield* ForgeSessionRepositoryService;
     const settingsRepository = yield* SettingsRepositoryService;
-    const pdfExtractor = yield* PdfExtractorService;
+    const forgeSourceResolver = yield* ForgeSourceResolverService;
     const chunkService = yield* ChunkService;
     const forgePromptRuntime = yield* ForgePromptRuntimeService;
     const appEventPublisher = yield* AppEventPublisherService;
@@ -316,33 +411,52 @@ export const createForgeHandlers = () =>
         );
       });
 
-    const createSessionFromSourcePath = (sourceFilePath: string) =>
+    const chunkResolvedSource = (resolvedSource: ResolvedForgeSourceContent) =>
       Effect.gen(function* () {
-        if (!path.isAbsolute(sourceFilePath)) {
-          return yield* Effect.fail(
-            new ForgeOperationError({
-              message: `Forge sourceFilePath must be absolute: ${sourceFilePath}`,
-            }),
-          );
-        }
+        const chunkResult = yield* chunkService.chunkText({
+          text: resolvedSource.text,
+          pageBreaks: resolvedSource.pageBreaks,
+        });
 
-        const sourceFingerprint = yield* mapOperationError(
-          pdfExtractor.resolveFingerprint(sourceFilePath),
+        return {
+          resolvedSource,
+          chunkResult,
+        };
+      });
+
+    const toExtractionResult = (
+      sessionId: number,
+      resolvedSource: ResolvedForgeSourceContent,
+      chunkCount: number,
+    ) => ({
+      sessionId,
+      textLength: resolvedSource.text.length,
+      preview: resolvedSource.text.slice(0, PREVIEW_LENGTH),
+      totalPages: resolvedSource.totalPages,
+      chunkCount,
+    });
+
+    const createSessionFromSource = (source: ForgeSourceInput) =>
+      Effect.gen(function* () {
+        const resolvedSource = yield* mapSourceResolverErrorForSession(
+          undefined,
+          forgeSourceResolver.resolveMetadata(source),
         );
 
         const duplicateSession = yield* mapOperationError(
           forgeSessionRepository.findLatestBySourceFingerprint({
-            sourceKind: "pdf",
-            sourceFingerprint,
+            sourceKind: resolvedSource.sourceKind,
+            sourceFingerprint: resolvedSource.sourceFingerprint,
           }),
         );
 
         const session = yield* mapOperationError(
           forgeSessionRepository.createSession({
-            sourceKind: "pdf",
-            sourceFilePath,
+            sourceKind: resolvedSource.sourceKind,
+            sourceLabel: resolvedSource.sourceLabel,
+            sourceFilePath: resolvedSource.sourceFilePath,
             deckPath: null,
-            sourceFingerprint,
+            sourceFingerprint: resolvedSource.sourceFingerprint,
           }),
         );
 
@@ -352,40 +466,16 @@ export const createForgeHandlers = () =>
         };
       });
 
-    const extractAndChunkForSession = (sessionId: number, sourceFilePath: string) =>
-      Effect.gen(function* () {
-        const extracted = yield* pdfExtractor
-          .extractText(sourceFilePath)
-          .pipe(Effect.mapError((error) => toPdfExtractionError(sessionId, error)));
-
-        if (extracted.text.trim().length === 0) {
-          const message = `No extractable text found in PDF source: ${sourceFilePath}`;
-          return yield* Effect.fail(
-            new ForgeEmptySourceTextError({
-              sessionId,
-              sourceFilePath,
-              message,
-            }),
-          );
-        }
-
-        const chunkResult = yield* chunkService.chunkText({
-          text: extracted.text,
-          pageBreaks: extracted.pageBreaks,
-        });
-
-        return {
-          extracted,
+    const resolveAndChunkSourceForSession = (session: ForgeSession, source: ForgeSourceInput) =>
+      mapSourceResolverErrorForSession(session.id, forgeSourceResolver.resolveContent(source)).pipe(
+        Effect.flatMap((resolvedSource) => ensureSessionSourceMatches(session, resolvedSource)),
+        Effect.flatMap((resolvedSource) => chunkResolvedSource(resolvedSource)),
+        Effect.map(({ resolvedSource, chunkResult }) => ({
+          resolvedSource,
           chunkResult,
-          extraction: {
-            sessionId,
-            textLength: extracted.text.length,
-            preview: extracted.text.slice(0, PREVIEW_LENGTH),
-            totalPages: extracted.totalPages,
-            chunkCount: chunkResult.chunkCount,
-          },
-        };
-      });
+          extraction: toExtractionResult(session.id, resolvedSource, chunkResult.chunkCount),
+        })),
+      );
 
     const recoverStaleGeneratingTopics = (sessionId: number) => {
       const staleBeforeIso = new Date(
@@ -551,35 +641,75 @@ export const createForgeHandlers = () =>
       });
 
     const handlers: Pick<Implementations<AppContract, never>, ForgeHandlerKeys> = {
-      ForgeCreateSession: ({ sourceFilePath }) => createSessionFromSourcePath(sourceFilePath),
+      ForgeCreateSession: ({ source }) => createSessionFromSource(source),
       ForgeListSessions: () =>
         mapOperationError(forgeSessionRepository.listRecentSessions()).pipe(
           Effect.map((sessions) => ({ sessions })),
         ),
-      ForgeExtractText: ({ sessionId }) =>
+      ForgeExtractText: ({ sessionId, source }) =>
         Effect.gen(function* () {
-          const begunSession = yield* mapOperationError(
+          const existingSession = yield* mapOperationError(
+            forgeSessionRepository.getSession(sessionId),
+          ).pipe(Effect.flatMap((session) => ensureSessionExists(session, sessionId)));
+
+          const alreadyHasChunks = yield* mapOperationError(
+            forgeSessionRepository.hasChunks(sessionId),
+          );
+
+          if (existingSession.status === "extracting") {
+            return yield* Effect.fail(
+              new ForgeSessionBusyError({
+                sessionId,
+                status: existingSession.status,
+              }),
+            );
+          }
+
+          if (alreadyHasChunks) {
+            return yield* Effect.fail(
+              new ForgeSessionAlreadyChunkedError({
+                sessionId,
+                message: `Session ${sessionId} already has persisted chunks.`,
+              }),
+            );
+          }
+
+          if (existingSession.status !== "created") {
+            return yield* Effect.fail(
+              new ForgeOperationError({
+                message: `Session ${sessionId} cannot begin extraction from status ${existingSession.status}.`,
+              }),
+            );
+          }
+
+          yield* mapSourceResolverErrorForSession(
+            sessionId,
+            forgeSourceResolver.resolveMetadata(source),
+          ).pipe(
+            Effect.flatMap((resolved) => ensureSessionSourceMatches(existingSession, resolved)),
+          );
+
+          const beganExtraction = yield* mapOperationError(
             forgeSessionRepository.tryBeginExtraction(sessionId),
           );
 
-          if (begunSession === null) {
+          if (beganExtraction === null) {
             return yield* failBeginExtractionConflict(sessionId);
           }
 
           const extractionEffect = Effect.gen(function* () {
-            const extractedAndChunked = yield* extractAndChunkForSession(
+            const resolvedSource = yield* mapSourceResolverErrorForSession(
               sessionId,
-              begunSession.sourceFilePath,
+              forgeSourceResolver.resolveContent(source),
             ).pipe(
-              Effect.catchTag("empty_text", (error) =>
-                mapRepositoryStatusUpdateError(
-                  forgeSessionRepository.setSessionStatus({
-                    sessionId,
-                    status: "error",
-                    errorMessage: error.message,
-                  }),
-                ).pipe(Effect.zipRight(Effect.fail(error))),
-              ),
+              Effect.flatMap((resolved) => ensureSessionSourceMatches(existingSession, resolved)),
+            );
+
+            const extractedAndChunked = yield* chunkResolvedSource(resolvedSource).pipe(
+              Effect.map(({ chunkResult }) => ({
+                chunkResult,
+                extraction: toExtractionResult(sessionId, resolvedSource, chunkResult.chunkCount),
+              })),
             );
 
             yield* mapOperationError(
@@ -607,55 +737,24 @@ export const createForgeHandlers = () =>
           });
 
           return yield* extractionEffect.pipe(
-            Effect.catchTags({
-              session_not_found: (error) => Effect.fail(error),
-              empty_text: (error) => Effect.fail(error),
-              pdf_extraction_error: (error) =>
-                setSessionErrorBestEffort(sessionId, error.message, "[forge/extract]").pipe(
-                  Effect.zipRight(Effect.fail(error)),
-                ),
-              forge_operation_error: (error) =>
-                setSessionErrorBestEffort(sessionId, error.message, "[forge/extract]").pipe(
-                  Effect.zipRight(Effect.fail(error)),
-                ),
-            }),
+            Effect.tapErrorCause((cause) =>
+              setSessionErrorBestEffort(
+                sessionId,
+                toFailureMessageFromCause(cause),
+                "[forge/extract]",
+              ),
+            ),
           );
         }),
-      ForgePreviewChunks: ({ sourceFilePath }) =>
-        Effect.gen(function* () {
-          if (!path.isAbsolute(sourceFilePath)) {
-            return yield* Effect.fail(
-              new ForgePreviewOperationError({
-                sourceFilePath,
-                message: `Forge sourceFilePath must be absolute: ${sourceFilePath}`,
-              }),
-            );
-          }
-
-          const extracted = yield* pdfExtractor
-            .extractText(sourceFilePath)
-            .pipe(Effect.mapError((error) => toPreviewPdfExtractionError(sourceFilePath, error)));
-
-          if (extracted.text.trim().length === 0) {
-            return yield* Effect.fail(
-              new ForgePreviewEmptySourceTextError({
-                sourceFilePath,
-                message: `No extractable text found in PDF source: ${sourceFilePath}`,
-              }),
-            );
-          }
-
-          const chunkResult = yield* chunkService.chunkText({
-            text: extracted.text,
-            pageBreaks: extracted.pageBreaks,
-          });
-
-          return {
-            textLength: extracted.text.length,
-            totalPages: extracted.totalPages,
+      ForgePreviewChunks: ({ source }) =>
+        mapSourceResolverErrorForPreview(forgeSourceResolver.resolveContent(source)).pipe(
+          Effect.flatMap((resolvedSource) => chunkResolvedSource(resolvedSource)),
+          Effect.map(({ resolvedSource, chunkResult }) => ({
+            textLength: resolvedSource.text.length,
+            totalPages: resolvedSource.totalPages,
             chunkCount: chunkResult.chunkCount,
-          };
-        }),
+          })),
+        ),
       ForgeGetTopicExtractionSnapshot: ({ sessionId }) =>
         Effect.gen(function* () {
           const session = yield* mapSessionRepositoryError(
@@ -1061,8 +1160,8 @@ export const createForgeHandlers = () =>
             },
           };
         }),
-      ForgeStartTopicExtraction: ({ sourceFilePath, model }) =>
-        createSessionFromSourcePath(sourceFilePath).pipe(
+      ForgeStartTopicExtraction: ({ source, model }) =>
+        createSessionFromSource(source).pipe(
           Effect.flatMap(({ session, duplicateOfSessionId }) =>
             Effect.gen(function* () {
               yield* mapSessionRepositoryStatusUpdateError(
@@ -1088,10 +1187,7 @@ export const createForgeHandlers = () =>
                   Effect.asVoid,
                 );
 
-              const extractedAndChunked = yield* extractAndChunkForSession(
-                session.id,
-                session.sourceFilePath,
-              );
+              const extractedAndChunked = yield* resolveAndChunkSourceForSession(session, source);
 
               yield* mapSessionRepositoryError(
                 session.id,
@@ -1264,9 +1360,11 @@ export const createForgeHandlers = () =>
                 topicsByChunk,
               };
             }).pipe(
-              Effect.catchAll((error) =>
-                setSessionErrorBestEffort(session.id, toErrorMessage(error), "[forge/start]").pipe(
-                  Effect.zipRight(Effect.fail(error)),
+              Effect.tapErrorCause((cause) =>
+                setSessionErrorBestEffort(
+                  session.id,
+                  toFailureMessageFromCause(cause),
+                  "[forge/start]",
                 ),
               ),
             ),
