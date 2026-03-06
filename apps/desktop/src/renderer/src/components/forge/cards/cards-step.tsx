@@ -9,7 +9,7 @@ import {
   useForgeDeckTargetActions,
   useForgeDeletedCardIdsByTopicKey,
   useForgeExpandedCardPanelsByTopicKey,
-  useForgeExtractSummary,
+  useForgeSessionId,
   useForgeSelectedTopicKeys,
   useForgeTargetDeckPath,
   useForgeTopicsByChunk,
@@ -112,8 +112,7 @@ const toDeckName = (relativePath: string): string => {
 export function CardsStep() {
   const queryClient = useQueryClient();
   const ipc = useIpc();
-  const extractSummary = useForgeExtractSummary();
-  const sessionId = extractSummary?.sessionId ?? null;
+  const sessionId = useForgeSessionId();
 
   const curationActions = useForgeCardsCurationActions();
   const activeTopicKey = useForgeActiveTopicKey();

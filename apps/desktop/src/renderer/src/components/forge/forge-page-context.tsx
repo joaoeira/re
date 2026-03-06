@@ -23,6 +23,7 @@ import {
   type ExtractState,
   type ExtractSummary,
   type ForgePageStore,
+  type ForgeSourceEntryMode,
   type ForgeStep,
   type PreviewState,
   type TopicCardIdMap,
@@ -30,6 +31,7 @@ import {
 } from "./forge-page-store";
 import {
   createPdfSelectedSource,
+  createTextSelectedSource,
   forgeSelectedSourceCacheKey,
   forgeSelectedSourceFromSession,
   toForgeSourceInput,
@@ -38,6 +40,10 @@ import {
 
 type ForgePageActions = {
   readonly handleFileSelected: (file: File | null) => void;
+  readonly openTextEditor: () => void;
+  readonly closeTextEditor: () => void;
+  readonly setTextDraft: (text: string) => void;
+  readonly submitTextSource: () => void;
   readonly beginExtraction: () => void;
   readonly advanceToCards: () => void;
   readonly resumeSession: (session: ForgeSessionSummary) => void;
@@ -79,6 +85,14 @@ export function useForgeSelectedSource(): ForgeSelectedSource | null {
   return useForgePageSelector((snapshot) => snapshot.context.selectedSource);
 }
 
+export function useForgeSourceEntryMode(): ForgeSourceEntryMode {
+  return useForgePageSelector((snapshot) => snapshot.context.sourceEntryMode);
+}
+
+export function useForgeTextDraft(): string {
+  return useForgePageSelector((snapshot) => snapshot.context.textDraft);
+}
+
 export function useForgeDuplicateOfSessionId(): number | null {
   return useForgePageSelector((snapshot) => snapshot.context.duplicateOfSessionId);
 }
@@ -93,6 +107,10 @@ export function useForgeExtractState(): ExtractState {
 
 export function useForgeExtractSummary(): ExtractSummary | null {
   return useForgePageSelector((snapshot) => snapshot.context.extractSummary);
+}
+
+export function useForgeSessionId(): number | null {
+  return useForgePageSelector((snapshot) => snapshot.context.activeExtractionSessionId);
 }
 
 export function useForgeTopicSyncErrorMessage(): string | null {
@@ -274,16 +292,21 @@ export function ForgePageProvider({
   const sessionListQuery = useForgeSessionListQuery();
 
   const selectedSource = useSelector(store, (snapshot) => snapshot.context.selectedSource);
-  const selectedSourceInput = toForgeSourceInput(selectedSource);
-  const selectedSourceCacheKey = forgeSelectedSourceCacheKey(selectedSource);
   const currentStep = useSelector(store, (snapshot) => snapshot.context.currentStep);
+  const sourceEntryMode = useSelector(store, (snapshot) => snapshot.context.sourceEntryMode);
   const extractState = useSelector(store, (snapshot) => snapshot.context.extractState);
   const activeExtractionSessionId = useSelector(
     store,
     (snapshot) => snapshot.context.activeExtractionSessionId,
   );
 
-  const previewQuery = useForgePreviewQuery(selectedSourceInput);
+  const previewSource =
+    currentStep === "source" && sourceEntryMode === "picker" && selectedSource?.kind === "pdf"
+      ? toForgeSourceInput(selectedSource)
+      : null;
+  const previewSourceCacheKey = forgeSourceCacheKey(previewSource);
+
+  const previewQuery = useForgePreviewQuery(previewSource);
   const topicSnapshotQuery = useForgeTopicSnapshotQuery(
     currentStep === "topics" ? activeExtractionSessionId : null,
     {
@@ -292,22 +315,22 @@ export function ForgePageProvider({
   );
 
   useEffect(() => {
-    if (!selectedSourceCacheKey || !previewQuery.data) return;
+    if (!previewSourceCacheKey || !previewQuery.data) return;
 
     store.send({
       type: "previewReady",
       summary: previewQuery.data,
     });
-  }, [selectedSourceCacheKey, previewQuery.data, previewQuery.dataUpdatedAt, store]);
+  }, [previewSourceCacheKey, previewQuery.data, previewQuery.dataUpdatedAt, store]);
 
   useEffect(() => {
-    if (!selectedSourceCacheKey || !previewQuery.error) return;
+    if (!previewSourceCacheKey || !previewQuery.error) return;
 
     store.send({
       type: "previewError",
       message: previewQuery.error.message,
     });
-  }, [selectedSourceCacheKey, previewQuery.error, previewQuery.errorUpdatedAt, store]);
+  }, [previewSourceCacheKey, previewQuery.error, previewQuery.errorUpdatedAt, store]);
 
   useEffect(() => {
     if (activeExtractionSessionId === null || currentStep !== "topics" || !topicSnapshotQuery.data)
@@ -317,6 +340,8 @@ export function ForgePageProvider({
       type: "topicSnapshotSynced",
       sessionId: topicSnapshotQuery.data.session.id,
       sessionCreatedAt: topicSnapshotQuery.data.session.createdAt,
+      sessionStatus: topicSnapshotQuery.data.session.status,
+      sessionErrorMessage: topicSnapshotQuery.data.session.errorMessage,
       topicsByChunk: topicSnapshotQuery.data.topicsByChunk,
     });
   }, [
@@ -368,8 +393,10 @@ export function ForgePageProvider({
         type: "extractionSessionCreated",
         sessionId: event.sessionId,
       });
+
+      void queryClient.invalidateQueries({ queryKey: queryKeys.forgeSessionList, exact: true });
     });
-  }, [ipc, store]);
+  }, [ipc, queryClient, store]);
 
   const resumingRef = useRef(false);
 
@@ -380,6 +407,19 @@ export function ForgePageProvider({
 
       const selectedSource = forgeSelectedSourceFromSession(session);
       const targetStep: ForgeStep = session.cardCount > 0 ? "cards" : "topics";
+      const resumeExtractState: ExtractState =
+        session.cardCount > 0
+          ? { status: "idle" }
+          : session.status === "error"
+            ? {
+                status: "error",
+                message: session.errorMessage ?? "Session extraction failed.",
+              }
+            : session.status === "extracting" ||
+                session.status === "extracted" ||
+                session.status === "topics_extracting"
+              ? { status: "extracting" }
+              : { status: "idle" };
 
       runIpcEffect(
         ipc.client
@@ -414,6 +454,7 @@ export function ForgePageProvider({
             type: "resumeSession",
             currentStep: targetStep,
             selectedSource,
+            extractState: resumeExtractState,
             sessionId: session.id,
             targetDeckPath: session.deckPath,
             topicsByChunk,
@@ -470,10 +511,12 @@ export function ForgePageProvider({
       store.send({ type: "setExtracting", startedAt: new Date().toISOString() });
     },
     onSuccess: (result, variables) => {
-      const currentSourceCacheKey = forgeSelectedSourceCacheKey(
-        store.getSnapshot().context.selectedSource,
-      );
+      void queryClient.invalidateQueries({ queryKey: queryKeys.forgeSessionList, exact: true });
+
+      const snapshot = store.getSnapshot().context;
+      const currentSourceCacheKey = forgeSelectedSourceCacheKey(snapshot.selectedSource);
       if (currentSourceCacheKey !== variables.sourceCacheKey) return;
+      if (snapshot.extractState.status !== "extracting") return;
 
       store.send({
         type: "extractionSuccess",
@@ -483,10 +526,10 @@ export function ForgePageProvider({
       });
     },
     onError: (error, variables) => {
-      const currentSourceCacheKey = forgeSelectedSourceCacheKey(
-        store.getSnapshot().context.selectedSource,
-      );
+      const snapshot = store.getSnapshot().context;
+      const currentSourceCacheKey = forgeSelectedSourceCacheKey(snapshot.selectedSource);
       if (currentSourceCacheKey !== variables.sourceCacheKey) return;
+      if (snapshot.extractState.status !== "extracting") return;
 
       store.send({
         type: "extractionError",
@@ -539,9 +582,49 @@ export function ForgePageProvider({
     [queryClient, store],
   );
 
+  const openTextEditor = useCallback(() => {
+    store.send({ type: "openTextEditor" });
+  }, [store]);
+
+  const resetForNoSource = useCallback(() => {
+    store.send({ type: "resetForNoSource" });
+  }, [store]);
+
+  const setTextDraft = useCallback(
+    (text: string) => {
+      store.send({ type: "setTextDraft", text });
+    },
+    [store],
+  );
+
+  const submitTextSource = useCallback(() => {
+    const snapshot = store.getSnapshot().context;
+    if (snapshot.extractState.status === "extracting") return;
+    if (snapshot.textDraft.trim().length === 0) return;
+
+    const selectedSource = createTextSelectedSource({
+      sourceLabel: "Pasted text",
+      text: snapshot.textDraft,
+    });
+    const source = toForgeSourceInput(selectedSource);
+    const sourceCacheKey = source ? forgeSourceCacheKey(source) : null;
+    if (!source || !sourceCacheKey) return;
+
+    store.send({ type: "setSelectedSource", selectedSource });
+    startTopicExtractionMutation({
+      source,
+      sourceCacheKey,
+    });
+  }, [startTopicExtractionMutation, store]);
+
   const beginExtraction = useCallback(() => {
     const snapshot = store.getSnapshot().context;
-    if (!snapshot.selectedSource || snapshot.extractState.status === "extracting") {
+    if (
+      !snapshot.selectedSource ||
+      snapshot.selectedSource.kind !== "pdf" ||
+      snapshot.extractState.status === "extracting" ||
+      snapshot.sourceEntryMode !== "picker"
+    ) {
       return;
     }
 
@@ -559,9 +642,9 @@ export function ForgePageProvider({
     const snapshot = store.getSnapshot().context;
     if (snapshot.extractState.status === "extracting") return;
     if (snapshot.selectedTopicKeys.size === 0) return;
-    if (snapshot.extractSummary?.sessionId == null) return;
+    if (snapshot.activeExtractionSessionId == null) return;
 
-    const sessionId = snapshot.extractSummary.sessionId;
+    const sessionId = snapshot.activeExtractionSessionId;
     const selections: Array<{ chunkId: number; topicIndex: number }> = [];
     for (const key of snapshot.selectedTopicKeys) {
       const parts = key.split(":");
@@ -588,21 +671,27 @@ export function ForgePageProvider({
       });
   }, [ipc.client, store]);
 
-  const resumeSession = useCallback(
-    (session: ForgeSessionSummary) => {
-      loadSessionData(session);
-    },
-    [loadSessionData],
-  );
-
   const actions = useMemo(
     () => ({
       handleFileSelected,
+      openTextEditor,
+      closeTextEditor: resetForNoSource,
+      setTextDraft,
+      submitTextSource,
       beginExtraction,
       advanceToCards,
-      resumeSession,
+      resumeSession: loadSessionData,
     }),
-    [handleFileSelected, beginExtraction, advanceToCards, resumeSession],
+    [
+      handleFileSelected,
+      openTextEditor,
+      resetForNoSource,
+      setTextDraft,
+      submitTextSource,
+      beginExtraction,
+      advanceToCards,
+      loadSessionData,
+    ],
   );
 
   const value = useMemo(

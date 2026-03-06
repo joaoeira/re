@@ -1,10 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
-import { PdfUploadZone } from "@/components/forge/pdf-upload-zone";
 import { useForgeSessionListQuery } from "@/hooks/queries/use-forge-session-list-query";
 import { Button } from "@/components/ui/button";
 
 import { CardsStep } from "./cards/cards-step";
+import { ForgeSourceCanvas } from "./forge-source-canvas";
 import {
   ForgePageProvider,
   useForgeCurrentStep,
@@ -13,9 +13,12 @@ import {
   useForgePageActions,
   useForgePreviewState,
   useForgeSelectedSource,
+  useForgeSourceEntryMode,
   useForgeResumeErrorMessage,
   useForgeSelectedTopicCount,
+  useForgeTextDraft,
 } from "./forge-page-context";
+import { ForgeTextEditor } from "./forge-text-editor";
 import { SessionBrowser } from "./session-browser";
 import { TopicSelection } from "./topics/topic-selection";
 
@@ -30,21 +33,39 @@ function ForgePageContent() {
   const actions = useForgePageActions();
   const currentStep = useForgeCurrentStep();
   const selectedSource = useForgeSelectedSource();
+  const sourceEntryMode = useForgeSourceEntryMode();
   const duplicateOfSessionId = useForgeDuplicateOfSessionId();
   const previewState = useForgePreviewState();
   const extractState = useForgeExtractState();
+  const textDraft = useForgeTextDraft();
   const selectedTopicCount = useForgeSelectedTopicCount();
   const resumeErrorMessage = useForgeResumeErrorMessage();
   const sessionListQuery = useForgeSessionListQuery();
 
-  const isSourceEmpty = currentStep === "source" && !selectedSource;
-  const resumableSessions = sessionListQuery.data?.sessions.filter((s) => s.topicCount > 0) ?? [];
+  const resumableSessions = useMemo(
+    () =>
+      (sessionListQuery.data?.sessions ?? []).filter(
+        (session) =>
+          session.topicCount > 0 ||
+          session.cardCount > 0 ||
+          session.status === "extracting" ||
+          session.status === "extracted" ||
+          session.status === "topics_extracting",
+      ),
+    [sessionListQuery.data?.sessions],
+  );
+  const isTextEditorOpen = currentStep === "source" && sourceEntryMode === "text-editor";
+  const isSourceEmpty = currentStep === "source" && sourceEntryMode === "picker" && !selectedSource;
   const showSessionBrowser = isSourceEmpty && resumableSessions.length > 0;
-  const showSourceStep = !isSourceEmpty || (!sessionListQuery.isLoading && !showSessionBrowser);
+  const showSourcePicker =
+    currentStep === "source" &&
+    sourceEntryMode === "picker" &&
+    (!isSourceEmpty || (!sessionListQuery.isLoading && !showSessionBrowser));
 
   useEffect(() => {
     if (currentStep === "source" && !selectedSource) return;
     if (currentStep === "cards") return;
+    if (currentStep === "source" && sourceEntryMode === "text-editor") return;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return;
@@ -59,12 +80,21 @@ function ForgePageContent() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [actions, currentStep, selectedSource]);
+  }, [actions, currentStep, selectedSource, sourceEntryMode]);
 
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-background">
       {currentStep === "cards" ? (
         <CardsStep />
+      ) : isTextEditorOpen ? (
+        <ForgeTextEditor
+          draft={textDraft}
+          errorMessage={extractState.status === "error" ? extractState.message : null}
+          onDraftChange={actions.setTextDraft}
+          onSubmit={actions.submitTextSource}
+          onClose={actions.closeTextEditor}
+          onDiscard={actions.closeTextEditor}
+        />
       ) : (
         <>
           <div className="flex-1 overflow-auto px-6 py-8">
@@ -73,65 +103,67 @@ function ForgePageContent() {
                 sessions={resumableSessions}
                 onResume={actions.resumeSession}
                 onFileSelected={actions.handleFileSelected}
+                onOpenTextEditor={actions.openTextEditor}
                 errorMessage={resumeErrorMessage}
               />
-            ) : showSourceStep ? (
+            ) : showSourcePicker ? (
               <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-                {currentStep === "source" ? (
-                  <>
-                    <PdfUploadZone onFileSelected={actions.handleFileSelected} />
+                <ForgeSourceCanvas
+                  onOpenTextEditor={actions.openTextEditor}
+                  onPdfSelected={actions.handleFileSelected}
+                />
 
-                    {selectedSource ? (
-                      <p className="text-xs text-muted-foreground">
-                        Selected: {selectedSource.sourceLabel}
-                      </p>
-                    ) : null}
-
-                    {previewState.status === "loading" ? (
-                      <p className="text-xs text-muted-foreground">Estimating chunk count...</p>
-                    ) : null}
-
-                    {previewState.status === "ready" ? (
-                      <p className="text-xs text-muted-foreground">
-                        Estimated {previewState.summary.chunkCount} chunk(s) across{" "}
-                        {previewState.summary.totalPages} page(s) and{" "}
-                        {previewState.summary.textLength} character(s).
-                      </p>
-                    ) : null}
-
-                    {previewState.status === "error" ? (
-                      <p role="alert" className="text-xs text-destructive">
-                        {previewState.message}
-                      </p>
-                    ) : null}
-
-                    {duplicateOfSessionId !== null ? (
-                      <p className="text-xs text-amber-600">
-                        Duplicate source detected. Continuing with new session (existing session id:{" "}
-                        {duplicateOfSessionId}).
-                      </p>
-                    ) : null}
-
-                    {extractState.status === "extracting" ? (
-                      <p className="text-xs text-muted-foreground">
-                        Running extraction and topic analysis for the selected source...
-                      </p>
-                    ) : null}
-
-                    {extractState.status === "error" ? (
-                      <p role="alert" className="text-xs text-destructive">
-                        {extractState.message}
-                      </p>
-                    ) : null}
-                  </>
+                {selectedSource?.kind === "pdf" ? (
+                  <p className="text-xs text-muted-foreground">
+                    Selected: {selectedSource.sourceLabel}
+                  </p>
                 ) : null}
 
-                {currentStep === "topics" ? <TopicSelection /> : null}
+                {previewState.status === "loading" ? (
+                  <p className="text-xs text-muted-foreground">Estimating chunk count...</p>
+                ) : null}
+
+                {previewState.status === "ready" ? (
+                  <p className="text-xs text-muted-foreground">
+                    Estimated {previewState.summary.chunkCount} chunk(s) across{" "}
+                    {previewState.summary.totalPages} page(s) and {previewState.summary.textLength}{" "}
+                    character(s).
+                  </p>
+                ) : null}
+
+                {previewState.status === "error" ? (
+                  <p role="alert" className="text-xs text-destructive">
+                    {previewState.message}
+                  </p>
+                ) : null}
+
+                {duplicateOfSessionId !== null ? (
+                  <p className="text-xs text-amber-600">
+                    Duplicate source detected. Continuing with new session (existing session id:{" "}
+                    {duplicateOfSessionId}).
+                  </p>
+                ) : null}
+
+                {extractState.status === "extracting" ? (
+                  <p className="text-xs text-muted-foreground">
+                    Running extraction and topic analysis for the selected source...
+                  </p>
+                ) : null}
+
+                {extractState.status === "error" ? (
+                  <p role="alert" className="text-xs text-destructive">
+                    {extractState.message}
+                  </p>
+                ) : null}
               </div>
+            ) : currentStep === "topics" ? (
+              <TopicSelection />
             ) : null}
           </div>
 
-          {currentStep === "source" && selectedSource ? (
+          {currentStep === "source" &&
+          sourceEntryMode === "picker" &&
+          selectedSource?.kind === "pdf" ? (
             <div className="shrink-0 border-t border-border bg-muted/30 px-6 py-2.5">
               <div className="mx-auto flex w-full items-center justify-end gap-3">
                 <Button

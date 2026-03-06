@@ -1,63 +1,19 @@
 import { userEvent } from "vitest/browser";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { ForgePage } from "@/components/forge/forge-page";
 import { renderWithIpcProviders } from "./render-with-providers";
+import { createForgeInvoke, DEFAULT_FORGE_TOPICS_BY_CHUNK } from "./forge-ipc-mocks";
 import { mockDesktopGlobals, uploadPdf } from "./forge-test-helpers";
 
-const TOPICS_BY_CHUNK = [
-  { chunkId: 101, sequenceOrder: 1, topics: ["biology", "cells"] },
-  { chunkId: 102, sequenceOrder: 2, topics: ["membranes"] },
-];
+const TOPICS_BY_CHUNK = DEFAULT_FORGE_TOPICS_BY_CHUNK.map((chunk, index) => ({
+  ...chunk,
+  sequenceOrder: index + 1,
+}));
 
 const createSuccessInvoke = (topicsByChunk = TOPICS_BY_CHUNK) =>
-  vi.fn().mockImplementation(async (method: string) => {
-    if (method === "ForgePreviewChunks") {
-      return {
-        type: "success",
-        data: { textLength: 230, totalPages: 4, chunkCount: 2 },
-      };
-    }
-    if (method === "ForgeStartTopicExtraction") {
-      return {
-        type: "success",
-        data: {
-          session: {
-            id: 12,
-            sourceKind: "pdf",
-            sourceFilePath: "/forge/source.pdf",
-            deckPath: null,
-            sourceFingerprint: "fp",
-            status: "topics_extracted",
-            errorMessage: null,
-            createdAt: "2025-01-10T00:00:00.000Z",
-            updatedAt: "2025-01-10T00:00:00.000Z",
-          },
-          duplicateOfSessionId: null,
-          extraction: {
-            sessionId: 12,
-            textLength: 230,
-            preview: "preview",
-            totalPages: 4,
-            chunkCount: 2,
-          },
-          topicsByChunk,
-        },
-      };
-    }
-    if (method === "ForgeGetTopicExtractionSnapshot") {
-      return {
-        type: "success",
-        data: {
-          session: null,
-          topicsByChunk: [],
-        },
-      };
-    }
-    if (method === "ForgeListSessions") {
-      return { type: "success", data: { sessions: [] } };
-    }
-    return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+  createForgeInvoke({
+    topicsByChunk,
   });
 
 const renderForgePage = async () => renderWithIpcProviders(<ForgePage />);

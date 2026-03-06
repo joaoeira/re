@@ -23,6 +23,15 @@ export const createPdfSelectedSource = (input: {
   sourceFilePath: input.sourceFilePath,
 });
 
+export const createTextSelectedSource = (input: {
+  readonly sourceLabel: string;
+  readonly text: string;
+}): ForgeSelectedSource => ({
+  kind: "text",
+  sourceLabel: input.sourceLabel,
+  text: input.text,
+});
+
 export const forgeSelectedSourceFromSession = (
   session: ForgeSessionSummary,
 ): ForgeSelectedSource | null => {

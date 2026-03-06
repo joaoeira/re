@@ -31,9 +31,13 @@ export function TopicSelection() {
     [topicsByChunk],
   );
 
-  const chunkCount = previewState.status === "ready" ? previewState.summary.chunkCount : 0;
+  const chunkCount =
+    extractSummary?.chunkCount ??
+    (previewState.status === "ready" ? previewState.summary.chunkCount : null);
   const extractedChunks = chunksWithTopics.length;
-  const extractPct = chunkCount > 0 ? Math.min((extractedChunks / chunkCount) * 100, 100) : 0;
+  const extractPct =
+    chunkCount && chunkCount > 0 ? Math.min((extractedChunks / chunkCount) * 100, 100) : null;
+  const shouldShowSummary = totalTopics > 0 || chunksWithTopics.length > 0;
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
@@ -44,7 +48,7 @@ export function TopicSelection() {
         </p>
       </div>
 
-      {extractSummary && (
+      {shouldShowSummary && (
         <p className="text-xs text-muted-foreground">
           Extracted <span className="font-mono text-foreground/70">{totalTopics}</span> topics from{" "}
           <span className="font-mono text-foreground/70">{chunksWithTopics.length}</span> chunks
@@ -56,17 +60,26 @@ export function TopicSelection() {
           <div className="flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-[1.5px] border-muted-foreground/40 border-t-transparent" />
             <span className="text-xs text-muted-foreground">
-              {chunkCount > 0
+              {chunkCount && chunkCount > 0
                 ? `Extracting section ${Math.min(extractedChunks + 1, chunkCount)} of ${chunkCount}…`
                 : "Extracting sections…"}
             </span>
           </div>
-          <div className="h-0.5 overflow-hidden rounded-full bg-border/50">
+          {extractPct !== null ? (
             <div
-              className="h-full rounded-full bg-muted-foreground/30 transition-[width] duration-500 ease-out"
-              style={{ width: `${extractPct}%` }}
-            />
-          </div>
+              role="progressbar"
+              aria-label="Topic extraction progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(extractPct)}
+              className="h-0.5 overflow-hidden rounded-full bg-border/50"
+            >
+              <div
+                className="h-full rounded-full bg-muted-foreground/30 transition-[width] duration-500 ease-out"
+                style={{ width: `${extractPct}%` }}
+              />
+            </div>
+          ) : null}
         </div>
       )}
 

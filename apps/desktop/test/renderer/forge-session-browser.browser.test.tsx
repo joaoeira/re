@@ -2,11 +2,14 @@ import { userEvent } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 
 import { ForgePage } from "@/components/forge/forge-page";
+import { createForgeInvoke } from "./forge-ipc-mocks";
 import { renderWithIpcProviders } from "./render-with-providers";
 import { mockDesktopGlobals, waitForFileInput } from "./forge-test-helpers";
 
 const SESSION_A = {
   id: 1,
+  sourceKind: "pdf" as const,
+  sourceLabel: "biology.pdf",
   sourceFilePath: "/docs/biology.pdf",
   deckPath: null,
   status: "topics_extracted" as const,
@@ -19,6 +22,8 @@ const SESSION_A = {
 
 const SESSION_B = {
   id: 2,
+  sourceKind: "pdf" as const,
+  sourceLabel: "chemistry.pdf",
   sourceFilePath: "/docs/chemistry.pdf",
   deckPath: "/workspace/decks/beta.md",
   status: "ready" as const,
@@ -32,79 +37,30 @@ const SESSION_B = {
 const SESSION_C = {
   ...SESSION_B,
   id: 3,
+  sourceLabel: "physics.pdf",
   sourceFilePath: "/docs/physics.pdf",
   deckPath: "/workspace/decks/missing.md",
 };
 
+const TEXT_SESSION = {
+  ...SESSION_B,
+  id: 4,
+  sourceKind: "text" as const,
+  sourceLabel: "Pasted text",
+  sourceFilePath: null,
+  status: "topics_extracting" as const,
+  topicCount: 0,
+  cardCount: 0,
+};
+
 const createInvokeWithSessions = (sessions: unknown[] = [SESSION_A, SESSION_B]) =>
-  vi.fn().mockImplementation(async (method: string) => {
-    if (method === "ForgeListSessions") {
-      return { type: "success", data: { sessions } };
-    }
-    if (method === "GetSettings") {
-      return {
-        type: "success",
-        data: {
-          settingsVersion: 1,
-          workspace: { rootPath: "/workspace" },
-        },
-      };
-    }
-    if (method === "ScanDecks") {
-      return {
-        type: "success",
-        data: {
-          rootPath: "/workspace",
-          decks: [
-            {
-              absolutePath: "/workspace/decks/alpha.md",
-              relativePath: "decks/alpha.md",
-              name: "alpha",
-            },
-            {
-              absolutePath: "/workspace/decks/beta.md",
-              relativePath: "decks/beta.md",
-              name: "beta",
-            },
-          ],
-        },
-      };
-    }
-    if (method === "ForgePreviewChunks") {
-      return {
-        type: "success",
-        data: { textLength: 100, totalPages: 2, chunkCount: 1 },
-      };
-    }
-    if (method === "ForgeGetTopicExtractionSnapshot") {
-      return { type: "success", data: { session: null, topicsByChunk: [] } };
-    }
-    if (method === "ForgeGetCardsSnapshot") {
-      return {
-        type: "success",
-        data: {
-          topics: [
-            {
-              topicId: 10,
-              chunkId: 100,
-              sequenceOrder: 0,
-              topicIndex: 0,
-              topicText: "Cell biology",
-              status: "generated",
-              errorMessage: null,
-              cardCount: 5,
-              addedCount: 0,
-              generationRevision: 1,
-              selected: true,
-            },
-          ],
-        },
-      };
-    }
-    if (method === "ForgeSetSessionDeckPath") {
-      return { type: "success", data: {} };
-    }
-    return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+  createForgeInvoke({
+    sessions,
+    previewData: {
+      textLength: 100,
+      totalPages: 2,
+      chunkCount: 1,
+    },
   });
 
 const renderForgePage = async () => renderWithIpcProviders(<ForgePage />);
@@ -128,7 +84,7 @@ describe("ForgePage session browser", () => {
 
     const screen = await renderForgePage();
 
-    await expect.element(screen.getByText("Drop a PDF here, or")).toBeVisible();
+    await expect.element(screen.getByText("Drop a PDF, or click to paste text")).toBeVisible();
   });
 
   it("shows the new session upload bar in the session browser", async () => {
@@ -137,7 +93,7 @@ describe("ForgePage session browser", () => {
 
     const screen = await renderForgePage();
 
-    await expect.element(screen.getByText("browse files")).toBeVisible();
+    await expect.element(screen.getByText("Browse PDF")).toBeVisible();
   });
 
   it("displays status labels for sessions", async () => {
@@ -241,7 +197,7 @@ describe("ForgePage session browser", () => {
     mockDesktopGlobals(invoke);
 
     const screen = await renderForgePage();
-    await expect.element(screen.getByText("browse files")).toBeVisible();
+    await expect.element(screen.getByText("Browse PDF")).toBeVisible();
 
     const input = await waitForFileInput();
 
@@ -265,7 +221,7 @@ describe("ForgePage session browser", () => {
 
     const screen = await renderForgePage();
 
-    await expect.element(screen.getByText("Drop a PDF here, or")).toBeVisible();
+    await expect.element(screen.getByText("Drop a PDF, or click to paste text")).toBeVisible();
     expect(screen.getByText("empty.pdf").query()).toBeNull();
   });
 
@@ -274,10 +230,10 @@ describe("ForgePage session browser", () => {
     mockDesktopGlobals(invoke);
 
     const screen = await renderForgePage();
-    await expect.element(screen.getByText("browse files")).toBeVisible();
+    await expect.element(screen.getByText("Browse PDF")).toBeVisible();
 
-    const dropZone = screen.getByText("browse files").element().closest("[role='button']");
-    if (!dropZone) throw new Error("Expected drop zone element.");
+    const dropZone = document.querySelector('[aria-label="Add forge source"]');
+    if (!(dropZone instanceof HTMLElement)) throw new Error("Expected drop zone element.");
 
     const notPdf = new File(["hello"], "notes.txt", { type: "text/plain" });
     const dataTransfer = new DataTransfer();
@@ -285,7 +241,95 @@ describe("ForgePage session browser", () => {
 
     dropZone.dispatchEvent(new DragEvent("drop", { bubbles: true, dataTransfer }));
 
-    await expect.element(screen.getByText("Only PDF files are supported.")).toBeVisible();
+    await expect.element(screen.getByText("Only PDF files are supported right now.")).toBeVisible();
+  });
+
+  it("shows in-progress text sessions even before any topics are persisted", async () => {
+    const invoke = createInvokeWithSessions([TEXT_SESSION]);
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderForgePage();
+
+    await expect.element(screen.getByText("Pasted text")).toBeVisible();
+    const sessionRow = screen.getByText("Pasted text").element().closest("button");
+    if (!(sessionRow instanceof HTMLElement)) throw new Error("Expected session row element.");
+
+    await expect.element(sessionRow).toHaveTextContent("TXT");
+    await expect.element(sessionRow).toHaveTextContent("Extracting topics");
+  });
+
+  it("resumes an extracting text session and enables continuing once snapshot polling reports completion", async () => {
+    const invoke = vi.fn().mockImplementation(async (method: string) => {
+      if (method === "ForgeListSessions") {
+        return { type: "success", data: { sessions: [TEXT_SESSION] } };
+      }
+      if (method === "ForgeGetCardsSnapshot") {
+        return {
+          type: "success",
+          data: {
+            topics: [],
+          },
+        };
+      }
+      if (method === "ForgeGetTopicExtractionSnapshot") {
+        return {
+          type: "success",
+          data: {
+            session: {
+              id: TEXT_SESSION.id,
+              sourceKind: "text",
+              sourceLabel: "Pasted text",
+              sourceFilePath: null,
+              deckPath: null,
+              sourceFingerprint: "fp:text",
+              status: "topics_extracted",
+              errorMessage: null,
+              createdAt: TEXT_SESSION.createdAt,
+              updatedAt: TEXT_SESSION.updatedAt,
+            },
+            topicsByChunk: [{ chunkId: 301, sequenceOrder: 0, topics: ["alpha"] }],
+          },
+        };
+      }
+      if (method === "GetSettings") {
+        return {
+          type: "success",
+          data: {
+            settingsVersion: 1,
+            workspace: { rootPath: "/workspace" },
+          },
+        };
+      }
+      if (method === "ScanDecks") {
+        return {
+          type: "success",
+          data: {
+            rootPath: "/workspace",
+            decks: [],
+          },
+        };
+      }
+      if (method === "ForgeSetSessionDeckPath") {
+        return { type: "success", data: {} };
+      }
+      return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+    });
+
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderForgePage();
+    await userEvent.click(screen.getByText("Pasted text"));
+
+    await expect.element(screen.getByText("Select topics")).toBeVisible();
+    await expect.element(screen.getByText("alpha")).toBeVisible();
+    await expect.element(screen.getByText("Extracted 1 topics from 1 chunks")).toBeVisible();
+
+    await userEvent.click(screen.getByText("alpha"));
+    await expect
+      .element(screen.getByText("Continue to cards").element().closest("button")!)
+      .toBeEnabled();
+
+    expect(screen.getByText("Extracting sections…").query()).toBeNull();
   });
 
   it("shows error message when session resume fails", async () => {

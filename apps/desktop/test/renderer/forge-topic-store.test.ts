@@ -7,7 +7,7 @@ import {
   type ExtractSummary,
 } from "@/components/forge/forge-page-store";
 import { topicsSummaryToChunkTopics } from "@/components/forge/forge-page-context";
-import { createPdfSelectedSource } from "@/components/forge/forge-source";
+import { createPdfSelectedSource, createTextSelectedSource } from "@/components/forge/forge-source";
 
 const TWO_CHUNKS: ReadonlyArray<ChunkTopics> = [
   { chunkId: 10, sequenceOrder: 0, topics: ["alpha", "beta"] },
@@ -58,6 +58,8 @@ describe("forge-page-store topic selection", () => {
     it("starts on the source step", () => {
       const store = createForgePageStore();
       expect(ctx(store).currentStep).toBe("source");
+      expect(ctx(store).sourceEntryMode).toBe("picker");
+      expect(ctx(store).textDraft).toBe("");
     });
 
     it("starts with idle extract and preview states", () => {
@@ -86,6 +88,55 @@ describe("forge-page-store topic selection", () => {
       store.send({ type: "setTargetDeckPath", deckPath: null });
 
       expect(ctx(store).targetDeckPath).toBeNull();
+    });
+  });
+
+  describe("text editor source entry", () => {
+    it("opens the text editor and stores drafts", () => {
+      const store = createForgePageStore();
+      store.send({ type: "openTextEditor" });
+      store.send({ type: "setTextDraft", text: "alpha beta" });
+
+      expect(ctx(store).sourceEntryMode).toBe("text-editor");
+      expect(ctx(store).textDraft).toBe("alpha beta");
+    });
+
+    it("returns to the text editor when text extraction fails", () => {
+      const store = createForgePageStore();
+      const selectedSource = createTextSelectedSource({
+        sourceLabel: "Pasted text",
+        text: "alpha beta",
+      });
+
+      store.send({ type: "setSelectedSource", selectedSource });
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
+      store.send({ type: "extractionError", message: "Text failed" });
+
+      expect(ctx(store).currentStep).toBe("source");
+      expect(ctx(store).sourceEntryMode).toBe("text-editor");
+      expect(ctx(store).textDraft).toBe("alpha beta");
+      expect(ctx(store).extractState).toEqual({ status: "error", message: "Text failed" });
+    });
+
+    it("clears the text draft after successful extraction", () => {
+      const store = createForgePageStore();
+      store.send({
+        type: "setSelectedSource",
+        selectedSource: createTextSelectedSource({
+          sourceLabel: "Pasted text",
+          text: "alpha beta",
+        }),
+      });
+
+      store.send({
+        type: "extractionSuccess",
+        duplicateOfSessionId: null,
+        extraction: EXTRACTION,
+        topicsByChunk: TWO_CHUNKS,
+      });
+
+      expect(ctx(store).sourceEntryMode).toBe("text-editor");
+      expect(ctx(store).textDraft).toBe("");
     });
   });
 
@@ -221,6 +272,8 @@ describe("forge-page-store topic selection", () => {
         type: "topicSnapshotSynced",
         sessionId: 5,
         sessionCreatedAt: "2026-02-27T11:59:59.000Z",
+        sessionStatus: "topics_extracting",
+        sessionErrorMessage: null,
         topicsByChunk: [{ chunkId: 99, sequenceOrder: 0, topics: ["stale"] }],
       });
 
@@ -235,6 +288,8 @@ describe("forge-page-store topic selection", () => {
         type: "topicSnapshotSynced",
         sessionId: 7,
         sessionCreatedAt: "2026-02-27T12:00:01.000Z",
+        sessionStatus: "topics_extracting",
+        sessionErrorMessage: null,
         topicsByChunk: [{ chunkId: 11, sequenceOrder: 0, topics: ["alpha"] }],
       });
 
@@ -252,6 +307,8 @@ describe("forge-page-store topic selection", () => {
         type: "topicSnapshotSynced",
         sessionId: 8,
         sessionCreatedAt: "2026-02-27T12:00:01.000Z",
+        sessionStatus: "topics_extracting",
+        sessionErrorMessage: null,
         topicsByChunk: [{ chunkId: 12, sequenceOrder: 0, topics: ["alpha", "beta"] }],
       });
 
@@ -259,6 +316,8 @@ describe("forge-page-store topic selection", () => {
         type: "topicSnapshotSynced",
         sessionId: 8,
         sessionCreatedAt: "2026-02-27T12:00:02.000Z",
+        sessionStatus: "topics_extracting",
+        sessionErrorMessage: null,
         topicsByChunk: [{ chunkId: 12, sequenceOrder: 0, topics: ["alpha"] }],
       });
 
@@ -275,6 +334,8 @@ describe("forge-page-store topic selection", () => {
         type: "topicSnapshotSynced",
         sessionId: 9,
         sessionCreatedAt: "2026-02-27T12:00:01.000Z",
+        sessionStatus: "topics_extracting",
+        sessionErrorMessage: null,
         topicsByChunk: [{ chunkId: 10, sequenceOrder: 0, topics: ["alpha"] }],
       });
 
@@ -282,6 +343,8 @@ describe("forge-page-store topic selection", () => {
         type: "topicSnapshotSynced",
         sessionId: 10,
         sessionCreatedAt: "2026-02-27T12:00:02.000Z",
+        sessionStatus: "topics_extracting",
+        sessionErrorMessage: null,
         topicsByChunk: [{ chunkId: 11, sequenceOrder: 1, topics: ["beta"] }],
       });
 
@@ -302,9 +365,48 @@ describe("forge-page-store topic selection", () => {
         type: "topicSnapshotSynced",
         sessionId: 9,
         sessionCreatedAt: "2026-02-27T12:00:01.000Z",
+        sessionStatus: "topics_extracting",
+        sessionErrorMessage: null,
         topicsByChunk: [{ chunkId: 10, sequenceOrder: 0, topics: ["alpha"] }],
       });
       expect(ctx(store).topicSyncErrorMessage).toBeNull();
+    });
+
+    it("marks extraction idle when a snapshot reports topic extraction completed", () => {
+      const store = createForgePageStore();
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
+
+      store.send({
+        type: "topicSnapshotSynced",
+        sessionId: 15,
+        sessionCreatedAt: "2026-02-27T12:00:01.000Z",
+        sessionStatus: "topics_extracted",
+        sessionErrorMessage: null,
+        topicsByChunk: [{ chunkId: 12, sequenceOrder: 0, topics: ["alpha"] }],
+      });
+
+      expect(ctx(store).extractState).toEqual({ status: "idle" });
+      expect(ctx(store).activeExtractionStartedAt).toBeNull();
+    });
+
+    it("marks extraction errored when a snapshot reports a session error", () => {
+      const store = createForgePageStore();
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
+
+      store.send({
+        type: "topicSnapshotSynced",
+        sessionId: 16,
+        sessionCreatedAt: "2026-02-27T12:00:01.000Z",
+        sessionStatus: "error",
+        sessionErrorMessage: "Topic extraction failed",
+        topicsByChunk: [],
+      });
+
+      expect(ctx(store).extractState).toEqual({
+        status: "error",
+        message: "Topic extraction failed",
+      });
+      expect(ctx(store).activeExtractionStartedAt).toBeNull();
     });
   });
 
@@ -567,6 +669,7 @@ describe("forge-page-store topic selection", () => {
       store.send({
         type: "resumeSession",
         currentStep: "cards",
+        extractState: { status: "idle" },
         selectedSource: pdfSource("/tmp/resume.pdf"),
         sessionId: 77,
         targetDeckPath: "/workspace/decks/resume.md",
@@ -582,7 +685,7 @@ describe("forge-page-store topic selection", () => {
       expect(state.selectedTopicKeys).toBe(resumeKeys);
       expect(state.targetDeckPath).toBe("/workspace/decks/resume.md");
       expect(state.extractState).toEqual({ status: "idle" });
-      expect(state.extractSummary?.sessionId).toBe(77);
+      expect(state.extractSummary).toBeNull();
     });
 
     it("sets step to topics when resuming a topics session", () => {
@@ -590,6 +693,7 @@ describe("forge-page-store topic selection", () => {
       store.send({
         type: "resumeSession",
         currentStep: "topics",
+        extractState: { status: "idle" },
         selectedSource: pdfSource("/tmp/topics.pdf"),
         sessionId: 88,
         targetDeckPath: null,
@@ -606,6 +710,7 @@ describe("forge-page-store topic selection", () => {
       store.send({
         type: "resumeSession",
         currentStep: "topics",
+        extractState: { status: "idle" },
         selectedSource: {
           kind: "text",
           sourceLabel: "Pasted text",
@@ -622,6 +727,50 @@ describe("forge-page-store topic selection", () => {
         sourceLabel: "Pasted text",
         text: null,
       });
+      expect(ctx(store).sourceEntryMode).toBe("text-editor");
+    });
+
+    it("keeps extraction polling active when resuming a topics_extracting session", () => {
+      const store = createForgePageStore();
+      store.send({
+        type: "resumeSession",
+        currentStep: "topics",
+        extractState: { status: "extracting" },
+        selectedSource: {
+          kind: "text",
+          sourceLabel: "Pasted text",
+          text: null,
+        },
+        sessionId: 90,
+        targetDeckPath: null,
+        topicsByChunk: [],
+        selectedTopicKeys: new Set<string>(),
+      });
+
+      expect(ctx(store).currentStep).toBe("topics");
+      expect(ctx(store).extractState).toEqual({ status: "extracting" });
+      expect(ctx(store).activeExtractionSessionId).toBe(90);
+    });
+
+    it("does not let a stale snapshot downgrade a completed extraction back to extracting", () => {
+      const store = createForgePageStore();
+      store.send({
+        type: "extractionSuccess",
+        duplicateOfSessionId: null,
+        extraction: EXTRACTION,
+        topicsByChunk: TWO_CHUNKS,
+      });
+
+      store.send({
+        type: "topicSnapshotSynced",
+        sessionId: EXTRACTION.sessionId,
+        sessionCreatedAt: "2026-02-27T12:00:01.000Z",
+        sessionStatus: "topics_extracting",
+        sessionErrorMessage: null,
+        topicsByChunk: TWO_CHUNKS,
+      });
+
+      expect(ctx(store).extractState).toEqual({ status: "idle" });
     });
 
     it("clears prior state from a dirty store", () => {
@@ -643,6 +792,7 @@ describe("forge-page-store topic selection", () => {
       store.send({
         type: "resumeSession",
         currentStep: "cards",
+        extractState: { status: "idle" },
         selectedSource: pdfSource("/tmp/clean.pdf"),
         sessionId: 99,
         targetDeckPath: null,
@@ -676,6 +826,7 @@ describe("forge-page-store topic selection", () => {
       store.send({
         type: "resumeSession",
         currentStep: "cards",
+        extractState: { status: "idle" },
         selectedSource: pdfSource("/f.pdf"),
         sessionId: 1,
         targetDeckPath: null,

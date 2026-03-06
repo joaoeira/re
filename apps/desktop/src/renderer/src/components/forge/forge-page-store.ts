@@ -1,4 +1,5 @@
 import { createStore } from "@xstate/store";
+import type { ForgeSessionStatus } from "@shared/rpc/schemas/forge";
 
 import type { ForgeSelectedSource } from "./forge-source";
 
@@ -34,6 +35,7 @@ export type ChunkTopics = {
 };
 
 export type ForgeStep = "source" | "topics" | "cards";
+export type ForgeSourceEntryMode = "picker" | "text-editor";
 
 export const topicKey = (chunkId: number, topicIndex: number): string => `${chunkId}:${topicIndex}`;
 
@@ -46,7 +48,9 @@ export type TopicExpandedCardPanelMap = ReadonlyMap<
 
 type ForgePageContext = {
   readonly currentStep: ForgeStep;
+  readonly sourceEntryMode: ForgeSourceEntryMode;
   readonly selectedSource: ForgeSelectedSource | null;
+  readonly textDraft: string;
   readonly targetDeckPath: string | null;
   readonly duplicateOfSessionId: number | null;
   readonly previewState: PreviewState;
@@ -72,7 +76,9 @@ const emptyTopicExpandedCardPanelMap: TopicExpandedCardPanelMap = new Map<
 
 const initialForgePageContext = (): ForgePageContext => ({
   currentStep: "source",
+  sourceEntryMode: "picker",
   selectedSource: null,
+  textDraft: "",
   targetDeckPath: null,
   duplicateOfSessionId: null,
   previewState: { status: "idle" },
@@ -88,6 +94,28 @@ const initialForgePageContext = (): ForgePageContext => ({
   expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
   resumeErrorMessage: null,
 });
+
+const extractStateFromSessionStatus = (
+  status: ForgeSessionStatus,
+  errorMessage: string | null,
+): ExtractState => {
+  switch (status) {
+    case "created":
+    case "extracting":
+    case "extracted":
+    case "topics_extracting":
+      return { status: "extracting" };
+    case "error":
+      return {
+        status: "error",
+        message: errorMessage ?? "Session extraction failed.",
+      };
+    case "topics_extracted":
+    case "generating":
+    case "ready":
+      return { status: "idle" };
+  }
+};
 
 const sortChunks = (chunks: ReadonlyArray<ChunkTopics>): ReadonlyArray<ChunkTopics> =>
   chunks
@@ -117,37 +145,60 @@ const pruneSelectedTopicKeys = (
   return next.size === selectedTopicKeys.size ? selectedTopicKeys : next;
 };
 
-const pruneTopicCardIdMap = (
-  source: TopicCardIdMap,
+const pruneMapByKeys = <V>(
+  source: ReadonlyMap<string, V>,
   selectedTopicKeys: ReadonlySet<string>,
-): TopicCardIdMap => {
+  cloneValue: (value: V) => V,
+): ReadonlyMap<string, V> => {
   if (source.size === 0) return source;
 
-  const next = new Map<string, ReadonlySet<number>>();
-  source.forEach((cardIds, key) => {
+  const next = new Map<string, V>();
+  source.forEach((value, key) => {
     if (!selectedTopicKeys.has(key)) return;
-    if (cardIds.size === 0) return;
-    next.set(key, new Set(cardIds));
+    if (value instanceof Set || value instanceof Map) {
+      if (value.size === 0) return;
+    }
+    next.set(key, cloneValue(value));
   });
 
   return next.size === source.size ? source : next;
 };
+
+const pruneTopicCardIdMap = (
+  source: TopicCardIdMap,
+  selectedTopicKeys: ReadonlySet<string>,
+): TopicCardIdMap => pruneMapByKeys(source, selectedTopicKeys, (cardIds) => new Set(cardIds));
 
 const pruneExpandedCardPanelMap = (
   source: TopicExpandedCardPanelMap,
   selectedTopicKeys: ReadonlySet<string>,
-): TopicExpandedCardPanelMap => {
-  if (source.size === 0) return source;
+): TopicExpandedCardPanelMap =>
+  pruneMapByKeys(source, selectedTopicKeys, (panelsByCardId) => new Map(panelsByCardId));
 
-  const next = new Map<string, ReadonlyMap<number, ForgeCardExpandedPanel>>();
-  source.forEach((panelsByCardId, key) => {
-    if (!selectedTopicKeys.has(key)) return;
-    if (panelsByCardId.size === 0) return;
-    next.set(key, new Map(panelsByCardId));
-  });
-
-  return next.size === source.size ? source : next;
-};
+const withPrunedSelections = (
+  context: ForgePageContext,
+  selectedTopicKeys: ReadonlySet<string>,
+): Pick<
+  ForgePageContext,
+  | "selectedTopicKeys"
+  | "activeTopicKey"
+  | "deletedCardIdsByTopicKey"
+  | "expandedCardPanelsByTopicKey"
+> => ({
+  selectedTopicKeys,
+  activeTopicKey:
+    context.activeTopicKey && selectedTopicKeys.has(context.activeTopicKey)
+      ? context.activeTopicKey
+      : null,
+  deletedCardIdsByTopicKey: pruneTopicCardIdMap(
+    context.deletedCardIdsByTopicKey,
+    selectedTopicKeys,
+  ),
+  expandedCardPanelsByTopicKey: pruneExpandedCardPanelMap(
+    context.expandedCardPanelsByTopicKey,
+    selectedTopicKeys,
+  ),
+});
 
 const withTopicCardId = (
   source: TopicCardIdMap,
@@ -257,13 +308,47 @@ export const createForgePageStore = () =>
           message: event.message,
         },
       }),
+      openTextEditor: (context) => ({
+        ...initialForgePageContext(),
+        sourceEntryMode: "text-editor" as const,
+        textDraft:
+          context.selectedSource?.kind === "text" && context.selectedSource.text !== null
+            ? context.selectedSource.text
+            : context.textDraft,
+      }),
+      setTextDraft: (context, event: { text: string }) => ({
+        ...context,
+        sourceEntryMode: "text-editor" as const,
+        textDraft: event.text,
+        selectedSource:
+          context.selectedSource?.kind === "text"
+            ? {
+                ...context.selectedSource,
+                text: event.text,
+              }
+            : context.selectedSource,
+        previewState: { status: "idle" as const },
+        extractState:
+          context.extractState.status === "error"
+            ? ({ status: "idle" } as const)
+            : context.extractState,
+      }),
       setSelectedSource: (context, event: { selectedSource: ForgeSelectedSource }) => ({
         ...context,
         currentStep: "source" as const,
+        sourceEntryMode:
+          event.selectedSource.kind === "text" ? ("text-editor" as const) : ("picker" as const),
         selectedSource: event.selectedSource,
+        textDraft:
+          event.selectedSource.kind === "text"
+            ? (event.selectedSource.text ?? context.textDraft)
+            : "",
         targetDeckPath: null,
         duplicateOfSessionId: null,
-        previewState: { status: "loading" as const },
+        previewState:
+          event.selectedSource.kind === "pdf"
+            ? ({ status: "loading" } as const)
+            : ({ status: "idle" } as const),
         extractState: { status: "idle" as const },
         activeExtractionStartedAt: null,
         activeExtractionSessionId: null,
@@ -328,19 +413,7 @@ export const createForgePageStore = () =>
         return {
           ...context,
           topicsByChunk: nextTopicsByChunk,
-          selectedTopicKeys: nextSelectedTopicKeys,
-          activeTopicKey:
-            context.activeTopicKey && nextSelectedTopicKeys.has(context.activeTopicKey)
-              ? context.activeTopicKey
-              : null,
-          deletedCardIdsByTopicKey: pruneTopicCardIdMap(
-            context.deletedCardIdsByTopicKey,
-            nextSelectedTopicKeys,
-          ),
-          expandedCardPanelsByTopicKey: pruneExpandedCardPanelMap(
-            context.expandedCardPanelsByTopicKey,
-            nextSelectedTopicKeys,
-          ),
+          ...withPrunedSelections(context, nextSelectedTopicKeys),
         };
       },
       topicSnapshotSynced: (
@@ -348,6 +421,8 @@ export const createForgePageStore = () =>
         event: {
           sessionId: number;
           sessionCreatedAt: string;
+          sessionStatus: ForgeSessionStatus;
+          sessionErrorMessage: string | null;
           topicsByChunk: ReadonlyArray<ChunkTopics>;
         },
       ) => {
@@ -372,25 +447,26 @@ export const createForgePageStore = () =>
           context.selectedTopicKeys,
           nextTopicsByChunk,
         );
+        const nextExtractState = extractStateFromSessionStatus(
+          event.sessionStatus,
+          event.sessionErrorMessage,
+        );
+        const guardedExtractState =
+          context.extractSummary !== null &&
+          context.extractState.status !== "extracting" &&
+          nextExtractState.status === "extracting"
+            ? context.extractState
+            : nextExtractState;
 
         return {
           ...context,
           activeExtractionSessionId: event.sessionId,
+          activeExtractionStartedAt:
+            guardedExtractState.status === "extracting" ? context.activeExtractionStartedAt : null,
           topicSyncErrorMessage: null,
+          extractState: guardedExtractState,
           topicsByChunk: nextTopicsByChunk,
-          selectedTopicKeys: nextSelectedTopicKeys,
-          activeTopicKey:
-            context.activeTopicKey && nextSelectedTopicKeys.has(context.activeTopicKey)
-              ? context.activeTopicKey
-              : null,
-          deletedCardIdsByTopicKey: pruneTopicCardIdMap(
-            context.deletedCardIdsByTopicKey,
-            nextSelectedTopicKeys,
-          ),
-          expandedCardPanelsByTopicKey: pruneExpandedCardPanelMap(
-            context.expandedCardPanelsByTopicKey,
-            nextSelectedTopicKeys,
-          ),
+          ...withPrunedSelections(context, nextSelectedTopicKeys),
         };
       },
       topicSnapshotError: (context, event: { message: string }) => ({
@@ -413,6 +489,11 @@ export const createForgePageStore = () =>
         return {
           ...context,
           currentStep: "topics" as const,
+          sourceEntryMode:
+            context.selectedSource?.kind === "text"
+              ? ("text-editor" as const)
+              : ("picker" as const),
+          textDraft: "",
           targetDeckPath: null,
           duplicateOfSessionId: event.duplicateOfSessionId,
           activeExtractionStartedAt: null,
@@ -421,24 +502,18 @@ export const createForgePageStore = () =>
           extractSummary: event.extraction,
           topicsByChunk: nextTopicsByChunk,
           extractState: { status: "idle" as const },
-          selectedTopicKeys: nextSelectedTopicKeys,
-          activeTopicKey:
-            context.activeTopicKey && nextSelectedTopicKeys.has(context.activeTopicKey)
-              ? context.activeTopicKey
-              : null,
-          deletedCardIdsByTopicKey: pruneTopicCardIdMap(
-            context.deletedCardIdsByTopicKey,
-            nextSelectedTopicKeys,
-          ),
-          expandedCardPanelsByTopicKey: pruneExpandedCardPanelMap(
-            context.expandedCardPanelsByTopicKey,
-            nextSelectedTopicKeys,
-          ),
+          ...withPrunedSelections(context, nextSelectedTopicKeys),
         };
       },
       extractionError: (context, event: { message: string }) => ({
         ...context,
         currentStep: "source" as const,
+        sourceEntryMode:
+          context.selectedSource?.kind === "text" ? ("text-editor" as const) : ("picker" as const),
+        textDraft:
+          context.selectedSource?.kind === "text" && context.selectedSource.text !== null
+            ? context.selectedSource.text
+            : context.textDraft,
         targetDeckPath: null,
         activeExtractionStartedAt: null,
         activeExtractionSessionId: null,
@@ -458,16 +533,7 @@ export const createForgePageStore = () =>
         else next.add(key);
         return {
           ...context,
-          selectedTopicKeys: next,
-          activeTopicKey:
-            context.activeTopicKey && next.has(context.activeTopicKey)
-              ? context.activeTopicKey
-              : null,
-          deletedCardIdsByTopicKey: pruneTopicCardIdMap(context.deletedCardIdsByTopicKey, next),
-          expandedCardPanelsByTopicKey: pruneExpandedCardPanelMap(
-            context.expandedCardPanelsByTopicKey,
-            next,
-          ),
+          ...withPrunedSelections(context, next),
         };
       },
       toggleAllChunk: (context, event: { chunkId: number; select: boolean }) => {
@@ -481,16 +547,7 @@ export const createForgePageStore = () =>
         });
         return {
           ...context,
-          selectedTopicKeys: next,
-          activeTopicKey:
-            context.activeTopicKey && next.has(context.activeTopicKey)
-              ? context.activeTopicKey
-              : null,
-          deletedCardIdsByTopicKey: pruneTopicCardIdMap(context.deletedCardIdsByTopicKey, next),
-          expandedCardPanelsByTopicKey: pruneExpandedCardPanelMap(
-            context.expandedCardPanelsByTopicKey,
-            next,
-          ),
+          ...withPrunedSelections(context, next),
         };
       },
       selectAllTopics: (context) => {
@@ -500,12 +557,7 @@ export const createForgePageStore = () =>
         });
         return {
           ...context,
-          selectedTopicKeys: next,
-          deletedCardIdsByTopicKey: pruneTopicCardIdMap(context.deletedCardIdsByTopicKey, next),
-          expandedCardPanelsByTopicKey: pruneExpandedCardPanelMap(
-            context.expandedCardPanelsByTopicKey,
-            next,
-          ),
+          ...withPrunedSelections(context, next),
         };
       },
       deselectAllTopics: (context) => ({
@@ -568,6 +620,7 @@ export const createForgePageStore = () =>
         event: {
           currentStep: ForgeStep;
           selectedSource: ForgeSelectedSource | null;
+          extractState: ExtractState;
           sessionId: number;
           targetDeckPath: string | null;
           topicsByChunk: ReadonlyArray<ChunkTopics>;
@@ -576,17 +629,13 @@ export const createForgePageStore = () =>
       ) => ({
         ...initialForgePageContext(),
         currentStep: event.currentStep,
+        sourceEntryMode:
+          event.selectedSource?.kind === "text" ? ("text-editor" as const) : ("picker" as const),
         selectedSource: event.selectedSource,
         targetDeckPath: event.targetDeckPath,
         activeExtractionSessionId: event.sessionId,
-        extractSummary: {
-          sessionId: event.sessionId,
-          textLength: 0,
-          preview: "",
-          totalPages: 0,
-          chunkCount: 0,
-        },
-        extractState: { status: "idle" as const },
+        extractSummary: null,
+        extractState: event.extractState,
         topicsByChunk: event.topicsByChunk,
         selectedTopicKeys: event.selectedTopicKeys,
       }),

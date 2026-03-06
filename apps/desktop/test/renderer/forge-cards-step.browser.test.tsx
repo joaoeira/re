@@ -258,6 +258,7 @@ const createCardsInvoke = (options?: {
           session: {
             id: sessionId,
             sourceKind: "pdf",
+            sourceLabel: "source.pdf",
             sourceFilePath: "/forge/source.pdf",
             deckPath: null,
             sourceFingerprint: "fp",
