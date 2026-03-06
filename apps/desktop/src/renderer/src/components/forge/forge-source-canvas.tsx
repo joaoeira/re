@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { FileText, Type, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

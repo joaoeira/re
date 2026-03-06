@@ -1383,7 +1383,12 @@ describe("Forge cards step", () => {
       sourceAnswer: "editable source answer",
     });
 
-    await userEvent.click(screen.getByRole("button", { name: "regenerate", exact: true }));
+    const panelRegenerateButton = screen
+      .getByText("variations generated")
+      .element()
+      .closest("div")!
+      .querySelector("button")!;
+    (panelRegenerateButton as HTMLElement).click();
 
     await expect
       .poll(() => {
@@ -1468,7 +1473,12 @@ describe("Forge cards step", () => {
       sourceAnswer: "edited cloze answer",
     });
 
-    await userEvent.click(screen.getByRole("button", { name: "regenerate", exact: true }));
+    const panelRegenerateButton = screen
+      .getByText("Cloze conversion")
+      .element()
+      .closest("div")!
+      .querySelector("button")!;
+    (panelRegenerateButton as HTMLElement).click();
 
     await expect
       .poll(() => {
