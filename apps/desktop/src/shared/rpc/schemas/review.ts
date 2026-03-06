@@ -1,5 +1,8 @@
 import { ParseResult, Schema } from "@effect/schema";
 import type { ItemId } from "@re/core";
+import type { QAContent as QaContent } from "@re/types";
+
+import { ModelIdSchema } from "./ai";
 
 const NonNegativeIntSchema = Schema.Number.pipe(Schema.int(), Schema.nonNegative());
 const ItemIdSchema = Schema.String.pipe(
@@ -111,6 +114,14 @@ export const LightQueueItemSchema = Schema.Struct({
 
 export type LightQueueItem = typeof LightQueueItemSchema.Type;
 
+export const ReviewCardRefSchema = Schema.Struct({
+  deckPath: Schema.String,
+  cardId: Schema.String,
+  cardIndex: NonNegativeIntSchema,
+});
+
+export type ReviewCardRef = typeof ReviewCardRefSchema.Type;
+
 export const FSRSGradeSchema = Schema.Literal(0, 1, 2, 3);
 
 export type FSRSGrade = typeof FSRSGradeSchema.Type;
@@ -168,6 +179,76 @@ export const CardContentResultSchema = Schema.Struct({
 });
 
 export type CardContentResult = typeof CardContentResultSchema.Type;
+
+const ReviewAssistantQaContentSchema: Schema.Schema<QaContent> = Schema.Struct({
+  question: Schema.String,
+  answer: Schema.String,
+});
+
+export const ReviewAssistantQaSourceCardSchema = Schema.Struct({
+  cardType: Schema.Literal("qa"),
+  content: ReviewAssistantQaContentSchema,
+});
+
+export type ReviewAssistantQaSourceCard = typeof ReviewAssistantQaSourceCardSchema.Type;
+
+export class ReviewAssistantUnsupportedCardTypeError extends Schema.TaggedError<ReviewAssistantUnsupportedCardTypeError>(
+  "@re/desktop/rpc/ReviewAssistantUnsupportedCardTypeError",
+)("assistant_unsupported_card_type", {
+  cardType: Schema.String,
+  message: Schema.String,
+}) {}
+
+export const ReviewAssistantSourceCardResultSchema = Schema.Struct({
+  sourceCard: ReviewAssistantQaSourceCardSchema,
+});
+
+export type ReviewAssistantSourceCardResult = typeof ReviewAssistantSourceCardResultSchema.Type;
+
+export const ReviewAssistantSourceCardErrorSchema = Schema.Union(
+  CardContentErrorSchema,
+  ReviewAssistantUnsupportedCardTypeError,
+);
+
+export type ReviewAssistantSourceCardError = typeof ReviewAssistantSourceCardErrorSchema.Type;
+
+export const ReviewGeneratePermutationsInputSchema = Schema.Struct({
+  deckPath: Schema.String,
+  cardId: Schema.String,
+  cardIndex: NonNegativeIntSchema,
+  instruction: Schema.optional(Schema.String),
+  model: Schema.optional(ModelIdSchema),
+});
+
+export type ReviewGeneratePermutationsInput = typeof ReviewGeneratePermutationsInputSchema.Type;
+
+export const ReviewGeneratedPermutationSchema = Schema.Struct({
+  id: Schema.String.pipe(Schema.nonEmptyString()),
+  question: Schema.String.pipe(Schema.nonEmptyString()),
+  answer: Schema.String.pipe(Schema.nonEmptyString()),
+});
+
+export type ReviewGeneratedPermutation = typeof ReviewGeneratedPermutationSchema.Type;
+
+export class ReviewPermutationGenerationError extends Schema.TaggedError<ReviewPermutationGenerationError>(
+  "@re/desktop/rpc/ReviewPermutationGenerationError",
+)("review_permutation_generation_error", {
+  message: Schema.String,
+}) {}
+
+export const ReviewGeneratePermutationsResultSchema = Schema.Struct({
+  permutations: Schema.Array(ReviewGeneratedPermutationSchema),
+});
+
+export type ReviewGeneratePermutationsResult = typeof ReviewGeneratePermutationsResultSchema.Type;
+
+export const ReviewGeneratePermutationsErrorSchema = Schema.Union(
+  CardContentErrorSchema,
+  ReviewAssistantUnsupportedCardTypeError,
+  ReviewPermutationGenerationError,
+);
+
+export type ReviewGeneratePermutationsError = typeof ReviewGeneratePermutationsErrorSchema.Type;
 
 export const BuildReviewQueueResultSchema = Schema.Struct({
   items: Schema.Array(LightQueueItemSchema),

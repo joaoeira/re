@@ -39,8 +39,10 @@ import { GetGitSyncSnapshot, RunGitSync } from "./contracts/git";
 import {
   BuildReviewQueue,
   GetCardContent,
+  GetReviewAssistantSourceCard,
   GetReviewStats,
   ListReviewHistory,
+  ReviewGeneratePermutations,
   ScheduleReview,
   UndoReview,
 } from "./contracts/review";
@@ -85,6 +87,8 @@ export const appContract = defineContract({
     SelectDirectory,
     BuildReviewQueue,
     GetCardContent,
+    GetReviewAssistantSourceCard,
+    ReviewGeneratePermutations,
     ScheduleReview,
     UndoReview,
     GetReviewStats,

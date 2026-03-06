@@ -2,7 +2,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { inferType } from "@re/core";
-import { ClozeType, QAType } from "@re/types";
+import { ClozeType, QAType, type QAContent } from "@re/types";
 import { DeckManager, ReviewQueueBuilder, Scheduler, computeDueDate } from "@re/workspace";
 import type { FileSystem, Path } from "@effect/platform";
 import { Effect, Exit } from "effect";
@@ -13,8 +13,11 @@ import { findCardLocationById } from "@main/card-location";
 import {
   AnalyticsRepositoryService,
   DeckWriteCoordinatorService,
+  ForgePromptRuntimeService,
   SettingsRepositoryService,
 } from "@main/di";
+import { GenerateReviewPermutationsPromptSpec } from "@main/review/prompts/generate-review-permutations";
+import type { SettingsRepository } from "@main/settings/repository";
 import { toErrorMessage } from "@main/utils/format";
 import type { AppContract } from "@shared/rpc/contracts";
 import {
@@ -22,6 +25,8 @@ import {
   CardContentNotFoundError,
   CardContentParseError,
   CardContentReadError,
+  ReviewAssistantUnsupportedCardTypeError,
+  ReviewPermutationGenerationError,
   ReviewOperationError,
   UndoConflictError,
   UndoSafetyUnavailableError,
@@ -41,6 +46,8 @@ const reviewItemTypes = [QAType, ClozeType] as const;
 type ReviewHandlerKeys =
   | "BuildReviewQueue"
   | "GetCardContent"
+  | "GetReviewAssistantSourceCard"
+  | "ReviewGeneratePermutations"
   | "ScheduleReview"
   | "UndoReview"
   | "GetReviewStats"
@@ -56,11 +63,202 @@ type ReviewHandlerRuntime =
 const failWithReviewOperationError = (error: unknown) =>
   Effect.fail(new ReviewOperationError({ message: toErrorMessage(error) }));
 
+type ReviewRenderedCardSpec = {
+  readonly prompt: string;
+  readonly reveal: string;
+  readonly cardType: "qa" | "cloze";
+};
+
+type ResolvedReviewCard =
+  | {
+      readonly cardType: "qa";
+      readonly cardSpec: ReviewRenderedCardSpec;
+      readonly qaContent: QAContent;
+    }
+  | {
+      readonly cardType: "cloze";
+      readonly cardSpec: ReviewRenderedCardSpec;
+    };
+
+const loadResolvedReviewCard = (options: {
+  readonly settingsRepository: SettingsRepository;
+  readonly deckPath: string;
+  readonly cardId: string;
+  readonly cardIndex: number;
+}): Effect.Effect<
+  ResolvedReviewCard,
+  | CardContentReadError
+  | CardContentNotFoundError
+  | CardContentParseError
+  | CardContentIndexOutOfBoundsError,
+  DeckManager
+> =>
+  Effect.gen(function* () {
+    yield* validateDeckAccess<CardContentReadError | CardContentNotFoundError>(
+      options.settingsRepository,
+      {
+        deckPath: options.deckPath,
+        mapSettingsError: (error) => new CardContentReadError({ message: toErrorMessage(error) }),
+        makeMissingRootError: () =>
+          new CardContentNotFoundError({
+            message: "Workspace root path is not configured.",
+          }),
+        makeOutsideRootError: (invalidDeckPath) =>
+          new CardContentNotFoundError({
+            message: `Deck path is outside workspace root: ${invalidDeckPath}`,
+          }),
+      },
+    );
+
+    const deckManager = yield* DeckManager;
+    const parsed = yield* deckManager.readDeck(options.deckPath).pipe(
+      Effect.catchTags({
+        DeckNotFound: (e) => Effect.fail(new CardContentNotFoundError({ message: e.message })),
+        DeckReadError: (e) => Effect.fail(new CardContentReadError({ message: e.message })),
+        DeckParseError: (e) => Effect.fail(new CardContentParseError({ message: e.message })),
+      }),
+    );
+    const found = findCardLocationById(parsed, options.cardId);
+
+    if (!found) {
+      return yield* Effect.fail(
+        new CardContentNotFoundError({
+          message: `Card not found: ${options.cardId}`,
+        }),
+      );
+    }
+
+    const inferred = yield* inferType(reviewItemTypes, found.item.content).pipe(
+      Effect.mapError((error) => new CardContentParseError({ message: error.message })),
+    );
+
+    const cards = inferred.type.cards(inferred.content);
+    const cardSpec = cards[options.cardIndex];
+
+    if (!cardSpec) {
+      return yield* Effect.fail(
+        new CardContentIndexOutOfBoundsError({
+          cardIndex: options.cardIndex,
+          availableCards: cards.length,
+        }),
+      );
+    }
+
+    if (cardSpec.cardType !== "qa" && cardSpec.cardType !== "cloze") {
+      return yield* Effect.fail(
+        new CardContentParseError({
+          message: `Unsupported card type: ${cardSpec.cardType}`,
+        }),
+      );
+    }
+
+    const renderedCardSpec: ReviewRenderedCardSpec = {
+      prompt: cardSpec.prompt,
+      reveal: cardSpec.reveal,
+      cardType: cardSpec.cardType,
+    };
+
+    if (inferred.type === QAType) {
+      return {
+        cardType: "qa",
+        cardSpec: renderedCardSpec,
+        qaContent: inferred.content as QAContent,
+      };
+    }
+
+    if (inferred.type === ClozeType) {
+      return {
+        cardType: "cloze",
+        cardSpec: renderedCardSpec,
+      };
+    }
+
+    return yield* Effect.fail(
+      new CardContentParseError({
+        message: `Unsupported inferred type: ${inferred.type.name}`,
+      }),
+    );
+  });
+
+const resolveReviewAssistantQaSourceCard = (options: {
+  readonly settingsRepository: SettingsRepository;
+  readonly deckPath: string;
+  readonly cardId: string;
+  readonly cardIndex: number;
+}): Effect.Effect<
+  {
+    readonly sourceCard: {
+      readonly cardType: "qa";
+      readonly content: QAContent;
+    };
+  },
+  | CardContentReadError
+  | CardContentNotFoundError
+  | CardContentParseError
+  | CardContentIndexOutOfBoundsError
+  | ReviewAssistantUnsupportedCardTypeError,
+  DeckManager
+> =>
+  loadResolvedReviewCard(options).pipe(
+    Effect.flatMap((resolved) =>
+      resolved.cardType === "qa"
+        ? Effect.succeed({
+            sourceCard: {
+              cardType: "qa" as const,
+              content: resolved.qaContent,
+            },
+          })
+        : Effect.fail(
+            new ReviewAssistantUnsupportedCardTypeError({
+              cardType: resolved.cardType,
+              message: `Permutations are not supported for ${resolved.cardType} review cards.`,
+            }),
+          ),
+    ),
+  );
+
+const normalizeGeneratedPermutations = (
+  permutations: ReadonlyArray<{ readonly question: string; readonly answer: string }>,
+  source: QAContent,
+): ReadonlyArray<{ readonly id: string; readonly question: string; readonly answer: string }> => {
+  const normalize = (value: string): string => value.replace(/\s+/g, " ").trim();
+  const sourceQuestion = normalize(source.question);
+  const sourceAnswer = normalize(source.answer);
+  const seen = new Set<string>();
+
+  return permutations
+    .map((permutation) => ({
+      question: normalize(permutation.question),
+      answer: normalize(permutation.answer),
+    }))
+    .filter(
+      (permutation) =>
+        permutation.question.length > 0 &&
+        permutation.answer.length > 0 &&
+        !(permutation.question === sourceQuestion && permutation.answer === sourceAnswer),
+    )
+    .filter((permutation) => {
+      const key = `${permutation.question}\u0000${permutation.answer}`;
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    })
+    .map((permutation) => ({
+      id: randomUUID(),
+      question: permutation.question,
+      answer: permutation.answer,
+    }));
+};
+
 export const createReviewHandlers = () =>
   Effect.gen(function* () {
     const settingsRepository = yield* SettingsRepositoryService;
     const analyticsRepository = yield* AnalyticsRepositoryService;
     const deckWriteCoordinator = yield* DeckWriteCoordinatorService;
+    const forgePromptRuntime = yield* ForgePromptRuntimeService;
 
     return provideHandlerServices({
       BuildReviewQueue: ({ deckPaths, rootPath }) =>
@@ -100,71 +298,57 @@ export const createReviewHandlers = () =>
           };
         }).pipe(Effect.mapError((e) => new ReviewOperationError({ message: toErrorMessage(e) }))),
       GetCardContent: ({ deckPath, cardId, cardIndex }) =>
-        Effect.gen(function* () {
-          yield* validateDeckAccess<CardContentReadError | CardContentNotFoundError>(
-            settingsRepository,
-            {
-              deckPath,
-              mapSettingsError: (error) =>
-                new CardContentReadError({ message: toErrorMessage(error) }),
-              makeMissingRootError: () =>
-                new CardContentNotFoundError({
-                  message: "Workspace root path is not configured.",
-                }),
-              makeOutsideRootError: (invalidDeckPath) =>
-                new CardContentNotFoundError({
-                  message: `Deck path is outside workspace root: ${invalidDeckPath}`,
-                }),
-            },
-          );
-
-          const deckManager = yield* DeckManager;
-          const parsed = yield* deckManager.readDeck(deckPath).pipe(
-            Effect.catchTags({
-              DeckNotFound: (e) =>
-                Effect.fail(new CardContentNotFoundError({ message: e.message })),
-              DeckReadError: (e) => Effect.fail(new CardContentReadError({ message: e.message })),
-              DeckParseError: (e) => Effect.fail(new CardContentParseError({ message: e.message })),
-            }),
-          );
-          const found = findCardLocationById(parsed, cardId);
-
-          if (!found) {
-            return yield* Effect.fail(
-              new CardContentNotFoundError({
-                message: `Card not found: ${cardId}`,
-              }),
-            );
-          }
-
-          const inferred = yield* inferType(reviewItemTypes, found.item.content).pipe(
-            Effect.mapError((error) => new CardContentParseError({ message: error.message })),
-          );
-
-          const cards = inferred.type.cards(inferred.content);
-          const cardSpec = cards[cardIndex];
-
-          if (!cardSpec) {
-            return yield* Effect.fail(
-              new CardContentIndexOutOfBoundsError({
-                cardIndex,
-                availableCards: cards.length,
-              }),
-            );
-          }
-
-          if (cardSpec.cardType !== "qa" && cardSpec.cardType !== "cloze") {
-            return yield* Effect.fail(
-              new CardContentParseError({
-                message: `Unsupported card type: ${cardSpec.cardType}`,
-              }),
-            );
-          }
-
-          return {
+        loadResolvedReviewCard({
+          settingsRepository,
+          deckPath,
+          cardId,
+          cardIndex,
+        }).pipe(
+          Effect.map(({ cardSpec }) => ({
             prompt: cardSpec.prompt,
             reveal: cardSpec.reveal,
-            cardType: cardSpec.cardType as "qa" | "cloze",
+            cardType: cardSpec.cardType,
+          })),
+        ),
+      GetReviewAssistantSourceCard: ({ deckPath, cardId, cardIndex }) =>
+        resolveReviewAssistantQaSourceCard({
+          settingsRepository,
+          deckPath,
+          cardId,
+          cardIndex,
+        }),
+      ReviewGeneratePermutations: ({ deckPath, cardId, cardIndex, instruction, model }) =>
+        Effect.gen(function* () {
+          const { sourceCard } = yield* resolveReviewAssistantQaSourceCard({
+            settingsRepository,
+            deckPath,
+            cardId,
+            cardIndex,
+          });
+
+          const promptResult = yield* forgePromptRuntime
+            .run(
+              GenerateReviewPermutationsPromptSpec,
+              {
+                sourceCard,
+                ...(instruction ? { instruction } : {}),
+              },
+              model ? { model } : undefined,
+            )
+            .pipe(
+              Effect.mapError(
+                (error) =>
+                  new ReviewPermutationGenerationError({
+                    message: toErrorMessage(error),
+                  }),
+              ),
+            );
+
+          return {
+            permutations: normalizeGeneratedPermutations(
+              promptResult.output.permutations,
+              sourceCard.content,
+            ),
           };
         }),
       ScheduleReview: ({ deckPath, cardId, grade }) =>

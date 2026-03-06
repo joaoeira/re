@@ -6,6 +6,12 @@ import {
   CardContentErrorSchema,
   CardContentResultSchema,
   FSRSGradeSchema,
+  ReviewAssistantSourceCardErrorSchema,
+  ReviewAssistantSourceCardResultSchema,
+  ReviewCardRefSchema,
+  ReviewGeneratePermutationsErrorSchema,
+  ReviewGeneratePermutationsInputSchema,
+  ReviewGeneratePermutationsResultSchema,
   ReviewHistoryEntrySchema,
   ReviewOperationError,
   ReviewStatsSchema,
@@ -25,13 +31,23 @@ export const BuildReviewQueue = rpc(
 
 export const GetCardContent = rpc(
   "GetCardContent",
-  Schema.Struct({
-    deckPath: Schema.String,
-    cardId: Schema.String,
-    cardIndex: Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
-  }),
+  ReviewCardRefSchema,
   CardContentResultSchema,
   CardContentErrorSchema,
+);
+
+export const GetReviewAssistantSourceCard = rpc(
+  "GetReviewAssistantSourceCard",
+  ReviewCardRefSchema,
+  ReviewAssistantSourceCardResultSchema,
+  ReviewAssistantSourceCardErrorSchema,
+);
+
+export const ReviewGeneratePermutations = rpc(
+  "ReviewGeneratePermutations",
+  ReviewGeneratePermutationsInputSchema,
+  ReviewGeneratePermutationsResultSchema,
+  ReviewGeneratePermutationsErrorSchema,
 );
 
 export const ScheduleReview = rpc(

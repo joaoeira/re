@@ -29,6 +29,7 @@ type UseReviewSessionResult =
       totalDue: number;
       totalNew: number;
       notice: string | null;
+      loadCycle: number;
       send: DesktopReviewSessionSend;
     };
 
@@ -37,6 +38,7 @@ type ReadyReviewSessionState = {
   readonly totalDue: number;
   readonly totalNew: number;
   readonly notice: string | null;
+  readonly loadCycle: number;
 };
 
 export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionResult {
@@ -127,6 +129,7 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
       totalDue: queue.totalDue,
       totalNew: queue.totalNew,
       notice: refreshReasonRef.current,
+      loadCycle: 0,
     });
     refreshReasonRef.current = null;
 
@@ -156,12 +159,20 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
             totalDue: queue.totalDue,
             totalNew: queue.totalNew,
             notice: refreshReasonRef.current,
+            loadCycle: snapshotValue.matches({ presenting: "loading" }) ? 1 : 0,
           };
         }
+
+        const nextLoadCycle =
+          snapshotValue.matches({ presenting: "loading" }) &&
+          !currentState.snapshot.matches({ presenting: "loading" })
+            ? currentState.loadCycle + 1
+            : currentState.loadCycle;
 
         return {
           ...currentState,
           snapshot: snapshotValue,
+          loadCycle: nextLoadCycle,
         };
       });
     });
@@ -249,6 +260,7 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
     totalDue: readyState.totalDue,
     totalNew: readyState.totalNew,
     notice: readyState.notice,
+    loadCycle: readyState.loadCycle,
     send,
   };
 }

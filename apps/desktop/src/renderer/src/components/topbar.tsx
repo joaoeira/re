@@ -58,6 +58,7 @@ export function Topbar() {
     if (!isReview) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === "Escape") {
         void navigate({ to: "/" });

@@ -1,5 +1,5 @@
-import { useCallback, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Effect } from "effect";
 
@@ -9,9 +9,17 @@ import { CardContent } from "@/components/review-session/card-content";
 import { ReviewActionBar } from "@/components/review-session/review-action-bar";
 import { SessionProgress } from "@/components/review-session/session-progress";
 import { SessionSummary } from "@/components/review-session/session-summary";
+import { ReviewCommandDialog } from "@/components/review-session/review-command-dialog";
+import { ReviewPermutationsSidebar } from "@/components/review-session/review-permutations-sidebar";
 import { Button } from "@/components/ui/button";
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
+import { queryKeys } from "@/lib/query-keys";
+import {
+  toReviewAssistantCardKey,
+  toReviewAssistantCardRef,
+  type ReviewAssistantCardRef,
+} from "@/lib/review-assistant";
 import type { DesktopReviewSessionSnapshot } from "@/machines/desktopReviewSession";
 import type { LightQueueItem } from "@shared/rpc/schemas/review";
 
@@ -19,10 +27,17 @@ type ReviewSessionProps = {
   readonly decks: "all" | string[];
 };
 
+type AssistantPanelState = {
+  readonly type: "permutations";
+  readonly card: ReviewAssistantCardRef;
+  readonly deckName: string;
+};
+
 export function ReviewSession({ decks }: ReviewSessionProps) {
   const navigate = useNavigate();
   const session = useReviewSession(decks);
   const ipc = useIpc();
+  const queryClient = useQueryClient();
   const { mutate: openEditorWindow } = useOpenEditorWindowMutation();
   const { mutate: deleteCard } = useMutation({
     mutationFn: (queueItem: LightQueueItem) =>
@@ -39,6 +54,10 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
       ),
     onError: () => undefined,
   });
+  const [commandDialogOpen, setCommandDialogOpen] = useState(false);
+  const [assistantPanel, setAssistantPanel] = useState<AssistantPanelState | null>(null);
+  const previousLoadCycleRef = useRef<number | null>(null);
+  const assistantSidebarRef = useRef<HTMLDivElement | null>(null);
 
   const getCurrentQueueItem = useCallback(
     (snapshot: DesktopReviewSessionSnapshot): LightQueueItem | undefined =>
@@ -70,6 +89,64 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
     [deleteCard, getCurrentQueueItem],
   );
 
+  const openPermutationsForCurrentCard = useCallback(
+    (snapshot: DesktopReviewSessionSnapshot) => {
+      const queueItem = getCurrentQueueItem(snapshot);
+      const currentCard = snapshot.context.currentCard;
+      const card = toReviewAssistantCardRef(queueItem);
+
+      if (!queueItem || !currentCard || !card || currentCard.cardType !== "qa") {
+        return;
+      }
+
+      setAssistantPanel({
+        type: "permutations",
+        card,
+        deckName: queueItem.deckName,
+      });
+    },
+    [getCurrentQueueItem],
+  );
+
+  const resetAssistant = useCallback(() => {
+    const assistantKey = assistantPanel ? toReviewAssistantCardKey(assistantPanel.card) : null;
+
+    setCommandDialogOpen(false);
+    setAssistantPanel(null);
+    if (assistantKey) {
+      void queryClient.removeQueries({
+        queryKey: queryKeys.reviewAssistantSourceCard(assistantKey),
+        exact: true,
+      });
+    }
+  }, [assistantPanel, queryClient]);
+
+  useEffect(() => {
+    if (session.status !== "ready") {
+      if (assistantPanel !== null || commandDialogOpen) {
+        resetAssistant();
+      }
+      previousLoadCycleRef.current = null;
+      return;
+    }
+
+    if (session.snapshot.matches("complete")) {
+      if (assistantPanel !== null || commandDialogOpen) {
+        resetAssistant();
+      }
+      previousLoadCycleRef.current = session.loadCycle;
+      return;
+    }
+
+    if (
+      previousLoadCycleRef.current !== null &&
+      session.loadCycle !== previousLoadCycleRef.current
+    ) {
+      resetAssistant();
+    }
+    previousLoadCycleRef.current = session.loadCycle;
+  }, [assistantPanel, commandDialogOpen, resetAssistant, session]);
+
   useEffect(() => {
     if (session.status !== "ready") {
       return;
@@ -79,6 +156,32 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
     const isGrading = snapshot.matches({ presenting: "grading" });
 
     const onKeyDown = (event: KeyboardEvent) => {
+      const assistantPanelContainsTarget =
+        event.target instanceof Node
+          ? (assistantSidebarRef.current?.contains(event.target) ?? false)
+          : false;
+      if (
+        shouldSuppressReviewHotkeys({
+          commandDialogOpen,
+          assistantPanelContainsTarget,
+          target: event.target,
+        })
+      ) {
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        if (
+          !snapshot.matches("complete") &&
+          !snapshot.matches({ presenting: "loading" }) &&
+          snapshot.context.currentCard !== null
+        ) {
+          event.preventDefault();
+          setCommandDialogOpen(true);
+        }
+        return;
+      }
+
       if (isGrading) return;
 
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
@@ -129,7 +232,7 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
     return () => {
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [openEditorForCurrentCard, session]);
+  }, [commandDialogOpen, openEditorForCurrentCard, session]);
 
   if (session.status === "loading") {
     return (
@@ -172,38 +275,57 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
   const isShowingPrompt = snapshot.matches({ presenting: "showPrompt" });
   const isShowingAnswer = snapshot.matches({ presenting: "showAnswer" });
   const isGrading = snapshot.matches({ presenting: "grading" });
+  const currentQueueItem = getCurrentQueueItem(snapshot);
+  const canCreatePermutations =
+    !isComplete && !isLoadingCard && snapshot.context.currentCard?.cardType === "qa";
+  const assistantCardKey = toReviewAssistantCardKey(assistantPanel?.card ?? null);
 
   return (
-    <>
-      <div className="relative flex flex-1 flex-col overflow-auto px-6 py-5">
-        {!isComplete && (
-          <SessionProgress
-            done={snapshot.context.currentIndex}
-            total={snapshot.context.queue.length}
-          />
-        )}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1">
+        <div className="relative flex min-w-0 flex-1 flex-col overflow-auto px-6 py-5">
+          {!isComplete && (
+            <SessionProgress
+              done={snapshot.context.currentIndex}
+              total={snapshot.context.queue.length}
+            />
+          )}
 
-        {notice && <p className="mb-4 text-center text-sm text-sky-700">{notice}</p>}
-        {snapshot.context.error && (
-          <p className="mb-4 text-center text-sm text-destructive">{snapshot.context.error}</p>
-        )}
+          {notice && <p className="mb-4 text-center text-sm text-sky-700">{notice}</p>}
+          {snapshot.context.error && (
+            <p className="mb-4 text-center text-sm text-destructive">{snapshot.context.error}</p>
+          )}
 
-        {isComplete ? (
-          <SessionSummary
-            stats={snapshot.context.sessionStats}
-            canUndo={snapshot.context.reviewLogStack.length > 0}
-            onUndo={() => send({ type: "UNDO" })}
-            onBack={() => void navigate({ to: "/" })}
-          />
-        ) : isLoadingCard || snapshot.context.currentCard === null ? (
-          <p className="text-center text-sm text-muted-foreground">Loading card...</p>
-        ) : (
-          <CardContent
-            card={snapshot.context.currentCard}
-            deckName={snapshot.context.queue[snapshot.context.currentIndex]?.deckName ?? ""}
-            isRevealed={isShowingAnswer || isGrading}
-          />
-        )}
+          {isComplete ? (
+            <SessionSummary
+              stats={snapshot.context.sessionStats}
+              canUndo={snapshot.context.reviewLogStack.length > 0}
+              onUndo={() => send({ type: "UNDO" })}
+              onBack={() => void navigate({ to: "/" })}
+            />
+          ) : isLoadingCard || snapshot.context.currentCard === null ? (
+            <p className="text-center text-sm text-muted-foreground">Loading card...</p>
+          ) : (
+            <CardContent
+              card={snapshot.context.currentCard}
+              deckName={snapshot.context.queue[snapshot.context.currentIndex]?.deckName ?? ""}
+              isRevealed={isShowingAnswer || isGrading}
+            />
+          )}
+        </div>
+
+        {assistantPanel &&
+          assistantPanel.type === "permutations" &&
+          !isLoadingCard &&
+          snapshot.context.currentCard !== null &&
+          assistantCardKey !== null && (
+            <ReviewPermutationsSidebar
+              ref={assistantSidebarRef}
+              card={assistantPanel.card}
+              cardKey={assistantCardKey}
+              onClose={() => setAssistantPanel(null)}
+            />
+          )}
       </div>
 
       {!isComplete && !isLoadingCard && snapshot.context.currentCard !== null && (
@@ -217,6 +339,33 @@ export function ReviewSession({ decks }: ReviewSessionProps) {
           actionsDisabled={isGrading}
         />
       )}
-    </>
+
+      <ReviewCommandDialog
+        open={commandDialogOpen}
+        onOpenChange={setCommandDialogOpen}
+        canCreatePermutations={canCreatePermutations}
+        onCreatePermutations={() => {
+          if (!currentQueueItem) return;
+          openPermutationsForCurrentCard(snapshot);
+        }}
+      />
+    </div>
   );
 }
+
+const isEditableTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+};
+
+const shouldSuppressReviewHotkeys = ({
+  commandDialogOpen,
+  assistantPanelContainsTarget,
+  target,
+}: {
+  readonly commandDialogOpen: boolean;
+  readonly assistantPanelContainsTarget: boolean;
+  readonly target: EventTarget | null;
+}): boolean => commandDialogOpen || assistantPanelContainsTarget || isEditableTarget(target);

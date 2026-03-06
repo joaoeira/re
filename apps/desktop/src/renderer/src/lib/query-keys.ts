@@ -42,4 +42,6 @@ export const queryKeys = {
     ["forgeCardPermutations", sourceCardId] as const,
   forgeCardCloze: (sourceCardId: number | null) => ["forgeCardCloze", sourceCardId] as const,
   reviewBootstrap: (deckSelectionKey: string) => ["reviewBootstrap", deckSelectionKey] as const,
+  reviewAssistantSourceCard: (cardKey: string | null) =>
+    ["reviewAssistantSourceCard", cardKey] as const,
 };

@@ -41,7 +41,7 @@ export default defineConfig({
           alias: sharedAliases,
         },
         optimizeDeps: {
-          include: ["@tanstack/react-query"],
+          include: ["@tanstack/react-query", "@base-ui/react/dialog"],
         },
         test: {
           name: "browser",

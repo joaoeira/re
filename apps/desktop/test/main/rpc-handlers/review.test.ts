@@ -9,9 +9,59 @@ import {
   createNoopReviewAnalyticsRepository,
   type ReviewAnalyticsRepository,
 } from "@main/analytics";
+import type { ForgePromptRuntime } from "@main/forge/services/prompt-runtime";
 import { parseFile } from "@re/core";
 
 import { createHandlersWithOverrides } from "./helpers";
+
+const createReviewPromptRuntime = (
+  implementation: (input: {
+    readonly sourceCard: {
+      readonly cardType: "qa";
+      readonly content: {
+        readonly question: string;
+        readonly answer: string;
+      };
+    };
+    readonly instruction?: string;
+  }) => Effect.Effect<
+    ReadonlyArray<{ readonly question: string; readonly answer: string }>,
+    unknown
+  >,
+): ForgePromptRuntime =>
+  ({
+    run: <Input, Output>(_spec: unknown, input: Input) =>
+      implementation(
+        input as {
+          readonly sourceCard: {
+            readonly cardType: "qa";
+            readonly content: {
+              readonly question: string;
+              readonly answer: string;
+            };
+          };
+          readonly instruction?: string;
+        },
+      ).pipe(
+        Effect.map(
+          (permutations) =>
+            ({
+              output: {
+                permutations,
+              } as Output,
+              rawText: JSON.stringify({ permutations }),
+              metadata: {
+                promptId: "review/generate-permutations",
+                promptVersion: "1",
+                model: "test:model",
+                attemptCount: 1,
+                promptHash: "test-hash",
+                outputChars: 0,
+              },
+            }) as const,
+        ),
+      ),
+  }) as ForgePromptRuntime;
 
 describe("review handlers", () => {
   it("builds a review queue and returns QA card content", async () => {
@@ -122,6 +172,188 @@ Answer
       expect(restoredCard.due).toEqual(scheduled.previousCard.due);
       expect(restoredCard.stability.raw).toBe(scheduled.previousCard.stability.raw);
       expect(restoredCard.difficulty.raw).toBe(scheduled.previousCard.difficulty.raw);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(settingsRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("returns a QA assistant source card for the current review card", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-source-card-"));
+    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));
+    const settingsFilePath = path.join(settingsRoot, "settings.json");
+    const deckPath = path.join(rootPath, "qa.md");
+
+    try {
+      await fs.writeFile(
+        deckPath,
+        `<!--@ qa-card 0 0 0 0-->
+Question
+---
+Answer
+`,
+        "utf8",
+      );
+
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const sourceCard = await Effect.runPromise(
+        handlers.GetReviewAssistantSourceCard({
+          deckPath,
+          cardId: "qa-card",
+          cardIndex: 0,
+        }),
+      );
+
+      expect(sourceCard.sourceCard.cardType).toBe("qa");
+      expect(sourceCard.sourceCard.content).toEqual({
+        question: "Question",
+        answer: "Answer",
+      });
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(settingsRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("returns assistant_unsupported_card_type for cloze source card reads", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-source-cloze-"));
+    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));
+    const settingsFilePath = path.join(settingsRoot, "settings.json");
+    const deckPath = path.join(rootPath, "cloze.md");
+
+    try {
+      await fs.writeFile(
+        deckPath,
+        `<!--@ cloze-card 0 0 0 0-->
+The capital of France is {{c1::Paris}}.
+`,
+        "utf8",
+      );
+
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const exit = await Effect.runPromiseExit(
+        handlers.GetReviewAssistantSourceCard({
+          deckPath,
+          cardId: "cloze-card",
+          cardIndex: 0,
+        }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected GetReviewAssistantSourceCard to fail.");
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("assistant_unsupported_card_type");
+      }
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(settingsRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("generates normalized permutations for a QA review card", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-generate-"));
+    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));
+    const settingsFilePath = path.join(settingsRoot, "settings.json");
+    const deckPath = path.join(rootPath, "qa.md");
+
+    try {
+      await fs.writeFile(
+        deckPath,
+        `<!--@ qa-card 0 0 0 0-->
+Question
+---
+Answer
+`,
+        "utf8",
+      );
+
+      const promptRuntime = createReviewPromptRuntime(() =>
+        Effect.succeed([
+          { question: "  Question  ", answer: "  Answer  " },
+          { question: "Variant question", answer: "Variant answer" },
+          { question: "Variant question", answer: "Variant answer" },
+          { question: "   ", answer: "missing" },
+        ]),
+      );
+
+      const handlers = await createHandlersWithOverrides(settingsFilePath, {
+        forgePromptRuntime: promptRuntime,
+      });
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const result = await Effect.runPromise(
+        handlers.ReviewGeneratePermutations({
+          deckPath,
+          cardId: "qa-card",
+          cardIndex: 0,
+        }),
+      );
+
+      expect(result.permutations).toHaveLength(1);
+      expect(result.permutations[0]?.question).toBe("Variant question");
+      expect(result.permutations[0]?.answer).toBe("Variant answer");
+      expect(result.permutations[0]?.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(settingsRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("maps prompt runtime failures to review_permutation_generation_error", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-generate-fail-"));
+    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));
+    const settingsFilePath = path.join(settingsRoot, "settings.json");
+    const deckPath = path.join(rootPath, "qa.md");
+
+    try {
+      await fs.writeFile(
+        deckPath,
+        `<!--@ qa-card 0 0 0 0-->
+Question
+---
+Answer
+`,
+        "utf8",
+      );
+
+      const promptRuntime = createReviewPromptRuntime(() =>
+        Effect.fail(new Error("model unavailable")),
+      );
+
+      const handlers = await createHandlersWithOverrides(settingsFilePath, {
+        forgePromptRuntime: promptRuntime,
+      });
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const exit = await Effect.runPromiseExit(
+        handlers.ReviewGeneratePermutations({
+          deckPath,
+          cardId: "qa-card",
+          cardIndex: 0,
+        }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected ReviewGeneratePermutations to fail.");
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("review_permutation_generation_error");
+      }
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
       await fs.rm(settingsRoot, { recursive: true, force: true });
@@ -244,6 +476,42 @@ Answer
     }
   });
 
+  it("returns read_error when deck cannot be read in GetReviewAssistantSourceCard", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-source-read-"));
+    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));
+    const settingsFilePath = path.join(settingsRoot, "settings.json");
+    const deckPath = path.join(rootPath, "unreadable.md");
+
+    try {
+      await fs.mkdir(deckPath);
+
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const exit = await Effect.runPromiseExit(
+        handlers.GetReviewAssistantSourceCard({
+          deckPath,
+          cardId: "any-card",
+          cardIndex: 0,
+        }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected GetReviewAssistantSourceCard to fail.");
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("read_error");
+      }
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(settingsRoot, { recursive: true, force: true });
+    }
+  });
+
   it("returns card_index_out_of_bounds when index exceeds inferred cards", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-"));
     const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));
@@ -273,6 +541,50 @@ The capital of France is {{c1::Paris}}.
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isSuccess(exit)) {
         throw new Error("Expected GetCardContent to fail.");
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value._tag).toBe("card_index_out_of_bounds");
+      }
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(settingsRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("returns card_index_out_of_bounds when ReviewGeneratePermutations receives an invalid index", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-generate-oob-"));
+    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));
+    const settingsFilePath = path.join(settingsRoot, "settings.json");
+    const deckPath = path.join(rootPath, "cloze.md");
+
+    try {
+      await fs.writeFile(
+        deckPath,
+        `<!--@ cloze-card 0 0 0 0-->
+The capital of France is {{c1::Paris}}.
+`,
+        "utf8",
+      );
+
+      const handlers = await createHandlersWithOverrides(settingsFilePath, {
+        forgePromptRuntime: createReviewPromptRuntime(() => Effect.succeed([])),
+      });
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const exit = await Effect.runPromiseExit(
+        handlers.ReviewGeneratePermutations({
+          deckPath,
+          cardId: "cloze-card",
+          cardIndex: 1,
+        }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected ReviewGeneratePermutations to fail.");
       }
 
       const failure = Cause.failureOption(exit.cause);
