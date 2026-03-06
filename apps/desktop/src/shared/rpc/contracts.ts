@@ -35,6 +35,7 @@ import {
   ForgeUpdateCard,
   ForgeUpdatePermutation,
 } from "./contracts/forge";
+import { GetGitSyncSnapshot, RunGitSync } from "./contracts/git";
 import {
   BuildReviewQueue,
   GetCardContent,
@@ -61,6 +62,7 @@ import {
 export * from "./contracts/ai";
 export * from "./contracts/editor";
 export * from "./contracts/forge";
+export * from "./contracts/git";
 export * from "./contracts/review";
 export * from "./contracts/secret";
 export * from "./contracts/workspace";
@@ -112,6 +114,8 @@ export const appContract = defineContract({
     ForgeSaveTopicSelections,
     ForgeSetSessionDeckPath,
     ForgeAddCardToDeck,
+    GetGitSyncSnapshot,
+    RunGitSync,
   ] as const,
   events: [
     WorkspaceSnapshotChanged,

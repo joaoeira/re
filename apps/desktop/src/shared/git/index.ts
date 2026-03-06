@@ -1,0 +1,30 @@
+export {
+  GitSyncBlockedReasonSchema,
+  GitSyncBlockedSchema,
+  GitSyncReadySchema,
+  GitSyncResultSchema,
+  GitSyncSnapshotSchema,
+  GitSyncUnavailableReasonSchema,
+  GitSyncUnavailableSchema,
+  type GitSyncBlocked,
+  type GitSyncBlockedReason,
+  type GitSyncReady,
+  type GitSyncResult,
+  type GitSyncSnapshot,
+  type GitSyncUnavailable,
+  type GitSyncUnavailableReason,
+} from "./schema";
+
+export {
+  gitSyncSnapshotHasWork,
+  GitBinaryNotAvailableError,
+  GitCommandFailedError,
+  GitCommandTransportError,
+  GitSyncConflictError,
+  GitSyncErrorSchema,
+  GitSyncNotReadyError,
+  mapGitSyncErrorToError,
+  toGitSyncErrorMessage,
+  toGitSyncSnapshotMessage,
+  type GitSyncError,
+} from "./errors";

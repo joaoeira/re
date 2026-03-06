@@ -22,6 +22,7 @@ describe("shared deck write coordinator wiring", () => {
         Effect.sync(() => {
           lockCalls.push(lockedDeckPath);
         }).pipe(Effect.zipRight(effect)),
+      withWorkspaceLock: (_rootPath, effect) => effect,
     };
 
     try {

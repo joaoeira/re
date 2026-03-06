@@ -59,6 +59,7 @@ export const defaultHandlers = Effect.runSync(
         openEditorWindow: () => undefined,
       }),
     ),
+    Effect.provide(NodeServicesLive),
   ),
 ).handlers;
 

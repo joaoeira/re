@@ -83,6 +83,7 @@ describe("analytics replay", () => {
         withDeckLock(deckPath);
         return effect;
       },
+      withWorkspaceLock: (_rootPath, effect) => effect,
     };
 
     const deckManager: DeckManagerService = {
@@ -142,6 +143,7 @@ describe("analytics replay", () => {
 
     const coordinator: DeckWriteCoordinator = {
       withDeckLock: (_deckPath, effect) => effect,
+      withWorkspaceLock: (_rootPath, effect) => effect,
     };
 
     const deckManager: DeckManagerService = {
