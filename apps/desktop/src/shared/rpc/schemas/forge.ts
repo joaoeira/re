@@ -6,6 +6,8 @@ const NonNegativeIntSchema = Schema.Number.pipe(Schema.int(), Schema.nonNegative
 const NullableStringSchema = Schema.Union(Schema.String, Schema.Null);
 const NonEmptyStringSchema = Schema.String.pipe(Schema.nonEmptyString());
 
+export const FORGE_CHUNK_SIZE = 12_000;
+
 export const ForgeSourceKindSchema = Schema.Literal("pdf", "text");
 export type ForgeSourceKind = typeof ForgeSourceKindSchema.Type;
 

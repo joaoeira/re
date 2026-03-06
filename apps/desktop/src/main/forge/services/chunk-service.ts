@@ -1,8 +1,8 @@
 import { Effect } from "effect";
 
-import type { ForgeChunkPageBoundary } from "@shared/rpc/schemas/forge";
+import { FORGE_CHUNK_SIZE, type ForgeChunkPageBoundary } from "@shared/rpc/schemas/forge";
 
-export const CHUNK_SIZE = 12_000;
+export const CHUNK_SIZE = FORGE_CHUNK_SIZE;
 
 type ChunkedTextInput = {
   readonly text: string;

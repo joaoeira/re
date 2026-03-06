@@ -118,19 +118,10 @@ export function ForgeSourceCanvas({
       />
 
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex items-center gap-2 text-muted-foreground/70">
-            <Upload className="size-4 shrink-0" />
-            <Type className="size-4 shrink-0" />
-          </div>
-
+        <div className="min-w-0 flex-1 space-y-4">
           <div className="space-y-1">
             <p className={cn("text-foreground", compact ? "text-sm" : "text-base")}>
               Drop a PDF, or click to paste text
-            </p>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              PDFs keep the existing preview flow. Text opens a dedicated editor and extracts
-              immediately when submitted.
             </p>
           </div>
 
@@ -147,7 +138,6 @@ export function ForgeSourceCanvas({
             >
               Browse PDF
             </Button>
-            <span>PDF up to {forgePdfFileSizeLimitMb} MB</span>
           </div>
 
           {errorMessage ? (
@@ -155,17 +145,6 @@ export function ForgeSourceCanvas({
               {errorMessage}
             </p>
           ) : null}
-        </div>
-
-        <div className="hidden shrink-0 items-center gap-2 text-[10px] text-muted-foreground sm:flex">
-          <span className="inline-flex items-center gap-1 border border-border px-2 py-1">
-            <FileText className="size-3" />
-            PDF
-          </span>
-          <span className="inline-flex items-center gap-1 border border-border px-2 py-1">
-            <Type className="size-3" />
-            TXT
-          </span>
         </div>
       </div>
     </section>

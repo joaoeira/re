@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { FORGE_CHUNK_SIZE } from "@shared/rpc/schemas/forge";
 
 const countWords = (text: string): number => {
   const trimmed = text.trim();
@@ -39,6 +40,10 @@ export function ForgeTextEditor({
   const [discardOpen, setDiscardOpen] = useState(false);
   const hasContent = draft.trim().length > 0;
   const wordCount = useMemo(() => countWords(draft), [draft]);
+  const chunkCount = useMemo(
+    () => (draft.length === 0 ? 0 : Math.ceil(draft.length / FORGE_CHUNK_SIZE)),
+    [draft],
+  );
 
   const requestClose = () => {
     if (!hasContent) {
@@ -51,83 +56,92 @@ export function ForgeTextEditor({
 
   return (
     <>
-      <div className="mx-auto flex h-full w-full max-w-3xl flex-1 flex-col px-6 py-8">
-        <div className="flex items-center justify-between gap-3">
-          <Button type="button" variant="ghost" size="sm" onClick={requestClose} className="gap-2">
-            <ArrowLeft className="size-3.5" />
-            <span>Back</span>
-          </Button>
+      <div className="flex h-full flex-col overflow-hidden">
+        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col overflow-y-auto px-6 py-8">
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={requestClose}
+              className="gap-2"
+            >
+              <ArrowLeft className="size-3.5" />
+              <span>Back</span>
+            </Button>
 
-          {hasContent ? (
-            <kbd className="border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground/70">
-              Cmd/Ctrl+Enter
-            </kbd>
-          ) : null}
-        </div>
-
-        <div className="flex flex-1 flex-col pt-8">
-          <div className="space-y-2">
-            <h1 className="text-lg font-medium text-foreground">Paste text</h1>
-            <p className="max-w-xl text-[13px] leading-relaxed text-muted-foreground">
-              Paste or write the source material directly. It will be extracted immediately as a
-              text source labeled <span className="font-mono text-foreground/70">Pasted text</span>.
-            </p>
-            {errorMessage ? (
-              <p role="alert" className="text-xs text-destructive">
-                {errorMessage}
-              </p>
+            {hasContent ? (
+              <kbd className="border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground/70">
+                Cmd/Ctrl+Enter
+              </kbd>
             ) : null}
           </div>
 
-          <div className="flex flex-1 flex-col pt-6">
-            <Textarea
-              aria-label="Paste source text"
-              autoFocus
-              value={draft}
-              onChange={(event) => onDraftChange(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && hasContent) {
-                  event.preventDefault();
-                  onSubmit();
-                }
-                if (event.key === "Escape" && !hasContent) {
-                  event.preventDefault();
-                  onClose();
-                }
-              }}
-              placeholder="Paste text here…"
-              className="min-h-[50vh] flex-1 resize-none border-0 bg-transparent p-0 text-sm leading-7 shadow-none focus-visible:ring-0"
-            />
+          <div className="flex flex-1 flex-col">
+            <div className="space-y-2">
+              {errorMessage ? (
+                <p role="alert" className="text-xs text-destructive">
+                  {errorMessage}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex flex-1 flex-col pt-6">
+              <Textarea
+                aria-label="Paste source text"
+                autoFocus
+                value={draft}
+                onChange={(event) => onDraftChange(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && hasContent) {
+                    event.preventDefault();
+                    onSubmit();
+                  }
+                  if (event.key === "Escape" && !hasContent) {
+                    event.preventDefault();
+                    onClose();
+                  }
+                }}
+                placeholder="Paste text here…"
+                className="min-h-[50vh] flex-1 resize-none border-0 bg-transparent p-0 text-sm leading-7 shadow-none focus-visible:ring-0"
+              />
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="shrink-0 border-t border-border bg-muted/20 px-6 py-2.5">
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4">
-          <p className="text-xs text-muted-foreground">
-            {hasContent ? (
-              <>
-                <span className="font-mono font-medium text-foreground/80">{wordCount}</span> word
-                {wordCount === 1 ? "" : "s"}
-              </>
-            ) : (
-              "Paste source text to continue"
-            )}
-          </p>
+        <div className="shrink-0 border-t border-border bg-muted/20 px-6 py-2.5">
+          <div className="mx-auto flex w-full items-center justify-between gap-4">
+            <p className="text-xs text-muted-foreground">
+              {hasContent ? (
+                <>
+                  <span className="font-mono font-medium text-foreground/80">{wordCount}</span> word
+                  {wordCount === 1 ? "" : "s"}
+                  <span className="mx-1.5 text-muted-foreground/40">·</span>
+                  <span className="font-mono font-medium text-foreground/80">
+                    {chunkCount}
+                  </span>{" "}
+                  chunk
+                  {chunkCount === 1 ? "" : "s"}
+                </>
+              ) : (
+                "Paste source text to continue"
+              )}
+            </p>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onSubmit}
-            disabled={!hasContent}
-            className="gap-2 hover:border-foreground disabled:opacity-30"
-          >
-            <span>Extract topics</span>
-            <kbd className="border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground/60">
-              Cmd/Ctrl+Enter
-            </kbd>
-          </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onSubmit}
+              disabled={!hasContent}
+              className="gap-2 hover:border-foreground disabled:opacity-30"
+            >
+              <span>Extract topics</span>
+              <kbd className="border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground/60">
+                Cmd/Ctrl+Enter
+              </kbd>
+            </Button>
+          </div>
         </div>
       </div>
 

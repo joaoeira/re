@@ -15,7 +15,7 @@ const renderForgePage = async (
 
 const openTextEditor = async (screen: Awaited<ReturnType<typeof renderForgePage>>) => {
   await userEvent.click(screen.getByText("Drop a PDF, or click to paste text"));
-  await expect.element(screen.getByText("Paste text")).toBeVisible();
+  await expect.element(screen.getByRole("textbox", { name: "Paste source text" })).toBeVisible();
 };
 
 const createSuccessInvoke = () =>
@@ -55,7 +55,7 @@ describe("ForgePage", () => {
     await userEvent.click(screen.getByText("Browse PDF"));
 
     await waitForFileInput();
-    expect(screen.getByRole("heading", { name: "Paste text" }).query()).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Paste source text" }).query()).toBeNull();
   });
 
   it("closes an empty text editor with Escape", async () => {
@@ -574,7 +574,7 @@ describe("ForgePage", () => {
     await userEvent.click(screen.getByText("Extract topics"));
 
     await expect.element(screen.getByText("Text extraction failed.")).toBeVisible();
-    await expect.element(screen.getByText("Paste text")).toBeVisible();
+    await expect.element(screen.getByRole("textbox", { name: "Paste source text" })).toBeVisible();
     await expect.element(textarea).toHaveValue("hello world");
   });
 
