@@ -50,7 +50,7 @@ const generateReveal = (content: ClozeContent, targetIndex: number): string =>
 const generatePrompt = (content: ClozeContent, targetIndex: number): string =>
   replaceClozeDeletions(content.text, (deletion) => {
     if (deletion.index === targetIndex) {
-      return deletion.hint ? `[${deletion.hint}]` : "[...]";
+      return deletion.hint ? `**[${deletion.hint}]**` : "**[...]**";
     }
     return deletion.hidden;
   });

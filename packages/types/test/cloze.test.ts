@@ -156,7 +156,7 @@ Line 2: {{c2::answer2}}`;
         const cards = ClozeType.cards(content);
 
         // Cards should be ordered by index (c1, c2, c3)
-        assert.ok(cards[0]!.prompt.includes("[...]")); // c1 hidden
+        assert.ok(cards[0]!.prompt.includes("**[...]**")); // c1 hidden
         assert.ok(cards[0]!.prompt.includes("second")); // c2 visible
         assert.ok(cards[0]!.prompt.includes("third")); // c3 visible
       }),
@@ -168,7 +168,7 @@ Line 2: {{c2::answer2}}`;
         const cards = ClozeType.cards(content);
 
         assert.strictEqual(cards.length, 1);
-        assert.strictEqual(cards[0]!.prompt, "[...] and [...]");
+        assert.strictEqual(cards[0]!.prompt, "**[...]** and **[...]**");
         assert.strictEqual(cards[0]!.reveal, "**first** and **second**");
       }),
     );
@@ -179,10 +179,10 @@ Line 2: {{c2::answer2}}`;
         const cards = ClozeType.cards(content);
 
         // Card 0 (c1): capital hidden, France visible
-        assert.strictEqual(cards[0]!.prompt, "The [...] of France is Paris.");
+        assert.strictEqual(cards[0]!.prompt, "The **[...]** of France is Paris.");
 
         // Card 1 (c2): capital visible, France hidden
-        assert.strictEqual(cards[1]!.prompt, "The capital of [...] is Paris.");
+        assert.strictEqual(cards[1]!.prompt, "The capital of **[...]** is Paris.");
       }),
     );
 
@@ -213,7 +213,7 @@ Line 2: {{c2::answer2}}`;
         const cards = ClozeType.cards(content);
 
         assert.strictEqual(cards.length, 1);
-        assert.strictEqual(cards[0]!.prompt, "The answer is [...].");
+        assert.strictEqual(cards[0]!.prompt, "The answer is **[...]**.");
         assert.strictEqual(cards[0]!.reveal, "The answer is **42**.");
       }),
     );
@@ -224,7 +224,7 @@ Line 2: {{c2::answer2}}`;
         const cards = ClozeType.cards(content);
 
         assert.strictEqual(cards.length, 1);
-        assert.strictEqual(cards[0]!.prompt, "The [capital city] is beautiful.");
+        assert.strictEqual(cards[0]!.prompt, "The **[capital city]** is beautiful.");
         assert.strictEqual(cards[0]!.reveal, "The **Paris** is beautiful.");
       }),
     );
@@ -236,9 +236,9 @@ Line 2: {{c2::answer2}}`;
 
         assert.strictEqual(cards.length, 2);
         // Card 0 (c1): shows [capital] for Paris, France visible
-        assert.strictEqual(cards[0]!.prompt, "[capital] of France");
+        assert.strictEqual(cards[0]!.prompt, "**[capital]** of France");
         // Card 1 (c2): Paris visible, shows [...] for France
-        assert.strictEqual(cards[1]!.prompt, "Paris of [...]");
+        assert.strictEqual(cards[1]!.prompt, "Paris of **[...]**");
       }),
     );
 
@@ -260,7 +260,7 @@ Line 2: {{c2::answer2}}`;
         const cards = ClozeType.cards(content);
 
         assert.strictEqual(cards.length, 1);
-        assert.strictEqual(cards[0]!.prompt, "[hint1] and [hint2]");
+        assert.strictEqual(cards[0]!.prompt, "**[hint1]** and **[hint2]**");
         assert.strictEqual(cards[0]!.reveal, "**first** and **second**");
       }),
     );
