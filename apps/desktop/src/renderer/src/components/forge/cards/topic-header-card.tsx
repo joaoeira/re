@@ -33,7 +33,7 @@ export function TopicHeaderCard({
               onClick={onRegenerate}
               className="text-muted-foreground/50 underline underline-offset-4 decoration-border transition-colors hover:text-foreground/60"
             >
-              regenerate unadded
+              regenerate
             </button>
           </>
         )}

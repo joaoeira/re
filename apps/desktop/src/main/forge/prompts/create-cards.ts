@@ -89,8 +89,7 @@ const renderBaseUserPrompt = (input: CreateCardsPromptInput): string => {
 
 - Produce a concise set of high-value, non-redundant flashcards. Quality and focus over quantity.
 
-- Stay within the scope of the topic being presented. The topic defines what should be carded. If the surrounding text mentions related events, people, or concepts that are not part of what the topic itself covers, do not create cards about them. The model may use its own knowledge to write clearer or more precise cards, but only about claims the topic actually makes.
-        ---
+---
       Source text:
       ${input.chunkText}
 

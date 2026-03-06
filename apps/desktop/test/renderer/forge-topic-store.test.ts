@@ -7,7 +7,11 @@ import {
   type ExtractSummary,
 } from "@/components/forge/forge-page-store";
 import { topicsSummaryToChunkTopics } from "@/components/forge/forge-page-context";
-import { createPdfSelectedSource, createTextSelectedSource } from "@/components/forge/forge-source";
+import {
+  createPdfSelectedSource,
+  createTextSelectedSource,
+  toForgeSourceInput,
+} from "@/components/forge/forge-source";
 
 const TWO_CHUNKS: ReadonlyArray<ChunkTopics> = [
   { chunkId: 10, sequenceOrder: 0, topics: ["alpha", "beta"] },
@@ -101,10 +105,36 @@ describe("forge-page-store topic selection", () => {
       expect(ctx(store).textDraft).toBe("alpha beta");
     });
 
+    it("stores and retrieves the title draft", () => {
+      const store = createForgePageStore();
+      store.send({ type: "openTextEditor" });
+      store.send({ type: "setTextTitleDraft", title: "My title" });
+
+      expect(ctx(store).textTitleDraft).toBe("My title");
+    });
+
+    it("preserves the title draft across openTextEditor cycles", () => {
+      const store = createForgePageStore();
+      store.send({ type: "openTextEditor" });
+      store.send({ type: "setTextTitleDraft", title: "My title" });
+      store.send({ type: "resetForNoSource" });
+      store.send({ type: "openTextEditor" });
+
+      expect(ctx(store).textTitleDraft).toBe("");
+    });
+
+    it("preserves the title draft when openTextEditor is called with existing title state", () => {
+      const store = createForgePageStore();
+      store.send({ type: "openTextEditor" });
+      store.send({ type: "setTextTitleDraft", title: "My title" });
+      store.send({ type: "openTextEditor" });
+
+      expect(ctx(store).textTitleDraft).toBe("My title");
+    });
+
     it("returns to the text editor when text extraction fails", () => {
       const store = createForgePageStore();
       const selectedSource = createTextSelectedSource({
-        sourceLabel: "Pasted text",
         text: "alpha beta",
       });
 
@@ -118,12 +148,28 @@ describe("forge-page-store topic selection", () => {
       expect(ctx(store).extractState).toEqual({ status: "error", message: "Text failed" });
     });
 
+    it("restores the title draft from the source label when text extraction fails", () => {
+      const store = createForgePageStore();
+      store.send({ type: "openTextEditor" });
+      store.send({ type: "setTextTitleDraft", title: "My title" });
+
+      const selectedSource = createTextSelectedSource({
+        sourceLabel: "My title",
+        text: "alpha beta",
+      });
+
+      store.send({ type: "setSelectedSource", selectedSource });
+      store.send({ type: "setExtracting", startedAt: "2026-02-27T12:00:00.000Z" });
+      store.send({ type: "extractionError", message: "Text failed" });
+
+      expect(ctx(store).textTitleDraft).toBe("My title");
+    });
+
     it("clears the text draft after successful extraction", () => {
       const store = createForgePageStore();
       store.send({
         type: "setSelectedSource",
         selectedSource: createTextSelectedSource({
-          sourceLabel: "Pasted text",
           text: "alpha beta",
         }),
       });
@@ -137,6 +183,28 @@ describe("forge-page-store topic selection", () => {
 
       expect(ctx(store).sourceEntryMode).toBe("text-editor");
       expect(ctx(store).textDraft).toBe("");
+    });
+
+    it("clears the title draft after successful extraction", () => {
+      const store = createForgePageStore();
+      store.send({ type: "openTextEditor" });
+      store.send({ type: "setTextTitleDraft", title: "My title" });
+      store.send({
+        type: "setSelectedSource",
+        selectedSource: createTextSelectedSource({
+          sourceLabel: "My title",
+          text: "alpha beta",
+        }),
+      });
+
+      store.send({
+        type: "extractionSuccess",
+        duplicateOfSessionId: null,
+        extraction: EXTRACTION,
+        topicsByChunk: TWO_CHUNKS,
+      });
+
+      expect(ctx(store).textTitleDraft).toBe("");
     });
   });
 
@@ -950,5 +1018,44 @@ describe("topicsSummaryToChunkTopics", () => {
     ]);
 
     expect(result).toEqual([{ chunkId: 5, sequenceOrder: 0, topics: ["only"] }]);
+  });
+});
+
+describe("toForgeSourceInput", () => {
+  it("omits sourceLabel for text sources when no label is provided", () => {
+    const source = createTextSelectedSource({ text: "hello" });
+    const input = toForgeSourceInput(source);
+
+    expect(input).toEqual({ kind: "text", text: "hello" });
+    expect(input).not.toHaveProperty("sourceLabel");
+  });
+
+  it("includes sourceLabel for text sources when a non-empty label is provided", () => {
+    const source = createTextSelectedSource({ sourceLabel: "My notes", text: "hello" });
+    const input = toForgeSourceInput(source);
+
+    expect(input).toEqual({ kind: "text", text: "hello", sourceLabel: "My notes" });
+  });
+
+  it("trims the sourceLabel and omits it when it is only whitespace", () => {
+    const source = createTextSelectedSource({ sourceLabel: "   ", text: "hello" });
+    const input = toForgeSourceInput(source);
+
+    expect(input).toEqual({ kind: "text", text: "hello" });
+    expect(input).not.toHaveProperty("sourceLabel");
+  });
+
+  it("trims leading/trailing whitespace from sourceLabel", () => {
+    const source = createTextSelectedSource({ sourceLabel: "  My notes  ", text: "hello" });
+    const input = toForgeSourceInput(source);
+
+    expect(input).toEqual({ kind: "text", text: "hello", sourceLabel: "My notes" });
+  });
+
+  it("returns null for text sources with null text", () => {
+    const source = { kind: "text" as const, text: null };
+    const input = toForgeSourceInput(source);
+
+    expect(input).toBeNull();
   });
 });

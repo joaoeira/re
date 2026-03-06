@@ -99,7 +99,6 @@ describe("ForgePage", () => {
         expect(payload).toEqual({
           source: {
             kind: "text",
-            sourceLabel: "Pasted text",
             text: "alpha beta gamma",
           },
         });
@@ -576,6 +575,212 @@ describe("ForgePage", () => {
     await expect.element(screen.getByText("Text extraction failed.")).toBeVisible();
     await expect.element(screen.getByRole("textbox", { name: "Paste source text" })).toBeVisible();
     await expect.element(textarea).toHaveValue("hello world");
+  });
+
+  it("shows an optional title input in the text editor", async () => {
+    const invoke = createSuccessInvoke();
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderForgePage();
+    await openTextEditor(screen);
+
+    await expect.element(screen.getByRole("textbox", { name: "Source title" })).toBeVisible();
+  });
+
+  it("sends sourceLabel when a title is provided", async () => {
+    const invoke = vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
+      if (method === "ForgeListSessions") {
+        return { type: "success", data: { sessions: [] } };
+      }
+
+      if (method === "ForgeStartTopicExtraction") {
+        expect(payload).toEqual({
+          source: {
+            kind: "text",
+            text: "alpha beta gamma",
+            sourceLabel: "My custom title",
+          },
+        });
+
+        return {
+          type: "success",
+          data: {
+            session: {
+              id: 12,
+              sourceKind: "text",
+              sourceLabel: "My custom title",
+              sourceFilePath: null,
+              deckPath: null,
+              sourceFingerprint: "fp:text",
+              status: "topics_extracted",
+              errorMessage: null,
+              createdAt: "2025-01-10T00:00:00.000Z",
+              updatedAt: "2025-01-10T00:00:00.000Z",
+            },
+            duplicateOfSessionId: null,
+            extraction: {
+              sessionId: 12,
+              textLength: 17,
+              preview: "alpha beta gamma",
+              totalPages: 1,
+              chunkCount: 1,
+            },
+            topicsByChunk: [
+              {
+                chunkId: 101,
+                sequenceOrder: 0,
+                topics: ["alpha topic"],
+              },
+            ],
+          },
+        };
+      }
+
+      if (method === "ForgeGetTopicExtractionSnapshot") {
+        return {
+          type: "success",
+          data: {
+            session: null,
+            topicsByChunk: [],
+          },
+        };
+      }
+
+      return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+    });
+
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderForgePage();
+    await openTextEditor(screen);
+    await userEvent.fill(screen.getByRole("textbox", { name: "Source title" }), "My custom title");
+    await userEvent.fill(
+      screen.getByRole("textbox", { name: "Paste source text" }),
+      "alpha beta gamma",
+    );
+    await userEvent.click(screen.getByText("Extract topics"));
+
+    await expect.element(screen.getByText("Select topics")).toBeVisible();
+  });
+
+  it("omits sourceLabel when the title field is left blank", async () => {
+    const invoke = vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
+      if (method === "ForgeListSessions") {
+        return { type: "success", data: { sessions: [] } };
+      }
+
+      if (method === "ForgeStartTopicExtraction") {
+        const source = (payload as { source: Record<string, unknown> }).source;
+        expect(source).not.toHaveProperty("sourceLabel");
+
+        return {
+          type: "success",
+          data: {
+            session: {
+              id: 13,
+              sourceKind: "text",
+              sourceLabel: "alpha beta gamma",
+              sourceFilePath: null,
+              deckPath: null,
+              sourceFingerprint: "fp:text2",
+              status: "topics_extracted",
+              errorMessage: null,
+              createdAt: "2025-01-10T00:00:00.000Z",
+              updatedAt: "2025-01-10T00:00:00.000Z",
+            },
+            duplicateOfSessionId: null,
+            extraction: {
+              sessionId: 13,
+              textLength: 17,
+              preview: "alpha beta gamma",
+              totalPages: 1,
+              chunkCount: 1,
+            },
+            topicsByChunk: [
+              {
+                chunkId: 101,
+                sequenceOrder: 0,
+                topics: ["alpha topic"],
+              },
+            ],
+          },
+        };
+      }
+
+      if (method === "ForgeGetTopicExtractionSnapshot") {
+        return {
+          type: "success",
+          data: {
+            session: null,
+            topicsByChunk: [],
+          },
+        };
+      }
+
+      return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+    });
+
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderForgePage();
+    await openTextEditor(screen);
+    await userEvent.fill(
+      screen.getByRole("textbox", { name: "Paste source text" }),
+      "alpha beta gamma",
+    );
+    await userEvent.click(screen.getByText("Extract topics"));
+
+    await expect.element(screen.getByText("Select topics")).toBeVisible();
+  });
+
+  it("preserves the title draft when text extraction fails", async () => {
+    const invoke = vi.fn().mockImplementation(async (method: string) => {
+      if (method === "ForgeListSessions") {
+        return { type: "success", data: { sessions: [] } };
+      }
+
+      if (method === "ForgeStartTopicExtraction") {
+        return {
+          type: "failure",
+          error: {
+            tag: "session_operation_error",
+            data: {
+              _tag: "session_operation_error",
+              sessionId: 78,
+              message: "Title extraction failed.",
+            },
+          },
+        };
+      }
+
+      if (method === "ForgeGetTopicExtractionSnapshot") {
+        return {
+          type: "success",
+          data: {
+            session: null,
+            topicsByChunk: [],
+          },
+        };
+      }
+
+      return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+    });
+
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderForgePage();
+    await openTextEditor(screen);
+    await userEvent.fill(screen.getByRole("textbox", { name: "Source title" }), "My notes");
+    await userEvent.fill(screen.getByRole("textbox", { name: "Paste source text" }), "hello world");
+    await userEvent.click(screen.getByText("Extract topics"));
+
+    await expect.element(screen.getByText("Title extraction failed.")).toBeVisible();
+    await expect
+      .element(screen.getByRole("textbox", { name: "Source title" }))
+      .toHaveValue("My notes");
+    await expect
+      .element(screen.getByRole("textbox", { name: "Paste source text" }))
+      .toHaveValue("hello world");
   });
 
   it("requests preview on upload and enables Begin Extraction", async () => {

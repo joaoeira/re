@@ -41,7 +41,7 @@ export default defineConfig({
           alias: sharedAliases,
         },
         optimizeDeps: {
-          include: ["@base-ui/react/combobox", "@tanstack/react-query"],
+          include: ["@tanstack/react-query"],
         },
         test: {
           name: "browser",

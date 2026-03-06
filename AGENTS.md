@@ -436,3 +436,4 @@ Dependencies: `@vitest/browser-playwright`, `vitest-browser-react`. Chromium ins
 - **Tooltips**: portaled and lazy-rendered. Trigger hover before asserting content. `await expect.element()` retries automatically.
 - **Router context**: components using `useNavigate` must be inside a `RouterProvider`. For isolated component tests, create a minimal router with `createRootRoute` + `createRouter`. Assert navigation via `router.state.location`.
 - **`__screenshots__` folder**: generated on test failure. Gitignored — not tracked.
+- **Base UI dual React instance**: adding a new `@base-ui/react/*` import can cause `TypeError: Cannot read properties of null (reading 'useContext')` in browser tests if Vite's dep optimizer cache (`node_modules/.vite/vitest/`) is stale. Fix by deleting the cache directory and re-running tests. If the problem recurs in CI, add the package to `optimizeDeps.include` in `vitest.config.ts`.

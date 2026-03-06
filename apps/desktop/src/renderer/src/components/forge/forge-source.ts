@@ -10,7 +10,7 @@ export type ForgeSelectedSource =
     }
   | {
       readonly kind: "text";
-      readonly sourceLabel: string;
+      readonly sourceLabel?: string;
       readonly text: string | null;
     };
 
@@ -24,11 +24,11 @@ export const createPdfSelectedSource = (input: {
 });
 
 export const createTextSelectedSource = (input: {
-  readonly sourceLabel: string;
+  readonly sourceLabel?: string;
   readonly text: string;
 }): ForgeSelectedSource => ({
   kind: "text",
-  sourceLabel: input.sourceLabel,
+  ...(input.sourceLabel ? { sourceLabel: input.sourceLabel } : {}),
   text: input.text,
 });
 
@@ -61,14 +61,15 @@ export const toForgeSourceInput = (source: ForgeSelectedSource | null): ForgeSou
         kind: "pdf",
         sourceFilePath: source.sourceFilePath,
       };
-    case "text":
-      return source.text === null
-        ? null
-        : {
-            kind: "text",
-            text: source.text,
-            sourceLabel: source.sourceLabel,
-          };
+    case "text": {
+      if (source.text === null) return null;
+      const trimmedLabel = source.sourceLabel?.trim();
+      return {
+        kind: "text",
+        text: source.text,
+        ...(trimmedLabel ? { sourceLabel: trimmedLabel } : {}),
+      };
+    }
   }
 };
 

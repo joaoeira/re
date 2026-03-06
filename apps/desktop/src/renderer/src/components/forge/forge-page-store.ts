@@ -51,6 +51,7 @@ type ForgePageContext = {
   readonly sourceEntryMode: ForgeSourceEntryMode;
   readonly selectedSource: ForgeSelectedSource | null;
   readonly textDraft: string;
+  readonly textTitleDraft: string;
   readonly targetDeckPath: string | null;
   readonly duplicateOfSessionId: number | null;
   readonly previewState: PreviewState;
@@ -79,6 +80,7 @@ const initialForgePageContext = (): ForgePageContext => ({
   sourceEntryMode: "picker",
   selectedSource: null,
   textDraft: "",
+  textTitleDraft: "",
   targetDeckPath: null,
   duplicateOfSessionId: null,
   previewState: { status: "idle" },
@@ -315,6 +317,7 @@ export const createForgePageStore = () =>
           context.selectedSource?.kind === "text" && context.selectedSource.text !== null
             ? context.selectedSource.text
             : context.textDraft,
+        textTitleDraft: context.textTitleDraft,
       }),
       setTextDraft: (context, event: { text: string }) => ({
         ...context,
@@ -332,6 +335,10 @@ export const createForgePageStore = () =>
           context.extractState.status === "error"
             ? ({ status: "idle" } as const)
             : context.extractState,
+      }),
+      setTextTitleDraft: (context, event: { title: string }) => ({
+        ...context,
+        textTitleDraft: event.title,
       }),
       setSelectedSource: (context, event: { selectedSource: ForgeSelectedSource }) => ({
         ...context,
@@ -494,6 +501,7 @@ export const createForgePageStore = () =>
               ? ("text-editor" as const)
               : ("picker" as const),
           textDraft: "",
+          textTitleDraft: "",
           targetDeckPath: null,
           duplicateOfSessionId: event.duplicateOfSessionId,
           activeExtractionStartedAt: null,
@@ -514,6 +522,10 @@ export const createForgePageStore = () =>
           context.selectedSource?.kind === "text" && context.selectedSource.text !== null
             ? context.selectedSource.text
             : context.textDraft,
+        textTitleDraft:
+          context.selectedSource?.kind === "text"
+            ? (context.selectedSource.sourceLabel ?? context.textTitleDraft)
+            : "",
         targetDeckPath: null,
         activeExtractionStartedAt: null,
         activeExtractionSessionId: null,

@@ -43,6 +43,7 @@ type ForgePageActions = {
   readonly openTextEditor: () => void;
   readonly closeTextEditor: () => void;
   readonly setTextDraft: (text: string) => void;
+  readonly setTextTitleDraft: (title: string) => void;
   readonly submitTextSource: () => void;
   readonly beginExtraction: () => void;
   readonly advanceToCards: () => void;
@@ -91,6 +92,10 @@ export function useForgeSourceEntryMode(): ForgeSourceEntryMode {
 
 export function useForgeTextDraft(): string {
   return useForgePageSelector((snapshot) => snapshot.context.textDraft);
+}
+
+export function useForgeTextTitleDraft(): string {
+  return useForgePageSelector((snapshot) => snapshot.context.textTitleDraft);
 }
 
 export function useForgeDuplicateOfSessionId(): number | null {
@@ -597,13 +602,21 @@ export function ForgePageProvider({
     [store],
   );
 
+  const setTextTitleDraft = useCallback(
+    (title: string) => {
+      store.send({ type: "setTextTitleDraft", title });
+    },
+    [store],
+  );
+
   const submitTextSource = useCallback(() => {
     const snapshot = store.getSnapshot().context;
     if (snapshot.extractState.status === "extracting") return;
     if (snapshot.textDraft.trim().length === 0) return;
 
+    const trimmedTitle = snapshot.textTitleDraft.trim();
     const selectedSource = createTextSelectedSource({
-      sourceLabel: "Pasted text",
+      ...(trimmedTitle ? { sourceLabel: trimmedTitle } : {}),
       text: snapshot.textDraft,
     });
     const source = toForgeSourceInput(selectedSource);
@@ -677,6 +690,7 @@ export function ForgePageProvider({
       openTextEditor,
       closeTextEditor: resetForNoSource,
       setTextDraft,
+      setTextTitleDraft,
       submitTextSource,
       beginExtraction,
       advanceToCards,
@@ -687,6 +701,7 @@ export function ForgePageProvider({
       openTextEditor,
       resetForNoSource,
       setTextDraft,
+      setTextTitleDraft,
       submitTextSource,
       beginExtraction,
       advanceToCards,

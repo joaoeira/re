@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FORGE_CHUNK_SIZE } from "@shared/rpc/schemas/forge";
 
@@ -22,8 +23,10 @@ const countWords = (text: string): number => {
 
 type ForgeTextEditorProps = {
   readonly draft: string;
+  readonly titleDraft: string;
   readonly errorMessage?: string | null;
   readonly onDraftChange: (text: string) => void;
+  readonly onTitleChange: (title: string) => void;
   readonly onSubmit: () => void;
   readonly onClose: () => void;
   readonly onDiscard: () => void;
@@ -31,8 +34,10 @@ type ForgeTextEditorProps = {
 
 export function ForgeTextEditor({
   draft,
+  titleDraft,
   errorMessage,
   onDraftChange,
+  onTitleChange,
   onSubmit,
   onClose,
   onDiscard,
@@ -86,7 +91,18 @@ export function ForgeTextEditor({
               ) : null}
             </div>
 
-            <div className="flex flex-1 flex-col pt-6">
+            <div className="pt-6">
+              <Input
+                aria-label="Source title"
+                type="text"
+                value={titleDraft}
+                onChange={(event) => onTitleChange(event.currentTarget.value)}
+                placeholder="Title (optional)"
+                className="h-auto border-0 bg-transparent px-0 pb-3 text-lg font-medium text-foreground shadow-none placeholder:text-muted-foreground/40 focus-visible:ring-0"
+              />
+            </div>
+
+            <div className="flex flex-1 flex-col">
               <Textarea
                 aria-label="Paste source text"
                 autoFocus

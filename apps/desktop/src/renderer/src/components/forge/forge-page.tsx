@@ -17,6 +17,7 @@ import {
   useForgeResumeErrorMessage,
   useForgeSelectedTopicCount,
   useForgeTextDraft,
+  useForgeTextTitleDraft,
 } from "./forge-page-context";
 import { ForgeTextEditor } from "./forge-text-editor";
 import { SessionBrowser } from "./session-browser";
@@ -38,6 +39,7 @@ function ForgePageContent() {
   const previewState = useForgePreviewState();
   const extractState = useForgeExtractState();
   const textDraft = useForgeTextDraft();
+  const textTitleDraft = useForgeTextTitleDraft();
   const selectedTopicCount = useForgeSelectedTopicCount();
   const resumeErrorMessage = useForgeResumeErrorMessage();
   const sessionListQuery = useForgeSessionListQuery();
@@ -89,8 +91,10 @@ function ForgePageContent() {
       ) : isTextEditorOpen ? (
         <ForgeTextEditor
           draft={textDraft}
+          titleDraft={textTitleDraft}
           errorMessage={extractState.status === "error" ? extractState.message : null}
           onDraftChange={actions.setTextDraft}
+          onTitleChange={actions.setTextTitleDraft}
           onSubmit={actions.submitTextSource}
           onClose={actions.closeTextEditor}
           onDiscard={actions.closeTextEditor}
