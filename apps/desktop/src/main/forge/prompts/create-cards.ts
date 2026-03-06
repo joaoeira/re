@@ -70,47 +70,55 @@ const renderInstructionBlock = (instruction: string | undefined): string => {
 const renderBaseUserPrompt = (input: CreateCardsPromptInput): string => {
   return `
 
-  ---
-  Source text:
-
-  ${input.chunkText}
-
-  ----
-
-  Create flashcards specifically and exclusively about the following topic:
-  ${input.topic}
-
-  ----
-
-I want you to use the contents of the text to create flashcards that follow the principles of effective flashcards to create as many flashcards about the statement I will give you. It is imperative that the cards be about the statement you have been given.
-
-Provide your response in JSON format with the following structure:
-{
-  "cards": [
-    {
-      "question": "Question text here",
-      "answer": "Answer text here",
-    },
-    // ... more cards
-    ]
-}
 
     Do not include any explanation, markdown code blocks, or other text. Return only the JSON object.
-    ---
 
-    Important instructions that should be followed strictly:
+ Important instructions that must be followed strictly:
 
-    - Each flashcard must be fully self-contained. This means that every question should provide all necessary context within itself, without relying on information from other flashcards. Questions should include explicit references to the relevant event, time period, and any necessary background information to ensure that the user can understand the statement without additional context. Make as few make assumptions about the student's prior knowledge of the statement or related events, though you can expect him to have some base knowledge on the statement.
+- Before generating any flashcards, decompose the source text into atomic claims—individual facts, definitions, causal links, or relations that each stand alone as a single testable piece of knowledge. For example, "Pasteur developed the rabies vaccine in 1885 using a laboratory-attenuated virus" contains three atomic claims: who developed it, the date, and the method. Each should produce its own card. Generate cards from these decomposed claims, not from the original text directly.
 
-    - Each flashcard should be independent of the remaining in the way they are phrased.
+- Create flashcards only for claims that are clearly supported by the source text. Do not infer, elaborate, or add context beyond what the source provides.
 
-    - The most important thing is that the answer be short, clear, and direct.  It is preferable to create many small cards than try to create a few heavy and overloaded cards with long answers. Note that you do not have to follow the specific wording of the statement, the statement is what I want you to create cards about.
+- Generate exactly one flashcard per atomic claim. A card may link two facts when one is the natural framing for the other (e.g. asking what method Pasteur used inherently identifies Pasteur), but if a card requires a compound answer with multiple independent pieces of information, it should be split.
 
-    - Ensure each answer is no longer than two sentences, preferably a single sentence, and conveys the key information succinctly. Try to limit each answer to 15 words or fewer and focus on the essential facts required to answer the question.
+- Every flashcard must be fully self-contained. Each question should include the specific event, person, period, or context needed to understand what is being asked, without relying on any other card.
 
-    - Exclude any broader discussions or unrelated concepts. Focus on one key fact or concept per flashcard, with answers being concise and limited to two sentences maximum.
+- The answer must be short, clear, and direct—no longer than two sentences, preferably one, ideally 15 words or fewer. Focus on one key fact, definition, contrast, cause, or outcome.
 
-    ${renderInstructionBlock(input.instruction)}
+- Avoid vague or essay-like prompts. Do not ask for the "significance" or "importance" of something unless the answer space is tightly constrained by the question.
+
+- Produce a concise set of high-value, non-redundant flashcards. Quality and focus over quantity.
+
+- Stay within the scope of the topic being presented. The topic defines what should be carded. If the surrounding text mentions related events, people, or concepts that are not part of what the topic itself covers, do not create cards about them. The model may use its own knowledge to write clearer or more precise cards, but only about claims the topic actually makes.
+        ---
+      Source text:
+      ${input.chunkText}
+
+      ---
+
+      Topic:
+      ${input.topic}
+
+      ---
+
+      Use the source text to create flashcards specifically and exclusively about the topic above.
+
+      Important: the topic may contain multiple distinct factual or conceptual claims. Before writing any flashcards, silently break the topic down into its atomic, directly testable claims. Then generate flashcards from those atomic claims rather than from the topic sentence as a whole.
+
+      Do not return the claims. Return only the final flashcards.
+
+      Provide your response in JSON format with the following structure:
+      {
+        "cards": [
+          {
+            "question": "Question text here",
+            "answer": "Answer text here"
+          }
+        ]
+      }
+
+
+      ${renderInstructionBlock(input.instruction)}
 `;
 };
 
