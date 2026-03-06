@@ -79,9 +79,6 @@ function SessionRow({
     >
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-center gap-2">
-          <span className="border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/80">
-            {session.sourceKind === "pdf" ? "PDF" : "TXT"}
-          </span>
           <span
             className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.colorClass} ${meta.pulse ? "animate-pulse" : ""}`}
           />

@@ -254,7 +254,6 @@ describe("ForgePage session browser", () => {
     const sessionRow = screen.getByText("Pasted text").element().closest("button");
     if (!(sessionRow instanceof HTMLElement)) throw new Error("Expected session row element.");
 
-    await expect.element(sessionRow).toHaveTextContent("TXT");
     await expect.element(sessionRow).toHaveTextContent("Extracting topics");
   });
 

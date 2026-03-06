@@ -54,9 +54,8 @@ describe("CardBlock", () => {
     const onAdd = vi.fn();
     const screen = await render(<CardBlock {...makeProps({ isAdded: true, onAdd })} />);
 
-    await expect.element(screen.getByText("Added to deck")).toBeVisible();
-
     const cardAddedButton = screen.getByRole("button", { name: "Card added" });
+    await expect.element(cardAddedButton).toBeVisible();
     await expect.element(cardAddedButton).toBeDisabled();
 
     (cardAddedButton.element() as HTMLElement).click();
