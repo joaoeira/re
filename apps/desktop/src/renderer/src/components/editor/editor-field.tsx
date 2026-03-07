@@ -1,11 +1,9 @@
-import { useEffect, useRef } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent } from "@tiptap/react";
 import Placeholder from "@tiptap/extension-placeholder";
-import StarterKit from "@tiptap/starter-kit";
 import { Pin } from "lucide-react";
-import { Markdown } from "tiptap-markdown";
-import { nextClozeDeletionIndex } from "@re/core";
 
+import { clozeShortcutExtension } from "@/components/editor/extensions/cloze-shortcut";
+import { useMarkdownEditor } from "@/components/editor/hooks/use-markdown-editor";
 import { cn } from "@/lib/utils";
 
 type EditorFieldProps = {
@@ -18,20 +16,6 @@ type EditorFieldProps = {
   readonly enableClozeShortcut?: boolean;
 };
 
-type MarkdownStorage = {
-  readonly markdown?: {
-    readonly getMarkdown: () => string;
-  };
-};
-
-const getMarkdown = (editor: NonNullable<ReturnType<typeof useEditor>>): string => {
-  const storage = editor.storage as MarkdownStorage;
-  if (storage.markdown) {
-    return storage.markdown.getMarkdown();
-  }
-  return editor.getText();
-};
-
 export function EditorField({
   label,
   frozen,
@@ -41,81 +25,18 @@ export function EditorField({
   placeholder,
   enableClozeShortcut = false,
 }: EditorFieldProps) {
-  const lastContentFromProp = useRef(content);
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        codeBlock: {
-          HTMLAttributes: {
-            class: "editor-code-block",
-          },
-        },
-        hardBreak: false,
-      }),
-      Placeholder.configure({
-        placeholder: placeholder ?? "",
-      }),
-      Markdown.configure({
-        html: false,
-        transformCopiedText: true,
-        transformPastedText: true,
-      }),
-    ],
+  const editor = useMarkdownEditor({
     content,
-    editorProps: {
-      attributes: {
-        class: "editor-prosemirror",
-      },
-    },
-    onUpdate: ({ editor }) => {
-      const md = getMarkdown(editor);
-      lastContentFromProp.current = md;
-      onContentChange(md);
+    onContentChange,
+    editorOptions: {
+      extensions: [
+        Placeholder.configure({
+          placeholder: placeholder ?? "",
+        }),
+        ...(enableClozeShortcut ? [clozeShortcutExtension] : []),
+      ],
     },
   });
-
-  useEffect(() => {
-    if (!editor || content === lastContentFromProp.current) {
-      return;
-    }
-    lastContentFromProp.current = content;
-    editor.commands.setContent(content, { emitUpdate: false });
-  }, [content, editor]);
-
-  useEffect(() => {
-    if (!editor || !enableClozeShortcut) {
-      return;
-    }
-
-    const keyDownHandler = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || event.key.toLowerCase() !== "c") {
-        return;
-      }
-
-      const { empty, from, to } = editor.state.selection;
-      if (empty) {
-        return;
-      }
-
-      event.preventDefault();
-
-      const nextClozeIndex = nextClozeDeletionIndex(getMarkdown(editor));
-      const selectedText = editor.state.doc.textBetween(from, to, "\n", "\n");
-      editor
-        .chain()
-        .focus()
-        .insertContentAt({ from, to }, `{{c${nextClozeIndex}::${selectedText}}}`)
-        .run();
-    };
-
-    const domNode = editor.view.dom;
-    domNode.addEventListener("keydown", keyDownHandler);
-
-    return () => {
-      domNode.removeEventListener("keydown", keyDownHandler);
-    };
-  }, [editor, enableClozeShortcut]);
 
   return (
     <div className="group/field flex min-h-0 flex-1 flex-col">
