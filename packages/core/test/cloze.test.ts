@@ -140,10 +140,7 @@ describe("brace-balanced cloze parsing", () => {
   });
 
   it("replaces braced cloze content correctly", () => {
-    const output = replaceClozeDeletions(
-      "$E = {{c1::mc^{2}}}$",
-      (d) => `[${d.hidden}]`,
-    );
+    const output = replaceClozeDeletions("$E = {{c1::mc^{2}}}$", (d) => `[${d.hidden}]`);
 
     assert.strictEqual(output, "$E = [mc^{2}]$");
   });
@@ -201,13 +198,10 @@ describe("math-context-aware replacement", () => {
 
   it("distinguishes math and non-math clozes in same content", () => {
     const contexts: boolean[] = [];
-    replaceClozeDeletionsWithContext(
-      "The {{c1::capital}} of $E = {{c2::mc^2}}$",
-      (d) => {
-        contexts.push(d.insideMath);
-        return d.hidden;
-      },
-    );
+    replaceClozeDeletionsWithContext("The {{c1::capital}} of $E = {{c2::mc^2}}$", (d) => {
+      contexts.push(d.insideMath);
+      return d.hidden;
+    });
 
     assert.deepStrictEqual(contexts, [false, true]);
   });
@@ -269,78 +263,60 @@ describe("math-context-aware replacement", () => {
 
   it("handles multiple math spans correctly", () => {
     const contexts: boolean[] = [];
-    replaceClozeDeletionsWithContext(
-      "${{c1::a}}$ then {{c2::b}} then ${{c3::c}}$",
-      (d) => {
-        contexts.push(d.insideMath);
-        return d.hidden;
-      },
-    );
+    replaceClozeDeletionsWithContext("${{c1::a}}$ then {{c2::b}} then ${{c3::c}}$", (d) => {
+      contexts.push(d.insideMath);
+      return d.hidden;
+    });
 
     assert.deepStrictEqual(contexts, [true, false, true]);
   });
 
   it("does not treat $5 dollar amounts as math spans", () => {
     const contexts: boolean[] = [];
-    replaceClozeDeletionsWithContext(
-      "This costs $5 and {{c1::answer}}",
-      (d) => {
-        contexts.push(d.insideMath);
-        return d.hidden;
-      },
-    );
+    replaceClozeDeletionsWithContext("This costs $5 and {{c1::answer}}", (d) => {
+      contexts.push(d.insideMath);
+      return d.hidden;
+    });
 
     assert.deepStrictEqual(contexts, [false]);
   });
 
   it("does not let $ inside cloze body poison math detection", () => {
     const contexts: boolean[] = [];
-    replaceClozeDeletionsWithContext(
-      "Price is {{c1::$5}} and $x = {{c2::2}}$",
-      (d) => {
-        contexts.push(d.insideMath);
-        return d.hidden;
-      },
-    );
+    replaceClozeDeletionsWithContext("Price is {{c1::$5}} and $x = {{c2::2}}$", (d) => {
+      contexts.push(d.insideMath);
+      return d.hidden;
+    });
 
     assert.deepStrictEqual(contexts, [false, true]);
   });
 
   it("handles multi-backtick code spans", () => {
     const contexts: boolean[] = [];
-    replaceClozeDeletionsWithContext(
-      "``$x$`` and {{c1::answer}}",
-      (d) => {
-        contexts.push(d.insideMath);
-        return d.hidden;
-      },
-    );
+    replaceClozeDeletionsWithContext("``$x$`` and {{c1::answer}}", (d) => {
+      contexts.push(d.insideMath);
+      return d.hidden;
+    });
 
     assert.deepStrictEqual(contexts, [false]);
   });
 
   it("rejects space-flanked $ as math (flanking rules)", () => {
     const contexts: boolean[] = [];
-    replaceClozeDeletionsWithContext(
-      "$ not math $ and {{c1::answer}}",
-      (d) => {
-        contexts.push(d.insideMath);
-        return d.hidden;
-      },
-    );
+    replaceClozeDeletionsWithContext("$ not math $ and {{c1::answer}}", (d) => {
+      contexts.push(d.insideMath);
+      return d.hidden;
+    });
 
     assert.deepStrictEqual(contexts, [false]);
   });
 
   it("does not let unclosed $$ fall through to inline $", () => {
     const contexts: boolean[] = [];
-    replaceClozeDeletionsWithContext(
-      "$$unclosed and $x = {{c1::2}}$",
-      (d) => {
-        contexts.push(d.insideMath);
-        return d.hidden;
-      },
-    );
+    replaceClozeDeletionsWithContext("$$unclosed and $x = {{c1::2}}$", (d) => {
+      contexts.push(d.insideMath);
+      return d.hidden;
+    });
 
     assert.deepStrictEqual(contexts, [true]);
   });

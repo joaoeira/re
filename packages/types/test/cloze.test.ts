@@ -354,38 +354,22 @@ The {{c1::mitochondrion}} produces ATP.`);
 
     it.effect("mixed math and non-math clozes in same content", () =>
       Effect.gen(function* () {
-        const content = yield* ClozeType.parse(
-          "The {{c1::energy}} equation is $E = {{c2::mc^2}}$",
-        );
+        const content = yield* ClozeType.parse("The {{c1::energy}} equation is $E = {{c2::mc^2}}$");
         const cards = ClozeType.cards(content);
 
         assert.strictEqual(cards.length, 2);
 
-        assert.strictEqual(
-          cards[0]!.prompt,
-          "The **[...]** equation is $E = mc^2$",
-        );
-        assert.strictEqual(
-          cards[0]!.reveal,
-          "The **energy** equation is $E = mc^2$",
-        );
+        assert.strictEqual(cards[0]!.prompt, "The **[...]** equation is $E = mc^2$");
+        assert.strictEqual(cards[0]!.reveal, "The **energy** equation is $E = mc^2$");
 
-        assert.strictEqual(
-          cards[1]!.prompt,
-          "The energy equation is $E = \\text{[\\ldots]}$",
-        );
-        assert.strictEqual(
-          cards[1]!.reveal,
-          "The energy equation is $E = \\boldsymbol{mc^2}$",
-        );
+        assert.strictEqual(cards[1]!.prompt, "The energy equation is $E = \\text{[\\ldots]}$");
+        assert.strictEqual(cards[1]!.reveal, "The energy equation is $E = \\boldsymbol{mc^2}$");
       }),
     );
 
     it.effect("multiple clozes inside same math expression", () =>
       Effect.gen(function* () {
-        const content = yield* ClozeType.parse(
-          "${{c1::a}} + {{c2::b}} = c$",
-        );
+        const content = yield* ClozeType.parse("${{c1::a}} + {{c2::b}} = c$");
         const cards = ClozeType.cards(content);
 
         assert.strictEqual(cards.length, 2);
@@ -410,9 +394,7 @@ The {{c1::mitochondrion}} produces ATP.`);
 
     it.effect("duplicate indices inside math share a single card", () =>
       Effect.gen(function* () {
-        const content = yield* ClozeType.parse(
-          "${{c1::x}} = {{c1::y}}$",
-        );
+        const content = yield* ClozeType.parse("${{c1::x}} = {{c1::y}}$");
         const cards = ClozeType.cards(content);
 
         assert.strictEqual(cards.length, 1);
@@ -443,9 +425,7 @@ The {{c1::mitochondrion}} produces ATP.`);
 
     it.effect("cloze with $ in body does not poison math detection", () =>
       Effect.gen(function* () {
-        const content = yield* ClozeType.parse(
-          "Price is {{c1::$5}} and $x = {{c2::2}}$",
-        );
+        const content = yield* ClozeType.parse("Price is {{c1::$5}} and $x = {{c2::2}}$");
         const cards = ClozeType.cards(content);
 
         assert.strictEqual(cards.length, 2);

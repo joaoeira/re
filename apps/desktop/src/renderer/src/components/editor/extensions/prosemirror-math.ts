@@ -6,11 +6,58 @@ import type MarkdownIt from "markdown-it";
 import type StateBlock from "markdown-it/lib/rules_block/state_block";
 import type StateInline from "markdown-it/lib/rules_inline/state_inline";
 import {
+  MathView,
   mathBackspaceCmd,
   mathPlugin,
   REGEX_BLOCK_MATH_DOLLARS,
   REGEX_INLINE_MATH_DOLLARS_ESCAPED,
 } from "@benrbray/prosemirror-math";
+import katex from "katex";
+import { replaceClozeDeletions } from "@re/core";
+
+const preprocessClozeForKatex = (tex: string): string =>
+  replaceClozeDeletions(tex, (d) => `[${d.hidden}]`);
+
+const originalRenderMath = MathView.prototype.renderMath;
+
+if (typeof originalRenderMath === "function") {
+  MathView.prototype.renderMath = function (this: MathView) {
+    const self = this as unknown as {
+      _node: { content: { firstChild: { textContent: string } | null } };
+      _mathRenderElt: HTMLElement | undefined;
+      _katexOptions: katex.KatexOptions;
+    };
+
+    if (!("_mathRenderElt" in self) || !("_node" in self) || !("_katexOptions" in self)) {
+      originalRenderMath.call(this);
+      return;
+    }
+
+    if (!self._mathRenderElt) return;
+
+    const firstChild = self._node.content.firstChild;
+    const texString = firstChild ? firstChild.textContent.trim() : "";
+
+    if (texString.length < 1) {
+      this.dom.classList.add("empty-math");
+      while (self._mathRenderElt.firstChild) {
+        self._mathRenderElt.firstChild.remove();
+      }
+      return;
+    }
+
+    this.dom.classList.remove("empty-math");
+
+    try {
+      katex.render(preprocessClozeForKatex(texString), self._mathRenderElt, self._katexOptions);
+      self._mathRenderElt.classList.remove("parse-error");
+      this.dom.setAttribute("title", "");
+    } catch (err) {
+      self._mathRenderElt.classList.add("parse-error");
+      this.dom.setAttribute("title", String(err));
+    }
+  };
+}
 
 const DOLLAR_SIGN = "$".charCodeAt(0);
 const BACKSLASH = "\\".charCodeAt(0);

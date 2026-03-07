@@ -146,10 +146,7 @@ interface MathSpan {
   readonly end: number;
 }
 
-const maskClozeBodies = (
-  content: string,
-  deletions: readonly ClozeSyntaxMatch[],
-): string => {
+const maskClozeBodies = (content: string, deletions: readonly ClozeSyntaxMatch[]): string => {
   if (deletions.length === 0) return content;
 
   let result = "";

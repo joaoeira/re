@@ -57,6 +57,48 @@ describe("InlineEditor math support", () => {
     expect(screen.container.textContent).not.toContain("![Cell](../../.re/assets/cell.png)");
   });
 
+  it("renders cloze-in-math as bracketed content instead of garbled KaTeX", async () => {
+    const screen = await render(<InlineEditor content={"${{c1::mv}} = {{c2::np}}$"} />);
+
+    const inlineMath = screen.container.querySelector("math-inline");
+    expect(inlineMath).not.toBeNull();
+    expect(inlineMath?.querySelector(".katex")).not.toBeNull();
+    expect(inlineMath?.querySelector(".parse-error")).toBeNull();
+    expect(inlineMath?.textContent).not.toContain("c1::");
+    expect(inlineMath?.textContent).not.toContain("c2::");
+  });
+
+  it("renders cloze-in-math with LaTeX braces correctly", async () => {
+    const screen = await render(<InlineEditor content={"$E = {{c1::mc^{2}}}$"} />);
+
+    const inlineMath = screen.container.querySelector("math-inline");
+    expect(inlineMath).not.toBeNull();
+    expect(inlineMath?.querySelector(".katex")).not.toBeNull();
+    expect(inlineMath?.querySelector(".parse-error")).toBeNull();
+    expect(inlineMath?.textContent).not.toContain("c1::");
+  });
+
+  it("renders display math with cloze deletions correctly", async () => {
+    const screen = await render(
+      <InlineEditor content={"Before\n\n$$\n{{c1::x^2}} + {{c2::y^2}} = z^2\n$$\n\nAfter"} />,
+    );
+
+    const displayMath = screen.container.querySelector("math-display");
+    expect(displayMath).not.toBeNull();
+    expect(displayMath?.querySelector(".katex-display")).not.toBeNull();
+    expect(displayMath?.querySelector(".parse-error")).toBeNull();
+    expect(displayMath?.textContent).not.toContain("c1::");
+  });
+
+  it("renders plain math unchanged when no cloze syntax is present", async () => {
+    const screen = await render(<InlineEditor content={"$E=mc^2$"} />);
+
+    const inlineMath = screen.container.querySelector("math-inline");
+    expect(inlineMath).not.toBeNull();
+    expect(inlineMath?.querySelector(".katex")).not.toBeNull();
+    expect(inlineMath?.querySelector(".parse-error")).toBeNull();
+  });
+
   it("renders a file URL preview when deck context is available", async () => {
     const screen = await render(
       <EditorField
