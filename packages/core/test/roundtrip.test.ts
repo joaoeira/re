@@ -162,6 +162,24 @@ It adds two numbers.
     }),
   );
 
+  it.scoped("preserves markdown image syntax byte-perfect", () =>
+    Effect.gen(function* () {
+      const original = `<!--@ abc123 0 0 0 0-->
+Identify this organelle.
+
+![Mitochondrion](../../.re/assets/mitochondrion.png)
+---
+Mitochondrion
+
+![Annotated diagram](../../.re/assets/mitochondrion-annotated.png)
+`;
+      const parsed = yield* parseFile(original);
+      const serialized = serializeFile(parsed);
+
+      assert.strictEqual(serialized, original);
+    }),
+  );
+
   it.scoped("preserves preamble-only files", () =>
     Effect.gen(function* () {
       const original = `This is just a regular file.

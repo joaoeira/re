@@ -138,6 +138,18 @@ Line 2: {{c2::answer2}}`;
         assert.ok(Option.isNone(result.deletions[1]!.hint));
       }),
     );
+
+    it.scoped("parses content containing markdown images without interpreting them", () =>
+      Effect.gen(function* () {
+        const content = `![Mitochondrion](../../.re/assets/mitochondrion.png)
+The {{c1::mitochondrion}} produces ATP.`;
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.text, content);
+        assert.strictEqual(result.deletions.length, 1);
+        assert.strictEqual(result.deletions[0]!.hidden, "mitochondrion");
+      }),
+    );
   });
 
   describe("cards", () => {
@@ -262,6 +274,24 @@ Line 2: {{c2::answer2}}`;
         assert.strictEqual(cards.length, 1);
         assert.strictEqual(cards[0]!.prompt, "**[hint1]** and **[hint2]**");
         assert.strictEqual(cards[0]!.reveal, "**first** and **second**");
+      }),
+    );
+
+    it.effect("cards preserve markdown image syntax while transforming cloze text", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse(`![Mitochondrion](../../.re/assets/mitochondrion.png)
+The {{c1::mitochondrion}} produces ATP.`);
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(
+          cards[0]!.prompt,
+          "![Mitochondrion](../../.re/assets/mitochondrion.png)\nThe **[...]** produces ATP.",
+        );
+        assert.strictEqual(
+          cards[0]!.reveal,
+          "![Mitochondrion](../../.re/assets/mitochondrion.png)\nThe **mitochondrion** produces ATP.",
+        );
       }),
     );
   });

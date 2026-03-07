@@ -15,6 +15,32 @@ export {
 } from "./scanDecks";
 
 export {
+  ResolveDeckImagePathReasonSchema,
+  InvalidDeckImagePath,
+  ResolvedDeckImagePathSchema,
+  isPathWithinRoot,
+  resolveDeckImagePath,
+  type ResolveDeckImagePathReason,
+  type ResolvedDeckImagePath,
+} from "./imagePaths";
+
+export {
+  WORKSPACE_INTERNAL_DIRECTORY_NAME,
+  WORKSPACE_IMAGE_ASSETS_DIRECTORY_NAME,
+  WORKSPACE_IMAGE_ASSETS_RELATIVE_PATH,
+  InvalidWorkspaceImageAssetReasonSchema,
+  InvalidWorkspaceImageAsset,
+  ImportDeckImageAssetOperationSchema,
+  ImportDeckImageAssetOperationError,
+  ImportedDeckImageAssetSchema,
+  getWorkspaceImageAssetsDirectory,
+  importDeckImageAsset,
+  type InvalidWorkspaceImageAssetReason,
+  type ImportDeckImageAssetOperation,
+  type ImportedDeckImageAsset,
+} from "./imageAssets";
+
+export {
   snapshotWorkspace,
   DeckStateCountsSchema,
   DeckSnapshotOkSchema,

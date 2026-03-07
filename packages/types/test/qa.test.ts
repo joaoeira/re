@@ -94,6 +94,26 @@ It's a horizontal rule`;
         assert.strictEqual(result.answer, "It's a horizontal rule");
       }),
     );
+
+    it.scoped("parses markdown images in question and answer without rewriting them", () =>
+      Effect.gen(function* () {
+        const content = `Identify this organelle:
+![Mitochondrion](../../.re/assets/mitochondrion.png)
+---
+Mitochondrion
+![Annotated diagram](../../.re/assets/mitochondrion-annotated.png)`;
+        const result = yield* QAType.parse(content);
+
+        assert.strictEqual(
+          result.question,
+          "Identify this organelle:\n![Mitochondrion](../../.re/assets/mitochondrion.png)",
+        );
+        assert.strictEqual(
+          result.answer,
+          "Mitochondrion\n![Annotated diagram](../../.re/assets/mitochondrion-annotated.png)",
+        );
+      }),
+    );
   });
 
   describe("cards", () => {
@@ -131,6 +151,26 @@ It's a horizontal rule`;
         assert.strictEqual(grade1, 1);
         assert.strictEqual(grade2, 2);
         assert.strictEqual(grade3, 3);
+      }),
+    );
+
+    it.effect("cards preserve markdown image syntax in prompt and reveal", () =>
+      Effect.gen(function* () {
+        const content = yield* QAType.parse(`Question
+![Prompt image](../../.re/assets/prompt.png)
+---
+Answer
+![Reveal image](../../.re/assets/reveal.png)`);
+        const cards = QAType.cards(content);
+
+        assert.strictEqual(
+          cards[0]!.prompt,
+          "Question\n![Prompt image](../../.re/assets/prompt.png)",
+        );
+        assert.strictEqual(
+          cards[0]!.reveal,
+          "Answer\n![Reveal image](../../.re/assets/reveal.png)",
+        );
       }),
     );
   });
