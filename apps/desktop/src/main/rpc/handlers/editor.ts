@@ -2,7 +2,7 @@ import path from "node:path";
 
 import { createMetadata, hasClozeDeletion, type Item, type ItemMetadata } from "@re/core";
 import { ClozeType, QAType } from "@re/types";
-import { DeckManager, scanDecks } from "@re/workspace";
+import { DeckManager, importDeckImageAssetFromBytes, scanDecks } from "@re/workspace";
 import type { FileSystem, Path } from "@effect/platform";
 import { Effect, Either, Option } from "effect";
 import type { Implementations } from "electron-effect-rpc/types";
@@ -74,6 +74,8 @@ const duplicateKey = (cardType: EditorCardType, content: string): string =>
 
 const ensureTrailingNewline = (content: string): string =>
   content.endsWith("\n") ? content : `${content}\n`;
+
+const MAX_IMPORTED_IMAGE_BYTES = 10 * 1024 * 1024;
 
 const uniqueClozeIndices = (
   content: string,
@@ -151,6 +153,7 @@ type EditorHandlerKeys =
   | "GetItemForEdit"
   | "CheckDuplicates"
   | "DeleteItems"
+  | "ImportDeckImageAsset"
   | "OpenEditorWindow";
 
 type EditorHandlerRuntime = DeckManager | FileSystem.FileSystem | Path.Path;
@@ -446,6 +449,68 @@ export const createEditorHandlers = () =>
           });
 
           return {};
+        }).pipe(Effect.mapError(toEditorError)),
+      ImportDeckImageAsset: ({ deckPath, extension, bytes }) =>
+        Effect.gen(function* () {
+          const rootPath = yield* validateDeckAccessAs(
+            settingsRepository,
+            deckPath,
+            (m) => new EditorOperationError({ message: m }),
+          );
+
+          if (bytes.length > MAX_IMPORTED_IMAGE_BYTES) {
+            return yield* Effect.fail(
+              new EditorOperationError({
+                message: "Image exceeds maximum size of 10 MiB.",
+              }),
+            );
+          }
+
+          const imported = yield* importDeckImageAssetFromBytes({
+            rootPath,
+            deckPath,
+            bytes,
+            extension,
+          }).pipe(
+            Effect.catchTags({
+              InvalidWorkspaceImageAsset: (error) => {
+                if (error.reason === "unsupported_file_extension") {
+                  return Effect.fail(
+                    new EditorOperationError({
+                      message: `Unsupported image extension: ${extension}`,
+                    }),
+                  );
+                }
+
+                if (error.reason === "deck_outside_root") {
+                  return Effect.fail(
+                    new EditorOperationError({
+                      message: `Deck path is outside workspace root: ${deckPath}`,
+                    }),
+                  );
+                }
+
+                return Effect.fail(
+                  new EditorOperationError({
+                    message: `Unable to import image asset (${error.reason}).`,
+                  }),
+                );
+              },
+              ImportDeckImageAssetOperationError: (error) =>
+                Effect.fail(
+                  new EditorOperationError({
+                    message: `Failed to store image asset: ${error.message}`,
+                  }),
+                ),
+            }),
+          );
+
+          return {
+            contentHash: imported.contentHash,
+            extension: imported.extension,
+            workspaceRelativePath: imported.workspaceRelativePath,
+            deckRelativePath: imported.deckRelativePath,
+          };
         }).pipe(Effect.mapError(toEditorError)),
       OpenEditorWindow: (params) =>
         Effect.sync(() => {

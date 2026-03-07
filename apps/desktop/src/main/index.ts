@@ -1,7 +1,16 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { pathToFileURL } from "node:url";
 
-import { app, BrowserWindow, Menu, type MenuItemConstructorOptions, ipcMain } from "electron";
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  net,
+  protocol,
+  type MenuItemConstructorOptions,
+  ipcMain,
+} from "electron";
 import { Effect, Layer, Runtime } from "effect";
 
 import {
@@ -40,7 +49,7 @@ import {
 import { AppRpcHandlersServiceFromEffectLive } from "@main/rpc/handlers";
 import { HandlerServicesLive } from "@main/rpc/handlers/shared";
 import { makeSecretStore } from "@main/secrets";
-import { makeSettingsRepository } from "@main/settings/repository";
+import { makeSettingsRepository, type SettingsRepository } from "@main/settings/repository";
 import { createWorkspaceWatcher, type WorkspaceWatcher } from "@main/watcher/workspace-watcher";
 import {
   createSingleFlightTask,
@@ -54,6 +63,11 @@ import {
 import { makePdfExtractor } from "@main/forge/services/pdf-extractor";
 import { makeChunkService } from "@main/forge/services/chunk-service";
 import { WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
+import {
+  DESKTOP_CANONICAL_ASSET_PREFIX,
+  DESKTOP_ASSET_URL_SCHEME,
+  fromDesktopAssetUrl,
+} from "@shared/lib/asset-url";
 import { appIpc } from "@shared/rpc/ipc";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -61,6 +75,18 @@ declare const MAIN_WINDOW_VITE_NAME: string;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPLAY_INTERVAL_MS = 60_000;
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: DESKTOP_ASSET_URL_SCHEME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+]);
 
 let mainWindow: BrowserWindow | null = null;
 let ipcHandle: ReturnType<typeof appIpc.main> | null = null;
@@ -117,6 +143,45 @@ const loadMainWindow = async (window: BrowserWindow): Promise<void> => {
   const rendererPath = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`);
   log("loading renderer from file", rendererPath);
   await window.loadFile(rendererPath);
+};
+
+const isWithinRoot = (rootPath: string, targetPath: string): boolean => {
+  const resolvedRootPath = path.resolve(rootPath);
+  const resolvedTargetPath = path.resolve(targetPath);
+  const relativePath = path.relative(resolvedRootPath, resolvedTargetPath);
+
+  return (
+    relativePath === "" ||
+    (relativePath !== ".." &&
+      !relativePath.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relativePath))
+  );
+};
+
+const registerDesktopAssetProtocol = (settingsRepository: SettingsRepository): void => {
+  protocol.handle(DESKTOP_ASSET_URL_SCHEME, async (request) => {
+    const workspaceRelativePath = fromDesktopAssetUrl(request.url);
+    if (!workspaceRelativePath) {
+      return new Response("Invalid asset URL", { status: 400 });
+    }
+
+    if (!workspaceRelativePath.startsWith(DESKTOP_CANONICAL_ASSET_PREFIX)) {
+      return new Response("Asset path outside canonical store", { status: 403 });
+    }
+
+    const settings = await Effect.runPromise(settingsRepository.getSettings());
+    const rootPath = settings.workspace.rootPath;
+    if (!rootPath) {
+      return new Response("Workspace root is not configured", { status: 404 });
+    }
+
+    const absolutePath = path.resolve(rootPath, workspaceRelativePath);
+    if (!isWithinRoot(rootPath, absolutePath)) {
+      return new Response("Asset path is outside workspace root", { status: 403 });
+    }
+
+    return net.fetch(pathToFileURL(absolutePath).toString());
+  });
 };
 
 const createMainWindow = (): BrowserWindow => {
@@ -259,6 +324,7 @@ if (!gotSingleInstanceLock) {
     const settingsRepository = Effect.runSync(
       makeSettingsRepository({ settingsFilePath }).pipe(Effect.provide(NodeServicesLive)),
     );
+    registerDesktopAssetProtocol(settingsRepository);
     const secretStore = Effect.runSync(
       makeSecretStore({
         encryptedFilePath: secretsFilePath,

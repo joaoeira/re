@@ -279,6 +279,25 @@ export function useEditorSession(search: EditorSearchParams) {
     [send],
   );
 
+  const importDeckImageAsset = useCallback(
+    async (input: {
+      readonly deckPath: string;
+      readonly extension: ".png" | ".jpg" | ".jpeg" | ".webp" | ".gif";
+      readonly bytes: Uint8Array;
+    }) =>
+      runIpcEffect(
+        ipc.client.ImportDeckImageAsset(input).pipe(
+          Effect.catchTag("RpcDefectError", (rpcDefect) =>
+            Effect.fail(toRpcDefectError(rpcDefect)),
+          ),
+          Effect.catchTag("editor_operation_error", (editorError) =>
+            Effect.fail(new Error(editorError.message)),
+          ),
+        ),
+      ),
+    [ipc],
+  );
+
   return {
     context,
     decks,
@@ -289,6 +308,7 @@ export function useEditorSession(search: EditorSearchParams) {
     flashMessage,
     submit,
     createDeck,
+    importDeckImageAsset,
     setDeckPath: (deckPath: string | null) => send({ type: "SET_DECK_PATH", deckPath }),
     setFrontContent: (content: string) => send({ type: "SET_FRONT_CONTENT", content }),
     setBackContent: (content: string) => send({ type: "SET_BACK_CONTENT", content }),

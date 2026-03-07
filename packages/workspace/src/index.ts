@@ -35,6 +35,7 @@ export {
   ImportedDeckImageAssetSchema,
   getWorkspaceImageAssetsDirectory,
   importDeckImageAsset,
+  importDeckImageAssetFromBytes,
   type InvalidWorkspaceImageAssetReason,
   type ImportDeckImageAssetOperation,
   type ImportedDeckImageAsset,

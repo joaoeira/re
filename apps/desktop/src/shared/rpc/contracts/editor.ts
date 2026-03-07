@@ -1,7 +1,11 @@
 import { Schema } from "@effect/schema";
 import { event, rpc } from "electron-effect-rpc/contract";
 
-import { EditorOperationError } from "@shared/rpc/schemas/editor";
+import {
+  EditorOperationError,
+  ImportDeckImageAssetInputSchema,
+  ImportedDeckImageAssetResultSchema,
+} from "@shared/rpc/schemas/editor";
 
 const EditorCardTypeSchema = Schema.Literal("qa", "cloze");
 
@@ -88,6 +92,13 @@ export const DeleteItems = rpc(
     items: Schema.NonEmptyArray(DeleteItemSchema),
   }),
   Schema.Struct({}),
+  EditorOperationError,
+);
+
+export const ImportDeckImageAsset = rpc(
+  "ImportDeckImageAsset",
+  ImportDeckImageAssetInputSchema,
+  ImportedDeckImageAssetResultSchema,
   EditorOperationError,
 );
 

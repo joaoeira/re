@@ -272,6 +272,18 @@
     @apply font-mono;
   }
 
+  .editor-image-node {
+    @apply my-2 inline-flex max-w-full align-top;
+  }
+
+  .editor-image-preview {
+    @apply h-auto max-w-full rounded-md border border-border bg-muted/10;
+  }
+
+  .editor-image-placeholder {
+    @apply inline-flex items-center rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground/60;
+  }
+
   .editor-prosemirror .math-node {
     color: inherit;
     font-family: var(--font-sans);

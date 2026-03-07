@@ -8,6 +8,7 @@ import {
   WORKSPACE_IMAGE_ASSETS_RELATIVE_PATH,
   getWorkspaceImageAssetsDirectory,
   importDeckImageAsset,
+  importDeckImageAssetFromBytes,
 } from "../src";
 import { createMockFileSystem, type MockFileSystemConfig } from "./mock-file-system";
 
@@ -48,6 +49,32 @@ const runImportEither = (
   return {
     mock,
     promise: importDeckImageAsset(options).pipe(
+      Effect.either,
+      Effect.provide(layer),
+      Effect.runPromise,
+    ),
+  };
+};
+
+const runImportFromBytes = (
+  config: MockFileSystemConfig,
+  options: Parameters<typeof importDeckImageAssetFromBytes>[0],
+) => {
+  const { mock, layer } = buildLayer(config);
+  return {
+    mock,
+    promise: importDeckImageAssetFromBytes(options).pipe(Effect.provide(layer), Effect.runPromise),
+  };
+};
+
+const runImportFromBytesEither = (
+  config: MockFileSystemConfig,
+  options: Parameters<typeof importDeckImageAssetFromBytes>[0],
+) => {
+  const { mock, layer } = buildLayer(config);
+  return {
+    mock,
+    promise: importDeckImageAssetFromBytes(options).pipe(
       Effect.either,
       Effect.provide(layer),
       Effect.runPromise,
@@ -256,6 +283,69 @@ describe("imageAssets", () => {
         if (result.left instanceof ImportDeckImageAssetOperationError) {
           expect(result.left.operation).toBe("write_asset");
           expect(result.left.assetPath).toBe(assetPath);
+        }
+      }
+    });
+  });
+
+  describe("importDeckImageAssetFromBytes", () => {
+    it("imports bytes into the canonical store and returns the markdown path to write", async () => {
+      const sourceBytes = new Uint8Array([1, 2, 3, 4]);
+      const { mock, promise } = runImportFromBytes(
+        {
+          entryTypes: {},
+          directories: {},
+        },
+        {
+          rootPath: "/workspace",
+          deckPath: "/workspace/decks/biology/cell.md",
+          bytes: sourceBytes,
+          extension: ".PNG",
+        },
+      );
+
+      const result = await promise;
+
+      expect(result).toEqual({
+        contentHash: "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a",
+        extension: ".png",
+        absolutePath:
+          "/workspace/.re/assets/9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a.png",
+        workspaceRelativePath:
+          ".re/assets/9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a.png",
+        deckRelativePath:
+          "../../.re/assets/9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a.png",
+      });
+
+      expect(
+        Array.from(
+          mock.bytesStore[
+            "/workspace/.re/assets/9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a.png"
+          ] ?? [],
+        ),
+      ).toEqual(Array.from(sourceBytes));
+    });
+
+    it("rejects unsupported extensions", async () => {
+      const { promise } = runImportFromBytesEither(
+        {
+          entryTypes: {},
+          directories: {},
+        },
+        {
+          rootPath: "/workspace",
+          deckPath: "/workspace/decks/biology/cell.md",
+          bytes: new Uint8Array([1, 2, 3, 4]),
+          extension: ".bmp",
+        },
+      );
+
+      const result = await promise;
+      expect(Either.isLeft(result)).toBe(true);
+      if (Either.isLeft(result)) {
+        expect(result.left).toBeInstanceOf(InvalidWorkspaceImageAsset);
+        if (result.left instanceof InvalidWorkspaceImageAsset) {
+          expect(result.left.reason).toBe("unsupported_file_extension");
         }
       }
     });

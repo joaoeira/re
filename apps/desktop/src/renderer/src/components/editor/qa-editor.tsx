@@ -1,6 +1,7 @@
 import { Braces } from "lucide-react";
 
 import { EditorField } from "@/components/editor/editor-field";
+import type { ImportDeckImageAssetFn } from "@/components/editor/hooks/use-markdown-editor";
 
 type QaEditorProps = {
   readonly frontContent: string;
@@ -11,6 +12,9 @@ type QaEditorProps = {
   readonly onBackChange: (content: string) => void;
   readonly onToggleFrontFrozen: () => void;
   readonly onToggleBackFrozen: () => void;
+  readonly rootPath?: string | null;
+  readonly deckPath?: string | null;
+  readonly importDeckImageAsset?: ImportDeckImageAssetFn | undefined;
 };
 
 export function QaEditor({
@@ -22,6 +26,9 @@ export function QaEditor({
   onBackChange,
   onToggleFrontFrozen,
   onToggleBackFrozen,
+  rootPath = null,
+  deckPath = null,
+  importDeckImageAsset,
 }: QaEditorProps) {
   const showClozeHint = frontContent.trim().length > 0 && backContent.trim().length === 0;
 
@@ -35,6 +42,9 @@ export function QaEditor({
         onToggleFreeze={onToggleFrontFrozen}
         placeholder="Question..."
         enableClozeShortcut
+        rootPath={rootPath}
+        deckPath={deckPath}
+        importDeckImageAsset={importDeckImageAsset}
       />
       <div className="h-px bg-border" />
       <EditorField
@@ -44,6 +54,9 @@ export function QaEditor({
         frozen={backFrozen}
         onToggleFreeze={onToggleBackFrozen}
         placeholder="Answer..."
+        rootPath={rootPath}
+        deckPath={deckPath}
+        importDeckImageAsset={importDeckImageAsset}
       />
       {showClozeHint && (
         <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/40">

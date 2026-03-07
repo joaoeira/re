@@ -3,8 +3,15 @@ import { randomUUID } from "node:crypto";
 
 import { inferType } from "@re/core";
 import { ClozeType, QAType, type QAContent } from "@re/types";
-import { DeckManager, ReviewQueueBuilder, Scheduler, computeDueDate } from "@re/workspace";
-import type { FileSystem, Path } from "@effect/platform";
+import {
+  DeckManager,
+  ReviewQueueBuilder,
+  Scheduler,
+  computeDueDate,
+  resolveDeckImagePath,
+} from "@re/workspace";
+import { Path } from "@effect/platform";
+import type { FileSystem } from "@effect/platform";
 import { Effect, Exit } from "effect";
 import type { Implementations } from "electron-effect-rpc/types";
 
@@ -20,6 +27,7 @@ import { GenerateReviewPermutationsPromptSpec } from "@main/review/prompts/gener
 import type { SettingsRepository } from "@main/settings/repository";
 import { toErrorMessage } from "@main/utils/format";
 import type { AppContract } from "@shared/rpc/contracts";
+import { toDesktopAssetUrl } from "@shared/lib/asset-url";
 import {
   CardContentIndexOutOfBoundsError,
   CardContentNotFoundError,
@@ -42,6 +50,7 @@ import {
 } from "./shared";
 
 const reviewItemTypes = [QAType, ClozeType] as const;
+const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
 
 type ReviewHandlerKeys =
   | "BuildReviewQueue"
@@ -71,14 +80,76 @@ type ReviewRenderedCardSpec = {
 
 type ResolvedReviewCard =
   | {
+      readonly rootPath: string;
       readonly cardType: "qa";
       readonly cardSpec: ReviewRenderedCardSpec;
       readonly qaContent: QAContent;
     }
   | {
+      readonly rootPath: string;
       readonly cardType: "cloze";
       readonly cardSpec: ReviewRenderedCardSpec;
     };
+
+const URI_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+
+const rewriteSingleImageUrlForDesktop = (options: {
+  readonly rootPath: string;
+  readonly deckPath: string;
+  readonly rawUrl: string;
+}): Effect.Effect<string, never, Path.Path> =>
+  Effect.gen(function* () {
+    const normalizedUrl = options.rawUrl.trim();
+
+    if (normalizedUrl.length === 0) {
+      return "";
+    }
+
+    if (URI_SCHEME_PATTERN.test(normalizedUrl) || normalizedUrl.startsWith("//")) {
+      return normalizedUrl;
+    }
+
+    const resolved = yield* resolveDeckImagePath({
+      rootPath: options.rootPath,
+      deckPath: options.deckPath,
+      imagePath: normalizedUrl,
+    }).pipe(Effect.either);
+
+    if (resolved._tag === "Left") {
+      return "";
+    }
+
+    return toDesktopAssetUrl(resolved.right.workspaceRelativePath);
+  });
+
+const rewriteDeckImageUrlsForDesktop = (options: {
+  readonly rootPath: string;
+  readonly deckPath: string;
+  readonly markdown: string;
+}): Effect.Effect<string, never, Path.Path> =>
+  Effect.gen(function* () {
+    let cursor = 0;
+    let output = "";
+
+    for (const match of options.markdown.matchAll(MARKDOWN_IMAGE_PATTERN)) {
+      const index = match.index ?? 0;
+      const fullMatch = match[0] ?? "";
+      const altText = match[1] ?? "";
+      const rawUrl = match[2] ?? "";
+
+      output += options.markdown.slice(cursor, index);
+      const rewrittenUrl = yield* rewriteSingleImageUrlForDesktop({
+        rootPath: options.rootPath,
+        deckPath: options.deckPath,
+        rawUrl,
+      });
+      output += `![${altText}](${rewrittenUrl})`;
+      cursor = index + fullMatch.length;
+    }
+
+    output += options.markdown.slice(cursor);
+    return output;
+  });
 
 const loadResolvedReviewCard = (options: {
   readonly settingsRepository: SettingsRepository;
@@ -91,10 +162,10 @@ const loadResolvedReviewCard = (options: {
   | CardContentNotFoundError
   | CardContentParseError
   | CardContentIndexOutOfBoundsError,
-  DeckManager
+  DeckManager | Path.Path
 > =>
   Effect.gen(function* () {
-    yield* validateDeckAccess<CardContentReadError | CardContentNotFoundError>(
+    const rootPath = yield* validateDeckAccess<CardContentReadError | CardContentNotFoundError>(
       options.settingsRepository,
       {
         deckPath: options.deckPath,
@@ -152,14 +223,26 @@ const loadResolvedReviewCard = (options: {
       );
     }
 
+    const prompt = yield* rewriteDeckImageUrlsForDesktop({
+      rootPath,
+      deckPath: options.deckPath,
+      markdown: cardSpec.prompt,
+    });
+    const reveal = yield* rewriteDeckImageUrlsForDesktop({
+      rootPath,
+      deckPath: options.deckPath,
+      markdown: cardSpec.reveal,
+    });
+
     const renderedCardSpec: ReviewRenderedCardSpec = {
-      prompt: cardSpec.prompt,
-      reveal: cardSpec.reveal,
+      prompt,
+      reveal,
       cardType: cardSpec.cardType,
     };
 
     if (inferred.type === QAType) {
       return {
+        rootPath,
         cardType: "qa",
         cardSpec: renderedCardSpec,
         qaContent: inferred.content as QAContent,
@@ -168,6 +251,7 @@ const loadResolvedReviewCard = (options: {
 
     if (inferred.type === ClozeType) {
       return {
+        rootPath,
         cardType: "cloze",
         cardSpec: renderedCardSpec,
       };
@@ -197,25 +281,40 @@ const resolveReviewAssistantQaSourceCard = (options: {
   | CardContentParseError
   | CardContentIndexOutOfBoundsError
   | ReviewAssistantUnsupportedCardTypeError,
-  DeckManager
+  DeckManager | Path.Path
 > =>
-  loadResolvedReviewCard(options).pipe(
-    Effect.flatMap((resolved) =>
-      resolved.cardType === "qa"
-        ? Effect.succeed({
-            sourceCard: {
-              cardType: "qa" as const,
-              content: resolved.qaContent,
-            },
-          })
-        : Effect.fail(
-            new ReviewAssistantUnsupportedCardTypeError({
-              cardType: resolved.cardType,
-              message: `Permutations are not supported for ${resolved.cardType} review cards.`,
-            }),
-          ),
-    ),
-  );
+  Effect.gen(function* () {
+    const resolved = yield* loadResolvedReviewCard(options);
+    if (resolved.cardType !== "qa") {
+      return yield* Effect.fail(
+        new ReviewAssistantUnsupportedCardTypeError({
+          cardType: resolved.cardType,
+          message: `Permutations are not supported for ${resolved.cardType} review cards.`,
+        }),
+      );
+    }
+
+    const question = yield* rewriteDeckImageUrlsForDesktop({
+      rootPath: resolved.rootPath,
+      deckPath: options.deckPath,
+      markdown: resolved.qaContent.question,
+    });
+    const answer = yield* rewriteDeckImageUrlsForDesktop({
+      rootPath: resolved.rootPath,
+      deckPath: options.deckPath,
+      markdown: resolved.qaContent.answer,
+    });
+
+    return {
+      sourceCard: {
+        cardType: "qa" as const,
+        content: {
+          question,
+          answer,
+        },
+      },
+    };
+  });
 
 const normalizeGeneratedPermutations = (
   permutations: ReadonlyArray<{ readonly question: string; readonly answer: string }>,

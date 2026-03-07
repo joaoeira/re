@@ -67,6 +67,9 @@ export function EditorRoot({ search }: EditorRootProps) {
                   frozen={context.frontFrozen}
                   onChange={session.setFrontContent}
                   onToggleFrozen={session.toggleFrontFrozen}
+                  rootPath={session.rootPath}
+                  deckPath={context.deckPath}
+                  importDeckImageAsset={session.importDeckImageAsset}
                 />
                 <ClozePreview content={context.frontContent} />
               </>
@@ -80,6 +83,9 @@ export function EditorRoot({ search }: EditorRootProps) {
                 onBackChange={session.setBackContent}
                 onToggleFrontFrozen={session.toggleFrontFrozen}
                 onToggleBackFrozen={session.toggleBackFrozen}
+                rootPath={session.rootPath}
+                deckPath={context.deckPath}
+                importDeckImageAsset={session.importDeckImageAsset}
               />
             )}
 

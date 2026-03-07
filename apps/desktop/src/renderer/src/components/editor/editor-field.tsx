@@ -1,9 +1,13 @@
 import { EditorContent } from "@tiptap/react";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Pin } from "lucide-react";
+import { useRef } from "react";
 
-import { clozeShortcutExtension } from "@/components/editor/extensions/cloze-shortcut";
-import { useMarkdownEditor } from "@/components/editor/hooks/use-markdown-editor";
+import { createClozeShortcutExtension } from "@/components/editor/extensions/cloze-shortcut";
+import {
+  type ImportDeckImageAssetFn,
+  useMarkdownEditor,
+} from "@/components/editor/hooks/use-markdown-editor";
 import { cn } from "@/lib/utils";
 
 type EditorFieldProps = {
@@ -14,6 +18,9 @@ type EditorFieldProps = {
   readonly onContentChange: (markdown: string) => void;
   readonly placeholder?: string;
   readonly enableClozeShortcut?: boolean;
+  readonly rootPath?: string | null;
+  readonly deckPath?: string | null;
+  readonly importDeckImageAsset?: ImportDeckImageAssetFn | undefined;
 };
 
 export function EditorField({
@@ -24,16 +31,26 @@ export function EditorField({
   onContentChange,
   placeholder,
   enableClozeShortcut = false,
+  rootPath = null,
+  deckPath = null,
+  importDeckImageAsset,
 }: EditorFieldProps) {
+  const clozeShortcutExtensionRef = useRef(
+    enableClozeShortcut ? createClozeShortcutExtension() : null,
+  );
+
   const editor = useMarkdownEditor({
     content,
     onContentChange,
+    rootPath,
+    deckPath,
+    importDeckImageAsset,
     editorOptions: {
       extensions: [
         Placeholder.configure({
           placeholder: placeholder ?? "",
         }),
-        ...(enableClozeShortcut ? [clozeShortcutExtension] : []),
+        ...(clozeShortcutExtensionRef.current ? [clozeShortcutExtensionRef.current] : []),
       ],
     },
   });

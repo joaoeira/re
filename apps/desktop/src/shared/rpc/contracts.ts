@@ -9,6 +9,7 @@ import {
   DeleteItems,
   EditorNavigateRequest,
   GetItemForEdit,
+  ImportDeckImageAsset,
   OpenEditorWindow,
   ReplaceItem,
 } from "./contracts/editor";
@@ -98,6 +99,7 @@ export const appContract = defineContract({
     GetItemForEdit,
     CheckDuplicates,
     DeleteItems,
+    ImportDeckImageAsset,
     OpenEditorWindow,
     ForgeCreateSession,
     ForgeExtractText,

@@ -64,6 +64,49 @@ const createReviewPromptRuntime = (
   }) as ForgePromptRuntime;
 
 describe("review handlers", () => {
+  it("rewrites relative image markdown to file URLs for review content", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-image-"));
+    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));
+    const settingsFilePath = path.join(settingsRoot, "settings.json");
+    const deckPath = path.join(rootPath, "images.md");
+    const assetPath = path.join(
+      rootPath,
+      ".re/assets/9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a.png",
+    );
+
+    try {
+      await fs.mkdir(path.dirname(assetPath), { recursive: true });
+      await fs.writeFile(assetPath, new Uint8Array([1, 2, 3, 4]));
+      await fs.writeFile(
+        deckPath,
+        `<!--@ qa-card 0 0 0 0-->
+Question
+![](.re/assets/9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a.png)
+---
+Answer
+`,
+        "utf8",
+      );
+
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const card = await Effect.runPromise(
+        handlers.GetCardContent({
+          deckPath,
+          cardId: "qa-card",
+          cardIndex: 0,
+        }),
+      );
+
+      expect(card.prompt).toContain("Question");
+      expect(card.prompt).toContain("re-asset://asset/.re/assets/");
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(settingsRoot, { recursive: true, force: true });
+    }
+  });
+
   it("builds a review queue and returns QA card content", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-"));
     const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));

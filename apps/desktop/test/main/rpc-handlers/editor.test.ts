@@ -12,6 +12,46 @@ import type { AppContract } from "@shared/rpc/contracts";
 import { createHandlersWithOverrides } from "./helpers";
 
 describe("editor handlers", () => {
+  it("imports image bytes into the canonical workspace asset store", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-image-import-"));
+    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-settings-"));
+    const settingsFilePath = path.join(settingsRoot, "settings.json");
+    const deckPath = path.join(rootPath, "images.md");
+
+    try {
+      await fs.writeFile(deckPath, "", "utf8");
+
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const result = await Effect.runPromise(
+        handlers.ImportDeckImageAsset({
+          deckPath,
+          extension: ".png",
+          bytes: new Uint8Array([1, 2, 3, 4]),
+        }),
+      );
+
+      expect(result.contentHash).toBe(
+        "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a",
+      );
+      expect(result.deckRelativePath).toBe(
+        ".re/assets/9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a.png",
+      );
+
+      const storedBytes = await fs.readFile(
+        path.join(
+          rootPath,
+          ".re/assets/9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a.png",
+        ),
+      );
+      expect(Array.from(storedBytes)).toEqual([1, 2, 3, 4]);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(settingsRoot, { recursive: true, force: true });
+    }
+  });
+
   it("appends a new QA item", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-append-"));
     const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-settings-"));

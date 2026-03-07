@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render } from "vitest-browser-react";
 
+import { EditorField } from "@/components/editor/editor-field";
 import { InlineEditor } from "@/components/forge/cards/inline-editor";
 
 describe("InlineEditor math support", () => {
@@ -45,5 +46,32 @@ describe("InlineEditor math support", () => {
     expect(displayMath).not.toBeNull();
     expect(displayMath?.querySelector(".katex-display")).not.toBeNull();
     expect(screen.container.textContent).not.toContain("$$");
+  });
+
+  it("renders markdown image content as an unresolved editor placeholder instead of raw markdown", async () => {
+    const screen = await render(<InlineEditor content={"![Cell](../../.re/assets/cell.png)"} />);
+
+    const placeholder = screen.container.querySelector(".editor-image-placeholder");
+    expect(placeholder).not.toBeNull();
+    expect(placeholder?.textContent).toContain("cell.png");
+    expect(screen.container.textContent).not.toContain("![Cell](../../.re/assets/cell.png)");
+  });
+
+  it("renders a file URL preview when deck context is available", async () => {
+    const screen = await render(
+      <EditorField
+        label="Front"
+        frozen={false}
+        onToggleFreeze={() => undefined}
+        content={"![Cell](../../.re/assets/cell.png)"}
+        onContentChange={() => undefined}
+        rootPath="/workspace"
+        deckPath="/workspace/decks/biology/cell.md"
+      />,
+    );
+
+    const image = screen.container.querySelector<HTMLImageElement>(".editor-image-preview");
+    expect(image).not.toBeNull();
+    expect(image?.getAttribute("src")).toBe("re-asset://asset/.re/assets/cell.png");
   });
 });
