@@ -6,8 +6,9 @@ export {
   nextClozeDeletionIndex,
   parseClozeDeletions,
   replaceClozeDeletions,
+  replaceClozeDeletionsWithContext,
 } from "./cloze";
-export type { ClozeSyntaxMatch } from "./cloze";
+export type { ClozeSyntaxMatch, ClozeReplacerContext } from "./cloze";
 
 export type { Item, ItemMetadata, ParsedFile, NumericField, ItemId } from "./types";
 export { State } from "./types";

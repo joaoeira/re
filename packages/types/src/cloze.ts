@@ -5,7 +5,7 @@ import {
   type ItemType,
   ContentParseError,
   parseClozeDeletions,
-  replaceClozeDeletions,
+  replaceClozeDeletionsWithContext,
   manualCardSpec,
 } from "@re/core";
 
@@ -42,17 +42,30 @@ const parseDeletions = (text: string): ClozeDeletion[] => {
   return deletions.sort((a, b) => a.index - b.index);
 };
 
+const escapeTexText = (text: string): string =>
+  text.replace(/([\\{}^_%#&~$])/g, "\\$1");
+
 const generateReveal = (content: ClozeContent, targetIndex: number): string =>
-  replaceClozeDeletions(content.text, (deletion) =>
-    deletion.index === targetIndex ? `**${deletion.hidden}**` : deletion.hidden,
-  );
+  replaceClozeDeletionsWithContext(content.text, (deletion) => {
+    if (deletion.index !== targetIndex) {
+      return deletion.hidden;
+    }
+    return deletion.insideMath
+      ? `\\boldsymbol{${deletion.hidden}}`
+      : `**${deletion.hidden}**`;
+  });
 
 const generatePrompt = (content: ClozeContent, targetIndex: number): string =>
-  replaceClozeDeletions(content.text, (deletion) => {
-    if (deletion.index === targetIndex) {
-      return deletion.hint ? `**[${deletion.hint}]**` : "**[...]**";
+  replaceClozeDeletionsWithContext(content.text, (deletion) => {
+    if (deletion.index !== targetIndex) {
+      return deletion.hidden;
     }
-    return deletion.hidden;
+    if (deletion.insideMath) {
+      return deletion.hint
+        ? `\\text{[${escapeTexText(deletion.hint)}]}`
+        : `\\text{[\\ldots]}`;
+    }
+    return deletion.hint ? `**[${deletion.hint}]**` : "**[...]**";
   });
 
 /**

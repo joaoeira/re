@@ -295,4 +295,163 @@ The {{c1::mitochondrion}} produces ATP.`);
       }),
     );
   });
+
+  describe("cards with LaTeX", () => {
+    it.effect("cloze inside inline math produces LaTeX prompt placeholder", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("$E = {{c1::mc^2}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "$E = \\text{[\\ldots]}$");
+        assert.strictEqual(cards[0]!.reveal, "$E = \\boldsymbol{mc^2}$");
+      }),
+    );
+
+    it.effect("cloze inside display math produces LaTeX prompt placeholder", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("$$E = {{c1::mc^2}}$$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "$$E = \\text{[\\ldots]}$$");
+        assert.strictEqual(cards[0]!.reveal, "$$E = \\boldsymbol{mc^2}$$");
+      }),
+    );
+
+    it.effect("cloze with braces inside math", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("$E = {{c1::mc^{2}}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "$E = \\text{[\\ldots]}$");
+        assert.strictEqual(cards[0]!.reveal, "$E = \\boldsymbol{mc^{2}}$");
+      }),
+    );
+
+    it.effect("cloze with fraction inside math", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("$x = {{c1::\\frac{a}{b}}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "$x = \\text{[\\ldots]}$");
+        assert.strictEqual(cards[0]!.reveal, "$x = \\boldsymbol{\\frac{a}{b}}$");
+      }),
+    );
+
+    it.effect("cloze with hint inside math uses LaTeX hint", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("$F = {{c1::ma::Newton}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "$F = \\text{[Newton]}$");
+        assert.strictEqual(cards[0]!.reveal, "$F = \\boldsymbol{ma}$");
+      }),
+    );
+
+    it.effect("mixed math and non-math clozes in same content", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse(
+          "The {{c1::energy}} equation is $E = {{c2::mc^2}}$",
+        );
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 2);
+
+        assert.strictEqual(
+          cards[0]!.prompt,
+          "The **[...]** equation is $E = mc^2$",
+        );
+        assert.strictEqual(
+          cards[0]!.reveal,
+          "The **energy** equation is $E = mc^2$",
+        );
+
+        assert.strictEqual(
+          cards[1]!.prompt,
+          "The energy equation is $E = \\text{[\\ldots]}$",
+        );
+        assert.strictEqual(
+          cards[1]!.reveal,
+          "The energy equation is $E = \\boldsymbol{mc^2}$",
+        );
+      }),
+    );
+
+    it.effect("multiple clozes inside same math expression", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse(
+          "${{c1::a}} + {{c2::b}} = c$",
+        );
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 2);
+
+        assert.strictEqual(cards[0]!.prompt, "$\\text{[\\ldots]} + b = c$");
+        assert.strictEqual(cards[0]!.reveal, "$\\boldsymbol{a} + b = c$");
+
+        assert.strictEqual(cards[1]!.prompt, "$a + \\text{[\\ldots]} = c$");
+        assert.strictEqual(cards[1]!.reveal, "$a + \\boldsymbol{b} = c$");
+      }),
+    );
+
+    it.effect("cloze outside math still uses markdown bold", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("The answer is {{c1::42}}.");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards[0]!.prompt, "The answer is **[...]**.");
+        assert.strictEqual(cards[0]!.reveal, "The answer is **42**.");
+      }),
+    );
+
+    it.effect("duplicate indices inside math share a single card", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse(
+          "${{c1::x}} = {{c1::y}}$",
+        );
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "$\\text{[\\ldots]} = \\text{[\\ldots]}$");
+        assert.strictEqual(cards[0]!.reveal, "$\\boldsymbol{x} = \\boldsymbol{y}$");
+      }),
+    );
+
+    it.effect("hint with TeX-special characters is escaped in math prompt", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("$F = {{c1::ma::mass_1}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "$F = \\text{[mass\\_1]}$");
+        assert.strictEqual(cards[0]!.reveal, "$F = \\boldsymbol{ma}$");
+      }),
+    );
+
+    it.effect("reveal with \\frac stays in math mode (no \\textbf)", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("$x = {{c1::\\frac{a}{b}}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards[0]!.reveal, "$x = \\boldsymbol{\\frac{a}{b}}$");
+      }),
+    );
+
+    it.effect("cloze with $ in body does not poison math detection", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse(
+          "Price is {{c1::$5}} and $x = {{c2::2}}$",
+        );
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 2);
+        assert.strictEqual(cards[0]!.prompt, "Price is **[...]** and $x = 2$");
+        assert.strictEqual(cards[1]!.prompt, "Price is $5 and $x = \\text{[\\ldots]}$");
+      }),
+    );
+  });
 });
