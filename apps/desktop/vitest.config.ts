@@ -41,7 +41,13 @@ export default defineConfig({
           alias: sharedAliases,
         },
         optimizeDeps: {
-          include: ["@tanstack/react-query", "@base-ui/react/dialog"],
+          include: [
+            "@tanstack/react-query",
+            "@base-ui/react/dialog",
+            "@benrbray/prosemirror-math",
+            "@tiptap/pm/inputrules",
+            "@tiptap/pm/state",
+          ],
         },
         test: {
           name: "browser",

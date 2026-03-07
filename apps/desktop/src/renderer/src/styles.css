@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/jetbrains-mono";
+@import "@benrbray/prosemirror-math/dist/prosemirror-math.css";
+@import "katex/dist/katex.min.css";
 
 @source "./**/*.{ts,tsx}";
 @source "../../shared/**/*.{ts,tsx}";
@@ -268,5 +270,31 @@
 
   .editor-code-block {
     @apply font-mono;
+  }
+
+  .editor-prosemirror .math-node {
+    color: inherit;
+    font-family: var(--font-sans);
+  }
+
+  .editor-prosemirror .math-node.empty-math .math-render::before,
+  .editor-prosemirror .math-node .math-render.parse-error::before {
+    color: var(--destructive);
+  }
+
+  .editor-prosemirror .math-node .math-src,
+  .editor-prosemirror math-inline .math-src::after,
+  .editor-prosemirror math-inline .math-src::before,
+  .editor-prosemirror math-display .math-src::after,
+  .editor-prosemirror math-display .math-src::before {
+    color: var(--muted-foreground);
+  }
+
+  .editor-prosemirror math-display.ProseMirror-selectednode {
+    background-color: color-mix(in oklab, var(--muted) 75%, transparent);
+  }
+
+  .editor-prosemirror math-display .math-render {
+    overflow-x: auto;
   }
 }

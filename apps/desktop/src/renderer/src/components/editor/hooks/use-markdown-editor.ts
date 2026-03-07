@@ -3,6 +3,9 @@ import { useEditor, type Editor, type UseEditorOptions } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
 
+import { MathDisplay } from "@/components/editor/extensions/math-display";
+import { MathInline } from "@/components/editor/extensions/math-inline";
+import { ProseMirrorMath } from "@/components/editor/extensions/prosemirror-math";
 import { cn } from "@/lib/utils";
 
 type MarkdownStorage = {
@@ -20,6 +23,9 @@ const baseExtensions: NonNullable<UseEditorOptions["extensions"]> = [
     },
     hardBreak: false,
   }),
+  ProseMirrorMath,
+  MathInline,
+  MathDisplay,
   Markdown.configure({
     html: false,
     transformCopiedText: true,
@@ -96,6 +102,7 @@ export function useMarkdownEditor({
         };
   const editor = useEditor({
     ...editorOptions,
+    immediatelyRender: false,
     extensions: [...baseExtensions, ...(editorOptions?.extensions ?? [])],
     content,
     editable,

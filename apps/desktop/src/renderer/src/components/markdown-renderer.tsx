@@ -5,7 +5,6 @@ import remarkMath from "remark-math";
 
 import { cn } from "@/lib/utils";
 
-import "katex/dist/katex.min.css";
 import "highlight.js/styles/github.css";
 
 type MarkdownRendererProps = {
