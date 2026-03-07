@@ -529,6 +529,14 @@ export function ForgePageProvider({
         extraction: result.extraction,
         topicsByChunk: result.topicsByChunk,
       });
+
+      const updatedSessionId = store.getSnapshot().context.activeExtractionSessionId;
+      if (updatedSessionId !== null) {
+        onSessionChangeRef.current({
+          id: updatedSessionId,
+          sourceLabel: result.session.sourceLabel,
+        });
+      }
     },
     onError: (error, variables) => {
       const snapshot = store.getSnapshot().context;

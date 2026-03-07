@@ -241,7 +241,7 @@ describe("ForgePage", () => {
       .toBe(2);
   });
 
-  it("does not update the active route session during a newly started text extraction", async () => {
+  it("updates the active route session after text extraction completes", async () => {
     const onSessionChange = vi.fn();
     const invoke = vi.fn().mockImplementation(async (method: string) => {
       if (method === "ForgeListSessions") {
@@ -307,7 +307,20 @@ describe("ForgePage", () => {
     await userEvent.click(screen.getByText("Extract topics"));
 
     await expect.element(screen.getByText("Select topics")).toBeVisible();
-    expect(onSessionChange).not.toHaveBeenCalled();
+    expect(onSessionChange).toHaveBeenCalledWith({ id: 33, sourceLabel: "Pasted text" });
+  });
+
+  it("updates the active route session after PDF extraction completes", async () => {
+    const onSessionChange = vi.fn();
+    const invoke = createSuccessInvoke();
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderForgePage({ onSessionChange });
+    await uploadPdf();
+    await userEvent.click(screen.getByText("Begin Extraction"));
+
+    await expect.element(screen.getByText("Select topics")).toBeVisible();
+    expect(onSessionChange).toHaveBeenCalledWith({ id: 12, sourceLabel: "source.pdf" });
   });
 
   it("does not update the active route session when extraction session creation is streamed", async () => {

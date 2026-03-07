@@ -511,4 +511,87 @@ describe("renderer integration", () => {
     await expect.element(screen.getByText("nothing due")).toBeVisible();
     await expect.element(screen.getByRole("button", { name: /Review/ })).toBeDisabled();
   });
+
+  it("resets forge to source step when clicking sidebar Forge icon while on topics step", async () => {
+    const forgeSession = {
+      id: 12,
+      sourceKind: "pdf" as const,
+      sourceLabel: "source.pdf",
+      sourceFilePath: "/forge/source.pdf",
+      deckPath: null,
+      sourceFingerprint: "fp:start",
+      status: "topics_extracted" as const,
+      errorMessage: null,
+      topicCount: 3,
+      cardCount: 0,
+      createdAt: "2025-01-10T00:00:00.000Z",
+      updatedAt: "2025-01-10T00:00:00.000Z",
+    };
+
+    const invoke = vi.fn().mockImplementation(async (method: string) => {
+      if (method === "GetSettings") {
+        return {
+          type: "success",
+          data: { settingsVersion: 1, workspace: { rootPath: "/workspace" } },
+        };
+      }
+
+      if (method === "ForgeListSessions") {
+        return { type: "success", data: { sessions: [forgeSession] } };
+      }
+
+      if (method === "ForgeGetCardsSnapshot") {
+        return {
+          type: "success",
+          data: {
+            topics: [
+              {
+                topicId: 10,
+                chunkId: 101,
+                sequenceOrder: 0,
+                topicIndex: 0,
+                topicText: "biology",
+                status: "generated",
+                errorMessage: null,
+                cardCount: 0,
+                addedCount: 0,
+                generationRevision: 1,
+                selected: true,
+              },
+            ],
+          },
+        };
+      }
+
+      if (method === "ForgeGetTopicExtractionSnapshot") {
+        return {
+          type: "success",
+          data: {
+            session: forgeSession,
+            topicsByChunk: [{ chunkId: 101, sequenceOrder: 0, topics: ["biology"] }],
+          },
+        };
+      }
+
+      return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+    });
+
+    const subscribe = vi.fn().mockReturnValue(() => undefined);
+    mockDesktopApi(invoke, subscribe);
+
+    const stores = createStores();
+    window.location.hash = "#/forge?session=12&source=source.pdf";
+    const router = createRouter({ routeTree, history: createHashHistory() });
+    const screen = await renderWithIpcProviders(
+      <StoresProvider stores={stores}>
+        <RouterProvider router={router} />
+      </StoresProvider>,
+    );
+
+    await expect.element(screen.getByText("Select topics")).toBeVisible();
+
+    (screen.getByRole("button", { name: "Forge", exact: true }).element() as HTMLElement).click();
+
+    await expect.element(screen.getByText("Drop a PDF, or click to paste text")).toBeVisible();
+  });
 });

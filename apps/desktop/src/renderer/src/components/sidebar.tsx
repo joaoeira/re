@@ -50,7 +50,11 @@ export function Sidebar() {
                   aria-current={isActive ? "page" : undefined}
                   aria-disabled={isDisabled || undefined}
                   onClick={() => {
-                    if (item.to) void navigate({ to: item.to });
+                    if (item.to)
+                      void navigate({
+                        to: item.to,
+                        search: item.to === "/forge" ? { session: null, source: null } : undefined,
+                      });
                   }}
                 >
                   <item.icon size={18} />
