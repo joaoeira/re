@@ -6,7 +6,15 @@ import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
 import type { ForgeGetTopicCardsResult } from "@shared/rpc/schemas/forge";
 
-export function useForgeTopicCardsQuery(sessionId: number | null, topicId: number | null) {
+type UseForgeTopicCardsQueryOptions = {
+  readonly refetchIntervalMs?: number | false;
+};
+
+export function useForgeTopicCardsQuery(
+  sessionId: number | null,
+  topicId: number | null,
+  options: UseForgeTopicCardsQueryOptions = {},
+) {
   const ipc = useIpc();
 
   return useQuery<ForgeGetTopicCardsResult, Error>({
@@ -27,5 +35,6 @@ export function useForgeTopicCardsQuery(sessionId: number | null, topicId: numbe
                 ),
             )
         : skipToken,
+    refetchInterval: options.refetchIntervalMs ?? false,
   });
 }

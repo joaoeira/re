@@ -208,6 +208,19 @@ const pruneExpansionColumnsMap = (
 ): TopicExpansionColumnsMap =>
   pruneMapByKeys(source, selectedTopicKeys, (columns) => columns.slice());
 
+const firstSelectedTopicKeyInDisplayOrder = (
+  topicGroups: ReadonlyArray<ForgeTopicGroup>,
+  selectedTopicKeys: ReadonlySet<string>,
+): string | null => {
+  for (const group of topicGroups) {
+    for (const topic of group.topics) {
+      const key = topicKey(topic.topicId);
+      if (selectedTopicKeys.has(key)) return key;
+    }
+  }
+  return null;
+};
+
 const withPrunedSelections = (
   context: ForgePageContext,
   selectedTopicKeys: ReadonlySet<string>,
@@ -223,7 +236,7 @@ const withPrunedSelections = (
   activeTopicKey:
     context.activeTopicKey && selectedTopicKeys.has(context.activeTopicKey)
       ? context.activeTopicKey
-      : null,
+      : firstSelectedTopicKeyInDisplayOrder(context.topicGroups, selectedTopicKeys),
   deletedCardIdsByTopicKey: pruneTopicCardIdMap(
     context.deletedCardIdsByTopicKey,
     selectedTopicKeys,
@@ -741,6 +754,9 @@ export const createForgePageStore = () =>
       advanceToCards: (context) => ({
         ...context,
         currentStep: "cards" as const,
+        activeTopicKey:
+          context.activeTopicKey ??
+          firstSelectedTopicKeyInDisplayOrder(context.topicGroups, context.selectedTopicKeys),
       }),
       setTargetDeckPath: (context, event: { deckPath: string | null }) => {
         if (context.targetDeckPath === event.deckPath) return context;
@@ -774,6 +790,10 @@ export const createForgePageStore = () =>
         topicGroups: event.topicGroups,
         extractionOutcomes: event.extractionOutcomes,
         selectedTopicKeys: event.selectedTopicKeys,
+        activeTopicKey: firstSelectedTopicKeyInDisplayOrder(
+          event.topicGroups,
+          event.selectedTopicKeys,
+        ),
         expansionColumnsByTopicKey: emptyTopicExpansionColumnsMap,
       }),
       resumeError: (context, event: { message: string }) => ({

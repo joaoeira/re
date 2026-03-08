@@ -510,6 +510,93 @@ export function ForgePageProvider({
     };
   }, [ipc, queryClient, store]);
 
+  const autoStartInFlightRef = useRef(new Set<string>());
+
+  const autoStartCardsGeneration = useCallback(
+    (sessionId: number, snapshotTopics: ReadonlyArray<ForgeTopicCardsSummary>) => {
+      const { selectedTopicKeys, topicGroups } = store.getSnapshot().context;
+
+      const selectedTopicIds: number[] = [];
+      for (const group of topicGroups) {
+        for (const topic of group.topics) {
+          if (selectedTopicKeys.has(topicKey(topic.topicId))) {
+            selectedTopicIds.push(topic.topicId);
+          }
+        }
+      }
+
+      const summaryByKey = new Map<string, ForgeTopicCardsSummary>();
+      for (const t of snapshotTopics) {
+        summaryByKey.set(topicKey(t.topicId), t);
+      }
+
+      if (selectedTopicIds.some((id) => (summaryByKey.get(topicKey(id))?.cardCount ?? 0) > 0)) {
+        return;
+      }
+
+      const toGenerate = selectedTopicIds
+        .filter((id) => summaryByKey.get(topicKey(id))?.status !== "generating")
+        .slice(0, 3);
+
+      for (const topicId of toGenerate) {
+        const scopedKey = `${sessionId}:${topicKey(topicId)}`;
+        if (autoStartInFlightRef.current.has(scopedKey)) continue;
+        autoStartInFlightRef.current.add(scopedKey);
+
+        const existing = summaryByKey.get(topicKey(topicId));
+        if (existing) {
+          queryClient.setQueryData<{ topics: ReadonlyArray<ForgeTopicCardsSummary> }>(
+            queryKeys.forgeCardsSnapshot(sessionId),
+            (previous) => {
+              if (!previous) return previous;
+              return {
+                topics: previous.topics.map((t) =>
+                  t.topicId === topicId
+                    ? { ...t, status: "generating" as const, errorMessage: null }
+                    : t,
+                ),
+              };
+            },
+          );
+        }
+
+        void runIpcEffect(
+          ipc.client
+            .ForgeGenerateTopicCards({ sessionId, topicId })
+            .pipe(
+              Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                Effect.fail(toRpcDefectError(rpcDefect)),
+              ),
+            ),
+        )
+          .then((result) => {
+            queryClient.setQueryData(queryKeys.forgeTopicCards(sessionId, topicId), () => result);
+            queryClient.setQueryData<{ topics: ReadonlyArray<ForgeTopicCardsSummary> }>(
+              queryKeys.forgeCardsSnapshot(sessionId),
+              (previous) => {
+                if (!previous) return previous;
+                const nextTopics = previous.topics.map((t) =>
+                  t.topicId === result.topic.topicId ? result.topic : t,
+                );
+                const exists = nextTopics.some((t) => t.topicId === result.topic.topicId);
+                return { topics: exists ? nextTopics : [...previous.topics, result.topic] };
+              },
+            );
+          })
+          .catch(() => {
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.forgeCardsSnapshot(sessionId),
+              exact: true,
+            });
+          })
+          .finally(() => {
+            autoStartInFlightRef.current.delete(scopedKey);
+          });
+      }
+    },
+    [ipc.client, queryClient, store],
+  );
+
   const resumingRef = useRef(false);
   const loadedInitialSessionIdRef = useRef<number | null>(null);
 
@@ -584,6 +671,11 @@ export function ForgePageProvider({
 
           onSessionChangeRef.current({ id: session.id, sourceLabel: session.sourceLabel });
           void queryClient.invalidateQueries({ queryKey: queryKeys.forgeSessionList });
+
+          if (targetStep === "cards") {
+            queryClient.setQueryData(queryKeys.forgeCardsSnapshot(session.id), cardsSnapshot);
+            autoStartCardsGeneration(session.id, cardsSnapshot.topics);
+          }
         })
         .catch(() => {
           store.send({
@@ -595,7 +687,7 @@ export function ForgePageProvider({
           resumingRef.current = false;
         });
     },
-    [ipc.client, queryClient, store],
+    [autoStartCardsGeneration, ipc.client, queryClient, store],
   );
 
   useEffect(() => {
@@ -803,8 +895,24 @@ export function ForgePageProvider({
       })
       .catch(() => {
         store.send({ type: "advanceToCards" });
-      });
-  }, [ipc.client, store]);
+      })
+      .then(() =>
+        runIpcEffect(
+          ipc.client
+            .ForgeGetCardsSnapshot({ sessionId })
+            .pipe(
+              Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                Effect.fail(toRpcDefectError(rpcDefect)),
+              ),
+            ),
+        ),
+      )
+      .then((snapshotResult) => {
+        queryClient.setQueryData(queryKeys.forgeCardsSnapshot(sessionId), snapshotResult);
+        autoStartCardsGeneration(sessionId, snapshotResult.topics);
+      })
+      .catch(() => undefined);
+  }, [autoStartCardsGeneration, ipc.client, queryClient, store]);
 
   const actions = useMemo(
     () => ({

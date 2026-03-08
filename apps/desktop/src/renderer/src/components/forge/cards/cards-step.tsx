@@ -9,6 +9,7 @@ import {
   useForgeDeletedCardIdsByTopicKey,
   useForgeExpandedCardPanelsByTopicKey,
   useForgeExpansionColumns,
+  useForgePageStore,
   useForgeSessionId,
   useForgeSelectedTopics,
   useForgeTargetDeckPath,
@@ -119,6 +120,7 @@ const toDeckName = (relativePath: string): string => {
 export function CardsStep() {
   const queryClient = useQueryClient();
   const ipc = useIpc();
+  const store = useForgePageStore();
   const sessionId = useForgeSessionId();
 
   const curationActions = useForgeCardsCurationActions();
@@ -144,12 +146,6 @@ export function CardsStep() {
   const persistedDeckPathBySessionIdRef = useRef(new Map<number, string | null>());
   const inFlightDeckPersistKeysRef = useRef(new Set<string>());
   const autoResolvedScopeKeysRef = useRef(new Set<string>());
-  const targetDeckPathRef = useRef<string | null>(targetDeckPath);
-
-  useEffect(() => {
-    targetDeckPathRef.current = targetDeckPath;
-  }, [targetDeckPath]);
-
   const { mutate: persistSessionDeckPath } = useMutation({
     mutationFn: ({ sessionId, deckPath }: PersistSessionDeckPathVariables) =>
       runIpcEffect(
@@ -167,7 +163,7 @@ export function CardsStep() {
       inFlightDeckPersistKeysRef.current.delete(
         `${variables.sessionId}:${variables.deckPath ?? "null"}`,
       );
-      if (targetDeckPathRef.current === variables.deckPath) {
+      if (store.getSnapshot().context.targetDeckPath === variables.deckPath) {
         persistedDeckPathBySessionIdRef.current.set(variables.sessionId, variables.deckPath);
       }
       void queryClient.invalidateQueries({ queryKey: queryKeys.forgeSessionList, exact: true });
@@ -233,6 +229,7 @@ export function CardsStep() {
       );
       pendingCreatedDeckPathRef.current = result.absolutePath;
       deckTargetActions.setTargetDeckPath(result.absolutePath);
+      commitTargetDeckPath(result.absolutePath);
     },
     onError: (error) => {
       setCreateDeckErrorMessage(error.message);
@@ -247,12 +244,25 @@ export function CardsStep() {
     },
   });
 
-  useEffect(() => {
-    if (sessionId === null) return;
-    if (!persistedDeckPathBySessionIdRef.current.has(sessionId)) {
-      persistedDeckPathBySessionIdRef.current.set(sessionId, targetDeckPath);
-    }
-  }, [sessionId, targetDeckPath]);
+  if (sessionId !== null && !persistedDeckPathBySessionIdRef.current.has(sessionId)) {
+    persistedDeckPathBySessionIdRef.current.set(sessionId, targetDeckPath);
+  }
+
+  const commitTargetDeckPath = useCallback(
+    (nextDeckPath: string | null) => {
+      if (sessionId === null) return;
+
+      const persisted = persistedDeckPathBySessionIdRef.current.get(sessionId);
+      if (persisted === nextDeckPath) return;
+
+      const persistKey = `${sessionId}:${nextDeckPath ?? "null"}`;
+      if (inFlightDeckPersistKeysRef.current.has(persistKey)) return;
+
+      inFlightDeckPersistKeysRef.current.add(persistKey);
+      persistSessionDeckPath({ sessionId, deckPath: nextDeckPath });
+    },
+    [persistSessionDeckPath, sessionId],
+  );
 
   useEffect(() => {
     if (scanDecksQuery.isFetching || !scanDecksQuery.isSuccess) return;
@@ -260,6 +270,7 @@ export function CardsStep() {
       if (deckOptionPaths.length > 0 && !autoResolvedScopeKeysRef.current.has(autoSelectScopeKey)) {
         autoResolvedScopeKeysRef.current.add(autoSelectScopeKey);
         deckTargetActions.setTargetDeckPath(deckOptionPaths[0]!);
+        commitTargetDeckPath(deckOptionPaths[0]!);
       }
       return;
     }
@@ -275,30 +286,16 @@ export function CardsStep() {
     if (pendingCreatedDeckPathRef.current === targetDeckPath) return;
     autoResolvedScopeKeysRef.current.add(autoSelectScopeKey);
     deckTargetActions.setTargetDeckPath(null);
+    commitTargetDeckPath(null);
   }, [
     autoSelectScopeKey,
+    commitTargetDeckPath,
     deckOptionPaths,
     deckTargetActions,
     scanDecksQuery.isFetching,
     scanDecksQuery.isSuccess,
     targetDeckPath,
   ]);
-
-  useEffect(() => {
-    if (sessionId === null) return;
-
-    const persistedDeckPath = persistedDeckPathBySessionIdRef.current.get(sessionId);
-    if (persistedDeckPath === undefined || persistedDeckPath === targetDeckPath) return;
-
-    const persistKey = `${sessionId}:${targetDeckPath ?? "null"}`;
-    if (inFlightDeckPersistKeysRef.current.has(persistKey)) return;
-
-    inFlightDeckPersistKeysRef.current.add(persistKey);
-    persistSessionDeckPath({
-      sessionId,
-      deckPath: targetDeckPath,
-    });
-  }, [persistSessionDeckPath, sessionId, targetDeckPath]);
 
   const topics = useMemo<ReadonlyArray<CardsTopic>>(
     () =>
@@ -311,20 +308,24 @@ export function CardsStep() {
     [selectedTopics],
   );
 
-  useEffect(() => {
-    if (topics.length === 0) {
-      if (activeTopicKey !== null) {
-        curationActions.setActiveTopic(null);
-      }
-      return;
-    }
+  const [checkedTopicKeys, setCheckedTopicKeys] = useState<ReadonlySet<string>>(new Set());
+  const [checkedTopicBatchInFlight, setCheckedTopicBatchInFlight] = useState(false);
+  const [inFlightTopicKeys, setInFlightTopicKeys] = useState<ReadonlySet<string>>(new Set());
+  const inFlightTopicKeysRef = useRef<Set<string>>(new Set());
 
-    if (!activeTopicKey || !topics.some((topic) => topic.topicKey === activeTopicKey)) {
-      curationActions.setActiveTopic(topics[0]!.topicKey);
+  const currentSessionHasInFlight = useMemo(() => {
+    if (sessionId === null) return false;
+    const prefix = `${sessionId}:`;
+    for (const key of inFlightTopicKeys) {
+      if (key.startsWith(prefix)) return true;
     }
-  }, [activeTopicKey, curationActions, topics]);
+    return false;
+  }, [inFlightTopicKeys, sessionId]);
 
-  const cardsSnapshotQuery = useForgeCardsSnapshotQuery(sessionId);
+  const shouldPollRef = useRef(false);
+  const cardsSnapshotQuery = useForgeCardsSnapshotQuery(sessionId, {
+    refetchIntervalMs: shouldPollRef.current ? 1_000 : false,
+  });
   const summaryByTopicKey = useMemo(() => {
     const next = new Map<string, ForgeTopicCardsSummary>();
     const rows = cardsSnapshotQuery.data?.topics ?? [];
@@ -338,18 +339,21 @@ export function CardsStep() {
     [summaryByTopicKey, topics],
   );
 
+  const shouldPoll =
+    sessionId !== null &&
+    (checkedTopicBatchInFlight || currentSessionHasInFlight || hasGeneratingTopicsInSnapshot);
+  shouldPollRef.current = shouldPoll;
+
   const activeTopic = useMemo(
     () => topics.find((topic) => topic.topicKey === activeTopicKey) ?? null,
     [activeTopicKey, topics],
   );
   const activeTopicRef = useRef<CardsTopic | null>(null);
-  useEffect(() => {
-    activeTopicRef.current = activeTopic;
-  }, [activeTopic]);
+  activeTopicRef.current = activeTopic;
 
-  const activeTopicCardsQuery = useForgeTopicCardsQuery(sessionId, activeTopic?.topicId ?? null);
-  const [checkedTopicKeys, setCheckedTopicKeys] = useState<ReadonlySet<string>>(new Set());
-  const [checkedTopicBatchInFlight, setCheckedTopicBatchInFlight] = useState(false);
+  const activeTopicCardsQuery = useForgeTopicCardsQuery(sessionId, activeTopic?.topicId ?? null, {
+    refetchIntervalMs: shouldPoll ? 1_000 : false,
+  });
 
   const handleCheckTopic = useCallback((topicKeyValue: string) => {
     setCheckedTopicKeys((prev) => {
@@ -432,28 +436,36 @@ export function CardsStep() {
           queryKey: queryKeys.forgeCardsSnapshot(sessionId),
           exact: true,
         });
-        const latestActiveTopic = activeTopicRef.current;
-        if (latestActiveTopic) {
+        const latestActiveTopicKey = store.getSnapshot().context.activeTopicKey;
+        const latestActiveTopicId =
+          latestActiveTopicKey !== null ? Number(latestActiveTopicKey) : null;
+        if (latestActiveTopicId !== null && Number.isFinite(latestActiveTopicId)) {
           void queryClient.invalidateQueries({
-            queryKey: queryKeys.forgeTopicCards(sessionId, latestActiveTopic.topicId),
+            queryKey: queryKeys.forgeTopicCards(sessionId, latestActiveTopicId),
             exact: true,
           });
         }
       });
-  }, [checkedTopicBatchInFlight, checkedTopicKeys, ipc.client, queryClient, sessionId, topics]);
+  }, [
+    checkedTopicBatchInFlight,
+    checkedTopicKeys,
+    ipc.client,
+    queryClient,
+    sessionId,
+    store,
+    topics,
+  ]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && checkedTopicKeys.size > 0) {
-        setCheckedTopicKeys(new Set());
+      if (e.key === "Escape") {
+        setCheckedTopicKeys((prev) => (prev.size > 0 ? new Set() : prev));
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [checkedTopicKeys.size]);
+  }, []);
 
-  const [inFlightTopicKeys, setInFlightTopicKeys] = useState<ReadonlySet<string>>(new Set());
-  const inFlightTopicKeysRef = useRef<Set<string>>(new Set());
   const activeTopicGenerationInFlight =
     activeTopicKey !== null && sessionId !== null
       ? inFlightTopicKeys.has(inFlightTopicKey(sessionId, activeTopicKey))
@@ -471,44 +483,6 @@ export function CardsStep() {
     },
     [],
   );
-
-  useEffect(() => {
-    inFlightTopicKeysRef.current = new Set();
-    setInFlightTopicKeys(new Set());
-  }, [sessionId]);
-
-  useEffect(() => {
-    if (sessionId === null) return;
-
-    const shouldPollGeneration =
-      checkedTopicBatchInFlight || inFlightTopicKeys.size > 0 || hasGeneratingTopicsInSnapshot;
-    if (!shouldPollGeneration) return;
-
-    const intervalId = window.setInterval(() => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.forgeCardsSnapshot(sessionId),
-        exact: true,
-      });
-
-      if (activeTopic) {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.forgeTopicCards(sessionId, activeTopic.topicId),
-          exact: true,
-        });
-      }
-    }, 1_000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [
-    activeTopic,
-    checkedTopicBatchInFlight,
-    hasGeneratingTopicsInSnapshot,
-    inFlightTopicKeys.size,
-    queryClient,
-    sessionId,
-  ]);
 
   const { mutate: updateCard } = useForgeUpdateCardMutation();
   const { mutate: addCardToDeck } = useForgeAddCardToDeckMutation();
@@ -649,28 +623,6 @@ export function CardsStep() {
       summaryByTopicKey,
     ],
   );
-
-  const autoStartedSessionIdRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (sessionId === null || !cardsSnapshotQuery.data) return;
-    if (autoStartedSessionIdRef.current === sessionId) return;
-    autoStartedSessionIdRef.current = sessionId;
-
-    const selectedSummaries = topics.map((topic) => summaryByTopicKey.get(topic.topicKey) ?? null);
-    const hasExistingCards = selectedSummaries.some((summary) => (summary?.cardCount ?? 0) > 0);
-    if (hasExistingCards) return;
-
-    const topicsToGenerate = topics
-      .filter((topic) => {
-        const summary = summaryByTopicKey.get(topic.topicKey);
-        return summary?.status !== "generating";
-      })
-      .slice(0, 3);
-
-    topicsToGenerate.forEach((topic) => {
-      requestTopicGeneration(topic);
-    });
-  }, [cardsSnapshotQuery.data, requestTopicGeneration, sessionId, summaryByTopicKey, topics]);
 
   const activeAddedCardIds = useMemo(() => {
     const next = new Set<number>();
@@ -885,8 +837,9 @@ export function CardsStep() {
       if (deckPath === targetDeckPath) return;
       setCreateDeckErrorMessage(null);
       deckTargetActions.setTargetDeckPath(deckPath);
+      commitTargetDeckPath(deckPath);
     },
-    [deckTargetActions, targetDeckPath],
+    [commitTargetDeckPath, deckTargetActions, targetDeckPath],
   );
 
   const handleCreateDeck = useCallback(

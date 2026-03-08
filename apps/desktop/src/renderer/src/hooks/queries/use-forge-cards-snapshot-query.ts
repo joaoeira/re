@@ -6,7 +6,14 @@ import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
 import type { ForgeGetCardsSnapshotResult } from "@shared/rpc/schemas/forge";
 
-export function useForgeCardsSnapshotQuery(sessionId: number | null) {
+type UseForgeCardsSnapshotQueryOptions = {
+  readonly refetchIntervalMs?: number | false;
+};
+
+export function useForgeCardsSnapshotQuery(
+  sessionId: number | null,
+  options: UseForgeCardsSnapshotQueryOptions = {},
+) {
   const ipc = useIpc();
 
   return useQuery<ForgeGetCardsSnapshotResult, Error>({
@@ -24,5 +31,6 @@ export function useForgeCardsSnapshotQuery(sessionId: number | null) {
                 ),
             )
         : skipToken,
+    refetchInterval: options.refetchIntervalMs ?? false,
   });
 }

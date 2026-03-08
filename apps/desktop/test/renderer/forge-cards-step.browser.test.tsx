@@ -812,10 +812,10 @@ const getDeckSelectionText = (): string => {
 };
 
 const setDeckComboboxInputValue = async (value: string) => {
-  const input = document.querySelector("[data-slot='combobox-input']");
-  if (!(input instanceof HTMLInputElement)) {
-    throw new Error("Expected deck combobox input.");
-  }
+  await expect
+    .poll(() => document.querySelector("[data-slot='combobox-input']") instanceof HTMLInputElement)
+    .toBe(true);
+  const input = document.querySelector("[data-slot='combobox-input']") as HTMLInputElement;
   input.value = "";
   input.dispatchEvent(new Event("input", { bubbles: true }));
   await userEvent.type(input, value);

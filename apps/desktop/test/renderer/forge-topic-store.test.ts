@@ -230,6 +230,59 @@ describe("forge-page-store", () => {
     expect(ctx(store).expandedCardPanelsByTopicKey.size).toBe(0);
   });
 
+  it("auto-selects first topic in display order when active topic is deselected", () => {
+    const store = storeWithTopics();
+
+    store.send({ type: "toggleTopic", topicId: 101 });
+    store.send({ type: "toggleTopic", topicId: 102 });
+    store.send({ type: "setActiveCardsTopic", topicKey: topicKey(102) });
+    expect(ctx(store).activeTopicKey).toBe(topicKey(102));
+
+    store.send({ type: "toggleTopic", topicId: 102 });
+    expect(ctx(store).activeTopicKey).toBe(topicKey(101));
+  });
+
+  it("auto-selects first topic when all are selected at once", () => {
+    const store = storeWithTopics();
+
+    store.send({ type: "selectAllTopics" });
+    expect(ctx(store).activeTopicKey).toBe(topicKey(101));
+  });
+
+  it("sets activeTopicKey on advanceToCards", () => {
+    const store = storeWithTopics();
+
+    store.send({ type: "toggleTopic", topicId: 102 });
+    store.send({ type: "toggleTopic", topicId: 201 });
+    store.send({ type: "advanceToCards" });
+
+    expect(ctx(store).currentStep).toBe("cards");
+    expect(ctx(store).activeTopicKey).toBe(topicKey(102));
+  });
+
+  it("sets activeTopicKey on resumeSession", () => {
+    const store = createForgePageStore();
+    const selectedSource = createPdfSelectedSource({
+      sourceLabel: "source.pdf",
+      sourceFilePath: "/tmp/source.pdf",
+    });
+    const selectedTopicKeys = new Set([topicKey(101), topicKey(201)]);
+
+    store.send({
+      type: "resumeSession",
+      currentStep: "cards",
+      selectedSource,
+      extractState: { status: "idle" },
+      sessionId: 42,
+      targetDeckPath: "/workspace/decks/biology.md",
+      topicGroups: TOPIC_GROUPS,
+      extractionOutcomes: EXTRACTION_OUTCOMES,
+      selectedTopicKeys,
+    });
+
+    expect(ctx(store).activeTopicKey).toBe(topicKey(101));
+  });
+
   it("tracks source selection error and clears it on new source", () => {
     const store = createForgePageStore();
 
