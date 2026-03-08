@@ -95,7 +95,7 @@ export function CardsCanvas({
 
   return (
     <div className="flex min-h-0 flex-1 overflow-x-auto">
-      <div className="min-h-0 w-[760px] shrink-0 overflow-y-auto">
+      <div className="min-h-0 w-[760px] only:w-[900px] shrink-0 overflow-y-auto mx-auto">
         <div className="px-12 py-7 pb-20">
           <TopicHeaderCard
             topicText={topicText}
