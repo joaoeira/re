@@ -110,8 +110,28 @@ export function useForgeDuplicateOfSessionId(): number | null {
   return useForgePageSelector((snapshot) => snapshot.context.duplicateOfSessionId);
 }
 
+function useForgeSourceSelectionErrorMessage(): string | null {
+  return useForgePageSelector((snapshot) => snapshot.context.sourceSelectionErrorMessage);
+}
+
 export function useForgePreviewState(): PreviewState {
-  return useForgePageSelector((snapshot) => snapshot.context.previewState);
+  const selectedSource = useForgeSelectedSource();
+  const sourceEntryMode = useForgeSourceEntryMode();
+  const sourceSelectionErrorMessage = useForgeSourceSelectionErrorMessage();
+
+  const previewSource =
+    sourceEntryMode === "picker" && selectedSource?.kind === "pdf"
+      ? toForgeSourceInput(selectedSource)
+      : null;
+
+  const previewQuery = useForgePreviewQuery(previewSource);
+
+  if (sourceSelectionErrorMessage) return { status: "error", message: sourceSelectionErrorMessage };
+  if (!previewSource) return { status: "idle" };
+  if (previewQuery.data) return { status: "ready", summary: previewQuery.data };
+  if (previewQuery.error) return { status: "error", message: previewQuery.error.message };
+  if (previewQuery.isLoading) return { status: "loading" };
+  return { status: "idle" };
 }
 
 export function useForgeExtractState(): ExtractState {
@@ -418,22 +438,13 @@ export function ForgePageProvider({
 
   const sessionListQuery = useForgeSessionListQuery();
 
-  const selectedSource = useSelector(store, (snapshot) => snapshot.context.selectedSource);
   const currentStep = useSelector(store, (snapshot) => snapshot.context.currentStep);
-  const sourceEntryMode = useSelector(store, (snapshot) => snapshot.context.sourceEntryMode);
   const extractState = useSelector(store, (snapshot) => snapshot.context.extractState);
   const activeExtractionSessionId = useSelector(
     store,
     (snapshot) => snapshot.context.activeExtractionSessionId,
   );
 
-  const previewSource =
-    currentStep === "source" && sourceEntryMode === "picker" && selectedSource?.kind === "pdf"
-      ? toForgeSourceInput(selectedSource)
-      : null;
-  const previewSourceCacheKey = forgeSourceCacheKey(previewSource);
-
-  const previewQuery = useForgePreviewQuery(previewSource);
   const topicSnapshotQuery = useForgeTopicSnapshotQuery(
     currentStep === "topics" ? activeExtractionSessionId : null,
     {
@@ -442,63 +453,36 @@ export function ForgePageProvider({
   );
 
   useEffect(() => {
-    if (!previewSourceCacheKey || !previewQuery.data) return;
+    if (activeExtractionSessionId === null || currentStep !== "topics") return;
 
-    store.send({
-      type: "previewReady",
-      summary: previewQuery.data,
-    });
-  }, [previewSourceCacheKey, previewQuery.data, previewQuery.dataUpdatedAt, store]);
+    if (topicSnapshotQuery.data) {
+      store.send({
+        type: "topicSnapshotSynced",
+        sessionId: topicSnapshotQuery.data.session.id,
+        sessionCreatedAt: topicSnapshotQuery.data.session.createdAt,
+        sessionStatus: topicSnapshotQuery.data.session.status,
+        sessionErrorMessage: topicSnapshotQuery.data.session.errorMessage,
+        groups: topicSnapshotQuery.data.groups,
+        outcomes: topicSnapshotQuery.data.outcomes,
+      });
+    }
 
-  useEffect(() => {
-    if (!previewSourceCacheKey || !previewQuery.error) return;
-
-    store.send({
-      type: "previewError",
-      message: previewQuery.error.message,
-    });
-  }, [previewSourceCacheKey, previewQuery.error, previewQuery.errorUpdatedAt, store]);
-
-  useEffect(() => {
-    if (activeExtractionSessionId === null || currentStep !== "topics" || !topicSnapshotQuery.data)
-      return;
-
-    store.send({
-      type: "topicSnapshotSynced",
-      sessionId: topicSnapshotQuery.data.session.id,
-      sessionCreatedAt: topicSnapshotQuery.data.session.createdAt,
-      sessionStatus: topicSnapshotQuery.data.session.status,
-      sessionErrorMessage: topicSnapshotQuery.data.session.errorMessage,
-      groups: topicSnapshotQuery.data.groups,
-      outcomes: topicSnapshotQuery.data.outcomes,
-    });
+    if (topicSnapshotQuery.error) {
+      if (store.getSnapshot().context.extractState.status !== "extracting") return;
+      store.send({ type: "topicSnapshotError", message: topicSnapshotQuery.error.message });
+    }
   }, [
     currentStep,
     activeExtractionSessionId,
     topicSnapshotQuery.data,
     topicSnapshotQuery.dataUpdatedAt,
-    store,
-  ]);
-
-  useEffect(() => {
-    if (currentStep !== "topics" || activeExtractionSessionId === null || !topicSnapshotQuery.error)
-      return;
-    if (store.getSnapshot().context.extractState.status !== "extracting") return;
-
-    store.send({
-      type: "topicSnapshotError",
-      message: topicSnapshotQuery.error.message,
-    });
-  }, [
-    currentStep,
-    activeExtractionSessionId,
     topicSnapshotQuery.error,
     topicSnapshotQuery.errorUpdatedAt,
     store,
   ]);
 
   useEffect(() => {
-    return ipc.events.subscribe(ForgeTopicChunkExtracted, (event) => {
+    const handleTopicEvent = (event: { sessionId: number }) => {
       const context = store.getSnapshot().context;
       if (context.activeExtractionSessionId === null) {
         store.send({ type: "extractionSessionCreated", sessionId: event.sessionId });
@@ -510,34 +494,20 @@ export function ForgePageProvider({
         queryKey: queryKeys.forgeTopicSnapshot(event.sessionId),
         exact: true,
       });
-    });
-  }, [ipc, queryClient, store]);
+    };
 
-  useEffect(() => {
-    return ipc.events.subscribe(ForgeSynthesisTopicsExtracted, (event) => {
-      const context = store.getSnapshot().context;
-      if (context.activeExtractionSessionId === null) {
-        store.send({ type: "extractionSessionCreated", sessionId: event.sessionId });
-      } else if (context.activeExtractionSessionId !== event.sessionId) {
-        return;
-      }
-
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.forgeTopicSnapshot(event.sessionId),
-        exact: true,
-      });
-    });
-  }, [ipc, queryClient, store]);
-
-  useEffect(() => {
-    return ipc.events.subscribe(ForgeExtractionSessionCreated, (event) => {
-      store.send({
-        type: "extractionSessionCreated",
-        sessionId: event.sessionId,
-      });
-
+    const unsubChunk = ipc.events.subscribe(ForgeTopicChunkExtracted, handleTopicEvent);
+    const unsubSynthesis = ipc.events.subscribe(ForgeSynthesisTopicsExtracted, handleTopicEvent);
+    const unsubSession = ipc.events.subscribe(ForgeExtractionSessionCreated, (event) => {
+      store.send({ type: "extractionSessionCreated", sessionId: event.sessionId });
       void queryClient.invalidateQueries({ queryKey: queryKeys.forgeSessionList, exact: true });
     });
+
+    return () => {
+      unsubChunk();
+      unsubSynthesis();
+      unsubSession();
+    };
   }, [ipc, queryClient, store]);
 
   const resumingRef = useRef(false);

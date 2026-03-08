@@ -66,7 +66,7 @@ type ForgePageContext = {
   readonly textTitleDraft: string;
   readonly targetDeckPath: string | null;
   readonly duplicateOfSessionId: number | null;
-  readonly previewState: PreviewState;
+  readonly sourceSelectionErrorMessage: string | null;
   readonly extractState: ExtractState;
   readonly activeExtractionStartedAt: string | null;
   readonly activeExtractionSessionId: number | null;
@@ -101,7 +101,7 @@ const initialForgePageContext = (): ForgePageContext => ({
   textTitleDraft: "",
   targetDeckPath: null,
   duplicateOfSessionId: null,
-  previewState: { status: "idle" },
+  sourceSelectionErrorMessage: null,
   extractState: { status: "idle" },
   activeExtractionStartedAt: null,
   activeExtractionSessionId: null,
@@ -386,10 +386,7 @@ export const createForgePageStore = () =>
       resetForNoSource: () => initialForgePageContext(),
       setSourceSelectionError: (_context, event: { message: string }) => ({
         ...initialForgePageContext(),
-        previewState: {
-          status: "error" as const,
-          message: event.message,
-        },
+        sourceSelectionErrorMessage: event.message,
       }),
       openTextEditor: (context) => ({
         ...initialForgePageContext(),
@@ -411,7 +408,6 @@ export const createForgePageStore = () =>
                 text: event.text,
               }
             : context.selectedSource,
-        previewState: { status: "idle" as const },
         extractState:
           context.extractState.status === "error"
             ? ({ status: "idle" } as const)
@@ -433,10 +429,7 @@ export const createForgePageStore = () =>
             : "",
         targetDeckPath: null,
         duplicateOfSessionId: null,
-        previewState:
-          event.selectedSource.kind === "pdf"
-            ? ({ status: "loading" } as const)
-            : ({ status: "idle" } as const),
+        sourceSelectionErrorMessage: null,
         extractState: { status: "idle" as const },
         activeExtractionStartedAt: null,
         activeExtractionSessionId: null,
@@ -450,20 +443,6 @@ export const createForgePageStore = () =>
         expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
         expansionColumnsByTopicKey: emptyTopicExpansionColumnsMap,
         resumeErrorMessage: null,
-      }),
-      previewReady: (context, event: { summary: PreviewSummary }) => ({
-        ...context,
-        previewState: {
-          status: "ready" as const,
-          summary: event.summary,
-        },
-      }),
-      previewError: (context, event: { message: string }) => ({
-        ...context,
-        previewState: {
-          status: "error" as const,
-          message: event.message,
-        },
       }),
       setExtracting: (context, event: { startedAt: string }) => ({
         ...context,

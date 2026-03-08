@@ -230,8 +230,16 @@ describe("forge-page-store", () => {
     expect(ctx(store).expandedCardPanelsByTopicKey.size).toBe(0);
   });
 
-  it("maintains preview and extraction error state transitions", () => {
+  it("tracks source selection error and clears it on new source", () => {
     const store = createForgePageStore();
+
+    store.send({
+      type: "setSourceSelectionError",
+      message: "Unable to resolve a local file path for the selected PDF.",
+    });
+    expect(ctx(store).sourceSelectionErrorMessage).toBe(
+      "Unable to resolve a local file path for the selected PDF.",
+    );
 
     store.send({
       type: "setSelectedSource",
@@ -240,10 +248,11 @@ describe("forge-page-store", () => {
         sourceFilePath: "/tmp/source.pdf",
       }),
     });
-    expect(ctx(store).previewState).toEqual({ status: "loading" });
+    expect(ctx(store).sourceSelectionErrorMessage).toBeNull();
+  });
 
-    store.send({ type: "previewError", message: "Preview failed" });
-    expect(ctx(store).previewState).toEqual({ status: "error", message: "Preview failed" });
+  it("maintains extraction error state transitions", () => {
+    const store = createForgePageStore();
 
     store.send({ type: "setExtracting", startedAt: "2026-03-08T10:00:00.000Z" });
     store.send({ type: "extractionError", message: "Extraction failed" });
