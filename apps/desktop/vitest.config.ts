@@ -57,6 +57,9 @@ export default defineConfig({
             headless: true,
             provider: playwright(),
             instances: [{ browser: "chromium" }],
+            locators: {
+              timeout: 500,
+            },
           },
         },
       },
