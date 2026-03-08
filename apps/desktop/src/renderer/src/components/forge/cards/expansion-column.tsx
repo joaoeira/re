@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Braces, ListTree, X } from "lucide-react";
 
@@ -77,6 +77,7 @@ export function ExpansionColumn({
   const [addingIds, setAddingIds] = useState<ReadonlySet<number>>(new Set());
   const [addError, setAddError] = useState<string | null>(null);
   const [generationErrorMessage, setGenerationErrorMessage] = useState<string | null>(null);
+  const instructionTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const derivations = query.data?.derivations ?? [];
   const loading = isPending || inFlightForColumnCount > 0 || query.isLoading;
@@ -92,6 +93,14 @@ export function ExpansionColumn({
   useEffect(() => {
     setGenerationErrorMessage(null);
   }, [column.id]);
+
+  useLayoutEffect(() => {
+    const textarea = instructionTextareaRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "0px";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [instruction]);
 
   const requestGeneration = useCallback(
     async (confirmed?: boolean) => {
@@ -285,11 +294,18 @@ export function ExpansionColumn({
 
         {!loading && derivations.length === 0 ? (
           <div className="mt-6">
-            <input
-              type="text"
+            <textarea
+              ref={instructionTextareaRef}
               value={instruction}
               onChange={(event) => setInstruction(event.target.value)}
-              className="w-full bg-transparent text-sm text-foreground/80 outline-none placeholder:text-muted-foreground/40"
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                  event.preventDefault();
+                  void requestGeneration().catch(() => undefined);
+                }
+              }}
+              rows={1}
+              className="w-full resize-none overflow-hidden bg-transparent text-sm text-foreground/80 outline-none placeholder:text-muted-foreground/40 whitespace-pre-wrap break-words"
               placeholder="What should these cards focus on?"
             />
             <button
