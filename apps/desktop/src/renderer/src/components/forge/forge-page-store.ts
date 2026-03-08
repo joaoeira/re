@@ -1,8 +1,10 @@
 import { createStore } from "@xstate/store";
-import type {
-  ForgeSessionStatus,
-  ForgeTopicExtractionOutcome,
-  ForgeTopicGroup,
+import {
+  sameDerivationParentRef,
+  type DerivationParentRef,
+  type ForgeSessionStatus,
+  type ForgeTopicExtractionOutcome,
+  type ForgeTopicGroup,
 } from "@shared/rpc/schemas/forge";
 
 import type { ForgeSelectedSource } from "./forge-source";
@@ -43,6 +45,18 @@ export type TopicExpandedCardPanelMap = ReadonlyMap<
   string,
   ReadonlyMap<number, ForgeCardExpandedPanel>
 >;
+export type ExpansionColumnDescriptor = {
+  readonly id: string;
+  readonly parent: DerivationParentRef;
+  readonly rootCardId: number;
+  readonly parentQuestion: string;
+  readonly parentAnswer: string;
+  readonly instruction?: string;
+};
+export type TopicExpansionColumnsMap = ReadonlyMap<
+  string,
+  ReadonlyArray<ExpansionColumnDescriptor>
+>;
 
 type ForgePageContext = {
   readonly currentStep: ForgeStep;
@@ -64,6 +78,7 @@ type ForgePageContext = {
   readonly activeTopicKey: string | null;
   readonly deletedCardIdsByTopicKey: TopicCardIdMap;
   readonly expandedCardPanelsByTopicKey: TopicExpandedCardPanelMap;
+  readonly expansionColumnsByTopicKey: TopicExpansionColumnsMap;
   readonly resumeErrorMessage: string | null;
 };
 
@@ -72,6 +87,10 @@ const emptyTopicCardIdMap: TopicCardIdMap = new Map<string, ReadonlySet<number>>
 const emptyTopicExpandedCardPanelMap: TopicExpandedCardPanelMap = new Map<
   string,
   ReadonlyMap<number, ForgeCardExpandedPanel>
+>();
+const emptyTopicExpansionColumnsMap: TopicExpansionColumnsMap = new Map<
+  string,
+  ReadonlyArray<ExpansionColumnDescriptor>
 >();
 
 const initialForgePageContext = (): ForgePageContext => ({
@@ -94,6 +113,7 @@ const initialForgePageContext = (): ForgePageContext => ({
   activeTopicKey: null,
   deletedCardIdsByTopicKey: emptyTopicCardIdMap,
   expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
+  expansionColumnsByTopicKey: emptyTopicExpansionColumnsMap,
   resumeErrorMessage: null,
 });
 
@@ -182,6 +202,12 @@ const pruneExpandedCardPanelMap = (
 ): TopicExpandedCardPanelMap =>
   pruneMapByKeys(source, selectedTopicKeys, (panelsByCardId) => new Map(panelsByCardId));
 
+const pruneExpansionColumnsMap = (
+  source: TopicExpansionColumnsMap,
+  selectedTopicKeys: ReadonlySet<string>,
+): TopicExpansionColumnsMap =>
+  pruneMapByKeys(source, selectedTopicKeys, (columns) => columns.slice());
+
 const withPrunedSelections = (
   context: ForgePageContext,
   selectedTopicKeys: ReadonlySet<string>,
@@ -191,6 +217,7 @@ const withPrunedSelections = (
   | "activeTopicKey"
   | "deletedCardIdsByTopicKey"
   | "expandedCardPanelsByTopicKey"
+  | "expansionColumnsByTopicKey"
 > => ({
   selectedTopicKeys,
   activeTopicKey:
@@ -203,6 +230,10 @@ const withPrunedSelections = (
   ),
   expandedCardPanelsByTopicKey: pruneExpandedCardPanelMap(
     context.expandedCardPanelsByTopicKey,
+    selectedTopicKeys,
+  ),
+  expansionColumnsByTopicKey: pruneExpansionColumnsMap(
+    context.expansionColumnsByTopicKey,
     selectedTopicKeys,
   ),
 });
@@ -268,6 +299,83 @@ const withoutExpandedCardPanelsForTopic = (
   if (!source.has(topicKeyValue)) return source;
   const nextMap = new Map(source);
   nextMap.delete(topicKeyValue);
+  return nextMap;
+};
+
+const withOpenedExpansionColumn = (
+  source: TopicExpansionColumnsMap,
+  input: {
+    readonly topicKey: string;
+    readonly descriptor: ExpansionColumnDescriptor;
+    readonly sourceColumnParent: DerivationParentRef | null;
+  },
+): TopicExpansionColumnsMap => {
+  const existing = source.get(input.topicKey) ?? [];
+  const sourceColumnParent = input.sourceColumnParent;
+  if (sourceColumnParent !== null) {
+    const sourceIndex = existing.findIndex((column) =>
+      sameDerivationParentRef(column.parent, sourceColumnParent),
+    );
+    if (sourceIndex < 0) {
+      return source;
+    }
+  }
+  const retainedColumns =
+    sourceColumnParent === null
+      ? []
+      : existing.slice(
+          0,
+          existing.findIndex((column) =>
+            sameDerivationParentRef(column.parent, sourceColumnParent),
+          ) + 1,
+        );
+  const nextMap = new Map(source);
+  nextMap.set(input.topicKey, [...retainedColumns, input.descriptor]);
+  return nextMap;
+};
+
+const withoutExpansionColumnsForTopic = (
+  source: TopicExpansionColumnsMap,
+  topicKeyValue: string,
+): TopicExpansionColumnsMap => {
+  if (!source.has(topicKeyValue)) return source;
+  const nextMap = new Map(source);
+  nextMap.delete(topicKeyValue);
+  return nextMap;
+};
+
+const withExpansionColumnsTruncatedAt = (
+  source: TopicExpansionColumnsMap,
+  input: {
+    readonly topicKey: string;
+    readonly columnId: string;
+  },
+): TopicExpansionColumnsMap => {
+  const existing = source.get(input.topicKey) ?? [];
+  const index = existing.findIndex((column) => column.id === input.columnId);
+  if (index < 0) return source;
+  const nextMap = new Map(source);
+  nextMap.set(input.topicKey, existing.slice(0, index + 1));
+  return nextMap;
+};
+
+const withoutExpansionColumnAndRight = (
+  source: TopicExpansionColumnsMap,
+  input: {
+    readonly topicKey: string;
+    readonly columnId: string;
+  },
+): TopicExpansionColumnsMap => {
+  const existing = source.get(input.topicKey) ?? [];
+  const index = existing.findIndex((column) => column.id === input.columnId);
+  if (index < 0) return source;
+  const nextMap = new Map(source);
+  const nextColumns = existing.slice(0, index);
+  if (nextColumns.length === 0) {
+    nextMap.delete(input.topicKey);
+  } else {
+    nextMap.set(input.topicKey, nextColumns);
+  }
   return nextMap;
 };
 
@@ -340,6 +448,7 @@ export const createForgePageStore = () =>
         activeTopicKey: null,
         deletedCardIdsByTopicKey: emptyTopicCardIdMap,
         expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
+        expansionColumnsByTopicKey: emptyTopicExpansionColumnsMap,
         resumeErrorMessage: null,
       }),
       previewReady: (context, event: { summary: PreviewSummary }) => ({
@@ -372,6 +481,7 @@ export const createForgePageStore = () =>
         activeTopicKey: null,
         deletedCardIdsByTopicKey: emptyTopicCardIdMap,
         expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
+        expansionColumnsByTopicKey: emptyTopicExpansionColumnsMap,
       }),
       extractionSessionCreated: (context, event: { sessionId: number }) => {
         if (context.extractState.status !== "extracting") return context;
@@ -502,6 +612,7 @@ export const createForgePageStore = () =>
         activeTopicKey: null,
         deletedCardIdsByTopicKey: emptyTopicCardIdMap,
         expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
+        expansionColumnsByTopicKey: emptyTopicExpansionColumnsMap,
       }),
       toggleTopic: (context, event: { topicId: number }) => {
         const key = topicKey(event.topicId);
@@ -543,6 +654,7 @@ export const createForgePageStore = () =>
         activeTopicKey: null,
         deletedCardIdsByTopicKey: emptyTopicCardIdMap,
         expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
+        expansionColumnsByTopicKey: emptyTopicExpansionColumnsMap,
       }),
       setActiveCardsTopic: (context, event: { topicKey: string | null }) => ({
         ...context,
@@ -582,8 +694,71 @@ export const createForgePageStore = () =>
             context.expandedCardPanelsByTopicKey,
             event.topicKey,
           ),
+          expansionColumnsByTopicKey: withoutExpansionColumnsForTopic(
+            context.expansionColumnsByTopicKey,
+            event.topicKey,
+          ),
         };
       },
+      openExpansionColumnForTopic: (
+        context,
+        event: {
+          topicKey: string;
+          descriptor: ExpansionColumnDescriptor;
+          sourceColumnParent: DerivationParentRef | null;
+        },
+      ) => ({
+        ...context,
+        expansionColumnsByTopicKey: withOpenedExpansionColumn(context.expansionColumnsByTopicKey, {
+          topicKey: event.topicKey,
+          descriptor: event.descriptor,
+          sourceColumnParent: event.sourceColumnParent,
+        }),
+      }),
+      closeExpansionColumnForTopic: (
+        context,
+        event: {
+          topicKey: string;
+          columnId: string;
+        },
+      ) => ({
+        ...context,
+        expansionColumnsByTopicKey: withoutExpansionColumnAndRight(
+          context.expansionColumnsByTopicKey,
+          {
+            topicKey: event.topicKey,
+            columnId: event.columnId,
+          },
+        ),
+      }),
+      truncateExpansionColumnsForTopic: (
+        context,
+        event: {
+          topicKey: string;
+          columnId: string;
+        },
+      ) => ({
+        ...context,
+        expansionColumnsByTopicKey: withExpansionColumnsTruncatedAt(
+          context.expansionColumnsByTopicKey,
+          {
+            topicKey: event.topicKey,
+            columnId: event.columnId,
+          },
+        ),
+      }),
+      clearExpansionColumnsForTopic: (
+        context,
+        event: {
+          topicKey: string;
+        },
+      ) => ({
+        ...context,
+        expansionColumnsByTopicKey: withoutExpansionColumnsForTopic(
+          context.expansionColumnsByTopicKey,
+          event.topicKey,
+        ),
+      }),
       advanceToCards: (context) => ({
         ...context,
         currentStep: "cards" as const,
@@ -620,6 +795,7 @@ export const createForgePageStore = () =>
         topicGroups: event.topicGroups,
         extractionOutcomes: event.extractionOutcomes,
         selectedTopicKeys: event.selectedTopicKeys,
+        expansionColumnsByTopicKey: emptyTopicExpansionColumnsMap,
       }),
       resumeError: (context, event: { message: string }) => ({
         ...context,

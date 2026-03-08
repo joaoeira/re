@@ -15,6 +15,7 @@ import {
   ForgeTopicChunkExtracted,
 } from "@shared/rpc/contracts";
 import type {
+  DerivationParentRef,
   ForgeSessionSummary,
   ForgeSourceInput,
   ForgeTopicCardsSummary,
@@ -23,6 +24,7 @@ import type {
 } from "@shared/rpc/schemas/forge";
 import {
   createForgePageStore,
+  type ExpansionColumnDescriptor,
   type ForgeCardExpandedPanel,
   topicKey,
   type ExtractState,
@@ -33,6 +35,7 @@ import {
   type PreviewState,
   type TopicCardIdMap,
   type TopicExpandedCardPanelMap,
+  type TopicExpansionColumnsMap,
 } from "./forge-page-store";
 import {
   createPdfSelectedSource,
@@ -155,6 +158,20 @@ export function useForgeExpandedCardPanelsByTopicKey(): TopicExpandedCardPanelMa
   return useForgePageSelector((snapshot) => snapshot.context.expandedCardPanelsByTopicKey);
 }
 
+export function useForgeExpansionColumnsByTopicKey(): TopicExpansionColumnsMap {
+  return useForgePageSelector((snapshot) => snapshot.context.expansionColumnsByTopicKey);
+}
+
+export function useForgeExpansionColumns(): ReadonlyArray<ExpansionColumnDescriptor> {
+  const activeTopicKey = useForgeActiveTopicKey();
+  const columnsByTopicKey = useForgeExpansionColumnsByTopicKey();
+
+  return useMemo(
+    () => (activeTopicKey ? (columnsByTopicKey.get(activeTopicKey) ?? []) : []),
+    [activeTopicKey, columnsByTopicKey],
+  );
+}
+
 export function useForgeTopicExtractionOutcomes(): ReadonlyArray<ForgeTopicExtractionOutcome> {
   return useForgePageSelector((snapshot) => snapshot.context.extractionOutcomes);
 }
@@ -223,6 +240,14 @@ export type ForgeCardsCurationActions = {
     panel: ForgeCardExpandedPanel | null,
   ) => void;
   readonly clearTopicCuration: (topicKey: string) => void;
+  readonly openExpansionColumn: (
+    topicKey: string,
+    descriptor: ExpansionColumnDescriptor,
+    sourceColumnParent: DerivationParentRef | null,
+  ) => void;
+  readonly closeExpansionColumn: (topicKey: string, columnId: string) => void;
+  readonly truncateExpansionColumns: (topicKey: string, columnId: string) => void;
+  readonly clearExpansionColumns: (topicKey: string) => void;
 };
 
 export function useForgeCardsCurationActions(): ForgeCardsCurationActions {
@@ -240,6 +265,23 @@ export function useForgeCardsCurationActions(): ForgeCardsCurationActions {
       ) => store.send({ type: "setCardExpandedPanelForTopic", topicKey, cardId, panel }),
       clearTopicCuration: (topicKey: string) =>
         store.send({ type: "clearTopicCuration", topicKey }),
+      openExpansionColumn: (
+        topicKey: string,
+        descriptor: ExpansionColumnDescriptor,
+        sourceColumnParent: DerivationParentRef | null,
+      ) =>
+        store.send({
+          type: "openExpansionColumnForTopic",
+          topicKey,
+          descriptor,
+          sourceColumnParent,
+        }),
+      closeExpansionColumn: (topicKey: string, columnId: string) =>
+        store.send({ type: "closeExpansionColumnForTopic", topicKey, columnId }),
+      truncateExpansionColumns: (topicKey: string, columnId: string) =>
+        store.send({ type: "truncateExpansionColumnsForTopic", topicKey, columnId }),
+      clearExpansionColumns: (topicKey: string) =>
+        store.send({ type: "clearExpansionColumnsForTopic", topicKey }),
     }),
     [store],
   );

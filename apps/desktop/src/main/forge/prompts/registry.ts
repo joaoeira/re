@@ -1,6 +1,7 @@
 import { CreateCardsPromptSpec } from "./create-cards";
 import { CreateSynthesisCardsPromptSpec } from "./create-synthesis-cards";
 import { GenerateClozePromptSpec } from "./generate-cloze";
+import { GenerateExpansionsPromptSpec } from "./generate-expansions";
 import { GeneratePermutationsPromptSpec } from "./generate-permutations";
 import { GetTopicsPromptSpec } from "./get-topics";
 import { GetSynthesisTopicsPromptSpec } from "./get-synthesis-topics";
@@ -51,6 +52,7 @@ export const ForgePromptRegistry = createForgePromptRegistry([
   GetSynthesisTopicsPromptSpec,
   CreateCardsPromptSpec,
   CreateSynthesisCardsPromptSpec,
+  GenerateExpansionsPromptSpec,
   GeneratePermutationsPromptSpec,
   GenerateClozePromptSpec,
 ]);

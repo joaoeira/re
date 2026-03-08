@@ -28,6 +28,18 @@ type Card = {
   readonly addedToDeck: boolean;
 };
 
+type Derivation = {
+  readonly id: number;
+  readonly rootCardId: number;
+  readonly parentDerivationId: number | null;
+  readonly kind: "permutation" | "expansion";
+  readonly derivationOrder: number;
+  readonly question: string;
+  readonly answer: string;
+  readonly instruction: string | null;
+  readonly addedCount: number;
+};
+
 type TopicState = {
   readonly topic: TopicDef;
   status: "idle" | "generating" | "generated" | "error";
@@ -90,12 +102,23 @@ const TOPICS: ReadonlyArray<TopicDef> = [
 const topicKey = (topic: Pick<TopicDef, "chunkId" | "topicIndex">) =>
   `${topic.chunkId}:${topic.topicIndex}`;
 
+const typedFailure = <T extends { readonly _tag: string }>(data: T) => ({
+  type: "failure" as const,
+  error: {
+    tag: data._tag,
+    data,
+  },
+});
+
 const createCardsInvoke = (options?: {
   readonly sessionId?: number;
   readonly initialByTopicKey?: Readonly<Record<string, InitialTopicState>>;
   readonly snapshotSummaryOverridesByTopicKey?: Readonly<Record<string, SnapshotSummaryOverride>>;
   readonly topicGenerationDelayByTopicKey?: Readonly<Record<string, number>>;
   readonly topicGenerationFailureByTopicKey?: Readonly<Record<string, string>>;
+  readonly derivedGenerationFailureMessageByKind?: Readonly<
+    Partial<Record<"permutation" | "expansion", string>>
+  >;
   readonly permutationsGenerationDelayMs?: number;
   readonly clozeGenerationDelayMs?: number;
   readonly initialDecks?: ReadonlyArray<ForgeDeckEntry>;
@@ -114,6 +137,8 @@ const createCardsInvoke = (options?: {
   const remainingDeckPathPersistFailuresByDeckPath = new Map(
     Object.entries(options?.deckPathPersistFailuresByDeckPath ?? {}),
   );
+  const derivedGenerationFailureMessageByKind =
+    options?.derivedGenerationFailureMessageByKind ?? {};
   const permutationsGenerationDelayMs = options?.permutationsGenerationDelayMs ?? 0;
   const clozeGenerationDelayMs = options?.clozeGenerationDelayMs ?? 0;
 
@@ -138,12 +163,18 @@ const createCardsInvoke = (options?: {
     });
   });
 
-  const permutationsByCardId = new Map<
-    number,
-    Array<{ id: number; question: string; answer: string; addedCount: number }>
-  >();
-  const clozeByCardId = new Map<number, string>();
-  const clozeAddedCountByCardId = new Map<number, number>();
+  const derivationsByParentKey = new Map<string, Array<Derivation>>();
+  const clozeBySourceKey = new Map<string, string>();
+  const clozeAddedCountBySourceKey = new Map<string, number>();
+
+  const derivationParentKey = (
+    parent: { readonly cardId: number } | { readonly derivationId: number },
+    kind: "permutation" | "expansion",
+  ) =>
+    `${kind}:${"cardId" in parent ? `card:${parent.cardId}` : `derivation:${parent.derivationId}`}`;
+
+  const sourceKey = (source: { readonly cardId: number } | { readonly derivationId: number }) =>
+    "cardId" in source ? `card:${source.cardId}` : `derivation:${source.derivationId}`;
 
   const findTopicStateById = (topicId: number) => {
     for (const state of topicByKey.values()) {
@@ -158,6 +189,17 @@ const createCardsInvoke = (options?: {
     }
     return null;
   };
+
+  const findDerivationById = (derivationId: number): Derivation | null => {
+    for (const derivations of derivationsByParentKey.values()) {
+      const derivation = derivations.find((entry) => entry.id === derivationId);
+      if (derivation) return derivation;
+    }
+    return null;
+  };
+
+  const resolveCardById = (cardId: number): Card | null =>
+    findTopicStateByCardId(cardId)?.cards.find((card) => card.id === cardId) ?? null;
 
   const toSummary = (state: TopicState) => ({
     topicId: state.topic.topicId,
@@ -250,15 +292,12 @@ const createCardsInvoke = (options?: {
     if (method === "CreateDeck") {
       const input = payload as { relativePath: string };
       if (options?.createDeckFailureMessage) {
-        return {
-          type: "failure",
-          error: {
-            _tag: "InvalidDeckPath",
-            inputPath: input.relativePath,
-            reason: "invalid_file_name",
-            message: options.createDeckFailureMessage,
-          },
-        };
+        return typedFailure({
+          _tag: "InvalidDeckPath",
+          inputPath: input.relativePath,
+          reason: "invalid_file_name",
+          message: options.createDeckFailureMessage,
+        });
       }
       const createdDeck = toDeckEntry(workspaceRootPath, input.relativePath);
       if (!decks.some((deck) => deck.absolutePath === createdDeck.absolutePath)) {
@@ -355,14 +394,11 @@ const createCardsInvoke = (options?: {
       const input = payload as { topicId: number };
       const state = findTopicStateById(input.topicId);
       if (!state) {
-        return {
-          type: "failure",
-          error: {
-            _tag: "topic_not_found",
-            sessionId,
-            topicId: input.topicId,
-          },
-        };
+        return typedFailure({
+          _tag: "topic_not_found",
+          sessionId,
+          topicId: input.topicId,
+        });
       }
 
       return {
@@ -383,14 +419,11 @@ const createCardsInvoke = (options?: {
       const input = payload as { topicId: number };
       const state = findTopicStateById(input.topicId);
       if (!state) {
-        return {
-          type: "failure",
-          error: {
-            _tag: "topic_not_found",
-            sessionId,
-            topicId: input.topicId,
-          },
-        };
+        return typedFailure({
+          _tag: "topic_not_found",
+          sessionId,
+          topicId: input.topicId,
+        });
       }
       const generationDelayMs =
         options?.topicGenerationDelayByTopicKey?.[topicKey(state.topic)] ?? 0;
@@ -405,16 +438,13 @@ const createCardsInvoke = (options?: {
         state.cards = [];
         state.generationRevision += 1;
 
-        return {
-          type: "failure",
-          error: {
-            _tag: "card_generation_error",
-            sessionId,
-            chunkId: state.topic.chunkId,
-            topicIndex: state.topic.topicIndex,
-            message: generationFailureMessage,
-          },
-        };
+        return typedFailure({
+          _tag: "card_generation_error",
+          sessionId,
+          chunkId: state.topic.chunkId,
+          topicIndex: state.topic.topicIndex,
+          message: generationFailureMessage,
+        });
       }
 
       const nextRevision = state.generationRevision + 1;
@@ -462,13 +492,10 @@ const createCardsInvoke = (options?: {
       };
       const state = findTopicStateByCardId(input.cardId);
       if (!state) {
-        return {
-          type: "failure",
-          error: {
-            _tag: "card_not_found",
-            sourceCardId: input.cardId,
-          },
-        };
+        return typedFailure({
+          _tag: "card_not_found",
+          sourceCardId: input.cardId,
+        });
       }
 
       state.cards = state.cards.map((card) =>
@@ -495,111 +522,152 @@ const createCardsInvoke = (options?: {
       };
     }
 
-    if (method === "ForgeUpdatePermutation") {
+    if (method === "ForgeUpdateDerivation") {
       const input = payload as {
-        permutationId: number;
+        derivationId: number;
         question: string;
         answer: string;
       };
-      for (const permutations of permutationsByCardId.values()) {
-        const index = permutations.findIndex((p) => p.id === input.permutationId);
+      for (const [parentKey, derivations] of derivationsByParentKey.entries()) {
+        const index = derivations.findIndex((entry) => entry.id === input.derivationId);
         if (index >= 0) {
-          permutations[index] = {
-            id: input.permutationId,
+          const current = derivations[index]!;
+          const nextDerivation = {
+            ...current,
             question: input.question,
             answer: input.answer,
-            addedCount: permutations[index]?.addedCount ?? 0,
           };
+          derivationsByParentKey.set(parentKey, [
+            ...derivations.slice(0, index),
+            nextDerivation,
+            ...derivations.slice(index + 1),
+          ]);
           return {
             type: "success",
             data: {
-              permutation: {
-                id: input.permutationId,
-                question: input.question,
-                answer: input.answer,
-                addedCount: permutations[index]?.addedCount ?? 0,
-              },
+              derivation: nextDerivation,
             },
           };
         }
       }
       return {
-        type: "failure",
-        error: {
-          _tag: "permutation_not_found",
-          permutationId: input.permutationId,
-        },
+        ...typedFailure({
+          _tag: "derivation_not_found",
+          derivationId: input.derivationId,
+        }),
       };
     }
 
-    if (method === "ForgeGetCardPermutations") {
-      const input = payload as { sourceCardId: number };
+    if (method === "ForgeGetDerivedCards") {
+      const input = payload as {
+        parent: { readonly cardId: number } | { readonly derivationId: number };
+        kind: "permutation" | "expansion";
+      };
       return {
         type: "success",
         data: {
-          sourceCardId: input.sourceCardId,
-          permutations: permutationsByCardId.get(input.sourceCardId) ?? [],
+          derivations:
+            derivationsByParentKey.get(derivationParentKey(input.parent, input.kind)) ?? [],
         },
       };
     }
 
-    if (method === "ForgeGenerateCardPermutations") {
-      const input = payload as { sourceCardId: number };
+    if (method === "ForgeGenerateDerivedCards") {
+      const input = payload as {
+        parent: { readonly cardId: number } | { readonly derivationId: number };
+        kind: "permutation" | "expansion";
+        instruction?: string;
+      };
+      const failureMessage = derivedGenerationFailureMessageByKind[input.kind];
+      if (failureMessage) {
+        return typedFailure({
+          _tag: "derivation_generation_error",
+          parent: input.parent,
+          kind: input.kind,
+          message: failureMessage,
+        });
+      }
       if (permutationsGenerationDelayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, permutationsGenerationDelayMs));
       }
-      const permutations = [
+      const parentDerivation =
+        "derivationId" in input.parent ? findDerivationById(input.parent.derivationId) : null;
+      const rootCardId =
+        "cardId" in input.parent
+          ? input.parent.cardId
+          : (parentDerivation?.rootCardId ?? input.parent.derivationId);
+      const sourceCard = "cardId" in input.parent ? resolveCardById(input.parent.cardId) : null;
+      const derivations = [
         {
           id: nextPermutationId++,
-          question: `Permutation for ${input.sourceCardId}`,
-          answer: "Permutation answer",
+          rootCardId,
+          parentDerivationId: "derivationId" in input.parent ? input.parent.derivationId : null,
+          kind: input.kind,
+          derivationOrder: 0,
+          question:
+            input.kind === "permutation"
+              ? `Permutation for ${"cardId" in input.parent ? input.parent.cardId : input.parent.derivationId}`
+              : `Expansion for ${(sourceCard?.question ?? parentDerivation?.question ?? rootCardId).toString()}`,
+          answer:
+            input.kind === "permutation"
+              ? "Permutation answer"
+              : (sourceCard?.answer ?? parentDerivation?.answer ?? "Expansion answer"),
+          instruction: input.instruction ?? null,
           addedCount: 0,
         },
       ];
-      permutationsByCardId.set(input.sourceCardId, permutations);
+      derivationsByParentKey.set(derivationParentKey(input.parent, input.kind), derivations);
       return {
         type: "success",
         data: {
-          sourceCardId: input.sourceCardId,
-          permutations,
+          derivations,
         },
       };
     }
 
     if (method === "ForgeGetCardCloze") {
-      const input = payload as { sourceCardId: number };
+      const input = payload as {
+        source: { readonly cardId: number } | { readonly derivationId: number };
+      };
+      const key = sourceKey(input.source);
       return {
         type: "success",
         data: {
-          sourceCardId: input.sourceCardId,
-          cloze: clozeByCardId.get(input.sourceCardId) ?? null,
-          addedCount: clozeAddedCountByCardId.get(input.sourceCardId) ?? 0,
+          source: input.source,
+          cloze: clozeBySourceKey.get(key) ?? null,
+          addedCount: clozeAddedCountBySourceKey.get(key) ?? 0,
         },
       };
     }
 
     if (method === "ForgeGenerateCardCloze") {
       const input = payload as {
-        sourceCardId: number;
+        source: { readonly cardId: number } | { readonly derivationId: number };
         sourceQuestion?: string;
         sourceAnswer?: string;
       };
       if (clozeGenerationDelayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, clozeGenerationDelayMs));
       }
-      const answerToken = (input.sourceAnswer ?? String(input.sourceCardId)).trim().split(/\s+/)[0];
+      const fallbackAnswer =
+        "cardId" in input.source
+          ? (resolveCardById(input.source.cardId)?.answer ?? String(input.source.cardId))
+          : (findDerivationById(input.source.derivationId)?.answer ??
+            String(input.source.derivationId));
+      const answerToken = (input.sourceAnswer ?? fallbackAnswer).trim().split(/\s+/)[0];
       const cloze = `The answer is {{c1::${answerToken}}}.`;
-      const previousCloze = clozeByCardId.get(input.sourceCardId);
-      clozeByCardId.set(input.sourceCardId, cloze);
+      const key = sourceKey(input.source);
+      const previousCloze = clozeBySourceKey.get(key);
+      clozeBySourceKey.set(key, cloze);
       if (previousCloze !== cloze) {
-        clozeAddedCountByCardId.set(input.sourceCardId, 0);
+        clozeAddedCountBySourceKey.set(key, 0);
       }
       return {
         type: "success",
         data: {
-          sourceCardId: input.sourceCardId,
+          source: input.source,
           cloze,
-          addedCount: clozeAddedCountByCardId.get(input.sourceCardId) ?? 0,
+          addedCount: clozeAddedCountBySourceKey.get(key) ?? 0,
         },
       };
     }
@@ -611,7 +679,7 @@ const createCardsInvoke = (options?: {
     if (method === "ForgeAddCardToDeck") {
       const input = payload as {
         sourceCardId?: number;
-        permutationId?: number;
+        derivationId?: number;
         cardType: "qa" | "cloze";
         content: string;
       };
@@ -632,27 +700,39 @@ const createCardsInvoke = (options?: {
         }
         if (input.cardType === "cloze") {
           const clozeCardCount = clozeCardCountFromContent(input.content);
-          clozeAddedCountByCardId.set(
-            input.sourceCardId,
-            (clozeAddedCountByCardId.get(input.sourceCardId) ?? 0) + clozeCardCount,
+          clozeAddedCountBySourceKey.set(
+            sourceKey({ cardId: input.sourceCardId }),
+            (clozeAddedCountBySourceKey.get(sourceKey({ cardId: input.sourceCardId })) ?? 0) +
+              clozeCardCount,
           );
         }
       }
-      if (typeof input.permutationId === "number" && input.cardType === "qa") {
-        for (const [sourceCardId, permutations] of permutationsByCardId.entries()) {
-          const index = permutations.findIndex((entry) => entry.id === input.permutationId);
-          if (index < 0) continue;
-          const current = permutations[index]!;
-          const next = {
-            ...current,
-            addedCount: current.addedCount + 1,
-          };
-          permutationsByCardId.set(sourceCardId, [
-            ...permutations.slice(0, index),
-            next,
-            ...permutations.slice(index + 1),
-          ]);
-          break;
+      if (typeof input.derivationId === "number") {
+        if (input.cardType === "cloze") {
+          const clozeCardCount = clozeCardCountFromContent(input.content);
+          clozeAddedCountBySourceKey.set(
+            sourceKey({ derivationId: input.derivationId }),
+            (clozeAddedCountBySourceKey.get(sourceKey({ derivationId: input.derivationId })) ?? 0) +
+              clozeCardCount,
+          );
+        }
+
+        if (input.cardType === "qa") {
+          for (const [parentKey, derivations] of derivationsByParentKey.entries()) {
+            const index = derivations.findIndex((entry) => entry.id === input.derivationId);
+            if (index < 0) continue;
+            const current = derivations[index]!;
+            const next = {
+              ...current,
+              addedCount: current.addedCount + 1,
+            };
+            derivationsByParentKey.set(parentKey, [
+              ...derivations.slice(0, index),
+              next,
+              ...derivations.slice(index + 1),
+            ]);
+            break;
+          }
         }
       }
       const cardCountForResult =
@@ -676,26 +756,20 @@ const createCardsInvoke = (options?: {
           input.deckPath,
           (remainingFailuresForDeck ?? 0) - 1,
         );
-        return {
-          type: "failure",
-          error: {
-            _tag: "session_operation_error",
-            sessionId,
-            message: "temporary sqlite lock",
-          },
-        };
+        return typedFailure({
+          _tag: "session_operation_error",
+          sessionId,
+          message: "temporary sqlite lock",
+        });
       }
 
       if (remainingDeckPathPersistFailures > 0) {
         remainingDeckPathPersistFailures -= 1;
-        return {
-          type: "failure",
-          error: {
-            _tag: "session_operation_error",
-            sessionId,
-            message: "temporary sqlite lock",
-          },
-        };
+        return typedFailure({
+          _tag: "session_operation_error",
+          sessionId,
+          message: "temporary sqlite lock",
+        });
       }
       return { type: "success", data: {} };
     }
@@ -1280,7 +1354,7 @@ describe("Forge cards step", () => {
     const screen = await renderWithIpcProviders(<ForgePage />);
     await navigateToCards(screen);
 
-    await expect.element(screen.getByText("Generating cards…")).toBeVisible();
+    await expect.element(screen.getByText("Generating cards...")).toBeVisible();
     expect(screen.getByRole("button", { name: "Generate cards" }).query()).toBeNull();
   });
 
@@ -1409,18 +1483,17 @@ describe("Forge cards step", () => {
     await expect
       .poll(() => {
         return invoke.mock.calls.filter(
-          ([method]: unknown[]) => method === "ForgeGenerateCardPermutations",
+          ([method]: unknown[]) => method === "ForgeGenerateDerivedCards",
         ).length;
       })
       .toBe(1);
 
     const firstGenerateCall = invoke.mock.calls.find(
-      ([method]: unknown[]) => method === "ForgeGenerateCardPermutations",
-    ) as [string, { sourceCardId: number; sourceQuestion: string; sourceAnswer: string }];
+      ([method]: unknown[]) => method === "ForgeGenerateDerivedCards",
+    ) as [string, { parent: { cardId: number }; kind: "permutation" }];
     expect(firstGenerateCall[1]).toEqual({
-      sourceCardId: 8_210,
-      sourceQuestion: "edited source question",
-      sourceAnswer: "editable source answer",
+      parent: { cardId: 8_210 },
+      kind: "permutation",
     });
 
     await expect.element(screen.getByText("variations generated")).toBeVisible();
@@ -1434,19 +1507,18 @@ describe("Forge cards step", () => {
     await expect
       .poll(() => {
         return invoke.mock.calls.filter(
-          ([method]: unknown[]) => method === "ForgeGenerateCardPermutations",
+          ([method]: unknown[]) => method === "ForgeGenerateDerivedCards",
         ).length;
       })
       .toBe(2);
 
     const regenerateCall = invoke.mock.calls
-      .filter(([method]: unknown[]) => method === "ForgeGenerateCardPermutations")
-      .at(-1) as [string, { sourceCardId: number; sourceQuestion: string; sourceAnswer: string }];
+      .filter(([method]: unknown[]) => method === "ForgeGenerateDerivedCards")
+      .at(-1) as [string, { parent: { cardId: number }; kind: "permutation" }];
 
     expect(regenerateCall[1]).toEqual({
-      sourceCardId: 8_210,
-      sourceQuestion: "edited source question",
-      sourceAnswer: "editable source answer",
+      parent: { cardId: 8_210 },
+      kind: "permutation",
     });
   });
 
@@ -1507,9 +1579,9 @@ describe("Forge cards step", () => {
 
     const firstGenerateCall = invoke.mock.calls.find(
       ([method]: unknown[]) => method === "ForgeGenerateCardCloze",
-    ) as [string, { sourceCardId: number; sourceQuestion: string; sourceAnswer: string }];
+    ) as [string, { source: { cardId: number }; sourceQuestion: string; sourceAnswer: string }];
     expect(firstGenerateCall[1]).toEqual({
-      sourceCardId: 8_220,
+      source: { cardId: 8_220 },
       sourceQuestion: "editable cloze question",
       sourceAnswer: "edited cloze answer",
     });
@@ -1532,16 +1604,162 @@ describe("Forge cards step", () => {
 
     const regenerateCall = invoke.mock.calls
       .filter(([method]: unknown[]) => method === "ForgeGenerateCardCloze")
-      .at(-1) as [string, { sourceCardId: number; sourceQuestion: string; sourceAnswer: string }];
+      .at(-1) as [
+      string,
+      { source: { cardId: number }; sourceQuestion: string; sourceAnswer: string },
+    ];
 
     expect(regenerateCall[1]).toEqual({
-      sourceCardId: 8_220,
+      source: { cardId: 8_220 },
       sourceQuestion: "editable cloze question",
       sourceAnswer: "edited cloze answer",
     });
   });
 
-  it("ForgeUpdatePermutation mock updates permutation data correctly", async () => {
+  it("renders permutation generation errors from the mutation path", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "generated",
+          generationRevision: 1,
+          cards: [
+            {
+              id: 8_230,
+              question: "broken permutation question",
+              answer: "broken permutation answer",
+            },
+          ],
+        },
+      },
+      derivedGenerationFailureMessageByKind: {
+        permutation: "permutation generation failed",
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await userEvent.click(screen.getByRole("button", { name: "Permutations" }));
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method]: unknown[]) => method === "ForgeGenerateDerivedCards",
+        ).length;
+      })
+      .toBe(1);
+    await expect.element(screen.getByText("permutation generation failed")).toBeVisible();
+  });
+
+  it("renders expansion generation errors from the mutation path", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "generated",
+          generationRevision: 1,
+          cards: [
+            {
+              id: 8_235,
+              question: "broken expansion question",
+              answer: "broken expansion answer",
+            },
+          ],
+        },
+      },
+      derivedGenerationFailureMessageByKind: {
+        expansion: "expansion generation failed",
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await userEvent.click(screen.getByRole("button", { name: "Expand" }));
+    await userEvent.click(screen.getByRole("button", { name: "Generate cards" }));
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method, payload]: unknown[]) =>
+            method === "ForgeGenerateDerivedCards" &&
+            typeof payload === "object" &&
+            payload !== null &&
+            "kind" in payload &&
+            payload.kind === "expansion",
+        ).length;
+      })
+      .toBe(1);
+    await expect.element(screen.getByText("expansion generation failed")).toBeVisible();
+  });
+
+  it("opens an expansion column and generates expansion cards from a root card", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "generated",
+          generationRevision: 1,
+          cards: [
+            {
+              id: 8_240,
+              question: "expandable question",
+              answer: "expandable answer",
+            },
+          ],
+        },
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await userEvent.click(screen.getByRole("button", { name: "Expand" }));
+
+    const instructionField = screen.getByPlaceholder("What should these cards focus on?");
+    await expect.element(instructionField).toBeVisible();
+    await userEvent.fill(instructionField, "deeper detail");
+
+    await userEvent.click(screen.getByText("Generate cards", { exact: false }));
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(
+          ([method, payload]: unknown[]) =>
+            method === "ForgeGenerateDerivedCards" &&
+            typeof payload === "object" &&
+            payload !== null &&
+            "kind" in payload &&
+            payload.kind === "expansion",
+        ).length;
+      })
+      .toBe(1);
+
+    const expansionCall = invoke.mock.calls.find(
+      ([method, payload]: unknown[]) =>
+        method === "ForgeGenerateDerivedCards" &&
+        typeof payload === "object" &&
+        payload !== null &&
+        "kind" in payload &&
+        payload.kind === "expansion",
+    ) as
+      | [string, { parent: { cardId: number }; kind: "expansion"; instruction: string }]
+      | undefined;
+
+    expect(expansionCall?.[1]).toEqual({
+      parent: { cardId: 8_240 },
+      kind: "expansion",
+      instruction: "deeper detail",
+    });
+    await expect.element(screen.getByText("Expansion for expandable question")).toBeVisible();
+    await expect.element(screen.getByText('"deeper detail"')).toBeVisible();
+  });
+
+  it("ForgeUpdateDerivation mock updates permutation data correctly", async () => {
     const invoke = createCardsInvoke({
       initialByTopicKey: {
         ...defaultInteractiveState(),
@@ -1566,9 +1784,9 @@ describe("Forge cards step", () => {
     await userEvent.click(screen.getByRole("button", { name: "Permutations" }));
     await expect.element(screen.getByText("Permutation for 8250")).toBeVisible();
 
-    const permutationId = 12_000;
-    const updateResult = await invoke("ForgeUpdatePermutation", {
-      permutationId,
+    const derivationId = 12_000;
+    const updateResult = await invoke("ForgeUpdateDerivation", {
+      derivationId,
       question: "updated question",
       answer: "updated answer",
     });
@@ -1576,32 +1794,43 @@ describe("Forge cards step", () => {
     expect(updateResult).toEqual({
       type: "success",
       data: {
-        permutation: {
-          id: permutationId,
+        derivation: {
+          id: derivationId,
+          rootCardId: 8_250,
+          parentDerivationId: null,
+          kind: "permutation",
+          derivationOrder: 0,
           question: "updated question",
           answer: "updated answer",
+          instruction: null,
           addedCount: 0,
         },
       },
     });
 
-    const getResult = await invoke("ForgeGetCardPermutations", {
-      sourceCardId: 8_250,
+    const getResult = await invoke("ForgeGetDerivedCards", {
+      parent: { cardId: 8_250 },
+      kind: "permutation",
     });
-    expect(getResult.data.permutations[0]).toEqual({
-      id: permutationId,
+    expect(getResult.data.derivations[0]).toEqual({
+      id: derivationId,
+      rootCardId: 8_250,
+      parentDerivationId: null,
+      kind: "permutation",
+      derivationOrder: 0,
       question: "updated question",
       answer: "updated answer",
+      instruction: null,
       addedCount: 0,
     });
 
-    const notFoundResult = await invoke("ForgeUpdatePermutation", {
-      permutationId: 999_999,
+    const notFoundResult = await invoke("ForgeUpdateDerivation", {
+      derivationId: 999_999,
       question: "x",
       answer: "y",
     });
     expect(notFoundResult.type).toBe("failure");
-    expect(notFoundResult.error._tag).toBe("permutation_not_found");
+    expect(notFoundResult.error.tag).toBe("derivation_not_found");
   });
 
   it("auto-generates permutations and cloze variants when panels open empty", async () => {
@@ -1631,7 +1860,7 @@ describe("Forge cards step", () => {
     await expect
       .poll(() => {
         return invoke.mock.calls.filter(
-          ([method]: unknown[]) => method === "ForgeGenerateCardPermutations",
+          ([method]: unknown[]) => method === "ForgeGenerateDerivedCards",
         ).length;
       })
       .toBe(1);
@@ -1716,7 +1945,7 @@ describe("Forge cards step", () => {
     await expect
       .poll(() => {
         return invoke.mock.calls.filter(
-          ([method]: unknown[]) => method === "ForgeGenerateCardPermutations",
+          ([method]: unknown[]) => method === "ForgeGenerateDerivedCards",
         ).length;
       })
       .toBe(1);
@@ -1733,9 +1962,8 @@ describe("Forge cards step", () => {
     await expect
       .poll(
         () =>
-          invoke.mock.calls.filter(
-            ([method]: unknown[]) => method === "ForgeGenerateCardPermutations",
-          ).length,
+          invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeGenerateDerivedCards")
+            .length,
         { timeout: 700, interval: 50 },
       )
       .toBe(1);

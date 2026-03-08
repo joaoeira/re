@@ -19,11 +19,13 @@ import {
   CreateCardsPromptSpec,
   CreateSynthesisCardsPromptSpec,
   GenerateClozePromptSpec,
+  GenerateExpansionsPromptSpec,
   GeneratePermutationsPromptSpec,
   GetSynthesisTopicsPromptSpec,
   GetTopicsPromptSpec,
 } from "@main/forge/prompts";
 import {
+  type ForgeCardDerivation,
   type ForgeCardWithTopicContext,
   type ForgeSessionRepositoryError,
   type ForgeSessionStatusTransitionError,
@@ -42,6 +44,10 @@ import {
   type AppContract,
 } from "@shared/rpc/contracts";
 import {
+  isCardParentRef,
+  toDerivationParentRefKey,
+  type DerivationKind,
+  type DerivationParentRef,
   ForgeEmptySourceTextError,
   ForgeOperationError,
   ForgePreviewEmptySourceTextError,
@@ -52,8 +58,9 @@ import {
   ForgeCardGenerationError,
   ForgeCardNotFoundError,
   ForgeClozeGenerationError,
-  ForgePermutationGenerationError,
-  ForgePermutationNotFoundError,
+  ForgeDerivationAlreadyGeneratingError,
+  ForgeDerivationGenerationError,
+  ForgeDerivationNotFoundError,
   type ForgeSession,
   type ForgeSourceInput,
   ForgeSourceMismatchError,
@@ -74,12 +81,12 @@ type ForgeHandlerKeys =
   | "ForgeGetTopicCards"
   | "ForgeGenerateTopicCards"
   | "ForgeGenerateSelectedTopicCards"
-  | "ForgeGetCardPermutations"
-  | "ForgeGenerateCardPermutations"
+  | "ForgeGetDerivedCards"
+  | "ForgeGenerateDerivedCards"
   | "ForgeGetCardCloze"
   | "ForgeGenerateCardCloze"
   | "ForgeUpdateCard"
-  | "ForgeUpdatePermutation"
+  | "ForgeUpdateDerivation"
   | "ForgeSaveTopicSelections"
   | "ForgeSetSessionDeckPath"
   | "ForgeAddCardToDeck";
@@ -179,6 +186,21 @@ const ensureCardExists = (
         }),
       )
     : Effect.succeed(card);
+
+const ensureDerivationExists = (
+  derivation: ForgeCardDerivation | null,
+  derivationId: number,
+): Effect.Effect<ForgeCardDerivation, ForgeDerivationNotFoundError> =>
+  derivation === null
+    ? Effect.fail(
+        new ForgeDerivationNotFoundError({
+          derivationId,
+        }),
+      )
+    : Effect.succeed(derivation);
+
+const toDerivationLockKey = (parent: DerivationParentRef, kind: DerivationKind): string =>
+  `${toDerivationParentRefKey(parent)}:${kind}`;
 
 const toSourceResolveError = (input: {
   readonly sessionId?: number;
@@ -311,6 +333,7 @@ export const createForgeHandlers = () =>
     const topicGroundingTextResolver = yield* TopicGroundingTextResolverService;
     const appEventPublisher = yield* AppEventPublisherService;
     const deckWriteCoordinator = yield* DeckWriteCoordinatorService;
+    const derivationGenerationLocks = new Set<string>();
 
     const setSessionErrorBestEffort = (
       sessionId: number,
@@ -383,6 +406,207 @@ export const createForgeHandlers = () =>
           ),
           Effect.asVoid,
         );
+
+    const withDerivationGenerationLock = <A, E>(input: {
+      readonly parent: DerivationParentRef;
+      readonly kind: DerivationKind;
+      readonly effect: Effect.Effect<A, E>;
+    }): Effect.Effect<A, E | ForgeDerivationAlreadyGeneratingError> =>
+      Effect.suspend((): Effect.Effect<A, E | ForgeDerivationAlreadyGeneratingError> => {
+        const lockKey = toDerivationLockKey(input.parent, input.kind);
+        if (derivationGenerationLocks.has(lockKey)) {
+          return Effect.fail(
+            new ForgeDerivationAlreadyGeneratingError({
+              parent: input.parent,
+              kind: input.kind,
+            }),
+          );
+        }
+
+        derivationGenerationLocks.add(lockKey);
+        return input.effect.pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              derivationGenerationLocks.delete(lockKey);
+            }),
+          ),
+        );
+      });
+
+    const loadDerivationById = (derivationId: number) =>
+      mapOperationError(forgeSessionRepository.getDerivationById(derivationId)).pipe(
+        Effect.flatMap((derivation) => ensureDerivationExists(derivation, derivationId)),
+      );
+
+    const loadRootTopicForCard = (rootCard: ForgeCardWithTopicContext) =>
+      mapSessionRepositoryError(
+        rootCard.sessionId,
+        forgeSessionRepository.getTopicById(rootCard.topicId),
+      ).pipe(
+        Effect.flatMap((topic) =>
+          topic === null
+            ? Effect.fail(
+                new ForgeOperationError({
+                  message: `Root topic ${rootCard.topicId} for card ${rootCard.id} was not found.`,
+                }),
+              )
+            : Effect.succeed(topic),
+        ),
+      );
+
+    const loadResolvedDerivationParent = (parent: DerivationParentRef) =>
+      Effect.gen(function* () {
+        if (isCardParentRef(parent)) {
+          const card = yield* forgeSessionRepository.getCardById(parent.cardId).pipe(
+            Effect.mapError(toForgeOperationError),
+            Effect.flatMap((resolvedCard) => ensureCardExists(resolvedCard, parent.cardId)),
+          );
+
+          return {
+            parent,
+            question: card.question,
+            answer: card.answer,
+            rootCard: card,
+            sessionId: card.sessionId,
+            derivation: null,
+          };
+        }
+
+        const derivation = yield* loadDerivationById(parent.derivationId);
+        const rootCard = yield* forgeSessionRepository.getCardById(derivation.rootCardId).pipe(
+          Effect.mapError(toForgeOperationError),
+          Effect.flatMap((resolvedCard) => ensureCardExists(resolvedCard, derivation.rootCardId)),
+        );
+
+        return {
+          parent,
+          question: derivation.question,
+          answer: derivation.answer,
+          rootCard,
+          sessionId: rootCard.sessionId,
+          derivation,
+        };
+      });
+
+    const countDeletedDerivationsForReplacement = (input: {
+      readonly sessionId: number;
+      readonly parent: DerivationParentRef;
+      readonly kind: DerivationKind;
+    }) =>
+      mapSessionRepositoryError(
+        input.sessionId,
+        forgeSessionRepository.getDescendantCountForParent({
+          parent: input.parent,
+          kind: input.kind,
+        }),
+      );
+
+    type ResolvedDerivationParent = {
+      readonly parent: DerivationParentRef;
+      readonly question: string;
+      readonly answer: string;
+      readonly rootCard: ForgeCardWithTopicContext;
+      readonly sessionId: number;
+      readonly derivation: ForgeCardDerivation | null;
+    };
+
+    const buildExpansionAncestryChain = (input: {
+      readonly resolvedParent: ResolvedDerivationParent;
+    }) =>
+      Effect.gen(function* () {
+        const chain: Array<{
+          readonly selectedCard: { readonly question: string; readonly answer: string };
+          readonly siblingCards: ReadonlyArray<{
+            readonly question: string;
+            readonly answer: string;
+          }>;
+          readonly instruction?: string;
+        }> = [];
+
+        let selection:
+          | { readonly kind: "card"; readonly card: ForgeCardWithTopicContext }
+          | { readonly kind: "derivation"; readonly derivation: ForgeCardDerivation } =
+          input.resolvedParent.derivation === null
+            ? { kind: "card", card: input.resolvedParent.rootCard }
+            : { kind: "derivation", derivation: input.resolvedParent.derivation };
+
+        while (true) {
+          if (selection.kind === "card") {
+            const selectedCardId = selection.card.id;
+            const topicCards = yield* mapSessionRepositoryError(
+              selection.card.sessionId,
+              forgeSessionRepository.getCardsForTopicId(selection.card.topicId),
+            );
+
+            if (!topicCards) {
+              return yield* Effect.fail(
+                new ForgeCardNotFoundError({
+                  sourceCardId: selection.card.id,
+                }),
+              );
+            }
+
+            chain.push({
+              selectedCard: {
+                question: selection.card.question,
+                answer: selection.card.answer,
+              },
+              siblingCards: topicCards.cards
+                .filter((card) => card.id !== selectedCardId)
+                .map((card) => ({
+                  question: card.question,
+                  answer: card.answer,
+                })),
+            });
+            break;
+          }
+
+          const currentDerivation = selection.derivation;
+          const siblingsParent =
+            currentDerivation.parentDerivationId === null
+              ? ({ cardId: currentDerivation.rootCardId } as const)
+              : ({ derivationId: currentDerivation.parentDerivationId } as const);
+          const siblings = yield* mapSessionRepositoryError(
+            input.resolvedParent.sessionId,
+            forgeSessionRepository.getDerivedCards({
+              parent: siblingsParent,
+              kind: "expansion",
+            }),
+          );
+
+          chain.push({
+            selectedCard: {
+              question: currentDerivation.question,
+              answer: currentDerivation.answer,
+            },
+            siblingCards: siblings
+              .filter((derivation) => derivation.id !== currentDerivation.id)
+              .map((derivation) => ({
+                question: derivation.question,
+                answer: derivation.answer,
+              })),
+            ...(currentDerivation.instruction
+              ? { instruction: currentDerivation.instruction }
+              : {}),
+          });
+
+          if (currentDerivation.parentDerivationId === null) {
+            selection = {
+              kind: "card",
+              card: input.resolvedParent.rootCard,
+            };
+            continue;
+          }
+
+          const parentDerivation = yield* loadDerivationById(currentDerivation.parentDerivationId);
+          selection = {
+            kind: "derivation",
+            derivation: parentDerivation,
+          };
+        }
+
+        return chain.reverse();
+      });
 
     const failBeginExtractionConflict = (sessionId: number) =>
       Effect.gen(function* () {
@@ -1462,157 +1686,180 @@ export const createForgeHandlers = () =>
             results,
           };
         }),
-      ForgeGetCardPermutations: ({ sourceCardId }) =>
-        Effect.gen(function* () {
-          const sourceCard = yield* forgeSessionRepository.getCardById(sourceCardId).pipe(
-            Effect.mapError(toForgeOperationError),
-            Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
-          );
-
-          const list = yield* mapSessionRepositoryError(
-            sourceCard.sessionId,
-            forgeSessionRepository.getPermutationsForCard(sourceCardId),
-          );
-
-          return {
-            sourceCardId,
-            permutations: list.map((entry) => ({
-              id: entry.id,
-              question: entry.question,
-              answer: entry.answer,
-              addedCount: entry.addedCount,
+      ForgeGetDerivedCards: ({ parent, kind }) =>
+        mapOperationError(
+          forgeSessionRepository.getDerivedCards({
+            parent,
+            kind,
+          }),
+        ).pipe(
+          Effect.map((derivations) => ({
+            derivations: derivations.map((derivation) => ({
+              id: derivation.id,
+              rootCardId: derivation.rootCardId,
+              parentDerivationId: derivation.parentDerivationId,
+              kind: derivation.kind,
+              derivationOrder: derivation.derivationOrder,
+              question: derivation.question,
+              answer: derivation.answer,
+              instruction: derivation.instruction,
+              addedCount: derivation.addedCount,
             })),
-          };
-        }),
-      ForgeGenerateCardPermutations: ({
-        sourceCardId,
-        sourceQuestion,
-        sourceAnswer,
-        instruction,
-        model,
-      }) =>
-        Effect.gen(function* () {
-          const sourceCard = yield* forgeSessionRepository.getCardById(sourceCardId).pipe(
-            Effect.mapError(toForgeOperationError),
-            Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
-          );
+          })),
+        ),
+      ForgeGenerateDerivedCards: ({ parent, kind, instruction, model, confirmed }) =>
+        withDerivationGenerationLock({
+          parent,
+          kind,
+          effect: Effect.gen(function* () {
+            const resolvedParent = yield* loadResolvedDerivationParent(parent);
+            const normalizedInstruction = instruction?.trim() ? instruction.trim() : null;
 
-          const currentSourceQuestion = sourceQuestion ?? sourceCard.question;
-          const currentSourceAnswer = sourceAnswer ?? sourceCard.answer;
-          const sourceTopic = yield* mapSessionRepositoryError(
-            sourceCard.sessionId,
-            forgeSessionRepository.getTopicById(sourceCard.topicId),
-          ).pipe(
-            Effect.flatMap((topic) =>
-              topic === null
-                ? Effect.fail(new ForgeCardNotFoundError({ sourceCardId }))
-                : Effect.succeed(topic),
-            ),
-          );
-          const contextText = yield* topicGroundingTextResolver
-            .resolveForTopic(sourceTopic)
-            .pipe(
-              Effect.mapError((error) =>
-                toSessionOperationErrorFromRepositoryError(sourceCard.sessionId, error),
-              ),
+            if (
+              kind === "expansion" &&
+              resolvedParent.derivation !== null &&
+              resolvedParent.derivation.kind !== "expansion"
+            ) {
+              return yield* Effect.fail(
+                new ForgeOperationError({
+                  message:
+                    "Expansion derivations can only be created from root cards or expansion derivations.",
+                }),
+              );
+            }
+
+            if (confirmed !== true) {
+              const descendantCount = yield* countDeletedDerivationsForReplacement({
+                sessionId: resolvedParent.sessionId,
+                parent,
+                kind,
+              });
+
+              if (descendantCount > 0) {
+                return {
+                  confirmRequired: true as const,
+                  descendantCount,
+                };
+              }
+            }
+
+            const rootTopic = yield* loadRootTopicForCard(resolvedParent.rootCard);
+            const contextText = yield* topicGroundingTextResolver
+              .resolveForTopic(rootTopic)
+              .pipe(
+                Effect.mapError((error) =>
+                  toSessionOperationErrorFromRepositoryError(resolvedParent.sessionId, error),
+                ),
+              );
+
+            const cards =
+              kind === "permutation"
+                ? (yield* forgePromptRuntime
+                    .run(
+                      GeneratePermutationsPromptSpec,
+                      {
+                        contextText,
+                        source: {
+                          question: resolvedParent.question,
+                          answer: resolvedParent.answer,
+                        },
+                        ...(normalizedInstruction ? { instruction: normalizedInstruction } : {}),
+                      },
+                      model ? { model } : undefined,
+                    )
+                    .pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new ForgeDerivationGenerationError({
+                            parent,
+                            kind,
+                            message: toErrorMessage(error),
+                          }),
+                      ),
+                    )).output.permutations
+                : (yield* forgePromptRuntime
+                    .run(
+                      GenerateExpansionsPromptSpec,
+                      {
+                        contextText,
+                        topic: rootTopic.topicText,
+                        ancestryChain: yield* buildExpansionAncestryChain({
+                          resolvedParent,
+                        }),
+                        ...(normalizedInstruction ? { instruction: normalizedInstruction } : {}),
+                      },
+                      model ? { model } : undefined,
+                    )
+                    .pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new ForgeDerivationGenerationError({
+                            parent,
+                            kind,
+                            message: toErrorMessage(error),
+                          }),
+                      ),
+                    )).output.cards;
+
+            yield* mapSessionRepositoryError(
+              resolvedParent.sessionId,
+              forgeSessionRepository.replaceDerivedCards({
+                parent,
+                kind,
+                rootCardId: resolvedParent.rootCard.id,
+                instruction: normalizedInstruction,
+                cards,
+              }),
             );
 
-          const promptResult = yield* forgePromptRuntime
-            .run(
-              GeneratePermutationsPromptSpec,
-              {
-                contextText,
-                source: {
-                  question: currentSourceQuestion,
-                  answer: currentSourceAnswer,
-                },
-                ...(instruction ? { instruction } : {}),
-              },
-              model ? { model } : undefined,
-            )
-            .pipe(
-              Effect.mapError(
-                (error) =>
-                  new ForgePermutationGenerationError({
-                    sourceCardId,
-                    message: toErrorMessage(error),
-                  }),
-              ),
+            const derivations = yield* mapSessionRepositoryError(
+              resolvedParent.sessionId,
+              forgeSessionRepository.getDerivedCards({
+                parent,
+                kind,
+              }),
             );
 
-          yield* mapSessionRepositoryError(
-            sourceCard.sessionId,
-            forgeSessionRepository.replacePermutationsForCard({
-              sourceCardId,
-              permutations: promptResult.output.permutations,
-            }),
-          );
-
-          const list = yield* mapSessionRepositoryError(
-            sourceCard.sessionId,
-            forgeSessionRepository.getPermutationsForCard(sourceCardId),
-          );
-
-          const payload = {
-            sourceCardId,
-            permutations: list.map((entry) => ({
-              id: entry.id,
-              question: entry.question,
-              answer: entry.answer,
-              addedCount: entry.addedCount,
-            })),
-          };
-
-          return payload;
+            return {
+              derivations: derivations.map((derivation) => ({
+                id: derivation.id,
+                rootCardId: derivation.rootCardId,
+                parentDerivationId: derivation.parentDerivationId,
+                kind: derivation.kind,
+                derivationOrder: derivation.derivationOrder,
+                question: derivation.question,
+                answer: derivation.answer,
+                instruction: derivation.instruction,
+                addedCount: derivation.addedCount,
+              })),
+            };
+          }),
         }),
-      ForgeGetCardCloze: ({ sourceCardId }) =>
+      ForgeGetCardCloze: ({ source }) =>
         Effect.gen(function* () {
-          const sourceCard = yield* forgeSessionRepository.getCardById(sourceCardId).pipe(
-            Effect.mapError(toForgeOperationError),
-            Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
-          );
-
+          const resolvedParent = yield* loadResolvedDerivationParent(source);
           const cloze = yield* mapSessionRepositoryError(
-            sourceCard.sessionId,
-            forgeSessionRepository.getClozeForCard(sourceCardId),
+            resolvedParent.sessionId,
+            forgeSessionRepository.getClozeForSource(source),
           );
 
           return {
-            sourceCardId,
+            source,
             cloze: cloze?.clozeText ?? null,
             addedCount: cloze?.addedCount ?? 0,
           };
         }),
-      ForgeGenerateCardCloze: ({
-        sourceCardId,
-        sourceQuestion,
-        sourceAnswer,
-        instruction,
-        model,
-      }) =>
+      ForgeGenerateCardCloze: ({ source, sourceQuestion, sourceAnswer, instruction, model }) =>
         Effect.gen(function* () {
-          const sourceCard = yield* forgeSessionRepository.getCardById(sourceCardId).pipe(
-            Effect.mapError(toForgeOperationError),
-            Effect.flatMap((card) => ensureCardExists(card, sourceCardId)),
-          );
-
-          const currentSourceQuestion = sourceQuestion ?? sourceCard.question;
-          const currentSourceAnswer = sourceAnswer ?? sourceCard.answer;
-          const sourceTopic = yield* mapSessionRepositoryError(
-            sourceCard.sessionId,
-            forgeSessionRepository.getTopicById(sourceCard.topicId),
-          ).pipe(
-            Effect.flatMap((topic) =>
-              topic === null
-                ? Effect.fail(new ForgeCardNotFoundError({ sourceCardId }))
-                : Effect.succeed(topic),
-            ),
-          );
+          const resolvedParent = yield* loadResolvedDerivationParent(source);
+          const currentSourceQuestion = sourceQuestion ?? resolvedParent.question;
+          const currentSourceAnswer = sourceAnswer ?? resolvedParent.answer;
+          const rootTopic = yield* loadRootTopicForCard(resolvedParent.rootCard);
           const contextText = yield* topicGroundingTextResolver
-            .resolveForTopic(sourceTopic)
+            .resolveForTopic(rootTopic)
             .pipe(
               Effect.mapError((error) =>
-                toSessionOperationErrorFromRepositoryError(sourceCard.sessionId, error),
+                toSessionOperationErrorFromRepositoryError(resolvedParent.sessionId, error),
               ),
             );
 
@@ -1633,27 +1880,25 @@ export const createForgeHandlers = () =>
               Effect.mapError(
                 (error) =>
                   new ForgeClozeGenerationError({
-                    sourceCardId,
+                    source,
                     message: toErrorMessage(error),
                   }),
               ),
             );
 
           const cloze = yield* mapSessionRepositoryError(
-            sourceCard.sessionId,
-            forgeSessionRepository.upsertClozeForCard({
-              sourceCardId,
+            resolvedParent.sessionId,
+            forgeSessionRepository.upsertClozeForSource({
+              source,
               clozeText: promptResult.output.cloze,
             }),
           );
 
-          const payload = {
-            sourceCardId,
+          return {
+            source: cloze.source,
             cloze: cloze.clozeText,
             addedCount: cloze.addedCount,
           };
-
-          return payload;
         }),
       ForgeUpdateCard: ({ cardId, question, answer }) =>
         Effect.gen(function* () {
@@ -1688,26 +1933,31 @@ export const createForgeHandlers = () =>
             },
           };
         }),
-      ForgeUpdatePermutation: ({ permutationId, question, answer }) =>
+      ForgeUpdateDerivation: ({ derivationId, question, answer }) =>
         Effect.gen(function* () {
-          const updatedPermutation = yield* mapOperationError(
-            forgeSessionRepository.updatePermutationContent({
-              permutationId,
+          const updatedDerivation = yield* mapOperationError(
+            forgeSessionRepository.updateDerivedCardContent({
+              derivationId,
               question,
               answer,
             }),
           );
 
-          if (!updatedPermutation) {
-            return yield* Effect.fail(new ForgePermutationNotFoundError({ permutationId }));
+          if (!updatedDerivation) {
+            return yield* Effect.fail(new ForgeDerivationNotFoundError({ derivationId }));
           }
 
           return {
-            permutation: {
-              id: updatedPermutation.id,
-              question: updatedPermutation.question,
-              answer: updatedPermutation.answer,
-              addedCount: updatedPermutation.addedCount,
+            derivation: {
+              id: updatedDerivation.id,
+              rootCardId: updatedDerivation.rootCardId,
+              parentDerivationId: updatedDerivation.parentDerivationId,
+              kind: updatedDerivation.kind,
+              derivationOrder: updatedDerivation.derivationOrder,
+              question: updatedDerivation.question,
+              answer: updatedDerivation.answer,
+              instruction: updatedDerivation.instruction,
+              addedCount: updatedDerivation.addedCount,
             },
           };
         }),
@@ -1739,12 +1989,12 @@ export const createForgeHandlers = () =>
 
           return {};
         }),
-      ForgeAddCardToDeck: ({ deckPath, content, cardType, sourceCardId, permutationId }) =>
+      ForgeAddCardToDeck: ({ deckPath, content, cardType, sourceCardId, derivationId }) =>
         Effect.gen(function* () {
-          if (typeof sourceCardId === "number" && typeof permutationId === "number") {
+          if (typeof sourceCardId === "number" && typeof derivationId === "number") {
             return yield* Effect.fail(
               new ForgeOperationError({
-                message: "Provide either sourceCardId or permutationId, not both.",
+                message: "Provide either sourceCardId or derivationId, not both.",
               }),
             );
           }
@@ -1785,7 +2035,7 @@ export const createForgeHandlers = () =>
           if (typeof sourceCardId === "number" && cardType === "cloze") {
             yield* forgeSessionRepository
               .incrementClozeAddedCount({
-                sourceCardId,
+                source: { cardId: sourceCardId },
                 incrementBy: cardCount,
               })
               .pipe(
@@ -1802,17 +2052,37 @@ export const createForgeHandlers = () =>
               );
           }
 
-          if (typeof permutationId === "number" && cardType === "qa") {
+          if (typeof derivationId === "number" && cardType === "qa") {
             yield* forgeSessionRepository
-              .incrementPermutationAddedCount({
-                permutationId,
+              .incrementDerivedCardAddedCount({
+                derivationId,
                 incrementBy: cardCount,
               })
               .pipe(
                 Effect.catchTag("ForgeSessionRepositoryError", (error) =>
                   Effect.sync(() => {
-                    console.warn("[forge/cards] failed to persist permutation added count", {
-                      permutationId,
+                    console.warn("[forge/cards] failed to persist derivation added count", {
+                      derivationId,
+                      cardCount,
+                      error: error.message,
+                    });
+                  }),
+                ),
+                Effect.asVoid,
+              );
+          }
+
+          if (typeof derivationId === "number" && cardType === "cloze") {
+            yield* forgeSessionRepository
+              .incrementClozeAddedCount({
+                source: { derivationId },
+                incrementBy: cardCount,
+              })
+              .pipe(
+                Effect.catchTag("ForgeSessionRepositoryError", (error) =>
+                  Effect.sync(() => {
+                    console.warn("[forge/cards] failed to persist cloze added count", {
+                      derivationId,
                       cardCount,
                       error: error.message,
                     });

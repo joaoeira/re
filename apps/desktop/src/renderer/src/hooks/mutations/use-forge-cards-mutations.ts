@@ -4,52 +4,90 @@ import { Effect } from "effect";
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
-import type {
-  ForgeAddCardToDeckInput,
-  ForgeAddCardToDeckResult,
-  ForgeGenerateCardClozeInput,
-  ForgeGenerateCardClozeResult,
-  ForgeGenerateCardPermutationsInput,
-  ForgeGenerateCardPermutationsResult,
-  ForgeUpdateCardInput,
-  ForgeUpdateCardResult,
-  ForgeUpdatePermutationInput,
-  ForgeUpdatePermutationResult,
+import {
+  sameDerivationParentRef,
+  mapForgeGenerateCardClozeErrorToError,
+  DerivationParentRef,
+  mapForgeGenerateDerivedCardsErrorToError,
+  type ForgeAddCardToDeckInput,
+  type ForgeAddCardToDeckResult,
+  type ForgeGenerateCardClozeInput,
+  type ForgeGenerateCardClozeResult,
+  type ForgeGenerateDerivedCardsInput,
+  type ForgeGenerateDerivedCardsResult,
+  type ForgeUpdateCardInput,
+  type ForgeUpdateCardResult,
+  type ForgeUpdateDerivationInput,
+  type ForgeUpdateDerivationResult,
 } from "@shared/rpc/schemas/forge";
 
 export const formatQAContent = (question: string, answer: string): string =>
   `${question}\n---\n${answer}\n`;
 
 export const forgeCardsMutationKeys = {
-  generatePermutations: ["forgeGenerateCardPermutations"] as const,
+  generateDerivedCards: ["forgeGenerateDerivedCards"] as const,
   generateCloze: ["forgeGenerateCardCloze"] as const,
   updateCard: ["forgeUpdateCard"] as const,
-  updatePermutation: ["forgeUpdatePermutation"] as const,
+  updateDerivation: ["forgeUpdateDerivation"] as const,
   addCardToDeck: ["forgeAddCardToDeck"] as const,
 };
 
-export function useForgeGeneratePermutationsMutation() {
+export type ForgeGenerateDerivedCardsMutationInput = ForgeGenerateDerivedCardsInput & {
+  readonly rootCardId: number;
+};
+
+export const isForgeDerivationConfirmationResult = (
+  result: ForgeGenerateDerivedCardsResult,
+): result is Extract<ForgeGenerateDerivedCardsResult, { readonly confirmRequired: true }> =>
+  "confirmRequired" in result && result.confirmRequired === true;
+
+export { sameDerivationParentRef };
+
+export function useForgeGenerateDerivedCardsMutation() {
   const ipc = useIpc();
   const queryClient = useQueryClient();
 
   return useMutation<
-    ForgeGenerateCardPermutationsResult,
+    ForgeGenerateDerivedCardsResult,
     Error,
-    ForgeGenerateCardPermutationsInput
+    ForgeGenerateDerivedCardsMutationInput
   >({
-    mutationKey: forgeCardsMutationKeys.generatePermutations,
-    mutationFn: async (input) => {
+    mutationKey: forgeCardsMutationKeys.generateDerivedCards,
+    mutationFn: async ({ rootCardId: _rootCardId, ...input }) => {
       const result = await runIpcEffect(
-        ipc.client
-          .ForgeGenerateCardPermutations(input)
-          .pipe(
-            Effect.catchTag("RpcDefectError", (rpcDefect) =>
-              Effect.fail(toRpcDefectError(rpcDefect)),
-            ),
+        ipc.client.ForgeGenerateDerivedCards(input).pipe(
+          Effect.catchTag("RpcDefectError", (rpcDefect) =>
+            Effect.fail(toRpcDefectError(rpcDefect)),
           ),
+          Effect.mapError(mapForgeGenerateDerivedCardsErrorToError),
+        ),
       );
-      queryClient.setQueryData(queryKeys.forgeCardPermutations(input.sourceCardId), () => result);
       return result;
+    },
+    onSuccess: (result, variables) => {
+      if (!isForgeDerivationConfirmationResult(result)) {
+        const currentQueryKey = queryKeys.forgeDerivedCards(
+          variables.rootCardId,
+          variables.parent,
+          variables.kind,
+        );
+        queryClient.setQueryData(currentQueryKey, () => result);
+        void queryClient.invalidateQueries({
+          predicate: (query) =>
+            Array.isArray(query.queryKey) &&
+            query.queryKey[0] === queryKeys.forgeDerivedCardsPrefix[0] &&
+            query.queryKey[1] === variables.rootCardId &&
+            !(
+              sameDerivationParentRef(query.queryKey[2] as DerivationParentRef, variables.parent) &&
+              query.queryKey[3] === variables.kind
+            ),
+        });
+        if (variables.confirmed === true) {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.forgeCardClozePrefix,
+          });
+        }
+      }
     },
   });
 }
@@ -62,15 +100,14 @@ export function useForgeGenerateClozeMutation() {
     mutationKey: forgeCardsMutationKeys.generateCloze,
     mutationFn: async (input) => {
       const result = await runIpcEffect(
-        ipc.client
-          .ForgeGenerateCardCloze(input)
-          .pipe(
-            Effect.catchTag("RpcDefectError", (rpcDefect) =>
-              Effect.fail(toRpcDefectError(rpcDefect)),
-            ),
+        ipc.client.ForgeGenerateCardCloze(input).pipe(
+          Effect.catchTag("RpcDefectError", (rpcDefect) =>
+            Effect.fail(toRpcDefectError(rpcDefect)),
           ),
+          Effect.mapError(mapForgeGenerateCardClozeErrorToError),
+        ),
       );
-      queryClient.setQueryData(queryKeys.forgeCardCloze(input.sourceCardId), () => result);
+      queryClient.setQueryData(queryKeys.forgeCardCloze(input.source), () => result);
       return result;
     },
   });
@@ -94,15 +131,15 @@ export function useForgeUpdateCardMutation() {
   });
 }
 
-export function useForgeUpdatePermutationMutation() {
+export function useForgeUpdateDerivationMutation() {
   const ipc = useIpc();
 
-  return useMutation<ForgeUpdatePermutationResult, Error, ForgeUpdatePermutationInput>({
-    mutationKey: forgeCardsMutationKeys.updatePermutation,
+  return useMutation<ForgeUpdateDerivationResult, Error, ForgeUpdateDerivationInput>({
+    mutationKey: forgeCardsMutationKeys.updateDerivation,
     mutationFn: (input) =>
       runIpcEffect(
         ipc.client
-          .ForgeUpdatePermutation(input)
+          .ForgeUpdateDerivation(input)
           .pipe(
             Effect.catchTag("RpcDefectError", (rpcDefect) =>
               Effect.fail(toRpcDefectError(rpcDefect)),

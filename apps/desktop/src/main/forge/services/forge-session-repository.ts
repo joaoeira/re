@@ -5,6 +5,10 @@ import { Data, Effect, ManagedRuntime } from "effect";
 
 import {
   ForgeChunkPageBoundarySchema,
+  isCardParentRef,
+  toDerivationParentRefKey,
+  type DerivationKind,
+  type DerivationParentRef,
   type ForgeChunk,
   type ForgeChunkPageBoundary,
   type ForgeSession,
@@ -114,17 +118,22 @@ export type ForgeCardWithTopicContext = ForgeGeneratedCard & {
   readonly topicText: string;
 };
 
-export type ForgeCardPermutation = {
+export type { DerivationKind, DerivationParentRef };
+
+export type ForgeCardDerivation = {
   readonly id: number;
-  readonly sourceCardId: number;
-  readonly permutationOrder: number;
+  readonly rootCardId: number;
+  readonly parentDerivationId: number | null;
+  readonly kind: DerivationKind;
+  readonly derivationOrder: number;
   readonly question: string;
   readonly answer: string;
+  readonly instruction: string | null;
   readonly addedCount: number;
 };
 
 export type ForgeCardCloze = {
-  readonly sourceCardId: number;
+  readonly source: DerivationParentRef;
   readonly clozeText: string;
   readonly addedCount: number;
 };
@@ -227,31 +236,45 @@ export interface ForgeSessionRepository {
   readonly getCardById: (
     cardId: number,
   ) => Effect.Effect<ForgeCardWithTopicContext | null, ForgeSessionRepositoryError>;
-  readonly replacePermutationsForCard: (input: {
-    readonly sourceCardId: number;
-    readonly permutations: ReadonlyArray<{ readonly question: string; readonly answer: string }>;
+  readonly replaceDerivedCards: (input: {
+    readonly parent: DerivationParentRef;
+    readonly kind: DerivationKind;
+    readonly rootCardId: number;
+    readonly instruction: string | null;
+    readonly cards: ReadonlyArray<{ readonly question: string; readonly answer: string }>;
   }) => Effect.Effect<void, ForgeSessionRepositoryError>;
-  readonly getPermutationsForCard: (
-    sourceCardId: number,
-  ) => Effect.Effect<ReadonlyArray<ForgeCardPermutation>, ForgeSessionRepositoryError>;
-  readonly updatePermutationContent: (input: {
-    readonly permutationId: number;
+  readonly getDerivedCards: (input: {
+    readonly parent: DerivationParentRef;
+    readonly kind: DerivationKind;
+  }) => Effect.Effect<ReadonlyArray<ForgeCardDerivation>, ForgeSessionRepositoryError>;
+  readonly updateDerivedCardContent: (input: {
+    readonly derivationId: number;
     readonly question: string;
     readonly answer: string;
-  }) => Effect.Effect<ForgeCardPermutation | null, ForgeSessionRepositoryError>;
-  readonly incrementPermutationAddedCount: (input: {
-    readonly permutationId: number;
+  }) => Effect.Effect<ForgeCardDerivation | null, ForgeSessionRepositoryError>;
+  readonly incrementDerivedCardAddedCount: (input: {
+    readonly derivationId: number;
     readonly incrementBy: number;
-  }) => Effect.Effect<ForgeCardPermutation | null, ForgeSessionRepositoryError>;
-  readonly upsertClozeForCard: (input: {
-    readonly sourceCardId: number;
+  }) => Effect.Effect<ForgeCardDerivation | null, ForgeSessionRepositoryError>;
+  readonly getDerivationById: (
+    derivationId: number,
+  ) => Effect.Effect<ForgeCardDerivation | null, ForgeSessionRepositoryError>;
+  readonly getDescendantCount: (
+    derivationId: number,
+  ) => Effect.Effect<number, ForgeSessionRepositoryError>;
+  readonly getDescendantCountForParent: (input: {
+    readonly parent: DerivationParentRef;
+    readonly kind: DerivationKind;
+  }) => Effect.Effect<number, ForgeSessionRepositoryError>;
+  readonly upsertClozeForSource: (input: {
+    readonly source: DerivationParentRef;
     readonly clozeText: string;
   }) => Effect.Effect<ForgeCardCloze, ForgeSessionRepositoryError>;
-  readonly getClozeForCard: (
-    sourceCardId: number,
+  readonly getClozeForSource: (
+    source: DerivationParentRef,
   ) => Effect.Effect<ForgeCardCloze | null, ForgeSessionRepositoryError>;
   readonly incrementClozeAddedCount: (input: {
-    readonly sourceCardId: number;
+    readonly source: DerivationParentRef;
     readonly incrementBy: number;
   }) => Effect.Effect<ForgeCardCloze | null, ForgeSessionRepositoryError>;
   readonly recoverStaleGeneratingTopics: (input: {
@@ -364,17 +387,21 @@ type ForgeCardWithTopicContextRow = {
   topic_text: string;
 };
 
-type ForgeCardPermutationRow = {
+type ForgeCardDerivationRow = {
   id: number;
-  source_card_id: number;
-  permutation_order: number;
+  root_card_id: number;
+  parent_derivation_id: number | null;
+  kind: DerivationKind;
+  derivation_order: number;
   question: string;
   answer: string;
+  instruction: string | null;
   added_count: number;
 };
 
 type ForgeCardClozeRow = {
-  source_card_id: number;
+  source_card_id: number | null;
+  source_derivation_id: number | null;
   cloze_text: string;
   added_count: number;
 };
@@ -458,14 +485,48 @@ const toGeneratedCard = (row: ForgeCardRow): ForgeGeneratedCard => ({
   addedToDeck: row.added_to_deck_at !== null,
 });
 
-const toCardPermutation = (row: ForgeCardPermutationRow): ForgeCardPermutation => ({
+const toCardDerivation = (row: ForgeCardDerivationRow): ForgeCardDerivation => ({
   id: Number(row.id),
-  sourceCardId: Number(row.source_card_id),
-  permutationOrder: Number(row.permutation_order),
+  rootCardId: Number(row.root_card_id),
+  parentDerivationId: row.parent_derivation_id === null ? null : Number(row.parent_derivation_id),
+  kind: row.kind,
+  derivationOrder: Number(row.derivation_order),
   question: row.question,
   answer: row.answer,
+  instruction: row.instruction,
   addedCount: Number(row.added_count),
 });
+
+const sourceKey = toDerivationParentRefKey;
+
+const toCardCloze = (
+  row: ForgeCardClozeRow,
+  operation: string,
+): Effect.Effect<ForgeCardCloze, ForgeSessionRepositoryError> => {
+  if (row.source_card_id !== null && row.source_derivation_id === null) {
+    return Effect.succeed({
+      source: { cardId: Number(row.source_card_id) },
+      clozeText: row.cloze_text,
+      addedCount: Number(row.added_count),
+    });
+  }
+
+  if (row.source_card_id === null && row.source_derivation_id !== null) {
+    return Effect.succeed({
+      source: { derivationId: Number(row.source_derivation_id) },
+      clozeText: row.cloze_text,
+      addedCount: Number(row.added_count),
+    });
+  }
+
+  return Effect.fail(
+    new ForgeSessionRepositoryError({
+      operation,
+      message:
+        "Invalid forge_card_cloze row: expected exactly one of source_card_id or source_derivation_id.",
+    }),
+  );
+};
 
 const ALLOWED_TRANSITIONS: Record<ForgeSessionStatus, ReadonlySet<ForgeSessionStatus>> = {
   created: new Set(["extracting", "error"]),
@@ -898,50 +959,116 @@ export const makeSqliteForgeSessionRepository = ({
       Effect.map((chunks) => chunks.map((chunk) => chunk.text).join("")),
     );
 
-  const loadPermutationsBySourceCardIdSql = (
-    sourceCardId: number,
-  ): Effect.Effect<
-    ReadonlyArray<ForgeCardPermutation>,
-    ForgeSessionRepositoryError,
-    SqlClient.SqlClient
-  > =>
+  const loadDerivationByIdSql = (
+    derivationId: number,
+  ): Effect.Effect<ForgeCardDerivation | null, ForgeSessionRepositoryError, SqlClient.SqlClient> =>
     Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       const rows = yield* withSqlError(
-        "getPermutationsForCard.select",
-        sql<ForgeCardPermutationRow>`
-          SELECT id, source_card_id, permutation_order, question, answer, added_count
-          FROM forge_card_permutations
-          WHERE source_card_id = ${sourceCardId}
-          ORDER BY permutation_order ASC, id ASC
-        `,
-      );
-
-      return rows.map(toCardPermutation);
-    });
-
-  const loadClozeBySourceCardIdSql = (
-    sourceCardId: number,
-  ): Effect.Effect<ForgeCardCloze | null, ForgeSessionRepositoryError, SqlClient.SqlClient> =>
-    Effect.gen(function* () {
-      const sql = (yield* SqlClient.SqlClient).withoutTransforms();
-      const rows = yield* withSqlError(
-        "getClozeForCard.select",
-        sql<ForgeCardClozeRow>`
-          SELECT source_card_id, cloze_text, added_count
-          FROM forge_card_cloze
-          WHERE source_card_id = ${sourceCardId}
+        "getDerivationById.select",
+        sql<ForgeCardDerivationRow>`
+          SELECT
+            id,
+            root_card_id,
+            parent_derivation_id,
+            kind,
+            derivation_order,
+            question,
+            answer,
+            instruction,
+            added_count
+          FROM forge_card_derivations
+          WHERE id = ${derivationId}
           LIMIT 1
         `,
       );
 
       const row = rows[0];
+      return row ? toCardDerivation(row) : null;
+    });
+
+  const loadDerivedCardsByParentSql = (input: {
+    readonly parent: DerivationParentRef;
+    readonly kind: DerivationKind;
+  }): Effect.Effect<
+    ReadonlyArray<ForgeCardDerivation>,
+    ForgeSessionRepositoryError,
+    SqlClient.SqlClient
+  > =>
+    Effect.gen(function* () {
+      const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+      const rows = isCardParentRef(input.parent)
+        ? yield* withSqlError(
+            "getDerivedCards.selectFromCard",
+            sql<ForgeCardDerivationRow>`
+              SELECT
+                id,
+                root_card_id,
+                parent_derivation_id,
+                kind,
+                derivation_order,
+                question,
+                answer,
+                instruction,
+                added_count
+              FROM forge_card_derivations
+              WHERE root_card_id = ${input.parent.cardId}
+                AND parent_derivation_id IS NULL
+                AND kind = ${input.kind}
+              ORDER BY derivation_order ASC, id ASC
+            `,
+          )
+        : yield* withSqlError(
+            "getDerivedCards.selectFromDerivation",
+            sql<ForgeCardDerivationRow>`
+              SELECT
+                id,
+                root_card_id,
+                parent_derivation_id,
+                kind,
+                derivation_order,
+                question,
+                answer,
+                instruction,
+                added_count
+              FROM forge_card_derivations
+              WHERE parent_derivation_id = ${input.parent.derivationId}
+                AND kind = ${input.kind}
+              ORDER BY derivation_order ASC, id ASC
+            `,
+          );
+
+      return rows.map(toCardDerivation);
+    });
+
+  const loadClozeBySourceSql = (
+    source: DerivationParentRef,
+  ): Effect.Effect<ForgeCardCloze | null, ForgeSessionRepositoryError, SqlClient.SqlClient> =>
+    Effect.gen(function* () {
+      const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+      const rows = isCardParentRef(source)
+        ? yield* withSqlError(
+            "getClozeForSource.selectFromCard",
+            sql<ForgeCardClozeRow>`
+              SELECT source_card_id, source_derivation_id, cloze_text, added_count
+              FROM forge_card_cloze
+              WHERE source_card_id = ${source.cardId}
+              LIMIT 1
+            `,
+          )
+        : yield* withSqlError(
+            "getClozeForSource.selectFromDerivation",
+            sql<ForgeCardClozeRow>`
+              SELECT source_card_id, source_derivation_id, cloze_text, added_count
+              FROM forge_card_cloze
+              WHERE source_derivation_id = ${source.derivationId}
+              LIMIT 1
+            `,
+          );
+
+      const row = rows[0];
       if (!row) return null;
-      return {
-        sourceCardId: Number(row.source_card_id),
-        clozeText: row.cloze_text,
-        addedCount: Number(row.added_count),
-      };
+      return yield* toCardCloze(row, "getClozeForSource.decode");
     });
 
   const replaceCardsForTopicSql = (input: {
@@ -1785,35 +1912,90 @@ export const makeSqliteForgeSessionRepository = ({
         }),
       ),
     getCardById: (cardId) => runSql("getCardById.runtime", loadCardByIdWithContextSql(cardId)),
-    replacePermutationsForCard: ({ sourceCardId, permutations }) =>
+    replaceDerivedCards: ({ parent, kind, rootCardId, instruction, cards }) =>
       runSql(
-        "replacePermutationsForCard.runtime",
+        "replaceDerivedCards.runtime",
         Effect.gen(function* () {
           const sql = (yield* SqlClient.SqlClient).withoutTransforms();
           const replaceEffect = Effect.gen(function* () {
-            yield* sql`
-              DELETE FROM forge_card_permutations
-              WHERE source_card_id = ${sourceCardId}
-            `;
+            if (isCardParentRef(parent)) {
+              if (parent.cardId !== rootCardId) {
+                return yield* Effect.fail(
+                  new ForgeSessionRepositoryError({
+                    operation: "replaceDerivedCards.validateRootCardId",
+                    message: `Expected rootCardId ${parent.cardId} for card parent, received ${rootCardId}.`,
+                  }),
+                );
+              }
+            } else {
+              const parentDerivation = yield* loadDerivationByIdSql(parent.derivationId);
+              if (!parentDerivation) {
+                return yield* Effect.fail(
+                  new ForgeSessionRepositoryError({
+                    operation: "replaceDerivedCards.validateParentDerivation",
+                    message: `Parent derivation ${parent.derivationId} was not found.`,
+                  }),
+                );
+              }
+
+              if (parentDerivation.rootCardId !== rootCardId) {
+                return yield* Effect.fail(
+                  new ForgeSessionRepositoryError({
+                    operation: "replaceDerivedCards.validateRootCardId",
+                    message: `Expected rootCardId ${parentDerivation.rootCardId} for derivation parent ${parent.derivationId}, received ${rootCardId}.`,
+                  }),
+                );
+              }
+            }
+
+            if (isCardParentRef(parent)) {
+              yield* withSqlError(
+                "replaceDerivedCards.deleteFromCard",
+                sql`
+                  DELETE FROM forge_card_derivations
+                  WHERE root_card_id = ${rootCardId}
+                    AND parent_derivation_id IS NULL
+                    AND kind = ${kind}
+                `,
+              );
+            } else {
+              yield* withSqlError(
+                "replaceDerivedCards.deleteFromDerivation",
+                sql`
+                  DELETE FROM forge_card_derivations
+                  WHERE parent_derivation_id = ${parent.derivationId}
+                    AND kind = ${kind}
+                `,
+              );
+            }
 
             yield* Effect.forEach(
-              permutations,
-              (permutation, permutationOrder) =>
-                sql`
-                  INSERT INTO forge_card_permutations (
-                    source_card_id,
-                    permutation_order,
-                    question,
-                    answer,
-                    added_count
-                  ) VALUES (
-                    ${sourceCardId},
-                    ${permutationOrder},
-                    ${permutation.question},
-                    ${permutation.answer},
-                    0
-                  )
-                `,
+              cards,
+              (card, derivationOrder) =>
+                withSqlError(
+                  "replaceDerivedCards.insert",
+                  sql`
+                    INSERT INTO forge_card_derivations (
+                      root_card_id,
+                      parent_derivation_id,
+                      kind,
+                      derivation_order,
+                      question,
+                      answer,
+                      instruction,
+                      added_count
+                    ) VALUES (
+                      ${rootCardId},
+                      ${isCardParentRef(parent) ? null : parent.derivationId},
+                      ${kind},
+                      ${derivationOrder},
+                      ${card.question},
+                      ${card.answer},
+                      ${instruction},
+                      0
+                    )
+                  `,
+                ),
               { discard: true },
             );
           });
@@ -1822,124 +2004,256 @@ export const makeSqliteForgeSessionRepository = ({
             Effect.mapError(
               (error) =>
                 new ForgeSessionRepositoryError({
-                  operation: "replacePermutationsForCard.transaction",
+                  operation: "replaceDerivedCards.transaction",
                   message: toErrorMessage(error),
                 }),
             ),
           );
         }),
       ),
-    getPermutationsForCard: (sourceCardId) =>
-      runSql("getPermutationsForCard.runtime", loadPermutationsBySourceCardIdSql(sourceCardId)),
-    updatePermutationContent: ({ permutationId, question, answer }) =>
+    getDerivedCards: (input) =>
+      runSql("getDerivedCards.runtime", loadDerivedCardsByParentSql(input)),
+    updateDerivedCardContent: ({ derivationId, question, answer }) =>
       runSql(
-        "updatePermutationContent.runtime",
+        "updateDerivedCardContent.runtime",
         Effect.gen(function* () {
           const sql = (yield* SqlClient.SqlClient).withoutTransforms();
           const rows = yield* withSqlError(
-            "updatePermutationContent.update",
-            sql<ForgeCardPermutationRow>`
-              UPDATE forge_card_permutations
+            "updateDerivedCardContent.update",
+            sql<ForgeCardDerivationRow>`
+              UPDATE forge_card_derivations
               SET
                 question = ${question},
                 answer = ${answer}
-              WHERE id = ${permutationId}
-              RETURNING id, source_card_id, permutation_order, question, answer, added_count
+              WHERE id = ${derivationId}
+              RETURNING
+                id,
+                root_card_id,
+                parent_derivation_id,
+                kind,
+                derivation_order,
+                question,
+                answer,
+                instruction,
+                added_count
             `,
           );
 
           const row = rows[0];
-          return row ? toCardPermutation(row) : null;
+          return row ? toCardDerivation(row) : null;
         }),
       ),
-    incrementPermutationAddedCount: ({ permutationId, incrementBy }) =>
+    incrementDerivedCardAddedCount: ({ derivationId, incrementBy }) =>
       runSql(
-        "incrementPermutationAddedCount.runtime",
+        "incrementDerivedCardAddedCount.runtime",
         Effect.gen(function* () {
           const sql = (yield* SqlClient.SqlClient).withoutTransforms();
           const rows = yield* withSqlError(
-            "incrementPermutationAddedCount.update",
-            sql<ForgeCardPermutationRow>`
-              UPDATE forge_card_permutations
+            "incrementDerivedCardAddedCount.update",
+            sql<ForgeCardDerivationRow>`
+              UPDATE forge_card_derivations
               SET
                 added_count = added_count + ${Math.max(0, incrementBy)}
-              WHERE id = ${permutationId}
-              RETURNING id, source_card_id, permutation_order, question, answer, added_count
+              WHERE id = ${derivationId}
+              RETURNING
+                id,
+                root_card_id,
+                parent_derivation_id,
+                kind,
+                derivation_order,
+                question,
+                answer,
+                instruction,
+                added_count
             `,
           );
 
           const row = rows[0];
-          return row ? toCardPermutation(row) : null;
+          return row ? toCardDerivation(row) : null;
         }),
       ),
-    upsertClozeForCard: ({ sourceCardId, clozeText }) =>
+    getDerivationById: (derivationId) =>
+      runSql("getDerivationById.runtime", loadDerivationByIdSql(derivationId)),
+    getDescendantCount: (derivationId) =>
       runSql(
-        "upsertClozeForCard.runtime",
+        "getDescendantCount.runtime",
         Effect.gen(function* () {
           const sql = (yield* SqlClient.SqlClient).withoutTransforms();
-          yield* withSqlError(
-            "upsertClozeForCard.upsert",
-            sql`
-              INSERT INTO forge_card_cloze (
-                source_card_id,
-                cloze_text,
-                added_count,
-                created_at,
-                updated_at
-              ) VALUES (
-                ${sourceCardId},
-                ${clozeText},
-                0,
-                (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-                (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+          const rows = yield* withSqlError(
+            "getDescendantCount.select",
+            sql<CountRow>`
+              WITH RECURSIVE descendants AS (
+                SELECT id
+                FROM forge_card_derivations
+                WHERE parent_derivation_id = ${derivationId}
+                UNION ALL
+                SELECT forge_card_derivations.id
+                FROM forge_card_derivations
+                JOIN descendants
+                  ON forge_card_derivations.parent_derivation_id = descendants.id
               )
-              ON CONFLICT(source_card_id) DO UPDATE SET
-                cloze_text = excluded.cloze_text,
-                added_count = CASE
-                  WHEN forge_card_cloze.cloze_text = excluded.cloze_text
-                    THEN forge_card_cloze.added_count
-                  ELSE 0
-                END,
-                updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+              SELECT COUNT(*) AS count
+              FROM descendants
             `,
           );
 
-          const cloze = yield* loadClozeBySourceCardIdSql(sourceCardId);
-          if (cloze) return cloze;
-          return yield* Effect.fail(
-            new ForgeSessionRepositoryError({
-              operation: "upsertClozeForCard.readBack",
-              message: `Could not read cloze row for source card ${sourceCardId}.`,
-            }),
+          const count = Number(rows[0]?.count ?? 0);
+          return Number.isFinite(count) && count >= 0 ? count : 0;
+        }),
+      ),
+    getDescendantCountForParent: ({ parent, kind }) =>
+      runSql(
+        "getDescendantCountForParent.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const rows = yield* withSqlError(
+            "getDescendantCountForParent.select",
+            isCardParentRef(parent)
+              ? sql<CountRow>`
+                  WITH RECURSIVE descendants AS (
+                    SELECT id
+                    FROM forge_card_derivations
+                    WHERE root_card_id = ${parent.cardId}
+                      AND parent_derivation_id IS NULL
+                      AND kind = ${kind}
+                    UNION ALL
+                    SELECT child.id
+                    FROM forge_card_derivations child
+                    JOIN descendants d ON child.parent_derivation_id = d.id
+                  )
+                  SELECT COUNT(*) AS count FROM descendants
+                `
+              : sql<CountRow>`
+                  WITH RECURSIVE descendants AS (
+                    SELECT id
+                    FROM forge_card_derivations
+                    WHERE parent_derivation_id = ${parent.derivationId}
+                      AND kind = ${kind}
+                    UNION ALL
+                    SELECT child.id
+                    FROM forge_card_derivations child
+                    JOIN descendants d ON child.parent_derivation_id = d.id
+                  )
+                  SELECT COUNT(*) AS count FROM descendants
+                `,
+          );
+
+          const count = Number(rows[0]?.count ?? 0);
+          return Number.isFinite(count) && count >= 0 ? count : 0;
+        }),
+      ),
+    upsertClozeForSource: ({ source, clozeText }) =>
+      runSql(
+        "upsertClozeForSource.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+          const operation = Effect.gen(function* () {
+            const existing = yield* loadClozeBySourceSql(source);
+
+            if (existing) {
+              yield* isCardParentRef(source)
+                ? withSqlError(
+                    "upsertClozeForSource.updateFromCard",
+                    sql`
+                      UPDATE forge_card_cloze
+                      SET
+                        cloze_text = ${clozeText},
+                        added_count = ${existing.clozeText === clozeText ? existing.addedCount : 0},
+                        updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                      WHERE source_card_id = ${source.cardId}
+                    `,
+                  )
+                : withSqlError(
+                    "upsertClozeForSource.updateFromDerivation",
+                    sql`
+                      UPDATE forge_card_cloze
+                      SET
+                        cloze_text = ${clozeText},
+                        added_count = ${existing.clozeText === clozeText ? existing.addedCount : 0},
+                        updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                      WHERE source_derivation_id = ${source.derivationId}
+                    `,
+                  );
+            } else {
+              yield* withSqlError(
+                "upsertClozeForSource.insert",
+                sql`
+                  INSERT INTO forge_card_cloze (
+                    source_card_id,
+                    source_derivation_id,
+                    cloze_text,
+                    added_count,
+                    created_at,
+                    updated_at
+                  ) VALUES (
+                    ${isCardParentRef(source) ? source.cardId : null},
+                    ${isCardParentRef(source) ? null : source.derivationId},
+                    ${clozeText},
+                    0,
+                    (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+                    (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                  )
+                `,
+              );
+            }
+
+            const cloze = yield* loadClozeBySourceSql(source);
+            if (cloze) return cloze;
+
+            return yield* Effect.fail(
+              new ForgeSessionRepositoryError({
+                operation: "upsertClozeForSource.readBack",
+                message: `Could not read cloze row for source ${sourceKey(source)}.`,
+              }),
+            );
+          });
+
+          return yield* sql.withTransaction(operation).pipe(
+            Effect.mapError(
+              (error) =>
+                new ForgeSessionRepositoryError({
+                  operation: "upsertClozeForSource.transaction",
+                  message: toErrorMessage(error),
+                }),
+            ),
           );
         }),
       ),
-    getClozeForCard: (sourceCardId) =>
-      runSql("getClozeForCard.runtime", loadClozeBySourceCardIdSql(sourceCardId)),
-    incrementClozeAddedCount: ({ sourceCardId, incrementBy }) =>
+    getClozeForSource: (source) =>
+      runSql("getClozeForSource.runtime", loadClozeBySourceSql(source)),
+    incrementClozeAddedCount: ({ source, incrementBy }) =>
       runSql(
         "incrementClozeAddedCount.runtime",
         Effect.gen(function* () {
           const sql = (yield* SqlClient.SqlClient).withoutTransforms();
-          const rows = yield* withSqlError(
-            "incrementClozeAddedCount.update",
-            sql<ForgeCardClozeRow>`
-              UPDATE forge_card_cloze
-              SET
-                added_count = added_count + ${Math.max(0, incrementBy)},
-                updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-              WHERE source_card_id = ${sourceCardId}
-              RETURNING source_card_id, cloze_text, added_count
-            `,
-          );
+          const rows = isCardParentRef(source)
+            ? yield* withSqlError(
+                "incrementClozeAddedCount.updateFromCard",
+                sql<ForgeCardClozeRow>`
+                  UPDATE forge_card_cloze
+                  SET
+                    added_count = added_count + ${Math.max(0, incrementBy)},
+                    updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                  WHERE source_card_id = ${source.cardId}
+                  RETURNING source_card_id, source_derivation_id, cloze_text, added_count
+                `,
+              )
+            : yield* withSqlError(
+                "incrementClozeAddedCount.updateFromDerivation",
+                sql<ForgeCardClozeRow>`
+                  UPDATE forge_card_cloze
+                  SET
+                    added_count = added_count + ${Math.max(0, incrementBy)},
+                    updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                  WHERE source_derivation_id = ${source.derivationId}
+                  RETURNING source_card_id, source_derivation_id, cloze_text, added_count
+                `,
+              );
 
           const row = rows[0];
           if (!row) return null;
-          return {
-            sourceCardId: Number(row.source_card_id),
-            clozeText: row.cloze_text,
-            addedCount: Number(row.added_count),
-          };
+          return yield* toCardCloze(row, "incrementClozeAddedCount.decode");
         }),
       ),
     recoverStaleGeneratingTopics: ({ sessionId, staleBeforeIso, message }) =>
@@ -2073,7 +2387,7 @@ type InMemoryCard = {
   readonly addedToDeckAt: string | null;
 };
 
-type InMemoryCardPermutation = ForgeCardPermutation;
+type InMemoryDerivation = ForgeCardDerivation;
 
 type InMemoryCardCloze = ForgeCardCloze;
 
@@ -2082,15 +2396,15 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
   let nextChunkId = 1;
   let nextTopicId = 1;
   let nextCardId = 1;
-  let nextPermutationId = 1;
+  let nextDerivationId = 1;
   const sessions: ForgeSession[] = [];
   const chunks: InMemoryChunk[] = [];
   const topics: InMemoryTopic[] = [];
   const topicGeneration = new Map<number, InMemoryTopicGeneration>();
   const extractionOutcomes = new Map<string, InMemoryTopicExtractionOutcome>();
   const cards: InMemoryCard[] = [];
-  const permutations: InMemoryCardPermutation[] = [];
-  const clozeBySourceCardId = new Map<number, InMemoryCardCloze>();
+  const derivations: InMemoryDerivation[] = [];
+  const clozeBySourceKey = new Map<string, InMemoryCardCloze>();
 
   const nowIso = (): string => new Date().toISOString();
 
@@ -2200,6 +2514,84 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
       .map((chunk) => chunk.text)
       .join("");
 
+  const cloneDerivation = (derivation: InMemoryDerivation): ForgeCardDerivation => ({
+    ...derivation,
+  });
+
+  const cloneCloze = (cloze: InMemoryCardCloze): ForgeCardCloze => ({
+    ...cloze,
+    source: { ...cloze.source },
+  });
+
+  const getDerivationByIdInternal = (derivationId: number): ForgeCardDerivation | null => {
+    const derivation = derivations.find((entry) => entry.id === derivationId);
+    return derivation ? cloneDerivation(derivation) : null;
+  };
+
+  const matchesDerivationParent = (
+    derivation: InMemoryDerivation,
+    parent: DerivationParentRef,
+    kind: DerivationKind,
+  ): boolean =>
+    derivation.kind === kind &&
+    (isCardParentRef(parent)
+      ? derivation.rootCardId === parent.cardId && derivation.parentDerivationId === null
+      : derivation.parentDerivationId === parent.derivationId);
+
+  const collectDescendantDerivationIdsInternal = (
+    seedDerivationIds: ReadonlySet<number>,
+  ): ReadonlySet<number> => {
+    if (seedDerivationIds.size === 0) return seedDerivationIds;
+
+    const removed = new Set(seedDerivationIds);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const derivation of derivations) {
+        if (
+          derivation.parentDerivationId !== null &&
+          removed.has(derivation.parentDerivationId) &&
+          !removed.has(derivation.id)
+        ) {
+          removed.add(derivation.id);
+          changed = true;
+        }
+      }
+    }
+    return removed;
+  };
+
+  const removeDerivationsInternal = (seedDerivationIds: ReadonlySet<number>): void => {
+    const removedDerivationIds = collectDescendantDerivationIdsInternal(seedDerivationIds);
+    if (removedDerivationIds.size === 0) return;
+
+    derivations.splice(
+      0,
+      derivations.length,
+      ...derivations.filter((derivation) => !removedDerivationIds.has(derivation.id)),
+    );
+
+    for (const derivationId of removedDerivationIds) {
+      clozeBySourceKey.delete(sourceKey({ derivationId }));
+    }
+  };
+
+  const removeRootCardDependentsInternal = (removedRootCardIds: ReadonlySet<number>): void => {
+    if (removedRootCardIds.size === 0) return;
+
+    const removedDerivationIds = new Set(
+      derivations
+        .filter((derivation) => removedRootCardIds.has(derivation.rootCardId))
+        .map((derivation) => derivation.id),
+    );
+
+    removeDerivationsInternal(removedDerivationIds);
+
+    for (const cardId of removedRootCardIds) {
+      clozeBySourceKey.delete(sourceKey({ cardId }));
+    }
+  };
+
   const removeTopicsAndDependentsInternal = (removedTopicIds: ReadonlySet<number>): void => {
     if (removedTopicIds.size === 0) return;
 
@@ -2211,14 +2603,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
       cards.filter((card) => removedTopicIds.has(card.topicId)).map((card) => card.id),
     );
     cards.splice(0, cards.length, ...cards.filter((card) => !removedTopicIds.has(card.topicId)));
-    permutations.splice(
-      0,
-      permutations.length,
-      ...permutations.filter((permutation) => !removedCardIds.has(permutation.sourceCardId)),
-    );
-    for (const cardId of removedCardIds) {
-      clozeBySourceCardId.delete(cardId);
-    }
+    removeRootCardDependentsInternal(removedCardIds);
   };
 
   const replaceCardsForTopicInternal = (
@@ -2243,16 +2628,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
     nextCardId += nextCards.length;
 
     if (existingCardIds.size > 0) {
-      for (let index = permutations.length - 1; index >= 0; index -= 1) {
-        const permutation = permutations[index];
-        if (permutation && existingCardIds.has(permutation.sourceCardId)) {
-          permutations.splice(index, 1);
-        }
-      }
-
-      for (const cardId of existingCardIds) {
-        clozeBySourceCardId.delete(cardId);
-      }
+      removeRootCardDependentsInternal(existingCardIds);
     }
   };
 
@@ -2773,106 +3149,150 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           topicText: topic.topicText,
         };
       }),
-    replacePermutationsForCard: ({ sourceCardId, permutations: nextPermutations }) =>
-      Effect.sync(() => {
-        const retained = permutations.filter(
-          (permutation) => permutation.sourceCardId !== sourceCardId,
+    replaceDerivedCards: ({ parent, kind, rootCardId, instruction, cards: nextCards }) =>
+      Effect.suspend(() => {
+        if (isCardParentRef(parent)) {
+          if (parent.cardId !== rootCardId) {
+            return Effect.fail(
+              new ForgeSessionRepositoryError({
+                operation: "replaceDerivedCards.validateRootCardId",
+                message: `Expected rootCardId ${parent.cardId} for card parent, received ${rootCardId}.`,
+              }),
+            );
+          }
+        } else {
+          const parentDerivation = derivations.find((entry) => entry.id === parent.derivationId);
+          if (!parentDerivation) {
+            return Effect.fail(
+              new ForgeSessionRepositoryError({
+                operation: "replaceDerivedCards.validateParentDerivation",
+                message: `Parent derivation ${parent.derivationId} was not found.`,
+              }),
+            );
+          }
+
+          if (parentDerivation.rootCardId !== rootCardId) {
+            return Effect.fail(
+              new ForgeSessionRepositoryError({
+                operation: "replaceDerivedCards.validateRootCardId",
+                message: `Expected rootCardId ${parentDerivation.rootCardId} for derivation parent ${parent.derivationId}, received ${rootCardId}.`,
+              }),
+            );
+          }
+        }
+
+        const removedDerivationIds = new Set(
+          derivations
+            .filter((derivation) => matchesDerivationParent(derivation, parent, kind))
+            .map((derivation) => derivation.id),
         );
-        const staged = nextPermutations.map((permutation, permutationOrder) => ({
-          id: nextPermutationId + permutationOrder,
-          sourceCardId,
-          permutationOrder,
-          question: permutation.question,
-          answer: permutation.answer,
+        removeDerivationsInternal(removedDerivationIds);
+
+        const staged = nextCards.map((card, derivationOrder) => ({
+          id: nextDerivationId + derivationOrder,
+          rootCardId,
+          parentDerivationId: isCardParentRef(parent) ? null : parent.derivationId,
+          kind,
+          derivationOrder,
+          question: card.question,
+          answer: card.answer,
+          instruction,
           addedCount: 0,
         }));
 
-        permutations.length = 0;
-        permutations.push(...retained, ...staged);
-        nextPermutationId += staged.length;
+        derivations.push(...staged);
+        nextDerivationId += staged.length;
+        return Effect.void;
       }),
-    getPermutationsForCard: (sourceCardId) =>
+    getDerivedCards: ({ parent, kind }) =>
+      Effect.sync(() =>
+        derivations
+          .filter((entry) => matchesDerivationParent(entry, parent, kind))
+          .sort((left, right) => left.derivationOrder - right.derivationOrder || left.id - right.id)
+          .map(cloneDerivation),
+      ),
+    updateDerivedCardContent: ({ derivationId, question, answer }) =>
       Effect.sync(() => {
-        return permutations
-          .filter((entry) => entry.sourceCardId === sourceCardId)
-          .sort(
-            (left, right) => left.permutationOrder - right.permutationOrder || left.id - right.id,
-          )
-          .map((entry) => ({
-            id: entry.id,
-            sourceCardId: entry.sourceCardId,
-            permutationOrder: entry.permutationOrder,
-            question: entry.question,
-            answer: entry.answer,
-            addedCount: entry.addedCount,
-          }));
-      }),
-    updatePermutationContent: ({ permutationId, question, answer }) =>
-      Effect.sync(() => {
-        const index = permutations.findIndex((entry) => entry.id === permutationId);
+        const index = derivations.findIndex((entry) => entry.id === derivationId);
         if (index < 0) return null;
 
-        const current = permutations[index]!;
+        const current = derivations[index]!;
         const next = { ...current, question, answer };
-        permutations[index] = next;
-
-        return {
-          id: next.id,
-          sourceCardId: next.sourceCardId,
-          permutationOrder: next.permutationOrder,
-          question: next.question,
-          answer: next.answer,
-          addedCount: next.addedCount,
-        };
+        derivations[index] = next;
+        return cloneDerivation(next);
       }),
-    incrementPermutationAddedCount: ({ permutationId, incrementBy }) =>
+    incrementDerivedCardAddedCount: ({ derivationId, incrementBy }) =>
       Effect.sync(() => {
-        const index = permutations.findIndex((entry) => entry.id === permutationId);
+        const index = derivations.findIndex((entry) => entry.id === derivationId);
         if (index < 0) return null;
 
-        const current = permutations[index]!;
+        const current = derivations[index]!;
         const next = {
           ...current,
           addedCount: current.addedCount + Math.max(0, incrementBy),
         };
-        permutations[index] = next;
-
-        return {
-          id: next.id,
-          sourceCardId: next.sourceCardId,
-          permutationOrder: next.permutationOrder,
-          question: next.question,
-          answer: next.answer,
-          addedCount: next.addedCount,
-        };
+        derivations[index] = next;
+        return cloneDerivation(next);
       }),
-    upsertClozeForCard: ({ sourceCardId, clozeText }) =>
+    getDerivationById: (derivationId) => Effect.sync(() => getDerivationByIdInternal(derivationId)),
+    getDescendantCount: (derivationId) =>
       Effect.sync(() => {
-        const existing = clozeBySourceCardId.get(sourceCardId);
+        if (!derivations.some((entry) => entry.id === derivationId)) {
+          return 0;
+        }
+
+        const childIds = new Set(
+          derivations
+            .filter((entry) => entry.parentDerivationId === derivationId)
+            .map((entry) => entry.id),
+        );
+
+        return collectDescendantDerivationIdsInternal(childIds).size;
+      }),
+    getDescendantCountForParent: ({ parent, kind }) =>
+      Effect.sync(() => {
+        const directChildren = isCardParentRef(parent)
+          ? derivations.filter(
+              (entry) =>
+                entry.rootCardId === parent.cardId &&
+                entry.parentDerivationId === null &&
+                entry.kind === kind,
+            )
+          : derivations.filter(
+              (entry) => entry.parentDerivationId === parent.derivationId && entry.kind === kind,
+            );
+        if (directChildren.length === 0) return 0;
+
+        const seedIds = new Set(directChildren.map((entry) => entry.id));
+        return collectDescendantDerivationIdsInternal(seedIds).size;
+      }),
+    upsertClozeForSource: ({ source, clozeText }) =>
+      Effect.sync(() => {
+        const existing = clozeBySourceKey.get(sourceKey(source));
         const next: InMemoryCardCloze = {
-          sourceCardId,
+          source: { ...source },
           clozeText,
           addedCount: existing && existing.clozeText === clozeText ? existing.addedCount : 0,
         };
-        clozeBySourceCardId.set(sourceCardId, next);
-        return { ...next };
+        clozeBySourceKey.set(sourceKey(source), next);
+        return cloneCloze(next);
       }),
-    getClozeForCard: (sourceCardId) =>
+    getClozeForSource: (source) =>
       Effect.sync(() => {
-        const cloze = clozeBySourceCardId.get(sourceCardId);
-        return cloze ? { ...cloze } : null;
+        const cloze = clozeBySourceKey.get(sourceKey(source));
+        return cloze ? cloneCloze(cloze) : null;
       }),
-    incrementClozeAddedCount: ({ sourceCardId, incrementBy }) =>
+    incrementClozeAddedCount: ({ source, incrementBy }) =>
       Effect.sync(() => {
-        const existing = clozeBySourceCardId.get(sourceCardId);
+        const existing = clozeBySourceKey.get(sourceKey(source));
         if (!existing) return null;
 
         const next: InMemoryCardCloze = {
           ...existing,
           addedCount: existing.addedCount + Math.max(0, incrementBy),
         };
-        clozeBySourceCardId.set(sourceCardId, next);
-        return { ...next };
+        clozeBySourceKey.set(sourceKey(source), next);
+        return cloneCloze(next);
       }),
     recoverStaleGeneratingTopics: ({ sessionId, staleBeforeIso, message }) =>
       Effect.sync(() => {

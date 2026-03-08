@@ -1,4 +1,8 @@
-import type { ForgeSourceInput } from "@shared/rpc/schemas/forge";
+import type {
+  DerivationKind,
+  DerivationParentRef,
+  ForgeSourceInput,
+} from "@shared/rpc/schemas/forge";
 
 const normalizeForgeSourceText = (text: string): string => text.replace(/\r\n?/g, "\n").trim();
 
@@ -38,9 +42,11 @@ export const queryKeys = {
   forgeCardsSnapshot: (sessionId: number | null) => ["forgeCardsSnapshot", sessionId] as const,
   forgeTopicCards: (sessionId: number | null, topicId: number | null) =>
     ["forgeTopicCards", sessionId, topicId] as const,
-  forgeCardPermutations: (sourceCardId: number | null) =>
-    ["forgeCardPermutations", sourceCardId] as const,
-  forgeCardCloze: (sourceCardId: number | null) => ["forgeCardCloze", sourceCardId] as const,
+  forgeDerivedCardsPrefix: ["forgeDerivedCards"] as const,
+  forgeDerivedCards: (rootCardId: number, parent: DerivationParentRef, kind: DerivationKind) =>
+    ["forgeDerivedCards", rootCardId, parent, kind] as const,
+  forgeCardClozePrefix: ["forgeCardCloze"] as const,
+  forgeCardCloze: (source: DerivationParentRef) => ["forgeCardCloze", source] as const,
   reviewBootstrap: (deckSelectionKey: string) => ["reviewBootstrap", deckSelectionKey] as const,
   reviewAssistantSourceCard: (cardKey: string | null) =>
     ["reviewAssistantSourceCard", cardKey] as const,

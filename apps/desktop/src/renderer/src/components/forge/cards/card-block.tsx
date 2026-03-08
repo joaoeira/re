@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, ListTree, Braces, Trash2, Plus, Loader2 } from "lucide-react";
+import { Check, ListTree, Braces, Trash2, Plus, Loader2, ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -15,10 +15,12 @@ type CardBlockProps = {
   readonly isAdding: boolean;
   readonly addDisabled: boolean;
   readonly expandedPanel: "permutations" | "cloze" | null;
+  readonly expansionStatus: "idle" | "expanding" | "expanded";
   readonly onAdd: () => void;
   readonly onDelete: () => void;
   readonly onTogglePermutations: () => void;
   readonly onToggleCloze: () => void;
+  readonly onRequestExpansion: () => void;
   readonly onEditQuestion: (value: string) => void;
   readonly onEditAnswer: (value: string) => void;
 };
@@ -29,16 +31,18 @@ export function CardBlock({
   isAdding,
   addDisabled,
   expandedPanel,
+  expansionStatus,
   onAdd,
   onDelete,
   onTogglePermutations,
   onToggleCloze,
+  onRequestExpansion,
   onEditQuestion,
   onEditAnswer,
 }: CardBlockProps) {
   const showPermutations = expandedPanel === "permutations";
   const showCloze = expandedPanel === "cloze";
-  const hasExpanded = expandedPanel !== null;
+  const hasExpanded = expandedPanel !== null || expansionStatus !== "idle";
 
   const [permutationsMounted, setPermutationsMounted] = useState(false);
   const [clozeMounted, setClozeMounted] = useState(false);
@@ -52,7 +56,12 @@ export function CardBlock({
   }, [showCloze]);
 
   return (
-    <div className="group relative border-b border-border/30 px-2 py-5">
+    <div
+      className={cn(
+        "group relative border-b border-border/30 px-2 py-5",
+        expansionStatus !== "idle" && "bg-muted/35",
+      )}
+    >
       <div className={cn("transition-opacity", isAdded && "opacity-40")}>
         <InlineEditor
           content={card.question}
@@ -125,6 +134,28 @@ export function CardBlock({
             <Braces className="size-3" />
             Cloze
           </Button>
+          <Button
+            type="button"
+            variant={expansionStatus !== "idle" ? "secondary" : "ghost"}
+            size="xs"
+            className={cn(
+              "gap-1.5",
+              expansionStatus === "idle" &&
+                "text-muted-foreground/60 hover:bg-transparent hover:text-foreground",
+            )}
+            onClick={onRequestExpansion}
+          >
+            {expansionStatus === "expanding" ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <ArrowRight className="size-3" />
+            )}
+            {expansionStatus === "expanding"
+              ? "Expanding..."
+              : expansionStatus === "expanded"
+                ? "Expanded"
+                : "Expand"}
+          </Button>
         </div>
 
         <div className="flex-1" />
@@ -136,18 +167,14 @@ export function CardBlock({
 
       {(showPermutations || permutationsMounted) && (
         <div hidden={!showPermutations} className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
-          <PermutationsPanel
-            sourceCardId={card.id}
-            sourceQuestion={card.question}
-            sourceAnswer={card.answer}
-          />
+          <PermutationsPanel parent={{ cardId: card.id }} rootCardId={card.id} />
         </div>
       )}
 
       {(showCloze || clozeMounted) && (
         <div hidden={!showCloze} className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
           <ClozePanel
-            sourceCardId={card.id}
+            source={{ cardId: card.id }}
             sourceQuestion={card.question}
             sourceAnswer={card.answer}
           />

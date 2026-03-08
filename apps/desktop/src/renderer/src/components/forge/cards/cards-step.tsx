@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useMutationState, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Effect } from "effect";
 
 import {
@@ -8,13 +8,16 @@ import {
   useForgeDeckTargetActions,
   useForgeDeletedCardIdsByTopicKey,
   useForgeExpandedCardPanelsByTopicKey,
+  useForgeExpansionColumns,
   useForgeSessionId,
   useForgeSelectedTopics,
   useForgeTargetDeckPath,
 } from "../forge-page-context";
-import { topicKey } from "../forge-page-store";
+import { type ExpansionColumnDescriptor, topicKey } from "../forge-page-store";
 import {
+  type ForgeGenerateDerivedCardsMutationInput,
   formatQAContent,
+  forgeCardsMutationKeys,
   useForgeAddCardToDeckMutation,
   useForgeUpdateCardMutation,
 } from "@/hooks/mutations/use-forge-cards-mutations";
@@ -26,10 +29,14 @@ import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
 import type { ScanDecksResult } from "@re/workspace";
-import type {
-  ForgeGetTopicCardsResult,
-  ForgeTopicCardsStatus,
-  ForgeTopicCardsSummary,
+import {
+  mapForgeGetDerivedCardsErrorToError,
+  type DerivationParentRef,
+  type ForgeGetDerivedCardsResult,
+  type ForgeGeneratedCard,
+  type ForgeGetTopicCardsResult,
+  type ForgeTopicCardsStatus,
+  type ForgeTopicCardsSummary,
 } from "@shared/rpc/schemas/forge";
 import { mapCreateDeckErrorToError } from "@shared/rpc/schemas/workspace";
 import { CardsCanvas } from "./cards-canvas";
@@ -118,6 +125,7 @@ export function CardsStep() {
   const activeTopicKey = useForgeActiveTopicKey();
   const deletedByTopicKey = useForgeDeletedCardIdsByTopicKey();
   const expandedPanelsByTopicKey = useForgeExpandedCardPanelsByTopicKey();
+  const expansionColumns = useForgeExpansionColumns();
   const selectedTopics = useForgeSelectedTopics();
   const targetDeckPath = useForgeTargetDeckPath();
   const deckTargetActions = useForgeDeckTargetActions();
@@ -688,6 +696,16 @@ export function CardsStep() {
         : new Map<number, "permutations" | "cloze">(),
     [activeTopicKey, expandedPanelsByTopicKey],
   );
+  const pendingDerivationGenerations = useMutationState({
+    filters: {
+      mutationKey: forgeCardsMutationKeys.generateDerivedCards,
+      status: "pending",
+    },
+    select: (mutation) =>
+      mutation.state.variables as ForgeGenerateDerivedCardsMutationInput | undefined,
+  }).filter(
+    (variables): variables is ForgeGenerateDerivedCardsMutationInput => variables !== undefined,
+  );
 
   const sidebarTopics = useMemo(() => {
     return topics.map((topic) => {
@@ -737,6 +755,88 @@ export function CardsStep() {
     null;
 
   const activeCards = activeTopicResult?.cards ?? [];
+  const expandedRootCardIds = useMemo(
+    () =>
+      activeCards
+        .filter((card) =>
+          expansionColumns.some(
+            (column) => "cardId" in column.parent && column.parent.cardId === card.id,
+          ),
+        )
+        .map((card) => card.id),
+    [activeCards, expansionColumns],
+  );
+
+  const expansionQueries = useQueries({
+    queries: expandedRootCardIds.map((cardId) => ({
+      queryKey: queryKeys.forgeDerivedCards(cardId, { cardId }, "expansion"),
+      queryFn: () =>
+        runIpcEffect(
+          ipc.client.ForgeGetDerivedCards({ parent: { cardId }, kind: "expansion" }).pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
+            Effect.mapError(mapForgeGetDerivedCardsErrorToError),
+          ),
+        ),
+    })),
+  });
+
+  const expansionPresentationByCardId = useMemo(() => {
+    const next = new Map<
+      number,
+      {
+        readonly status: "idle" | "expanding" | "expanded";
+        readonly summary?: {
+          readonly cardCount: number;
+          readonly instruction?: string;
+        };
+      }
+    >();
+
+    for (const card of activeCards) {
+      const isOpen = expandedRootCardIds.includes(card.id);
+      const isGenerating = pendingDerivationGenerations.some(
+        (variables) =>
+          variables.kind === "expansion" &&
+          "cardId" in variables.parent &&
+          variables.parent.cardId === card.id,
+      );
+
+      const queryIndex = expandedRootCardIds.indexOf(card.id);
+      const queryData = queryIndex >= 0 ? expansionQueries[queryIndex]?.data : undefined;
+      const derivations = queryData?.derivations ?? [];
+
+      next.set(card.id, {
+        status: isGenerating ? "expanding" : isOpen ? "expanded" : "idle",
+        ...(derivations.length > 0
+          ? {
+              summary: {
+                cardCount: derivations.length,
+                ...(derivations[0]?.instruction ? { instruction: derivations[0].instruction } : {}),
+              },
+            }
+          : {}),
+      });
+    }
+
+    return next;
+  }, [activeCards, expandedRootCardIds, expansionQueries, pendingDerivationGenerations]);
+
+  const expandedDerivationIds = useMemo(() => {
+    const opened = new Set<number>();
+    for (const column of expansionColumns) {
+      if ("derivationId" in column.parent) {
+        opened.add(column.parent.derivationId);
+      }
+    }
+    for (const variables of pendingDerivationGenerations) {
+      if (variables.kind === "expansion" && "derivationId" in variables.parent) {
+        opened.add(variables.parent.derivationId);
+      }
+    }
+    return opened;
+  }, [expansionColumns, pendingDerivationGenerations]);
 
   const handleEditCard = useCallback(
     (cardId: number, field: "question" | "answer", value: string) => {
@@ -798,6 +898,58 @@ export function CardsStep() {
   );
 
   const deckSelectionDisabled = rootPath === null || settingsQuery.isLoading || creatingDeck;
+  const handleRequestExpansionFromRoot = useCallback(
+    (card: ForgeGeneratedCard) => {
+      if (!activeTopicKey) return;
+      const cachedResult = queryClient.getQueryData<ForgeGetDerivedCardsResult>(
+        queryKeys.forgeDerivedCards(card.id, { cardId: card.id }, "expansion"),
+      );
+
+      curationActions.openExpansionColumn(
+        activeTopicKey,
+        {
+          id: `card:${card.id}`,
+          parent: { cardId: card.id },
+          rootCardId: card.id,
+          parentQuestion: card.question,
+          parentAnswer: card.answer,
+          ...(cachedResult?.derivations[0]?.instruction
+            ? { instruction: cachedResult.derivations[0].instruction }
+            : {}),
+        },
+        null,
+      );
+    },
+    [activeTopicKey, curationActions, queryClient],
+  );
+
+  const handleRequestExpansionFromColumn = useCallback(
+    (descriptor: ExpansionColumnDescriptor, sourceColumnParent: DerivationParentRef) => {
+      if (!activeTopicKey) return;
+      curationActions.openExpansionColumn(activeTopicKey, descriptor, sourceColumnParent);
+    },
+    [activeTopicKey, curationActions],
+  );
+
+  const handleCloseExpansionColumn = useCallback(
+    (columnId: string) => {
+      if (!activeTopicKey) return;
+      curationActions.closeExpansionColumn(activeTopicKey, columnId);
+    },
+    [activeTopicKey, curationActions],
+  );
+
+  const handleRegeneratedExpansionColumn = useCallback(
+    (columnId: string) => {
+      if (!activeTopicKey) return;
+      curationActions.truncateExpansionColumns(activeTopicKey, columnId);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.forgeTopicCards(sessionId, activeTopic?.topicId ?? null),
+        exact: false,
+      });
+    },
+    [activeTopic, activeTopicKey, curationActions, queryClient, sessionId],
+  );
 
   return (
     <>
@@ -813,6 +965,7 @@ export function CardsStep() {
           onGenerateChecked={handleGenerateChecked}
         />
         <CardsCanvas
+          topicKey={activeTopicKey}
           topicText={activeTopicResult?.topic.topicText ?? activeTopic?.text ?? null}
           status={activeStatus}
           errorMessage={activeErrorMessage}
@@ -820,6 +973,9 @@ export function CardsStep() {
           addedCardIds={activeAddedCardIds}
           deletedCardIds={activeDeletedCardIds}
           expandedPanels={activeExpandedPanels}
+          expansionPresentationByCardId={expansionPresentationByCardId}
+          expansionColumns={expansionColumns}
+          expandedDerivationIds={expandedDerivationIds}
           addingCardIds={addingCardIds}
           addDisabled={!targetDeckPath}
           addCardError={addCardError}
@@ -897,6 +1053,10 @@ export function CardsStep() {
             if (!activeTopic) return;
             requestTopicGeneration(activeTopic);
           }}
+          onRequestExpansionFromRoot={handleRequestExpansionFromRoot}
+          onRequestExpansionFromColumn={handleRequestExpansionFromColumn}
+          onCloseExpansionColumn={handleCloseExpansionColumn}
+          onRegeneratedExpansionColumn={handleRegeneratedExpansionColumn}
         />
       </div>
       <CardsFooter

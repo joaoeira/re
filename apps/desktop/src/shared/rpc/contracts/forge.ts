@@ -4,15 +4,15 @@ import {
   ForgeCreateSessionErrorSchema,
   ForgeCreateSessionInputSchema,
   ForgeCreateSessionResultSchema,
+  ForgeGenerateDerivedCardsErrorSchema,
+  ForgeGenerateDerivedCardsInputSchema,
+  ForgeGenerateDerivedCardsResultSchema,
   ForgeListSessionsErrorSchema,
   ForgeListSessionsInputSchema,
   ForgeListSessionsResultSchema,
   ForgeGenerateCardClozeErrorSchema,
   ForgeGenerateCardClozeInputSchema,
   ForgeGenerateCardClozeResultSchema,
-  ForgeGenerateCardPermutationsErrorSchema,
-  ForgeGenerateCardPermutationsInputSchema,
-  ForgeGenerateCardPermutationsResultSchema,
   ForgeGenerateSelectedTopicCardsErrorSchema,
   ForgeGenerateSelectedTopicCardsInputSchema,
   ForgeGenerateSelectedTopicCardsResultSchema,
@@ -22,12 +22,12 @@ import {
   ForgeGetCardClozeErrorSchema,
   ForgeGetCardClozeInputSchema,
   ForgeGetCardClozeResultSchema,
-  ForgeGetCardPermutationsErrorSchema,
-  ForgeGetCardPermutationsInputSchema,
-  ForgeGetCardPermutationsResultSchema,
   ForgeGetCardsSnapshotErrorSchema,
   ForgeGetCardsSnapshotInputSchema,
   ForgeGetCardsSnapshotResultSchema,
+  ForgeGetDerivedCardsErrorSchema,
+  ForgeGetDerivedCardsInputSchema,
+  ForgeGetDerivedCardsResultSchema,
   ForgeGetTopicCardsErrorSchema,
   ForgeGetTopicCardsInputSchema,
   ForgeGetTopicCardsResultSchema,
@@ -49,9 +49,9 @@ import {
   ForgeUpdateCardErrorSchema,
   ForgeUpdateCardInputSchema,
   ForgeUpdateCardResultSchema,
-  ForgeUpdatePermutationErrorSchema,
-  ForgeUpdatePermutationInputSchema,
-  ForgeUpdatePermutationResultSchema,
+  ForgeUpdateDerivationErrorSchema,
+  ForgeUpdateDerivationInputSchema,
+  ForgeUpdateDerivationResultSchema,
   ForgeSaveTopicSelectionsErrorSchema,
   ForgeSaveTopicSelectionsInputSchema,
   ForgeSaveTopicSelectionsResultSchema,
@@ -126,18 +126,18 @@ export const ForgeGenerateSelectedTopicCards = rpc(
   ForgeGenerateSelectedTopicCardsErrorSchema,
 );
 
-export const ForgeGetCardPermutations = rpc(
-  "ForgeGetCardPermutations",
-  ForgeGetCardPermutationsInputSchema,
-  ForgeGetCardPermutationsResultSchema,
-  ForgeGetCardPermutationsErrorSchema,
+export const ForgeGetDerivedCards = rpc(
+  "ForgeGetDerivedCards",
+  ForgeGetDerivedCardsInputSchema,
+  ForgeGetDerivedCardsResultSchema,
+  ForgeGetDerivedCardsErrorSchema,
 );
 
-export const ForgeGenerateCardPermutations = rpc(
-  "ForgeGenerateCardPermutations",
-  ForgeGenerateCardPermutationsInputSchema,
-  ForgeGenerateCardPermutationsResultSchema,
-  ForgeGenerateCardPermutationsErrorSchema,
+export const ForgeGenerateDerivedCards = rpc(
+  "ForgeGenerateDerivedCards",
+  ForgeGenerateDerivedCardsInputSchema,
+  ForgeGenerateDerivedCardsResultSchema,
+  ForgeGenerateDerivedCardsErrorSchema,
 );
 
 export const ForgeGetCardCloze = rpc(
@@ -161,11 +161,11 @@ export const ForgeUpdateCard = rpc(
   ForgeUpdateCardErrorSchema,
 );
 
-export const ForgeUpdatePermutation = rpc(
-  "ForgeUpdatePermutation",
-  ForgeUpdatePermutationInputSchema,
-  ForgeUpdatePermutationResultSchema,
-  ForgeUpdatePermutationErrorSchema,
+export const ForgeUpdateDerivation = rpc(
+  "ForgeUpdateDerivation",
+  ForgeUpdateDerivationInputSchema,
+  ForgeUpdateDerivationResultSchema,
+  ForgeUpdateDerivationErrorSchema,
 );
 
 export const ForgeSaveTopicSelections = rpc(

@@ -66,6 +66,14 @@ const SYNTHESIS_TOPICS: ReadonlyArray<TopicDef> = [
   },
 ];
 
+const typedFailure = <T extends { readonly _tag: string }>(data: T) => ({
+  type: "failure" as const,
+  error: {
+    tag: data._tag,
+    data,
+  },
+});
+
 const createCardsInvoke = (allTopics: ReadonlyArray<TopicDef> = DETAIL_TOPICS) => {
   const sessionId = 77;
   const workspaceRootPath = FORGE_WORKSPACE_ROOT_PATH;
@@ -226,14 +234,11 @@ const createCardsInvoke = (allTopics: ReadonlyArray<TopicDef> = DETAIL_TOPICS) =
       const input = payload as { topicId: number };
       const topic = findTopic(input.topicId);
       if (!topic) {
-        return {
-          type: "failure",
-          error: {
-            _tag: "topic_not_found",
-            sessionId,
-            topicId: input.topicId,
-          },
-        };
+        return typedFailure({
+          _tag: "topic_not_found",
+          sessionId,
+          topicId: input.topicId,
+        });
       }
       return {
         type: "success",
@@ -253,14 +258,11 @@ const createCardsInvoke = (allTopics: ReadonlyArray<TopicDef> = DETAIL_TOPICS) =
       const input = payload as { topicId: number };
       const topic = findTopic(input.topicId);
       if (!topic) {
-        return {
-          type: "failure",
-          error: {
-            _tag: "topic_not_found",
-            sessionId,
-            topicId: input.topicId,
-          },
-        };
+        return typedFailure({
+          _tag: "topic_not_found",
+          sessionId,
+          topicId: input.topicId,
+        });
       }
       return {
         type: "success",

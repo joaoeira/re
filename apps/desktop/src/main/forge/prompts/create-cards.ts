@@ -26,7 +26,7 @@ const renderInstructionBlock = (instruction: string | undefined): string => {
   return `Additional instruction:\n${trimmedInstruction}`;
 };
 
-const renderBaseUserPrompt = (input: CreateCardsPromptInput): string => {
+export const renderBaseUserPrompt = (input: CreateCardsPromptInput): string => {
   return `
 
 

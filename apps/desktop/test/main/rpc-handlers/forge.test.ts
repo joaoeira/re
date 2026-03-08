@@ -29,7 +29,11 @@ import {
   PdfTextExtractError,
   type PdfExtractor,
 } from "@main/forge/services/pdf-extractor";
-import type { ForgeChunkPageBoundary } from "@shared/rpc/schemas/forge";
+import type {
+  ForgeChunkPageBoundary,
+  ForgeGenerateDerivedCardsResult,
+  ForgeGetDerivedCardsResult,
+} from "@shared/rpc/schemas/forge";
 import { createHandlersWithOverrides } from "./helpers";
 
 const createPdfExtractor = (options?: {
@@ -116,6 +120,18 @@ const createPromptRuntime = (
 const createCardsDomainPromptRuntime = (options?: {
   readonly holdCreateCards?: Promise<void>;
   readonly failCreateCards?: boolean;
+  readonly onGenerateExpansionsInput?: (input: {
+    readonly topic: string;
+    readonly ancestryChain: ReadonlyArray<{
+      readonly selectedCard: { readonly question: string; readonly answer: string };
+      readonly siblingCards: ReadonlyArray<{
+        readonly question: string;
+        readonly answer: string;
+      }>;
+      readonly instruction?: string;
+    }>;
+    readonly instruction?: string;
+  }) => void;
 }): ForgePromptRuntime => ({
   run: <Input, Output>(
     spec: PromptSpec<Input, Output>,
@@ -206,6 +222,42 @@ const createCardsDomainPromptRuntime = (options?: {
         };
       }
 
+      if (spec.promptId === "forge/generate-expansions") {
+        const expansionInput = input as {
+          readonly topic: string;
+          readonly ancestryChain: ReadonlyArray<{
+            readonly selectedCard: { readonly question: string; readonly answer: string };
+            readonly siblingCards: ReadonlyArray<{
+              readonly question: string;
+              readonly answer: string;
+            }>;
+            readonly instruction?: string;
+          }>;
+          readonly instruction?: string;
+        };
+        options?.onGenerateExpansionsInput?.(expansionInput);
+        const currentSelection = expansionInput.ancestryChain.at(-1)?.selectedCard;
+        return {
+          output: {
+            cards: [
+              {
+                question: `Expansion of: ${currentSelection?.question ?? expansionInput.topic}`,
+                answer: currentSelection?.answer ?? expansionInput.topic,
+              },
+            ],
+          } as unknown as Output,
+          rawText: '{"cards":[]}',
+          metadata: {
+            promptId: spec.promptId,
+            promptVersion: "1",
+            model: runOptions?.model ?? "mock:model",
+            attemptCount: 1,
+            promptHash: "x".repeat(64),
+            outputChars: 10,
+          },
+        };
+      }
+
       return yield* Effect.fail(
         new PromptInputValidationError({
           promptId: spec.promptId,
@@ -214,6 +266,16 @@ const createCardsDomainPromptRuntime = (options?: {
       );
     }),
 });
+
+const unwrapDerivedCardsResult = (
+  result: ForgeGenerateDerivedCardsResult,
+): ForgeGetDerivedCardsResult => {
+  if ("confirmRequired" in result) {
+    throw new Error("Expected derived cards result without confirmation.");
+  }
+
+  return result;
+};
 
 describe("forge handlers", () => {
   const setupHandlers = async (
@@ -1077,7 +1139,7 @@ describe("forge handlers", () => {
     }
   });
 
-  it("generates permutations and cloze and persists inline card edits", async () => {
+  it("generates derived permutation cards and cloze and persists inline card edits", async () => {
     const promptRuntime = createCardsDomainPromptRuntime();
     const { handlers, repository, dispose } = await setupHandlers({
       promptRuntime,
@@ -1112,16 +1174,23 @@ describe("forge handlers", () => {
         throw new Error("Expected generated source card.");
       }
 
-      const permutations = await Effect.runPromise(
-        handlers.ForgeGenerateCardPermutations({ sourceCardId }),
+      const permutations = unwrapDerivedCardsResult(
+        await Effect.runPromise(
+          handlers.ForgeGenerateDerivedCards({
+            parent: { cardId: sourceCardId },
+            kind: "permutation",
+          }),
+        ),
       );
-      expect(permutations.permutations).toHaveLength(1);
+      expect(permutations.derivations).toHaveLength(1);
 
-      const cloze = await Effect.runPromise(handlers.ForgeGenerateCardCloze({ sourceCardId }));
+      const cloze = await Effect.runPromise(
+        handlers.ForgeGenerateCardCloze({ source: { cardId: sourceCardId } }),
+      );
       expect(cloze.cloze).toContain("{{c1::ATP}}");
       const clozeWithQuestionOnlyOverride = await Effect.runPromise(
         handlers.ForgeGenerateCardCloze({
-          sourceCardId,
+          source: { cardId: sourceCardId },
           sourceQuestion: "Question-only override",
         }),
       );
@@ -1137,17 +1206,26 @@ describe("forge handlers", () => {
       expect(updated.card.question).toBe("Updated question?");
 
       const regeneratedPermutations = await Effect.runPromise(
-        handlers.ForgeGenerateCardPermutations({
-          sourceCardId,
-          sourceQuestion: updated.card.question,
-          sourceAnswer: updated.card.answer,
+        handlers.ForgeGenerateDerivedCards({
+          parent: { cardId: sourceCardId },
+          kind: "permutation",
         }),
+      ).then((result) =>
+        "confirmRequired" in result
+          ? Effect.runPromise(
+              handlers.ForgeGenerateDerivedCards({
+                parent: { cardId: sourceCardId },
+                kind: "permutation",
+                confirmed: true,
+              }),
+            ).then(unwrapDerivedCardsResult)
+          : result,
       );
-      expect(regeneratedPermutations.permutations[0]?.question).toContain("Updated question?");
-      expect(regeneratedPermutations.permutations[0]?.answer).toBe("Updated answer.");
+      expect(regeneratedPermutations.derivations[0]?.question).toContain("Updated question?");
+      expect(regeneratedPermutations.derivations[0]?.answer).toBe("Updated answer.");
       const regeneratedCloze = await Effect.runPromise(
         handlers.ForgeGenerateCardCloze({
-          sourceCardId,
+          source: { cardId: sourceCardId },
           sourceQuestion: updated.card.question,
           sourceAnswer: updated.card.answer,
         }),
@@ -1166,7 +1244,7 @@ describe("forge handlers", () => {
     }
   });
 
-  it("updates a permutation's content and returns permutation_not_found for missing id", async () => {
+  it("updates a derivation's content and returns derivation_not_found for missing id", async () => {
     const promptRuntime = createCardsDomainPromptRuntime();
     const { handlers, repository, dispose } = await setupHandlers({
       promptRuntime,
@@ -1201,26 +1279,31 @@ describe("forge handlers", () => {
         throw new Error("Expected generated source card.");
       }
 
-      const permutations = await Effect.runPromise(
-        handlers.ForgeGenerateCardPermutations({ sourceCardId }),
+      const permutations = unwrapDerivedCardsResult(
+        await Effect.runPromise(
+          handlers.ForgeGenerateDerivedCards({
+            parent: { cardId: sourceCardId },
+            kind: "permutation",
+          }),
+        ),
       );
-      expect(permutations.permutations).toHaveLength(1);
-      const permutationId = permutations.permutations[0]!.id;
+      expect(permutations.derivations).toHaveLength(1);
+      const derivationId = permutations.derivations[0]!.id;
 
       const updated = await Effect.runPromise(
-        handlers.ForgeUpdatePermutation({
-          permutationId,
-          question: "Updated permutation question?",
-          answer: "Updated permutation answer.",
+        handlers.ForgeUpdateDerivation({
+          derivationId,
+          question: "Updated derivation question?",
+          answer: "Updated derivation answer.",
         }),
       );
-      expect(updated.permutation.question).toBe("Updated permutation question?");
-      expect(updated.permutation.answer).toBe("Updated permutation answer.");
-      expect(updated.permutation.id).toBe(permutationId);
+      expect(updated.derivation.question).toBe("Updated derivation question?");
+      expect(updated.derivation.answer).toBe("Updated derivation answer.");
+      expect(updated.derivation.id).toBe(derivationId);
 
       const notFoundExit = await Effect.runPromiseExit(
-        handlers.ForgeUpdatePermutation({
-          permutationId: 999_999,
+        handlers.ForgeUpdateDerivation({
+          derivationId: 999_999,
           question: "x",
           answer: "y",
         }),
@@ -1230,9 +1313,273 @@ describe("forge handlers", () => {
         const failure = Cause.failureOption(notFoundExit.cause);
         expect(failure._tag).toBe("Some");
         if (failure._tag === "Some") {
-          expect(failure.value._tag).toBe("permutation_not_found");
+          expect((failure.value as { readonly _tag: string })._tag).toBe("derivation_not_found");
         }
       }
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("builds root-first expansion ancestry without echoing the selected card in siblings", async () => {
+    const seenExpansionInputs: Array<{
+      readonly topic: string;
+      readonly ancestryChain: ReadonlyArray<{
+        readonly selectedCard: { readonly question: string; readonly answer: string };
+        readonly siblingCards: ReadonlyArray<{
+          readonly question: string;
+          readonly answer: string;
+        }>;
+        readonly instruction?: string;
+      }>;
+      readonly instruction?: string;
+    }> = [];
+    const promptRuntime = createCardsDomainPromptRuntime({
+      onGenerateExpansionsInput: (input) => {
+        seenExpansionInputs.push(input);
+      },
+    });
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-expansion-ancestry.pdf"),
+      );
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk text",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["Expansion ancestry topic"] },
+      ]);
+
+      const topic = await getTopicBySequenceOrderAndIndex(repository, created.session.id, 0, 0);
+      if (!topic) throw new Error("Expected topic.");
+
+      await Effect.runPromise(
+        repository.replaceCardsForTopic({
+          topicId: topic.topicId,
+          cards: [
+            { question: "Selected root?", answer: "Root answer." },
+            { question: "Sibling one?", answer: "Sibling answer one." },
+            { question: "Sibling two?", answer: "Sibling answer two." },
+          ],
+        }),
+      );
+
+      const topicCards = await getCardsForTopicBySequenceOrderAndIndex(
+        repository,
+        created.session.id,
+        0,
+        0,
+      );
+      const sourceCardId = topicCards?.cards[0]?.id;
+      if (!sourceCardId) throw new Error("Expected root source card.");
+
+      const firstExpansion = unwrapDerivedCardsResult(
+        await Effect.runPromise(
+          handlers.ForgeGenerateDerivedCards({
+            parent: { cardId: sourceCardId },
+            kind: "expansion",
+            instruction: "root focus",
+          }),
+        ),
+      );
+      const firstExpansionId = firstExpansion.derivations[0]?.id;
+      if (!firstExpansionId) throw new Error("Expected first expansion derivation id.");
+
+      const nestedExpansion = unwrapDerivedCardsResult(
+        await Effect.runPromise(
+          handlers.ForgeGenerateDerivedCards({
+            parent: { derivationId: firstExpansionId },
+            kind: "expansion",
+            instruction: "child focus",
+          }),
+        ),
+      );
+
+      expect(firstExpansion.derivations[0]?.kind).toBe("expansion");
+      expect(nestedExpansion.derivations[0]?.parentDerivationId).toBe(firstExpansionId);
+      expect(seenExpansionInputs).toHaveLength(2);
+      expect(seenExpansionInputs[0]).toMatchObject({
+        topic: "Expansion ancestry topic",
+        ancestryChain: [
+          {
+            selectedCard: {
+              question: "Selected root?",
+              answer: "Root answer.",
+            },
+            siblingCards: [
+              {
+                question: "Sibling one?",
+                answer: "Sibling answer one.",
+              },
+              {
+                question: "Sibling two?",
+                answer: "Sibling answer two.",
+              },
+            ],
+          },
+        ],
+        instruction: "root focus",
+      });
+      expect(seenExpansionInputs[1]).toMatchObject({
+        topic: "Expansion ancestry topic",
+        ancestryChain: [
+          {
+            selectedCard: {
+              question: "Selected root?",
+              answer: "Root answer.",
+            },
+            siblingCards: [
+              {
+                question: "Sibling one?",
+                answer: "Sibling answer one.",
+              },
+              {
+                question: "Sibling two?",
+                answer: "Sibling answer two.",
+              },
+            ],
+          },
+          {
+            selectedCard: {
+              question: "Expansion of: Selected root?",
+              answer: "Root answer.",
+            },
+            siblingCards: [],
+            instruction: "root focus",
+          },
+        ],
+        instruction: "child focus",
+      });
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("requires confirmation and cascades descendant derivation deletion when regenerating expansions", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime();
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-expansion-cascade.pdf"),
+      );
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk text",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["Expansion cascade topic"] },
+      ]);
+
+      const topic = await getTopicBySequenceOrderAndIndex(repository, created.session.id, 0, 0);
+      if (!topic) throw new Error("Expected topic.");
+
+      await Effect.runPromise(
+        repository.replaceCardsForTopic({
+          topicId: topic.topicId,
+          cards: [{ question: "Cascade root?", answer: "Cascade answer." }],
+        }),
+      );
+
+      const topicCards = await getCardsForTopicBySequenceOrderAndIndex(
+        repository,
+        created.session.id,
+        0,
+        0,
+      );
+      const sourceCardId = topicCards?.cards[0]?.id;
+      if (!sourceCardId) throw new Error("Expected root source card.");
+
+      const rootExpansion = unwrapDerivedCardsResult(
+        await Effect.runPromise(
+          handlers.ForgeGenerateDerivedCards({
+            parent: { cardId: sourceCardId },
+            kind: "expansion",
+          }),
+        ),
+      );
+      const rootExpansionId = rootExpansion.derivations[0]?.id;
+      if (!rootExpansionId) throw new Error("Expected root expansion derivation id.");
+
+      const permutationFromExpansion = unwrapDerivedCardsResult(
+        await Effect.runPromise(
+          handlers.ForgeGenerateDerivedCards({
+            parent: { derivationId: rootExpansionId },
+            kind: "permutation",
+          }),
+        ),
+      );
+      const nestedExpansion = unwrapDerivedCardsResult(
+        await Effect.runPromise(
+          handlers.ForgeGenerateDerivedCards({
+            parent: { derivationId: rootExpansionId },
+            kind: "expansion",
+          }),
+        ),
+      );
+
+      expect(permutationFromExpansion.derivations).toHaveLength(1);
+      expect(nestedExpansion.derivations).toHaveLength(1);
+
+      const confirmation = await Effect.runPromise(
+        handlers.ForgeGenerateDerivedCards({
+          parent: { cardId: sourceCardId },
+          kind: "expansion",
+        }),
+      );
+      expect("confirmRequired" in confirmation).toBe(true);
+      if (!("confirmRequired" in confirmation)) {
+        throw new Error("Expected confirmation result.");
+      }
+      expect(confirmation.descendantCount).toBe(3);
+
+      const regenerated = unwrapDerivedCardsResult(
+        await Effect.runPromise(
+          handlers.ForgeGenerateDerivedCards({
+            parent: { cardId: sourceCardId },
+            kind: "expansion",
+            confirmed: true,
+          }),
+        ),
+      );
+
+      expect(regenerated.derivations).toHaveLength(1);
+      expect(regenerated.derivations[0]?.id).not.toBe(rootExpansionId);
+
+      const remainingPermutations = await Effect.runPromise(
+        handlers.ForgeGetDerivedCards({
+          parent: { derivationId: rootExpansionId },
+          kind: "permutation",
+        }),
+      );
+      const remainingExpansions = await Effect.runPromise(
+        handlers.ForgeGetDerivedCards({
+          parent: { derivationId: rootExpansionId },
+          kind: "expansion",
+        }),
+      );
+
+      expect(remainingPermutations.derivations).toEqual([]);
+      expect(remainingExpansions.derivations).toEqual([]);
     } finally {
       await dispose();
     }
@@ -1343,7 +1690,7 @@ describe("forge handlers", () => {
     }
   });
 
-  it("increments permutation addedCount when adding with permutationId", async () => {
+  it("increments derivation addedCount when adding with derivationId", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-permutation-added-count-"));
     const deckPath = path.join(rootPath, "deck.md");
     const sourceFilePath = "/tmp/forge-permutation-added-count.pdf";
@@ -1385,33 +1732,41 @@ describe("forge handlers", () => {
       const sourceCardId = generated.cards[0]?.id;
       if (!sourceCardId) throw new Error("Expected source card id.");
 
-      const permutations = await Effect.runPromise(
-        handlers.ForgeGenerateCardPermutations({ sourceCardId }),
+      const permutations = unwrapDerivedCardsResult(
+        await Effect.runPromise(
+          handlers.ForgeGenerateDerivedCards({
+            parent: { cardId: sourceCardId },
+            kind: "permutation",
+          }),
+        ),
       );
-      const permutationId = permutations.permutations[0]?.id;
-      if (!permutationId) throw new Error("Expected permutation id.");
-      expect(permutations.permutations[0]?.addedCount).toBe(0);
+      const derivationId = permutations.derivations[0]?.id;
+      if (!derivationId) throw new Error("Expected derivation id.");
+      expect(permutations.derivations[0]?.addedCount).toBe(0);
 
       await Effect.runPromise(
         handlers.ForgeAddCardToDeck({
           deckPath,
           content: "What molecule is the energy currency of the cell?\n---\nATP\n",
           cardType: "qa",
-          permutationId,
+          derivationId,
         }),
       );
 
       const permutationsAfterAdd = await Effect.runPromise(
-        handlers.ForgeGetCardPermutations({ sourceCardId }),
+        handlers.ForgeGetDerivedCards({
+          parent: { cardId: sourceCardId },
+          kind: "permutation",
+        }),
       );
-      expect(permutationsAfterAdd.permutations[0]?.addedCount).toBe(1);
+      expect(permutationsAfterAdd.derivations[0]?.addedCount).toBe(1);
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
       await dispose();
     }
   });
 
-  it("fails when both sourceCardId and permutationId are provided", async () => {
+  it("fails when both sourceCardId and derivationId are provided", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-add-card-conflict-"));
     const deckPath = path.join(rootPath, "deck.md");
     const { handlers, dispose } = await setupHandlers();
@@ -1426,7 +1781,7 @@ describe("forge handlers", () => {
           content: "What is ATP?\n---\nCellular energy currency.\n",
           cardType: "qa",
           sourceCardId: 1,
-          permutationId: 2,
+          derivationId: 2,
         }),
       );
 
@@ -1435,9 +1790,9 @@ describe("forge handlers", () => {
         const failure = Cause.failureOption(exit.cause);
         expect(failure._tag).toBe("Some");
         if (failure._tag === "Some") {
-          expect(failure.value._tag).toBe("forge_operation_error");
-          expect(failure.value.message).toContain(
-            "Provide either sourceCardId or permutationId, not both.",
+          expect((failure.value as { readonly _tag: string })._tag).toBe("forge_operation_error");
+          expect((failure.value as { readonly message: string }).message).toContain(
+            "Provide either sourceCardId or derivationId, not both.",
           );
         }
       }
@@ -1547,8 +1902,8 @@ describe("forge handlers", () => {
       if (!sourceCardId) throw new Error("Expected source card id.");
 
       await Effect.runPromise(
-        repository.upsertClozeForCard({
-          sourceCardId,
+        repository.upsertClozeForSource({
+          source: { cardId: sourceCardId },
           clozeText: "{{c1::ATP}} is produced in {{c2::mitochondria}}.",
         }),
       );
@@ -1562,8 +1917,96 @@ describe("forge handlers", () => {
         }),
       );
 
-      const cloze = await Effect.runPromise(repository.getClozeForCard(sourceCardId));
+      const cloze = await Effect.runPromise(repository.getClozeForSource({ cardId: sourceCardId }));
       expect(cloze?.addedCount).toBe(2);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await dispose();
+    }
+  });
+
+  it("increments cloze addedCount when adding cloze with derivationId", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-forge-cloze-derivation-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const sourceFilePath = "/tmp/forge-cloze-derivation.pdf";
+    const { handlers, repository, dispose } = await setupHandlers();
+
+    try {
+      await fs.writeFile(deckPath, "", "utf8");
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const session = await Effect.runPromise(
+        repository.createSession({
+          sourceKind: "pdf",
+          sourceLabel: "Test PDF",
+          sourceFilePath,
+          deckPath: null,
+          sourceFingerprint: "fp:forge-cloze-derivation",
+        }),
+      );
+      await Effect.runPromise(
+        repository.saveChunks(session.id, [
+          {
+            text: "chunk-0",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await seedDetailTopics(repository, session.id, [{ sequenceOrder: 0, topics: ["topic-a"] }]);
+
+      const topic = await getTopicBySequenceOrderAndIndex(repository, session.id, 0, 0);
+      if (!topic) throw new Error("Expected topic.");
+
+      await Effect.runPromise(
+        repository.replaceCardsForTopic({
+          topicId: topic.topicId,
+          cards: [{ question: "What is ATP?", answer: "Cellular energy." }],
+        }),
+      );
+
+      const detail = await getCardsForTopicBySequenceOrderAndIndex(repository, session.id, 0, 0);
+      const sourceCardId = detail?.cards[0]?.id;
+      if (!sourceCardId) throw new Error("Expected source card id.");
+
+      await Effect.runPromise(
+        repository.replaceDerivedCards({
+          parent: { cardId: sourceCardId },
+          kind: "expansion",
+          rootCardId: sourceCardId,
+          instruction: null,
+          cards: [{ question: "How is ATP made?", answer: "Via oxidative phosphorylation." }],
+        }),
+      );
+
+      const derivations = await Effect.runPromise(
+        repository.getDerivedCards({ parent: { cardId: sourceCardId }, kind: "expansion" }),
+      );
+      const derivationId = derivations[0]?.id;
+      if (!derivationId) throw new Error("Expected derivation id.");
+
+      await Effect.runPromise(
+        repository.upsertClozeForSource({
+          source: { derivationId },
+          clozeText: "{{c1::ATP}} is made via {{c2::oxidative phosphorylation}}.",
+        }),
+      );
+
+      await Effect.runPromise(
+        handlers.ForgeAddCardToDeck({
+          deckPath,
+          content: "{{c1::ATP}} is made via {{c2::oxidative phosphorylation}}.",
+          cardType: "cloze",
+          derivationId,
+        }),
+      );
+
+      const cloze = await Effect.runPromise(repository.getClozeForSource({ derivationId }));
+      expect(cloze?.addedCount).toBe(2);
+
+      const parsed = await Effect.runPromise(parseFile(await fs.readFile(deckPath, "utf8")));
+      expect(parsed.items).toHaveLength(1);
+      expect(parsed.items[0]!.content).toContain("{{c2::oxidative phosphorylation}}");
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
       await dispose();
@@ -2098,16 +2541,19 @@ describe("forge handlers", () => {
         throw new Error("Expected synthesis source card.");
       }
 
-      const permutations = await Effect.runPromise(
-        handlers.ForgeGenerateCardPermutations({
-          sourceCardId,
-        }),
+      const permutations = unwrapDerivedCardsResult(
+        await Effect.runPromise(
+          handlers.ForgeGenerateDerivedCards({
+            parent: { cardId: sourceCardId },
+            kind: "permutation",
+          }),
+        ),
       );
-      expect(permutations.permutations).toHaveLength(1);
+      expect(permutations.derivations).toHaveLength(1);
 
       const cloze = await Effect.runPromise(
         handlers.ForgeGenerateCardCloze({
-          sourceCardId,
+          source: { cardId: sourceCardId },
         }),
       );
       expect(cloze.cloze).toContain("{{c1::");

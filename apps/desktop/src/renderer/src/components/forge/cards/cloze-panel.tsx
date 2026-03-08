@@ -9,49 +9,64 @@ import {
 } from "@/hooks/mutations/use-forge-cards-mutations";
 import { useForgeCardClozeQuery } from "@/hooks/queries/use-forge-card-cloze-query";
 import { queryKeys } from "@/lib/query-keys";
-import type {
-  ForgeGenerateCardClozeInput,
-  ForgeGetCardClozeResult,
+import {
+  sameDerivationParentRef,
+  toDerivationParentRefKey,
+  type DerivationParentRef,
+  type ForgeGenerateCardClozeInput,
+  type ForgeGetCardClozeResult,
 } from "@shared/rpc/schemas/forge";
 import { Button } from "@/components/ui/button";
 import { useForgeTargetDeckPath } from "../forge-page-context";
 
 type ClozePanelProps = {
-  readonly sourceCardId: number;
+  readonly source: DerivationParentRef;
   readonly sourceQuestion: string;
   readonly sourceAnswer: string;
 };
 
-export function ClozePanel({ sourceCardId, sourceQuestion, sourceAnswer }: ClozePanelProps) {
-  const clozeQuery = useForgeCardClozeQuery(sourceCardId);
+export function ClozePanel({ source, sourceQuestion, sourceAnswer }: ClozePanelProps) {
+  const clozeQuery = useForgeCardClozeQuery(source);
   const { mutate: regenerateCloze, isPending } = useForgeGenerateClozeMutation();
   const { mutate: addCardToDeck } = useForgeAddCardToDeckMutation();
   const queryClient = useQueryClient();
   const targetDeckPath = useForgeTargetDeckPath();
-  const inFlightForSourceCardCount = useIsMutating({
+  const stableSourceKey = toDerivationParentRefKey(source);
+  const inFlightForSourceCount = useIsMutating({
     mutationKey: forgeCardsMutationKeys.generateCloze,
     predicate: (mutation) => {
       const variables = mutation.state.variables as ForgeGenerateCardClozeInput | undefined;
-      return variables?.sourceCardId === sourceCardId;
+      if (!variables) return false;
+      return sameDerivationParentRef(variables.source, source);
     },
   });
   const [addingCloze, setAddingCloze] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
-  const autoRegeneratedCardIdRef = useRef<number | null>(null);
+  const [generationErrorMessage, setGenerationErrorMessage] = useState<string | null>(null);
+  const autoRegeneratedSourceKeyRef = useRef<string | null>(null);
 
-  const hasInFlightGeneration = inFlightForSourceCardCount > 0;
+  const hasInFlightGeneration = inFlightForSourceCount > 0;
   const loading = isPending || hasInFlightGeneration || clozeQuery.isLoading;
   const clozeText = clozeQuery.data?.cloze ?? null;
   const addedCount = clozeQuery.data?.addedCount ?? 0;
   const hasBeenAdded = addedCount > 0;
+  const errorMessage = generationErrorMessage ?? clozeQuery.error?.message ?? null;
 
   const handleRegenerate = useCallback(() => {
-    regenerateCloze({
-      sourceCardId,
-      sourceQuestion,
-      sourceAnswer,
-    });
-  }, [regenerateCloze, sourceAnswer, sourceCardId, sourceQuestion]);
+    setGenerationErrorMessage(null);
+    regenerateCloze(
+      {
+        source,
+        sourceQuestion,
+        sourceAnswer,
+      },
+      {
+        onError: (error) => {
+          setGenerationErrorMessage(error.message);
+        },
+      },
+    );
+  }, [regenerateCloze, source, sourceAnswer, sourceQuestion]);
 
   const handleAddCloze = useCallback(() => {
     if (!targetDeckPath || !clozeText || addingCloze) return;
@@ -63,12 +78,14 @@ export function ClozePanel({ sourceCardId, sourceQuestion, sourceAnswer }: Cloze
         deckPath: targetDeckPath,
         content: clozeText,
         cardType: "cloze",
-        sourceCardId,
+        ...("cardId" in source
+          ? { sourceCardId: source.cardId }
+          : { derivationId: source.derivationId }),
       },
       {
         onSuccess: (result) => {
           queryClient.setQueryData<ForgeGetCardClozeResult>(
-            queryKeys.forgeCardCloze(sourceCardId),
+            queryKeys.forgeCardCloze(source),
             (previous) => {
               if (!previous) return previous;
               return {
@@ -82,20 +99,22 @@ export function ClozePanel({ sourceCardId, sourceQuestion, sourceAnswer }: Cloze
         onSettled: () => setAddingCloze(false),
       },
     );
-  }, [addCardToDeck, addingCloze, clozeText, queryClient, sourceCardId, targetDeckPath]);
+  }, [addCardToDeck, addingCloze, clozeText, queryClient, source, targetDeckPath]);
 
   useEffect(() => {
-    autoRegeneratedCardIdRef.current = null;
-  }, [sourceCardId]);
+    autoRegeneratedSourceKeyRef.current = null;
+    setGenerationErrorMessage(null);
+  }, [stableSourceKey]);
 
   useEffect(() => {
     if (!clozeQuery.isSuccess) return;
     if (clozeQuery.isFetching) return;
     if (clozeText !== null) return;
     if (hasInFlightGeneration) return;
-    if (autoRegeneratedCardIdRef.current === sourceCardId) return;
 
-    autoRegeneratedCardIdRef.current = sourceCardId;
+    if (autoRegeneratedSourceKeyRef.current === stableSourceKey) return;
+
+    autoRegeneratedSourceKeyRef.current = stableSourceKey;
     handleRegenerate();
   }, [
     clozeQuery.isFetching,
@@ -103,7 +122,7 @@ export function ClozePanel({ sourceCardId, sourceQuestion, sourceAnswer }: Cloze
     clozeText,
     handleRegenerate,
     hasInFlightGeneration,
-    sourceCardId,
+    stableSourceKey,
   ]);
 
   return (
@@ -126,9 +145,7 @@ export function ClozePanel({ sourceCardId, sourceQuestion, sourceAnswer }: Cloze
             </button>
           </div>
 
-          {clozeQuery.error ? (
-            <p className="text-[11px] text-destructive">{clozeQuery.error.message}</p>
-          ) : null}
+          {errorMessage ? <p className="text-[11px] text-destructive">{errorMessage}</p> : null}
 
           {addError ? <p className="text-[11px] text-destructive">{addError}</p> : null}
 

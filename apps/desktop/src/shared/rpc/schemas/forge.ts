@@ -287,60 +287,91 @@ export const ForgeGenerateSelectedTopicCardsResultSchema = Schema.Struct({
 export type ForgeGenerateSelectedTopicCardsResult =
   typeof ForgeGenerateSelectedTopicCardsResultSchema.Type;
 
-export const ForgePermutationSchema = Schema.Struct({
+export const DerivationKindSchema = Schema.Literal("permutation", "expansion");
+export type DerivationKind = typeof DerivationKindSchema.Type;
+
+export const DerivationParentRefSchema = Schema.Union(
+  Schema.Struct({ cardId: PositiveIntSchema }),
+  Schema.Struct({ derivationId: PositiveIntSchema }),
+);
+export type DerivationParentRef = typeof DerivationParentRefSchema.Type;
+
+export const isCardParentRef = (ref: DerivationParentRef): ref is { readonly cardId: number } =>
+  "cardId" in ref;
+
+export const sameDerivationParentRef = (
+  left: DerivationParentRef,
+  right: DerivationParentRef,
+): boolean =>
+  ("cardId" in left && "cardId" in right && left.cardId === right.cardId) ||
+  ("derivationId" in left && "derivationId" in right && left.derivationId === right.derivationId);
+
+export const toDerivationParentRefKey = (ref: DerivationParentRef): string =>
+  "cardId" in ref ? `card:${ref.cardId}` : `derivation:${ref.derivationId}`;
+
+export const ForgeDerivationSchema = Schema.Struct({
   id: PositiveIntSchema,
+  rootCardId: PositiveIntSchema,
+  parentDerivationId: Schema.Union(PositiveIntSchema, Schema.Null),
+  kind: DerivationKindSchema,
+  derivationOrder: NonNegativeIntSchema,
   question: Schema.String,
   answer: Schema.String,
+  instruction: Schema.Union(Schema.String, Schema.Null),
   addedCount: NonNegativeIntSchema,
 });
-export type ForgePermutation = typeof ForgePermutationSchema.Type;
+export type ForgeDerivation = typeof ForgeDerivationSchema.Type;
 
-export const ForgeGetCardPermutationsInputSchema = Schema.Struct({
-  sourceCardId: PositiveIntSchema,
+export const ForgeGetDerivedCardsInputSchema = Schema.Struct({
+  parent: DerivationParentRefSchema,
+  kind: DerivationKindSchema,
 });
-export type ForgeGetCardPermutationsInput = typeof ForgeGetCardPermutationsInputSchema.Type;
+export type ForgeGetDerivedCardsInput = typeof ForgeGetDerivedCardsInputSchema.Type;
 
-export const ForgeGetCardPermutationsResultSchema = Schema.Struct({
-  sourceCardId: PositiveIntSchema,
-  permutations: Schema.Array(ForgePermutationSchema),
+export const ForgeGetDerivedCardsResultSchema = Schema.Struct({
+  derivations: Schema.Array(ForgeDerivationSchema),
 });
-export type ForgeGetCardPermutationsResult = typeof ForgeGetCardPermutationsResultSchema.Type;
+export type ForgeGetDerivedCardsResult = typeof ForgeGetDerivedCardsResultSchema.Type;
 
-export const ForgeGenerateCardPermutationsInputSchema = Schema.Struct({
-  sourceCardId: PositiveIntSchema,
-  sourceQuestion: Schema.optional(Schema.String),
-  sourceAnswer: Schema.optional(Schema.String),
+export const ForgeGenerateDerivedCardsInputSchema = Schema.Struct({
+  parent: DerivationParentRefSchema,
+  kind: DerivationKindSchema,
   instruction: Schema.optional(Schema.String),
   model: Schema.optional(ModelIdSchema),
+  confirmed: Schema.optional(Schema.Boolean),
 });
-export type ForgeGenerateCardPermutationsInput =
-  typeof ForgeGenerateCardPermutationsInputSchema.Type;
+export type ForgeGenerateDerivedCardsInput = typeof ForgeGenerateDerivedCardsInputSchema.Type;
 
-export const ForgeGenerateCardPermutationsResultSchema = ForgeGetCardPermutationsResultSchema;
-export type ForgeGenerateCardPermutationsResult =
-  typeof ForgeGenerateCardPermutationsResultSchema.Type;
+export const ForgeGenerateDerivedCardsResultSchema = Schema.Union(
+  ForgeGetDerivedCardsResultSchema,
+  Schema.Struct({
+    confirmRequired: Schema.Literal(true),
+    descendantCount: NonNegativeIntSchema,
+  }),
+);
+export type ForgeGenerateDerivedCardsResult = typeof ForgeGenerateDerivedCardsResultSchema.Type;
 
 export const ForgeCardClozeSchema = Schema.Struct({
-  sourceCardId: PositiveIntSchema,
+  source: DerivationParentRefSchema,
   cloze: Schema.String,
   addedCount: NonNegativeIntSchema,
 });
 export type ForgeCardCloze = typeof ForgeCardClozeSchema.Type;
 
 export const ForgeGetCardClozeInputSchema = Schema.Struct({
-  sourceCardId: PositiveIntSchema,
+  source: DerivationParentRefSchema,
 });
 export type ForgeGetCardClozeInput = typeof ForgeGetCardClozeInputSchema.Type;
 
 export const ForgeGetCardClozeResultSchema = Schema.Struct({
-  sourceCardId: PositiveIntSchema,
+  source: DerivationParentRefSchema,
   cloze: Schema.Union(Schema.String, Schema.Null),
   addedCount: NonNegativeIntSchema,
 });
 export type ForgeGetCardClozeResult = typeof ForgeGetCardClozeResultSchema.Type;
 
 export const ForgeGenerateCardClozeInputSchema = Schema.Struct({
-  sourceCardId: PositiveIntSchema,
+  source: DerivationParentRefSchema,
   sourceQuestion: Schema.optional(Schema.String),
   sourceAnswer: Schema.optional(Schema.String),
   instruction: Schema.optional(Schema.String),
@@ -498,10 +529,10 @@ export class ForgeCardNotFoundError extends Schema.TaggedError<ForgeCardNotFound
   sourceCardId: PositiveIntSchema,
 }) {}
 
-export class ForgePermutationNotFoundError extends Schema.TaggedError<ForgePermutationNotFoundError>(
-  "@re/desktop/rpc/ForgePermutationNotFoundError",
-)("permutation_not_found", {
-  permutationId: PositiveIntSchema,
+export class ForgeDerivationNotFoundError extends Schema.TaggedError<ForgeDerivationNotFoundError>(
+  "@re/desktop/rpc/ForgeDerivationNotFoundError",
+)("derivation_not_found", {
+  derivationId: PositiveIntSchema,
 }) {}
 
 export class ForgeCardGenerationError extends Schema.TaggedError<ForgeCardGenerationError>(
@@ -519,17 +550,25 @@ export class ForgeTopicAlreadyGeneratingError extends Schema.TaggedError<ForgeTo
   topicId: PositiveIntSchema,
 }) {}
 
-export class ForgePermutationGenerationError extends Schema.TaggedError<ForgePermutationGenerationError>(
-  "@re/desktop/rpc/ForgePermutationGenerationError",
-)("permutation_generation_error", {
-  sourceCardId: PositiveIntSchema,
+export class ForgeDerivationAlreadyGeneratingError extends Schema.TaggedError<ForgeDerivationAlreadyGeneratingError>(
+  "@re/desktop/rpc/ForgeDerivationAlreadyGeneratingError",
+)("derivation_already_generating", {
+  parent: DerivationParentRefSchema,
+  kind: DerivationKindSchema,
+}) {}
+
+export class ForgeDerivationGenerationError extends Schema.TaggedError<ForgeDerivationGenerationError>(
+  "@re/desktop/rpc/ForgeDerivationGenerationError",
+)("derivation_generation_error", {
+  parent: DerivationParentRefSchema,
+  kind: DerivationKindSchema,
   message: Schema.String,
 }) {}
 
 export class ForgeClozeGenerationError extends Schema.TaggedError<ForgeClozeGenerationError>(
   "@re/desktop/rpc/ForgeClozeGenerationError",
 )("cloze_generation_error", {
-  sourceCardId: PositiveIntSchema,
+  source: DerivationParentRefSchema,
   message: Schema.String,
 }) {}
 
@@ -635,24 +674,25 @@ export const ForgeGenerateSelectedTopicCardsErrorSchema = Schema.Union(
 export type ForgeGenerateSelectedTopicCardsError =
   typeof ForgeGenerateSelectedTopicCardsErrorSchema.Type;
 
-export const ForgeGetCardPermutationsErrorSchema = Schema.Union(
-  ForgeCardNotFoundError,
+export const ForgeGetDerivedCardsErrorSchema = Schema.Union(
   ForgeSessionOperationError,
   ForgeOperationError,
 );
-export type ForgeGetCardPermutationsError = typeof ForgeGetCardPermutationsErrorSchema.Type;
+export type ForgeGetDerivedCardsError = typeof ForgeGetDerivedCardsErrorSchema.Type;
 
-export const ForgeGenerateCardPermutationsErrorSchema = Schema.Union(
+export const ForgeGenerateDerivedCardsErrorSchema = Schema.Union(
   ForgeCardNotFoundError,
-  ForgePermutationGenerationError,
+  ForgeDerivationNotFoundError,
+  ForgeDerivationAlreadyGeneratingError,
+  ForgeDerivationGenerationError,
   ForgeSessionOperationError,
   ForgeOperationError,
 );
-export type ForgeGenerateCardPermutationsError =
-  typeof ForgeGenerateCardPermutationsErrorSchema.Type;
+export type ForgeGenerateDerivedCardsError = typeof ForgeGenerateDerivedCardsErrorSchema.Type;
 
 export const ForgeGetCardClozeErrorSchema = Schema.Union(
   ForgeCardNotFoundError,
+  ForgeDerivationNotFoundError,
   ForgeSessionOperationError,
   ForgeOperationError,
 );
@@ -660,6 +700,7 @@ export type ForgeGetCardClozeError = typeof ForgeGetCardClozeErrorSchema.Type;
 
 export const ForgeGenerateCardClozeErrorSchema = Schema.Union(
   ForgeCardNotFoundError,
+  ForgeDerivationNotFoundError,
   ForgeClozeGenerationError,
   ForgeSessionOperationError,
   ForgeOperationError,
@@ -687,30 +728,30 @@ export const ForgeSetSessionDeckPathErrorSchema = Schema.Union(
 );
 export type ForgeSetSessionDeckPathError = typeof ForgeSetSessionDeckPathErrorSchema.Type;
 
-export const ForgeUpdatePermutationInputSchema = Schema.Struct({
-  permutationId: PositiveIntSchema,
+export const ForgeUpdateDerivationInputSchema = Schema.Struct({
+  derivationId: PositiveIntSchema,
   question: Schema.String,
   answer: Schema.String,
 });
-export type ForgeUpdatePermutationInput = typeof ForgeUpdatePermutationInputSchema.Type;
+export type ForgeUpdateDerivationInput = typeof ForgeUpdateDerivationInputSchema.Type;
 
-export const ForgeUpdatePermutationResultSchema = Schema.Struct({
-  permutation: ForgePermutationSchema,
+export const ForgeUpdateDerivationResultSchema = Schema.Struct({
+  derivation: ForgeDerivationSchema,
 });
-export type ForgeUpdatePermutationResult = typeof ForgeUpdatePermutationResultSchema.Type;
+export type ForgeUpdateDerivationResult = typeof ForgeUpdateDerivationResultSchema.Type;
 
-export const ForgeUpdatePermutationErrorSchema = Schema.Union(
-  ForgePermutationNotFoundError,
+export const ForgeUpdateDerivationErrorSchema = Schema.Union(
+  ForgeDerivationNotFoundError,
   ForgeOperationError,
 );
-export type ForgeUpdatePermutationError = typeof ForgeUpdatePermutationErrorSchema.Type;
+export type ForgeUpdateDerivationError = typeof ForgeUpdateDerivationErrorSchema.Type;
 
 export const ForgeAddCardToDeckInputSchema = Schema.Struct({
   deckPath: Schema.String.pipe(Schema.nonEmptyString()),
   content: Schema.String.pipe(Schema.nonEmptyString()),
   cardType: Schema.Literal("qa", "cloze"),
   sourceCardId: Schema.optional(PositiveIntSchema),
-  permutationId: Schema.optional(PositiveIntSchema),
+  derivationId: Schema.optional(PositiveIntSchema),
 });
 export type ForgeAddCardToDeckInput = typeof ForgeAddCardToDeckInputSchema.Type;
 
@@ -721,3 +762,70 @@ export type ForgeAddCardToDeckResult = typeof ForgeAddCardToDeckResultSchema.Typ
 
 export const ForgeAddCardToDeckErrorSchema = ForgeOperationError;
 export type ForgeAddCardToDeckError = typeof ForgeAddCardToDeckErrorSchema.Type;
+
+export const toForgeGetDerivedCardsErrorMessage = (error: ForgeGetDerivedCardsError): string => {
+  switch (error._tag) {
+    case "session_operation_error":
+    case "forge_operation_error":
+      return error.message;
+  }
+};
+
+export const mapForgeGetDerivedCardsErrorToError = (
+  error: ForgeGetDerivedCardsError | Error,
+): Error => ("_tag" in error ? new Error(toForgeGetDerivedCardsErrorMessage(error)) : error);
+
+export const toForgeGenerateDerivedCardsErrorMessage = (
+  error: ForgeGenerateDerivedCardsError,
+): string => {
+  switch (error._tag) {
+    case "card_not_found":
+      return `Card not found: ${error.sourceCardId}`;
+    case "derivation_not_found":
+      return `Derivation not found: ${error.derivationId}`;
+    case "derivation_already_generating":
+      return "Derived cards are already generating.";
+    case "derivation_generation_error":
+    case "session_operation_error":
+    case "forge_operation_error":
+      return error.message;
+  }
+};
+
+export const mapForgeGenerateDerivedCardsErrorToError = (
+  error: ForgeGenerateDerivedCardsError | Error,
+): Error => ("_tag" in error ? new Error(toForgeGenerateDerivedCardsErrorMessage(error)) : error);
+
+export const toForgeGetCardClozeErrorMessage = (error: ForgeGetCardClozeError): string => {
+  switch (error._tag) {
+    case "card_not_found":
+      return `Card not found: ${error.sourceCardId}`;
+    case "derivation_not_found":
+      return `Derivation not found: ${error.derivationId}`;
+    case "session_operation_error":
+    case "forge_operation_error":
+      return error.message;
+  }
+};
+
+export const mapForgeGetCardClozeErrorToError = (error: ForgeGetCardClozeError | Error): Error =>
+  "_tag" in error ? new Error(toForgeGetCardClozeErrorMessage(error)) : error;
+
+export const toForgeGenerateCardClozeErrorMessage = (
+  error: ForgeGenerateCardClozeError,
+): string => {
+  switch (error._tag) {
+    case "card_not_found":
+      return `Card not found: ${error.sourceCardId}`;
+    case "derivation_not_found":
+      return `Derivation not found: ${error.derivationId}`;
+    case "cloze_generation_error":
+    case "session_operation_error":
+    case "forge_operation_error":
+      return error.message;
+  }
+};
+
+export const mapForgeGenerateCardClozeErrorToError = (
+  error: ForgeGenerateCardClozeError | Error,
+): Error => ("_tag" in error ? new Error(toForgeGenerateCardClozeErrorMessage(error)) : error);

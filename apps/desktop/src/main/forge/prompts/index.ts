@@ -45,6 +45,13 @@ export {
   type CreateSynthesisCardsPromptOutput,
 } from "./create-synthesis-cards";
 export {
+  GenerateExpansionsPromptInputSchema,
+  GenerateExpansionsPromptOutputSchema,
+  GenerateExpansionsPromptSpec,
+  type GenerateExpansionsPromptInput,
+  type GenerateExpansionsPromptOutput,
+} from "./generate-expansions";
+export {
   GeneratePermutationsPromptInputSchema,
   GeneratePermutationsPromptOutputSchema,
   GeneratePermutationsPromptSpec,

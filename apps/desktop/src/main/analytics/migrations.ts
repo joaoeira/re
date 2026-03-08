@@ -1014,6 +1014,158 @@ const REVIEW_HISTORY_MIGRATIONS = {
       )
     `;
   }),
+  "0014_create_forge_card_derivations": Effect.gen(function* () {
+    const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+    yield* sql`DROP TABLE IF EXISTS temp.forge_card_cloze_backup_v3`;
+
+    yield* sql`
+      CREATE TABLE forge_card_derivations (
+        id INTEGER PRIMARY KEY,
+        root_card_id INTEGER NOT NULL REFERENCES forge_cards(id) ON DELETE CASCADE,
+        parent_derivation_id INTEGER REFERENCES forge_card_derivations(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('permutation', 'expansion')),
+        derivation_order INTEGER NOT NULL CHECK (derivation_order >= 0),
+        question TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        instruction TEXT,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        added_count INTEGER NOT NULL DEFAULT 0
+      )
+    `;
+
+    yield* sql`
+      CREATE UNIQUE INDEX uq_derivation_from_card
+      ON forge_card_derivations (root_card_id, kind, derivation_order)
+      WHERE parent_derivation_id IS NULL
+    `;
+
+    yield* sql`
+      CREATE UNIQUE INDEX uq_derivation_from_derivation
+      ON forge_card_derivations (parent_derivation_id, kind, derivation_order)
+      WHERE parent_derivation_id IS NOT NULL
+    `;
+
+    yield* sql`
+      CREATE INDEX forge_card_derivations_root_card_idx
+      ON forge_card_derivations (root_card_id)
+    `;
+
+    yield* sql`
+      CREATE INDEX forge_card_derivations_parent_idx
+      ON forge_card_derivations (parent_derivation_id)
+      WHERE parent_derivation_id IS NOT NULL
+    `;
+
+    yield* sql`
+      INSERT INTO forge_card_derivations (
+        id,
+        root_card_id,
+        parent_derivation_id,
+        kind,
+        derivation_order,
+        question,
+        answer,
+        instruction,
+        created_at,
+        added_count
+      )
+      SELECT
+        id,
+        source_card_id,
+        NULL,
+        'permutation',
+        permutation_order,
+        question,
+        answer,
+        NULL,
+        created_at,
+        added_count
+      FROM forge_card_permutations
+      ORDER BY id ASC
+    `;
+
+    yield* sql`DROP TABLE forge_card_permutations`;
+
+    yield* sql`
+      CREATE TEMP TABLE forge_card_cloze_backup_v3 AS
+      SELECT
+        id,
+        source_card_id,
+        cloze_text,
+        created_at,
+        updated_at,
+        added_count
+      FROM forge_card_cloze
+    `;
+
+    yield* sql`DROP TABLE forge_card_cloze`;
+
+    yield* sql`
+      CREATE TABLE forge_card_cloze (
+        id INTEGER PRIMARY KEY,
+        source_card_id INTEGER REFERENCES forge_cards(id) ON DELETE CASCADE,
+        source_derivation_id INTEGER REFERENCES forge_card_derivations(id) ON DELETE CASCADE,
+        cloze_text TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        added_count INTEGER NOT NULL DEFAULT 0,
+        CHECK (
+          (source_card_id IS NOT NULL AND source_derivation_id IS NULL)
+          OR (source_card_id IS NULL AND source_derivation_id IS NOT NULL)
+        )
+      )
+    `;
+
+    yield* sql`
+      CREATE UNIQUE INDEX uq_cloze_from_card
+      ON forge_card_cloze (source_card_id)
+      WHERE source_card_id IS NOT NULL
+    `;
+
+    yield* sql`
+      CREATE UNIQUE INDEX uq_cloze_from_derivation
+      ON forge_card_cloze (source_derivation_id)
+      WHERE source_derivation_id IS NOT NULL
+    `;
+
+    yield* sql`
+      INSERT INTO forge_card_cloze (
+        id,
+        source_card_id,
+        source_derivation_id,
+        cloze_text,
+        created_at,
+        updated_at,
+        added_count
+      )
+      SELECT
+        id,
+        source_card_id,
+        NULL,
+        cloze_text,
+        created_at,
+        updated_at,
+        added_count
+      FROM forge_card_cloze_backup_v3
+      ORDER BY id ASC
+    `;
+
+    const foreignKeyViolations = yield* sql<{
+      table: string;
+      rowid: number;
+      parent: string;
+      fkid: number;
+    }>`PRAGMA foreign_key_check`;
+    if (foreignKeyViolations.length > 0) {
+      return yield* Effect.fail(
+        toMigrationError(
+          `Migration 0014 detected foreign key violations: ${JSON.stringify(foreignKeyViolations)}`,
+        ),
+      );
+    }
+    yield* sql`DROP TABLE forge_card_cloze_backup_v3`;
+  }),
 } satisfies Record<string, Effect.Effect<void, unknown, SqlClient.SqlClient>>;
 
 const toMigrationError = (message: string): Migrator.MigrationError =>
