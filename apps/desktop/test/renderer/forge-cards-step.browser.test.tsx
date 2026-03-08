@@ -90,19 +90,6 @@ const TOPICS: ReadonlyArray<TopicDef> = [
 const topicKey = (topic: Pick<TopicDef, "chunkId" | "topicIndex">) =>
   `${topic.chunkId}:${topic.topicIndex}`;
 
-const groupTopicsByChunk = () => [
-  {
-    chunkId: 101,
-    sequenceOrder: 0,
-    topics: ["alpha", "beta"],
-  },
-  {
-    chunkId: 102,
-    sequenceOrder: 1,
-    topics: ["gamma", "delta"],
-  },
-];
-
 const createCardsInvoke = (options?: {
   readonly sessionId?: number;
   readonly initialByTopicKey?: Readonly<Record<string, InitialTopicState>>;
@@ -158,8 +145,11 @@ const createCardsInvoke = (options?: {
   const clozeByCardId = new Map<number, string>();
   const clozeAddedCountByCardId = new Map<number, number>();
 
-  const findTopicState = (input: { chunkId: number; topicIndex: number }) => {
-    return topicByKey.get(`${input.chunkId}:${input.topicIndex}`) ?? null;
+  const findTopicStateById = (topicId: number) => {
+    for (const state of topicByKey.values()) {
+      if (state.topic.topicId === topicId) return state;
+    }
+    return null;
   };
 
   const findTopicStateByCardId = (cardId: number) => {
@@ -171,8 +161,10 @@ const createCardsInvoke = (options?: {
 
   const toSummary = (state: TopicState) => ({
     topicId: state.topic.topicId,
+    sessionId,
+    family: "detail" as const,
     chunkId: state.topic.chunkId,
-    sequenceOrder: state.topic.sequenceOrder,
+    chunkSequenceOrder: state.topic.sequenceOrder,
     topicIndex: state.topic.topicIndex,
     topicText: state.topic.topicText,
     status: state.status,
@@ -182,6 +174,44 @@ const createCardsInvoke = (options?: {
     generationRevision: state.generationRevision,
     selected: true,
   });
+  const topicGroups = [
+    {
+      groupId: "chunk:101",
+      groupKind: "chunk" as const,
+      family: "detail" as const,
+      title: "Chunk 1",
+      displayOrder: 0,
+      chunkId: 101,
+      topics: TOPICS.filter((topic) => topic.chunkId === 101).map((topic) => ({
+        topicId: topic.topicId,
+        sessionId,
+        family: "detail" as const,
+        chunkId: topic.chunkId,
+        chunkSequenceOrder: topic.sequenceOrder,
+        topicIndex: topic.topicIndex,
+        topicText: topic.topicText,
+        selected: false,
+      })),
+    },
+    {
+      groupId: "chunk:102",
+      groupKind: "chunk" as const,
+      family: "detail" as const,
+      title: "Chunk 2",
+      displayOrder: 1,
+      chunkId: 102,
+      topics: TOPICS.filter((topic) => topic.chunkId === 102).map((topic) => ({
+        topicId: topic.topicId,
+        sessionId,
+        family: "detail" as const,
+        chunkId: topic.chunkId,
+        chunkSequenceOrder: topic.sequenceOrder,
+        topicIndex: topic.topicIndex,
+        topicText: topic.topicText,
+        selected: false,
+      })),
+    },
+  ] as const;
 
   const withSnapshotOverride = (
     summary: ReturnType<typeof toSummary>,
@@ -275,7 +305,8 @@ const createCardsInvoke = (options?: {
             totalPages: 4,
             chunkCount: 2,
           },
-          topicsByChunk: groupTopicsByChunk(),
+          outcomes: [{ family: "detail", status: "extracted", errorMessage: null }],
+          groups: topicGroups,
         },
       };
     }
@@ -284,8 +315,20 @@ const createCardsInvoke = (options?: {
       return {
         type: "success",
         data: {
-          session: null,
-          topicsByChunk: [],
+          session: {
+            id: sessionId,
+            sourceKind: "pdf",
+            sourceLabel: "source.pdf",
+            sourceFilePath: "/forge/source.pdf",
+            deckPath: null,
+            sourceFingerprint: "fp",
+            status: "topics_extracted",
+            errorMessage: null,
+            createdAt: "2026-02-27T00:00:00.000Z",
+            updatedAt: "2026-02-27T00:00:00.000Z",
+          },
+          outcomes: [{ family: "detail", status: "extracted", errorMessage: null }],
+          groups: topicGroups,
         },
       };
     }
@@ -309,16 +352,15 @@ const createCardsInvoke = (options?: {
     }
 
     if (method === "ForgeGetTopicCards") {
-      const input = payload as { chunkId: number; topicIndex: number };
-      const state = findTopicState(input);
+      const input = payload as { topicId: number };
+      const state = findTopicStateById(input.topicId);
       if (!state) {
         return {
           type: "failure",
           error: {
             _tag: "topic_not_found",
             sessionId,
-            chunkId: input.chunkId,
-            topicIndex: input.topicIndex,
+            topicId: input.topicId,
           },
         };
       }
@@ -338,16 +380,15 @@ const createCardsInvoke = (options?: {
     }
 
     if (method === "ForgeGenerateTopicCards") {
-      const input = payload as { chunkId: number; topicIndex: number };
-      const state = findTopicState(input);
+      const input = payload as { topicId: number };
+      const state = findTopicStateById(input.topicId);
       if (!state) {
         return {
           type: "failure",
           error: {
             _tag: "topic_not_found",
             sessionId,
-            chunkId: input.chunkId,
-            topicIndex: input.topicIndex,
+            topicId: input.topicId,
           },
         };
       }
@@ -923,15 +964,12 @@ describe("Forge cards step", () => {
 
     const generatedPayloads = invoke.mock.calls
       .filter(([method]: unknown[]) => method === "ForgeGenerateTopicCards")
-      .map(
-        ([, payload]: unknown[]) =>
-          payload as { sessionId: number; chunkId: number; topicIndex: number },
-      );
+      .map(([, payload]: unknown[]) => payload as { sessionId: number; topicId: number });
 
     expect(generatedPayloads).toEqual([
-      { sessionId: 77, chunkId: 101, topicIndex: 0 },
-      { sessionId: 77, chunkId: 101, topicIndex: 1 },
-      { sessionId: 77, chunkId: 102, topicIndex: 0 },
+      { sessionId: 77, topicId: 1001 },
+      { sessionId: 77, topicId: 1002 },
+      { sessionId: 77, topicId: 1003 },
     ]);
   });
 
@@ -1048,8 +1086,8 @@ describe("Forge cards step", () => {
       .poll(() => {
         return invoke.mock.calls.filter(([method, payload]: unknown[]) => {
           if (method !== "ForgeGenerateTopicCards") return false;
-          const input = payload as { chunkId: number; topicIndex: number };
-          return input.chunkId === 101 && input.topicIndex === 1;
+          const input = payload as { topicId: number };
+          return input.topicId === 1002;
         }).length;
       })
       .toBe(2);
@@ -1142,8 +1180,8 @@ describe("Forge cards step", () => {
       .poll(() => {
         return invoke.mock.calls.filter(([method, payload]: unknown[]) => {
           if (method !== "ForgeGenerateTopicCards") return false;
-          const input = payload as { chunkId: number; topicIndex: number };
-          return input.chunkId === 101 && input.topicIndex === 0;
+          const input = payload as { topicId: number };
+          return input.topicId === 1001;
         }).length;
       })
       .toBe(1);
@@ -1383,6 +1421,7 @@ describe("Forge cards step", () => {
       sourceAnswer: "editable source answer",
     });
 
+    await expect.element(screen.getByText("variations generated")).toBeVisible();
     const panelRegenerateButton = screen
       .getByText("variations generated")
       .element()
@@ -1473,6 +1512,7 @@ describe("Forge cards step", () => {
       sourceAnswer: "edited cloze answer",
     });
 
+    await expect.element(screen.getByText("Cloze conversion")).toBeVisible();
     const panelRegenerateButton = screen
       .getByText("Cloze conversion")
       .element()
