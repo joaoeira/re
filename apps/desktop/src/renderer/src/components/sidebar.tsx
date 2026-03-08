@@ -51,10 +51,11 @@ export function Sidebar() {
                   aria-disabled={isDisabled || undefined}
                   onClick={() => {
                     if (item.to)
-                      void navigate({
-                        to: item.to,
-                        search: item.to === "/forge" ? { session: null, source: null } : undefined,
-                      });
+                      void navigate(
+                        item.to === "/forge"
+                          ? { to: item.to, search: { session: null, source: null } }
+                          : { to: item.to },
+                      );
                   }}
                 >
                   <item.icon size={18} />
