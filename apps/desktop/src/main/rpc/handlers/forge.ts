@@ -635,7 +635,9 @@ export const createForgeHandlers = () =>
           ReturnType<typeof toTopicSummary> | ReturnType<typeof toTopicCardsSummary>
         >;
       }> = Array.from(detailGroups.values())
-        .sort((left, right) => left.displayOrder - right.displayOrder || left.chunkId - right.chunkId)
+        .sort(
+          (left, right) => left.displayOrder - right.displayOrder || left.chunkId - right.chunkId,
+        )
         .map((group) => ({
           groupId: `chunk:${group.chunkId}`,
           groupKind: "chunk" as const,
@@ -645,7 +647,9 @@ export const createForgeHandlers = () =>
           chunkId: group.chunkId,
           topics: group.topics
             .slice()
-            .sort((left, right) => left.topicIndex - right.topicIndex || left.topicId - right.topicId),
+            .sort(
+              (left, right) => left.topicIndex - right.topicIndex || left.topicId - right.topicId,
+            ),
         }));
 
       if (synthesisTopics.length > 0) {
@@ -654,12 +658,13 @@ export const createForgeHandlers = () =>
           groupKind: "section" as const,
           family: "synthesis" as const,
           title: "Synthesis",
-          displayOrder:
-            (groups[groups.length - 1]?.displayOrder ?? -1) + 1,
+          displayOrder: (groups[groups.length - 1]?.displayOrder ?? -1) + 1,
           chunkId: null,
           topics: synthesisTopics
             .slice()
-            .sort((left, right) => left.topicIndex - right.topicIndex || left.topicId - right.topicId),
+            .sort(
+              (left, right) => left.topicIndex - right.topicIndex || left.topicId - right.topicId,
+            ),
         });
       }
 
@@ -684,10 +689,7 @@ export const createForgeHandlers = () =>
       });
 
     const loadTopicById = (sessionId: number, topicId: number) =>
-      mapSessionRepositoryError(
-        sessionId,
-        forgeSessionRepository.getTopicById(topicId),
-      ).pipe(
+      mapSessionRepositoryError(sessionId, forgeSessionRepository.getTopicById(topicId)).pipe(
         Effect.flatMap((topic) =>
           topic === null || topic.sessionId !== sessionId
             ? Effect.fail(new ForgeTopicNotFoundError({ sessionId, topicId }))
@@ -736,15 +738,17 @@ export const createForgeHandlers = () =>
                   sequenceOrder: chunk.sequenceOrder,
                   topics: result.output.topics,
                 })),
-                Effect.mapError((error) =>
-                  new ForgeTopicExtractionError({
-                    sessionId: input.sessionId,
-                    chunkId: chunk.id,
-                    sequenceOrder: chunk.sequenceOrder,
-                    message: error._tag === "PromptModelInvocationError"
-                      ? `Model invocation failed for ${error.model}: ${toErrorMessage(error.cause)}`
-                      : toErrorMessage(error),
-                  }),
+                Effect.mapError(
+                  (error) =>
+                    new ForgeTopicExtractionError({
+                      sessionId: input.sessionId,
+                      chunkId: chunk.id,
+                      sequenceOrder: chunk.sequenceOrder,
+                      message:
+                        error._tag === "PromptModelInvocationError"
+                          ? `Model invocation failed for ${error.model}: ${toErrorMessage(error.cause)}`
+                          : toErrorMessage(error),
+                    }),
                 ),
               ),
           { concurrency: MAX_REQUEST_CONCURRENCY },
@@ -815,13 +819,15 @@ export const createForgeHandlers = () =>
           input.model ? { model: input.model } : undefined,
         )
         .pipe(
-          Effect.mapError((error) =>
-            new ForgeTopicExtractionError({
-              sessionId: input.sessionId,
-              message: error._tag === "PromptModelInvocationError"
-                ? `Model invocation failed for ${error.model}: ${toErrorMessage(error.cause)}`
-                : toErrorMessage(error),
-            }),
+          Effect.mapError(
+            (error) =>
+              new ForgeTopicExtractionError({
+                sessionId: input.sessionId,
+                message:
+                  error._tag === "PromptModelInvocationError"
+                    ? `Model invocation failed for ${error.model}: ${toErrorMessage(error.cause)}`
+                    : toErrorMessage(error),
+              }),
           ),
           Effect.flatMap((result) =>
             mapSessionRepositoryError(
@@ -894,7 +900,10 @@ export const createForgeHandlers = () =>
                 Effect.asVoid,
               );
 
-            const extractedAndChunked = yield* resolveAndChunkSourceForSession(session, input.source);
+            const extractedAndChunked = yield* resolveAndChunkSourceForSession(
+              session,
+              input.source,
+            );
 
             yield* mapSessionRepositoryError(
               session.id,
@@ -949,7 +958,9 @@ export const createForgeHandlers = () =>
               { concurrency: "unbounded" },
             );
 
-            const successCount = outcomes.filter((outcome) => outcome.status === "extracted").length;
+            const successCount = outcomes.filter(
+              (outcome) => outcome.status === "extracted",
+            ).length;
             const finalStatus = successCount > 0 ? "topics_extracted" : "error";
             const finalErrorMessage =
               finalStatus === "error"
@@ -1047,7 +1058,11 @@ export const createForgeHandlers = () =>
 
           const contextText = yield* topicGroundingTextResolver
             .resolveForTopic(topic)
-            .pipe(Effect.mapError((error) => toSessionOperationErrorFromRepositoryError(input.sessionId, error)));
+            .pipe(
+              Effect.mapError((error) =>
+                toSessionOperationErrorFromRepositoryError(input.sessionId, error),
+              ),
+            );
 
           const promptResult =
             topic.family === "detail"
@@ -1496,7 +1511,11 @@ export const createForgeHandlers = () =>
           );
           const contextText = yield* topicGroundingTextResolver
             .resolveForTopic(sourceTopic)
-            .pipe(Effect.mapError((error) => toSessionOperationErrorFromRepositoryError(sourceCard.sessionId, error)));
+            .pipe(
+              Effect.mapError((error) =>
+                toSessionOperationErrorFromRepositoryError(sourceCard.sessionId, error),
+              ),
+            );
 
           const promptResult = yield* forgePromptRuntime
             .run(
@@ -1591,7 +1610,11 @@ export const createForgeHandlers = () =>
           );
           const contextText = yield* topicGroundingTextResolver
             .resolveForTopic(sourceTopic)
-            .pipe(Effect.mapError((error) => toSessionOperationErrorFromRepositoryError(sourceCard.sessionId, error)));
+            .pipe(
+              Effect.mapError((error) =>
+                toSessionOperationErrorFromRepositoryError(sourceCard.sessionId, error),
+              ),
+            );
 
           const promptResult = yield* forgePromptRuntime
             .run(

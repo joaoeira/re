@@ -96,7 +96,7 @@ const groupsFromTopicsByChunk = (
       topicIndex,
       topicText,
       selected: false,
-      })),
+    })),
   }));
 
 export const createForgeTopicExtractionSnapshotSuccess = (options?: {

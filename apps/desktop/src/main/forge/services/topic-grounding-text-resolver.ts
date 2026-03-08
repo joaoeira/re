@@ -38,7 +38,4 @@ export const makeTopicGroundingTextResolver = ({
 });
 
 export const TopicGroundingTextResolverLive = (repository: ForgeSessionRepository) =>
-  Layer.succeed(
-    TopicGroundingTextResolver,
-    makeTopicGroundingTextResolver({ repository }),
-  );
+  Layer.succeed(TopicGroundingTextResolver, makeTopicGroundingTextResolver({ repository }));

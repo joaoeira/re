@@ -6,10 +6,7 @@ import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
 import type { ForgeGetTopicCardsResult } from "@shared/rpc/schemas/forge";
 
-export function useForgeTopicCardsQuery(
-  sessionId: number | null,
-  topicId: number | null,
-) {
+export function useForgeTopicCardsQuery(sessionId: number | null, topicId: number | null) {
   const ipc = useIpc();
 
   return useQuery<ForgeGetTopicCardsResult, Error>({

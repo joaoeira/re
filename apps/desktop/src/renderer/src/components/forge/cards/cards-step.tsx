@@ -244,18 +244,12 @@ export function CardsStep() {
     if (!persistedDeckPathBySessionIdRef.current.has(sessionId)) {
       persistedDeckPathBySessionIdRef.current.set(sessionId, targetDeckPath);
     }
-  }, [
-    sessionId,
-    targetDeckPath,
-  ]);
+  }, [sessionId, targetDeckPath]);
 
   useEffect(() => {
     if (scanDecksQuery.isFetching || !scanDecksQuery.isSuccess) return;
     if (targetDeckPath === null) {
-      if (
-        deckOptionPaths.length > 0 &&
-        !autoResolvedScopeKeysRef.current.has(autoSelectScopeKey)
-      ) {
+      if (deckOptionPaths.length > 0 && !autoResolvedScopeKeysRef.current.has(autoSelectScopeKey)) {
         autoResolvedScopeKeysRef.current.add(autoSelectScopeKey);
         deckTargetActions.setTargetDeckPath(deckOptionPaths[0]!);
       }
@@ -296,11 +290,7 @@ export function CardsStep() {
       sessionId,
       deckPath: targetDeckPath,
     });
-  }, [
-    persistSessionDeckPath,
-    sessionId,
-    targetDeckPath,
-  ]);
+  }, [persistSessionDeckPath, sessionId, targetDeckPath]);
 
   const topics = useMemo<ReadonlyArray<CardsTopic>>(
     () =>
@@ -349,10 +339,7 @@ export function CardsStep() {
     activeTopicRef.current = activeTopic;
   }, [activeTopic]);
 
-  const activeTopicCardsQuery = useForgeTopicCardsQuery(
-    sessionId,
-    activeTopic?.topicId ?? null,
-  );
+  const activeTopicCardsQuery = useForgeTopicCardsQuery(sessionId, activeTopic?.topicId ?? null);
   const [checkedTopicKeys, setCheckedTopicKeys] = useState<ReadonlySet<string>>(new Set());
   const [checkedTopicBatchInFlight, setCheckedTopicBatchInFlight] = useState(false);
 
@@ -541,10 +528,7 @@ export function CardsStep() {
   }, [curationActions, summaryByTopicKey, topics]);
 
   const patchSnapshotTopicSummary = useCallback(
-    (
-      nextSummary: ForgeTopicCardsSummary,
-      fallbackInvalidate = true,
-    ) => {
+    (nextSummary: ForgeTopicCardsSummary, fallbackInvalidate = true) => {
       if (sessionId === null) return;
 
       let patched = false;

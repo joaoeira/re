@@ -122,7 +122,10 @@ const extractStateFromSessionStatus = (
 const sortGroups = (groups: ReadonlyArray<ForgeTopicGroup>): ReadonlyArray<ForgeTopicGroup> =>
   groups
     .slice()
-    .sort((left, right) => left.displayOrder - right.displayOrder || left.groupId.localeCompare(right.groupId));
+    .sort(
+      (left, right) =>
+        left.displayOrder - right.displayOrder || left.groupId.localeCompare(right.groupId),
+    );
 
 const topicKeysFromGroups = (groups: ReadonlyArray<ForgeTopicGroup>): ReadonlySet<string> => {
   const valid = new Set<string>();

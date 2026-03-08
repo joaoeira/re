@@ -126,13 +126,14 @@ describe("forge session repository (canonical)", () => {
       }),
     );
 
-      const topicId = (await Effect.runPromise(repository.getCardsSnapshotBySession(session.id)))[0]?.topicId;
-      if (!topicId) throw new Error("Expected topic id.");
+    const topicId = (await Effect.runPromise(repository.getCardsSnapshotBySession(session.id)))[0]
+      ?.topicId;
+    if (!topicId) throw new Error("Expected topic id.");
 
-      await Effect.runPromise(repository.tryStartTopicGeneration(topicId));
-      await Effect.runPromise(
-        repository.replaceCardsForTopicAndFinishGenerationSuccess({
-          topicId,
+    await Effect.runPromise(repository.tryStartTopicGeneration(topicId));
+    await Effect.runPromise(
+      repository.replaceCardsForTopicAndFinishGenerationSuccess({
+        topicId,
         cards: [{ question: "Q?", answer: "A." }],
       }),
     );

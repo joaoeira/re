@@ -69,9 +69,9 @@ export function TopicSelection() {
         <p className="text-xs text-muted-foreground">
           {counts.detail > 0 ? (
             <>
-              Extracted <span className="font-mono text-foreground/70">{counts.detail}</span>{" "}
-              topics from <span className="font-mono text-foreground/70">{counts.detailGroups}</span>{" "}
-              chunk{counts.detailGroups === 1 ? "" : "s"}
+              Extracted <span className="font-mono text-foreground/70">{counts.detail}</span> topics
+              from <span className="font-mono text-foreground/70">{counts.detailGroups}</span> chunk
+              {counts.detailGroups === 1 ? "" : "s"}
               {counts.synthesis > 0 ? (
                 <>
                   {" "}

@@ -117,12 +117,12 @@ const createCardsDomainPromptRuntime = (options?: {
   readonly holdCreateCards?: Promise<void>;
   readonly failCreateCards?: boolean;
 }): ForgePromptRuntime => ({
-    run: <Input, Output>(
-      spec: PromptSpec<Input, Output>,
-      input: Input,
-      runOptions?: PromptRunOptions,
-    ) =>
-      Effect.gen(function* () {
+  run: <Input, Output>(
+    spec: PromptSpec<Input, Output>,
+    input: Input,
+    runOptions?: PromptRunOptions,
+  ) =>
+    Effect.gen(function* () {
       if (
         spec.promptId === "forge/create-cards" ||
         spec.promptId === "forge/create-synthesis-cards"
@@ -337,7 +337,10 @@ describe("forge handlers", () => {
   const seedDetailTopics = async (
     repository: ForgeSessionRepository,
     sessionId: number,
-    writes: ReadonlyArray<{ readonly sequenceOrder: number; readonly topics: ReadonlyArray<string> }>,
+    writes: ReadonlyArray<{
+      readonly sequenceOrder: number;
+      readonly topics: ReadonlyArray<string>;
+    }>,
   ): Promise<void> => {
     await Effect.runPromise(
       repository.replaceTopicsForSessionAndSetExtractionOutcome({
@@ -1293,9 +1296,7 @@ describe("forge handlers", () => {
           },
         ]),
       );
-      await seedDetailTopics(repository, session.id, [
-        { sequenceOrder: 0, topics: ["topic-a"] },
-      ]);
+      await seedDetailTopics(repository, session.id, [{ sequenceOrder: 0, topics: ["topic-a"] }]);
 
       const topic = await getTopicBySequenceOrderAndIndex(repository, session.id, 0, 0);
       if (!topic) throw new Error("Expected topic for source card.");
@@ -1767,9 +1768,7 @@ describe("forge handlers", () => {
     });
 
     try {
-      const result = await Effect.runPromise(
-        startPdfTopicExtraction(handlers, { sourceFilePath }),
-      );
+      const result = await Effect.runPromise(startPdfTopicExtraction(handlers, { sourceFilePath }));
 
       expect(result.session.status).toBe("topics_extracted");
       expect(result.outcomes).toEqual([
@@ -1823,9 +1822,7 @@ describe("forge handlers", () => {
     });
 
     try {
-      const result = await Effect.runPromise(
-        startPdfTopicExtraction(handlers, { sourceFilePath }),
-      );
+      const result = await Effect.runPromise(startPdfTopicExtraction(handlers, { sourceFilePath }));
 
       expect(result.session.status).toBe("topics_extracted");
       expect(result.outcomes).toEqual([
@@ -1891,7 +1888,9 @@ describe("forge handlers", () => {
     });
 
     try {
-      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-v2-snapshot.pdf"));
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-v2-snapshot.pdf"),
+      );
 
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
@@ -1934,7 +1933,9 @@ describe("forge handlers", () => {
     });
 
     try {
-      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-v2-synthesis-cards.pdf"));
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-v2-synthesis-cards.pdf"),
+      );
 
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
@@ -1988,8 +1989,12 @@ describe("forge handlers", () => {
     });
 
     try {
-      const first = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-v2-cross-a.pdf"));
-      const second = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-v2-cross-b.pdf"));
+      const first = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-v2-cross-a.pdf"),
+      );
+      const second = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-v2-cross-b.pdf"),
+      );
 
       await Effect.runPromise(
         repository.saveChunks(second.session.id, [
@@ -2047,7 +2052,9 @@ describe("forge handlers", () => {
     });
 
     try {
-      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-v2-synthesis-variants.pdf"));
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-v2-synthesis-variants.pdf"),
+      );
 
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
@@ -2116,7 +2123,9 @@ describe("forge handlers", () => {
     });
 
     try {
-      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-v2-topic-id.pdf"));
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-v2-topic-id.pdf"),
+      );
 
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
@@ -2157,9 +2166,9 @@ describe("forge handlers", () => {
       const selectedSnapshot = await Effect.runPromise(
         handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
       );
-      expect(selectedSnapshot.topics.find((topic) => topic.topicId === firstTopicId)?.selected).toBe(
-        false,
-      );
+      expect(
+        selectedSnapshot.topics.find((topic) => topic.topicId === firstTopicId)?.selected,
+      ).toBe(false);
       expect(
         selectedSnapshot.topics.find((topic) => topic.topicId === secondTopicId)?.selected,
       ).toBe(true);

@@ -53,18 +53,20 @@ const setupSqliteRepository = async () => {
   };
 };
 
-(sqliteBindingAvailable ? describe : describe.skip)("sqlite forge session repository (canonical)", () => {
-  it("migrates legacy forge topic graphs with generation and card rows", async () => {
-    const tempRoot = await fs.mkdtemp(path.join(tmpdir(), "re-forge-sqlite-migration-"));
-    const dbPath = path.join(tempRoot, "repo.db");
-    const journalPath = path.join(tempRoot, "repo-journal.json");
-    // @ts-expect-error better-sqlite3 types are not installed in this workspace.
-    const Database = (await import("better-sqlite3")).default;
-    const db = new Database(dbPath);
+(sqliteBindingAvailable ? describe : describe.skip)(
+  "sqlite forge session repository (canonical)",
+  () => {
+    it("migrates legacy forge topic graphs with generation and card rows", async () => {
+      const tempRoot = await fs.mkdtemp(path.join(tmpdir(), "re-forge-sqlite-migration-"));
+      const dbPath = path.join(tempRoot, "repo.db");
+      const journalPath = path.join(tempRoot, "repo-journal.json");
+      // @ts-expect-error better-sqlite3 types are not installed in this workspace.
+      const Database = (await import("better-sqlite3")).default;
+      const db = new Database(dbPath);
 
-    try {
-      db.pragma("foreign_keys = ON");
-      db.exec(`
+      try {
+        db.pragma("foreign_keys = ON");
+        db.exec(`
         CREATE TABLE effect_sql_migrations (
           migration_id integer PRIMARY KEY NOT NULL,
           created_at datetime NOT NULL DEFAULT current_timestamp,
@@ -129,194 +131,197 @@ const setupSqliteRepository = async () => {
         );
       `);
 
-      const insertMigration = db.prepare(`
+        const insertMigration = db.prepare(`
         INSERT INTO effect_sql_migrations (migration_id, name)
         VALUES (?, ?)
       `);
-      for (let migrationId = 1; migrationId <= 11; migrationId += 1) {
-        insertMigration.run(migrationId, `migration_${migrationId}`);
-      }
+        for (let migrationId = 1; migrationId <= 11; migrationId += 1) {
+          insertMigration.run(migrationId, `migration_${migrationId}`);
+        }
 
-      db.prepare(`
+        db.prepare(`
         INSERT INTO forge_sessions (
           id, source_kind, source_label, source_file_path, deck_path, source_fingerprint, status, error_message, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        1,
-        "pdf",
-        "legacy.pdf",
-        "/tmp/legacy.pdf",
-        null,
-        "fp:legacy",
-        "ready",
-        null,
-        "2025-01-01T00:00:00.000Z",
-        "2025-01-01T00:00:00.000Z",
-      );
-      db.prepare(`
+          1,
+          "pdf",
+          "legacy.pdf",
+          "/tmp/legacy.pdf",
+          null,
+          "fp:legacy",
+          "ready",
+          null,
+          "2025-01-01T00:00:00.000Z",
+          "2025-01-01T00:00:00.000Z",
+        );
+        db.prepare(`
         INSERT INTO forge_chunks (id, session_id, text, sequence_order, page_boundaries, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `).run(10, 1, "legacy chunk", 0, '[{"offset":0,"page":1}]', "2025-01-01T00:00:00.000Z");
-      db.prepare(`
+        db.prepare(`
         INSERT INTO forge_topics (id, chunk_id, topic_order, topic_text, created_at, selected)
         VALUES (?, ?, ?, ?, ?, ?)
       `).run(20, 10, 0, "legacy topic", "2025-01-01T00:00:00.000Z", 1);
-      db.prepare(`
+        db.prepare(`
         INSERT INTO forge_topic_generation (
           id, topic_id, status, error_message, generation_started_at, status_changed_at, generation_revision
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(30, 20, "generated", null, "2025-01-01T00:00:00.000Z", "2025-01-01T00:00:00.000Z", 1);
-      db.prepare(`
+        db.prepare(`
         INSERT INTO forge_cards (id, topic_id, card_order, question, answer, created_at, added_to_deck_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(40, 20, 0, "Q?", "A.", "2025-01-01T00:00:00.000Z", null);
-      db.close();
+        db.close();
 
-      const bundle = createSqliteReviewAnalyticsRuntimeBundle({ dbPath, journalPath });
+        const bundle = createSqliteReviewAnalyticsRuntimeBundle({ dbPath, journalPath });
+        try {
+          await bundle.runtime.runPromise(bundle.startupEffect);
+          const repository = makeSqliteForgeSessionRepository({ runtime: bundle.runtime });
+          const snapshot = await bundle.runtime.runPromise(repository.getCardsSnapshotBySession(1));
+          expect(snapshot).toHaveLength(1);
+          expect(snapshot[0]).toEqual(
+            expect.objectContaining({
+              topicId: 20,
+              sessionId: 1,
+              family: "detail",
+              topicText: "legacy topic",
+            }),
+          );
+        } finally {
+          await bundle.runtime.dispose();
+        }
+      } finally {
+        await fs.rm(tempRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("persists canonical detail and synthesis topic snapshots", async () => {
+      const { repository, dispose } = await setupSqliteRepository();
+
       try {
-        await bundle.runtime.runPromise(bundle.startupEffect);
-        const repository = makeSqliteForgeSessionRepository({ runtime: bundle.runtime });
-        const snapshot = await bundle.runtime.runPromise(repository.getCardsSnapshotBySession(1));
-        expect(snapshot).toHaveLength(1);
-        expect(snapshot[0]).toEqual(
-          expect.objectContaining({
-            topicId: 20,
-            sessionId: 1,
-            family: "detail",
-            topicText: "legacy topic",
+        const session = await Effect.runPromise(
+          repository.createSession({
+            sourceKind: "pdf",
+            sourceLabel: "source.pdf",
+            sourceFilePath: "/tmp/source.pdf",
+            deckPath: null,
+            sourceFingerprint: "fp:sqlite",
           }),
         );
+
+        await Effect.runPromise(
+          repository.saveChunks(session.id, [
+            {
+              text: "chunk-a ",
+              sequenceOrder: 0,
+              pageBoundaries: [{ offset: 0, page: 1 }],
+            },
+            {
+              text: "chunk-b",
+              sequenceOrder: 1,
+              pageBoundaries: [{ offset: 0, page: 2 }],
+            },
+          ]),
+        );
+
+        await Effect.runPromise(
+          repository.replaceTopicsForSessionAndSetExtractionOutcome({
+            sessionId: session.id,
+            writes: [
+              { sequenceOrder: 0, topics: ["alpha"] },
+              { sequenceOrder: 1, topics: ["beta"] },
+            ],
+            status: "extracted",
+            errorMessage: null,
+          }),
+        );
+        await Effect.runPromise(
+          repository.replaceSynthesisTopicsForSessionAndSetExtractionOutcome({
+            sessionId: session.id,
+            topics: ["system theme"],
+            status: "extracted",
+            errorMessage: null,
+          }),
+        );
+
+        const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+        const outcomes = await Effect.runPromise(repository.getTopicExtractionOutcomes(session.id));
+
+        expect(snapshot.map((topic) => topic.family)).toEqual(["detail", "detail", "synthesis"]);
+        expect(snapshot.at(-1)?.chunkId).toBeNull();
+        expect(snapshot.at(-1)?.sequenceOrder).toBeNull();
+        expect(outcomes).toEqual([
+          expect.objectContaining({ family: "detail", status: "extracted" }),
+          expect.objectContaining({ family: "synthesis", status: "extracted" }),
+        ]);
       } finally {
-        await bundle.runtime.dispose();
+        await dispose();
       }
-    } finally {
-      await fs.rm(tempRoot, { recursive: true, force: true });
-    }
-  });
+    });
 
-  it("persists canonical detail and synthesis topic snapshots", async () => {
-    const { repository, dispose } = await setupSqliteRepository();
+    it("reads cards by topic id and omits repository-side grounding text", async () => {
+      const { repository, dispose } = await setupSqliteRepository();
 
-    try {
-      const session = await Effect.runPromise(
-        repository.createSession({
-          sourceKind: "pdf",
-          sourceLabel: "source.pdf",
-          sourceFilePath: "/tmp/source.pdf",
-          deckPath: null,
-          sourceFingerprint: "fp:sqlite",
-        }),
-      );
+      try {
+        const session = await Effect.runPromise(
+          repository.createSession({
+            sourceKind: "pdf",
+            sourceLabel: "source.pdf",
+            sourceFilePath: "/tmp/source.pdf",
+            deckPath: null,
+            sourceFingerprint: "fp:sqlite-card",
+          }),
+        );
 
-      await Effect.runPromise(
-        repository.saveChunks(session.id, [
-          {
-            text: "chunk-a ",
-            sequenceOrder: 0,
-            pageBoundaries: [{ offset: 0, page: 1 }],
-          },
-          {
-            text: "chunk-b",
-            sequenceOrder: 1,
-            pageBoundaries: [{ offset: 0, page: 2 }],
-          },
-        ]),
-      );
+        await Effect.runPromise(
+          repository.saveChunks(session.id, [
+            {
+              text: "chunk-a",
+              sequenceOrder: 0,
+              pageBoundaries: [{ offset: 0, page: 1 }],
+            },
+          ]),
+        );
+        await Effect.runPromise(
+          repository.replaceTopicsForSessionAndSetExtractionOutcome({
+            sessionId: session.id,
+            writes: [{ sequenceOrder: 0, topics: ["alpha"] }],
+            status: "extracted",
+            errorMessage: null,
+          }),
+        );
 
-      await Effect.runPromise(
-        repository.replaceTopicsForSessionAndSetExtractionOutcome({
-          sessionId: session.id,
-          writes: [
-            { sequenceOrder: 0, topics: ["alpha"] },
-            { sequenceOrder: 1, topics: ["beta"] },
-          ],
-          status: "extracted",
-          errorMessage: null,
-        }),
-      );
-      await Effect.runPromise(
-        repository.replaceSynthesisTopicsForSessionAndSetExtractionOutcome({
-          sessionId: session.id,
-          topics: ["system theme"],
-          status: "extracted",
-          errorMessage: null,
-        }),
-      );
+        const topicId = (
+          await Effect.runPromise(repository.getCardsSnapshotBySession(session.id))
+        )[0]?.topicId;
+        if (!topicId) throw new Error("Expected topic id.");
 
-      const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
-      const outcomes = await Effect.runPromise(repository.getTopicExtractionOutcomes(session.id));
+        await Effect.runPromise(repository.tryStartTopicGeneration(topicId));
+        await Effect.runPromise(
+          repository.replaceCardsForTopicAndFinishGenerationSuccess({
+            topicId,
+            cards: [{ question: "Q?", answer: "A." }],
+          }),
+        );
 
-      expect(snapshot.map((topic) => topic.family)).toEqual(["detail", "detail", "synthesis"]);
-      expect(snapshot.at(-1)?.chunkId).toBeNull();
-      expect(snapshot.at(-1)?.sequenceOrder).toBeNull();
-      expect(outcomes).toEqual([
-        expect.objectContaining({ family: "detail", status: "extracted" }),
-        expect.objectContaining({ family: "synthesis", status: "extracted" }),
-      ]);
-    } finally {
-      await dispose();
-    }
-  });
+        const topicCards = await Effect.runPromise(repository.getCardsForTopicId(topicId));
+        const cardId = topicCards?.cards[0]?.id;
+        if (!cardId) throw new Error("Expected card id.");
 
-  it("reads cards by topic id and omits repository-side grounding text", async () => {
-    const { repository, dispose } = await setupSqliteRepository();
-
-    try {
-      const session = await Effect.runPromise(
-        repository.createSession({
-          sourceKind: "pdf",
-          sourceLabel: "source.pdf",
-          sourceFilePath: "/tmp/source.pdf",
-          deckPath: null,
-          sourceFingerprint: "fp:sqlite-card",
-        }),
-      );
-
-      await Effect.runPromise(
-        repository.saveChunks(session.id, [
-          {
-            text: "chunk-a",
-            sequenceOrder: 0,
-            pageBoundaries: [{ offset: 0, page: 1 }],
-          },
-        ]),
-      );
-      await Effect.runPromise(
-        repository.replaceTopicsForSessionAndSetExtractionOutcome({
-          sessionId: session.id,
-          writes: [{ sequenceOrder: 0, topics: ["alpha"] }],
-          status: "extracted",
-          errorMessage: null,
-        }),
-      );
-
-      const topicId = (await Effect.runPromise(repository.getCardsSnapshotBySession(session.id)))[0]?.topicId;
-      if (!topicId) throw new Error("Expected topic id.");
-
-      await Effect.runPromise(repository.tryStartTopicGeneration(topicId));
-      await Effect.runPromise(
-        repository.replaceCardsForTopicAndFinishGenerationSuccess({
-          topicId,
-          cards: [{ question: "Q?", answer: "A." }],
-        }),
-      );
-
-      const topicCards = await Effect.runPromise(repository.getCardsForTopicId(topicId));
-      const cardId = topicCards?.cards[0]?.id;
-      if (!cardId) throw new Error("Expected card id.");
-
-      const sourceCard = await Effect.runPromise(repository.getCardById(cardId));
-      expect(sourceCard).toEqual(
-        expect.objectContaining({
-          id: cardId,
-          topicId,
-          sessionId: session.id,
-          topicText: "alpha",
-        }),
-      );
-      expect("contextText" in (sourceCard ?? {})).toBe(false);
-    } finally {
-      await dispose();
-    }
-  });
-});
+        const sourceCard = await Effect.runPromise(repository.getCardById(cardId));
+        expect(sourceCard).toEqual(
+          expect.objectContaining({
+            id: cardId,
+            topicId,
+            sessionId: session.id,
+            topicText: "alpha",
+          }),
+        );
+        expect("contextText" in (sourceCard ?? {})).toBe(false);
+      } finally {
+        await dispose();
+      }
+    });
+  },
+);

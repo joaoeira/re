@@ -370,17 +370,13 @@ describe("Forge cards sidebar multi-select", () => {
         () =>
           invoke.mock.calls.find(
             ([method]: unknown[]) => method === "ForgeGenerateSelectedTopicCards",
-          ) as
-            | [string, { sessionId: number; topicIds: Array<number> }]
-            | undefined,
+          ) as [string, { sessionId: number; topicIds: Array<number> }] | undefined,
       )
       .toBeTruthy();
 
     const generateCall = invoke.mock.calls.find(
       ([method]: unknown[]) => method === "ForgeGenerateSelectedTopicCards",
-    ) as
-      | [string, { sessionId: number; topicIds: Array<number> }]
-      | undefined;
+    ) as [string, { sessionId: number; topicIds: Array<number> }] | undefined;
     expect(generateCall?.[1]).toEqual({
       sessionId: 77,
       topicIds: [1002],

@@ -1253,12 +1253,7 @@ export const makeSqliteForgeSessionRepository = ({
           );
         }),
       ),
-    replaceTopicsForSessionAndSetExtractionOutcome: ({
-      sessionId,
-      writes,
-      status,
-      errorMessage,
-    }) =>
+    replaceTopicsForSessionAndSetExtractionOutcome: ({ sessionId, writes, status, errorMessage }) =>
       runSql(
         "replaceTopicsForSessionAndSetExtractionOutcome.runtime",
         Effect.gen(function* () {
@@ -2103,7 +2098,8 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
     const topic = topics.find((entry) => entry.id === topicId);
     if (!topic) return null;
 
-    const ownerChunk = topic.chunkId === null ? null : chunks.find((chunk) => chunk.id === topic.chunkId);
+    const ownerChunk =
+      topic.chunkId === null ? null : chunks.find((chunk) => chunk.id === topic.chunkId);
 
     return {
       topicId: topic.id,
@@ -2138,7 +2134,8 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
     return next;
   };
 
-  const outcomeKey = (sessionId: number, family: ForgeTopicFamily): string => `${sessionId}:${family}`;
+  const outcomeKey = (sessionId: number, family: ForgeTopicFamily): string =>
+    `${sessionId}:${family}`;
 
   const topicSnapshotBySessionInternal = (
     sessionId: number,
@@ -2156,11 +2153,20 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
         const leftOrder = left.family === "detail" ? 0 : 1;
         const rightOrder = right.family === "detail" ? 0 : 1;
         const leftChunkOrder =
-          left.chunkId === null ? Number.MAX_SAFE_INTEGER : (chunkById.get(left.chunkId)?.sequenceOrder ?? Number.MAX_SAFE_INTEGER);
+          left.chunkId === null
+            ? Number.MAX_SAFE_INTEGER
+            : (chunkById.get(left.chunkId)?.sequenceOrder ?? Number.MAX_SAFE_INTEGER);
         const rightChunkOrder =
-          right.chunkId === null ? Number.MAX_SAFE_INTEGER : (chunkById.get(right.chunkId)?.sequenceOrder ?? Number.MAX_SAFE_INTEGER);
+          right.chunkId === null
+            ? Number.MAX_SAFE_INTEGER
+            : (chunkById.get(right.chunkId)?.sequenceOrder ?? Number.MAX_SAFE_INTEGER);
 
-        return leftOrder - rightOrder || leftChunkOrder - rightChunkOrder || left.topicOrder - right.topicOrder || left.id - right.id;
+        return (
+          leftOrder - rightOrder ||
+          leftChunkOrder - rightChunkOrder ||
+          left.topicOrder - right.topicOrder ||
+          left.id - right.id
+        );
       })
       .map((topic) => {
         const ownerChunk = topic.chunkId === null ? null : (chunkById.get(topic.chunkId) ?? null);
@@ -2204,11 +2210,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
     const removedCardIds = new Set(
       cards.filter((card) => removedTopicIds.has(card.topicId)).map((card) => card.id),
     );
-    cards.splice(
-      0,
-      cards.length,
-      ...cards.filter((card) => !removedTopicIds.has(card.topicId)),
-    );
+    cards.splice(0, cards.length, ...cards.filter((card) => !removedTopicIds.has(card.topicId)));
     permutations.splice(
       0,
       permutations.length,
@@ -2753,7 +2755,8 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
         const topic = topics.find((entry) => entry.id === card.topicId);
         if (!topic) return null;
 
-        const chunk = topic.chunkId === null ? null : chunks.find((entry) => entry.id === topic.chunkId);
+        const chunk =
+          topic.chunkId === null ? null : chunks.find((entry) => entry.id === topic.chunkId);
 
         return {
           id: card.id,
@@ -2907,8 +2910,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
       }),
     getChunkCount: (sessionId) =>
       Effect.sync(() => chunks.filter((entry) => entry.sessionId === sessionId).length),
-    getFullSessionText: (sessionId) =>
-      Effect.sync(() => getFullSessionTextInternal(sessionId)),
+    getFullSessionText: (sessionId) => Effect.sync(() => getFullSessionTextInternal(sessionId)),
     listRecentSessions: () =>
       Effect.sync(() =>
         sessions

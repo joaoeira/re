@@ -14,8 +14,7 @@ export type CreateSynthesisCardsPromptInput = typeof CreateSynthesisCardsPromptI
 export const CreateSynthesisCardsPromptOutputSchema = Schema.Struct({
   cards: NormalizedCardArraySchema,
 });
-export type CreateSynthesisCardsPromptOutput =
-  typeof CreateSynthesisCardsPromptOutputSchema.Type;
+export type CreateSynthesisCardsPromptOutput = typeof CreateSynthesisCardsPromptOutputSchema.Type;
 
 const renderInstructionBlock = (instruction: string | undefined): string => {
   const trimmedInstruction = instruction?.trim();

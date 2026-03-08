@@ -91,7 +91,9 @@ export function DeckCombobox({
 
   const itemToStringLabel = useCallback(
     (item: DeckComboboxValue) =>
-      isCreateAction(item) ? `Create ${item.relativePath}` : (deckPathToRelativePath.get(item) ?? item),
+      isCreateAction(item)
+        ? `Create ${item.relativePath}`
+        : (deckPathToRelativePath.get(item) ?? item),
     [deckPathToRelativePath],
   );
 

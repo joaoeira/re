@@ -163,7 +163,9 @@ describe("forge-page-store", () => {
     store.send({ type: "toggleTopic", topicId: 201 });
     expect(ctx(store).selectedTopicKeys.has(topicKey(201))).toBe(true);
 
-    const reducedGroups = topicSummariesToTopicGroups(TOPIC_SUMMARIES.filter((topic) => topic.topicId !== 201));
+    const reducedGroups = topicSummariesToTopicGroups(
+      TOPIC_SUMMARIES.filter((topic) => topic.topicId !== 201),
+    );
     store.send({
       type: "topicSnapshotSynced",
       sessionId: 1,
