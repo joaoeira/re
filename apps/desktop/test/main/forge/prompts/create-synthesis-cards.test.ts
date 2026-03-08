@@ -6,14 +6,16 @@ import { CreateSynthesisCardsPromptSpec } from "@main/forge/prompts";
 import { CardQualityPrinciples } from "@main/forge/prompts/card-principles";
 
 describe("CreateSynthesisCardsPromptSpec", () => {
-  it("renders principles as system prompt and includes synthesis topic/instruction", () => {
+  it("renders instructions as system prompt and source/topic/instruction as user message (control vs data plane)", () => {
     const rendered = CreateSynthesisCardsPromptSpec.render({
       contextText: "Whole-source context",
       topic: "How two theories relate",
       instruction: "Prefer contrastive cards.",
     });
 
-    expect(rendered.systemPrompt).toBe(CardQualityPrinciples);
+    expect(rendered.systemPrompt).toContain(CardQualityPrinciples);
+    expect(rendered.systemPrompt).toContain("synthesis flashcards");
+    expect(rendered.systemPrompt).toContain('"cards": [');
     expect(rendered.messages).toHaveLength(1);
 
     const message = rendered.messages[0];
@@ -23,12 +25,12 @@ describe("CreateSynthesisCardsPromptSpec", () => {
     }
 
     expect(message.role).toBe("user");
+    expect(message.content).toContain("Whole-source context");
     expect(message.content).toContain("How two theories relate");
     expect(message.content).toContain("Prefer contrastive cards.");
-    expect(message.content).toContain('"cards": [');
   });
 
-  it("renders fallback text when instruction is omitted", () => {
+  it("omits instruction block when instruction is not provided", () => {
     const rendered = CreateSynthesisCardsPromptSpec.render({
       contextText: "Whole-source context",
       topic: "Why the distinction matters",
@@ -40,7 +42,9 @@ describe("CreateSynthesisCardsPromptSpec", () => {
       throw new Error("Expected rendered user message content to be a string.");
     }
 
-    expect(message.content).toContain("No additional instruction was provided.");
+    expect(message.content).toContain("Whole-source context");
+    expect(message.content).toContain("Why the distinction matters");
+    expect(message.content).not.toContain("Additional instruction");
   });
 
   it("renders retry context and normalizes cards in output schema", async () => {

@@ -5,11 +5,13 @@ import { describe, expect, it } from "vitest";
 import { GetSynthesisTopicsPromptSpec } from "@main/forge/prompts";
 
 describe("GetSynthesisTopicsPromptSpec", () => {
-  it("renders source text as system prompt and JSON-only user instructions", () => {
+  it("renders instructions as system prompt and source text as user message (control vs data plane)", () => {
     const sourceText = "A long source that connects multiple related ideas.";
     const rendered = GetSynthesisTopicsPromptSpec.render({ sourceText });
 
-    expect(rendered.systemPrompt).toBe(sourceText);
+    expect(rendered.systemPrompt).toContain("Analyze the provided text");
+    expect(rendered.systemPrompt).toContain('"topics": [');
+    expect(rendered.systemPrompt).toContain("just the JSON object");
     expect(rendered.messages).toHaveLength(1);
 
     const message = rendered.messages[0];
@@ -19,9 +21,7 @@ describe("GetSynthesisTopicsPromptSpec", () => {
     }
 
     expect(message.role).toBe("user");
-    expect(message.content).toContain("generate synthesis topics");
-    expect(message.content).toContain('"topics": [');
-    expect(message.content).toContain("Return only the JSON object");
+    expect(message.content).toBe(sourceText);
   });
 
   it("renders retry-aware repair context for attempt 2+", () => {

@@ -42,29 +42,51 @@ export type GetSynthesisTopicsPromptOutput = typeof GetSynthesisTopicsPromptOutp
 
 const renderBaseUserPrompt = (_input: GetSynthesisTopicsPromptInput): string => {
   return `
-    Analyze the full source and generate synthesis topics that connect ideas across sections, not just within one local passage.
+    Analyze the provided text and generate a series of integrative topic statements that capture its major thematic threads, structural arguments, and higher-order points. These should synthesize across multiple sections of the text while remaining firmly anchored to its specific subject matter.
 
-    Each synthesis topic should:
-    1. Be a single, self-contained sentence.
-    2. Capture a higher-order relationship, contrast, evolution, causal chain, or thematic connection that depends on the source as a whole.
-    3. Avoid simply restating one local detail from a single section.
-    4. Be concrete enough that flashcards could later be generated from it.
-    5. Use only information supported by the source.
+Each statement should:
+1. Synthesize multiple related details from the text into a single thematic claim about the specific people, entities, technologies, or ideas the text discusses.
+2. Articulate what the text is building toward or leading the reader to conclude, even when this is not stated in any single sentence.
+3. Preserve the specific names, entities, and context of the text. These are not abstract generalizations but integrated claims about the text's actual subject matter.
+4. Represent a thread that runs across multiple paragraphs or sections, not a point made in a single passage.
+5. Use language that mirrors the text's own register. If the text describes a tradeoff neutrally, state it as a tradeoff. If the text says something "adds complexity," do not escalate this to "severe limitations." If the text presents an advantage without qualification, you may state it directly. Treat the text's word choices and hedges as a ceiling on your own assertiveness.
+6. Be as short as possible while remaining a complete, self-contained claim. Strip every word that doesn't carry meaning. Prefer concrete nouns and active verbs over abstract phrasing and nominalizations. If a statement can lose a clause without losing correctness or necessary context, lose the clause.
 
-    Good synthesis topics often explain:
-    - how two or more ideas fit together
-    - how a concept evolves across the source
-    - why one distinction matters in the broader argument
-    - what unifying pattern links multiple examples
+To generate these, consider:
+- What larger points do clusters of individual facts or events collectively support?
+- What tensions, dynamics, or relationships does the text develop across multiple sections?
+- What is the text building the reader up to understand that goes beyond any single paragraph?
+- What causal chains or structural explanations connect the text's individual claims?
+- What motivates or frames the discussion — why does this text exist, what question is it responding to, and what context makes it timely?
+- Where the text examines multiple sides of a comparison, each side's strengths and constraints should be captured with comparable depth. If the text gives symmetric treatment to two technologies, frameworks, or positions, your topics should reflect that symmetry.
+- Where the text distinguishes between different categories, use cases, or paradigms within the same broad subject, preserve those distinctions as separate topics rather than merging them.
 
-    Return JSON with the exact shape:
-    {
-      "topics": [
-        "<topic>"
-      ]
-    }
+Ensure your output:
+- Covers the full scope of the text. Do not selectively extract topics that build toward a single narrative while ignoring threads that complicate or balance it.
+- Captures the text's own framing and motivation, not just its technical content.
+- Avoids redundancy. Each topic should cover distinct thematic ground. If two candidate topics substantially overlap, merge them or keep only the one that captures more of the text's structure.
 
-    Do not include prose, markdown, explanations, or code fences. Return only the JSON object.
+Do NOT:
+- Editorialize beyond the text's own level of certainty. If the text presents something as one factor among several, do not present it as the decisive factor. If the text calls something "possible but complex," do not call it "severe" or a "burden."
+- Summarize individual sentences or paragraphs in isolation.
+- Produce abstract principles or generalizable lessons stripped of the text's specific subject matter.
+- Reference the text, the author, or the act of reading (e.g., "The text argues..." or "The chapter shows...").
+- Use throat-clearing phrases ("It is worth noting that," "This reflects the broader dynamic whereby," "What emerges from this is"). Start each statement with its subject.
+- Use two words where one suffices. Prefer "X causes Y" over "X plays a significant role in shaping Y." Prefer "X limits Y" over "X introduces meaningful constraints on Y."
+- Pad statements with hedged qualifiers unless the text itself hedges. If the text states something directly, state it directly.
+
+Format your response as a JSON object:
+{
+  "topics": [
+    "<statement>",
+    "<statement>",
+    ...
+  ]
+}
+
+Do not include any other text or explanations in your response, just the JSON object.
+Do not wrap it in markdown code blocks, just return the JSON object.
+Target length: each statement should be 1–2 sentences. If a statement requires 3 sentences, it is probably two topics or contains redundancy. Err on the side of a shorter statement that omits a minor nuance over a longer one that captures everything.
   `;
 };
 
@@ -96,18 +118,18 @@ export const GetSynthesisTopicsPromptSpec: PromptSpec<
   render: (input, context) => {
     const baseMessage = {
       role: "user" as const,
-      content: renderBaseUserPrompt(input),
+      content: input.sourceText,
     };
 
     if (!context || context.attempt <= 1) {
       return {
-        systemPrompt: input.sourceText,
+        systemPrompt: renderBaseUserPrompt(input),
         messages: [baseMessage],
       };
     }
 
     return {
-      systemPrompt: input.sourceText,
+      systemPrompt: renderBaseUserPrompt(input),
       messages: [
         baseMessage,
         {

@@ -38,7 +38,7 @@ export const GetTopicsPromptOutputSchema = Schema.Struct({
 });
 export type GetTopicsPromptOutput = typeof GetTopicsPromptOutputSchema.Type;
 
-const renderBaseUserPrompt = (_input: GetTopicsPromptInput): string => {
+const renderSystemPrompt = (_input: GetTopicsPromptInput): string => {
   return `
     Analyze the provided text and generate a series of informative statements that capture its key points and progression. Each statement should:
     1. Be a single, clear sentence expressing one main idea or event from the text, including relevant context.
@@ -94,20 +94,20 @@ export const GetTopicsPromptSpec: PromptSpec<GetTopicsPromptInput, GetTopicsProm
     temperature: 1.0,
   },
   render: (input, context) => {
-    const baseMessage = {
+    const dataMessage = {
       role: "user" as const,
-      content: renderBaseUserPrompt(input),
+      content: input.chunkText,
     };
 
     if (!context || context.attempt <= 1) {
       return {
-        systemPrompt: input.chunkText,
-        messages: [baseMessage],
+        systemPrompt: renderSystemPrompt(input),
+        messages: [dataMessage],
       };
     }
 
     const repairMessages = [
-      baseMessage,
+      dataMessage,
       {
         role: "assistant" as const,
         content: context.previousRawExcerpt ?? "",
@@ -119,7 +119,7 @@ export const GetTopicsPromptSpec: PromptSpec<GetTopicsPromptInput, GetTopicsProm
     ];
 
     return {
-      systemPrompt: input.chunkText,
+      systemPrompt: renderSystemPrompt(input),
       messages: repairMessages,
     };
   },

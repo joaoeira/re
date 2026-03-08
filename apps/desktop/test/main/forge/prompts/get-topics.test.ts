@@ -5,11 +5,13 @@ import { describe, expect, it } from "vitest";
 import { GetTopicsPromptSpec } from "@main/forge/prompts";
 
 describe("GetTopicsPromptSpec", () => {
-  it("renders chunk text as system prompt and JSON-only user instructions", () => {
+  it("renders instructions as system prompt and chunk text as user message (control vs data plane)", () => {
     const chunkText = "The mitochondria is the powerhouse of the cell.";
     const rendered = GetTopicsPromptSpec.render({ chunkText });
 
-    expect(rendered.systemPrompt).toBe(chunkText);
+    expect(rendered.systemPrompt).toContain("Analyze the provided text");
+    expect(rendered.systemPrompt).toContain('"topics": [');
+    expect(rendered.systemPrompt).toContain("Do not include any other text");
     expect(rendered.messages).toHaveLength(1);
 
     const message = rendered.messages[0];
@@ -19,9 +21,7 @@ describe("GetTopicsPromptSpec", () => {
     }
 
     expect(message.role).toBe("user");
-    expect(message.content).toContain("Analyze the provided text");
-    expect(message.content).toContain('"topics": [');
-    expect(message.content).toContain("Do not include any other text");
+    expect(message.content).toBe(chunkText);
   });
 
   it("renders retry-aware repair context for attempt 2+", () => {
