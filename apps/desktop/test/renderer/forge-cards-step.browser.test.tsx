@@ -716,7 +716,9 @@ const navigateToCards = async (screen: Awaited<ReturnType<typeof renderWithIpcPr
   await userEvent.click(screen.getByRole("button", { name: "Select all", exact: true }));
   await expect.element(screen.getByText("4 topics selected")).toBeVisible();
   await userEvent.click(screen.getByText("Continue to cards"));
-  await expect.element(screen.getByText("Topics · 4")).toBeVisible();
+  await expect
+    .element(screen.getByRole("complementary").getByText("alpha", { exact: true }))
+    .toBeVisible();
 };
 
 const openDeckCombobox = () => {
@@ -820,7 +822,7 @@ describe("Forge cards step", () => {
       )
       .toBe(true);
 
-    const sidebar = screen.getByText("Topics · 4").element().closest("aside");
+    const sidebar = screen.getByRole("complementary").element();
     if (!(sidebar instanceof HTMLElement)) {
       throw new Error("Expected cards sidebar.");
     }
@@ -1773,7 +1775,7 @@ describe("Forge cards step", () => {
     await userEvent.click(screen.getByRole("button", { name: "Permutations" }));
     await expect.element(screen.getByText("Permutation for 8500")).toBeVisible();
 
-    const sidebar = screen.getByText("Topics · 4").element().closest("aside");
+    const sidebar = screen.getByRole("complementary").element();
     if (!(sidebar instanceof HTMLElement)) {
       throw new Error("Expected cards sidebar.");
     }

@@ -698,6 +698,7 @@ export function CardsStep() {
 
       return {
         topicKey: topic.topicKey,
+        family: topic.family,
         text: summary?.topicText ?? topic.text,
         status: summary?.status ?? "idle",
         cardCount,
@@ -804,8 +805,6 @@ export function CardsStep() {
         <CardsSidebar
           topics={sidebarTopics}
           activeTopicKey={activeTopicKey}
-          totalAdded={totalAdded}
-          totalCards={totalCards}
           checkedTopicKeys={checkedTopicKeys}
           generatingChecked={checkedTopicBatchInFlight}
           onSelectTopic={(nextTopicKey) => curationActions.setActiveTopic(nextTopicKey)}

@@ -12,27 +12,67 @@ import {
 } from "./forge-test-helpers";
 
 type TopicDef = {
-  readonly chunkId: number;
-  readonly sequenceOrder: number;
+  readonly family: "detail" | "synthesis";
+  readonly chunkId: number | null;
+  readonly sequenceOrder: number | null;
   readonly topicIndex: number;
   readonly topicText: string;
   readonly topicId: number;
 };
 
-const TOPICS: ReadonlyArray<TopicDef> = [
-  { chunkId: 101, sequenceOrder: 0, topicIndex: 0, topicText: "alpha", topicId: 1001 },
-  { chunkId: 101, sequenceOrder: 0, topicIndex: 1, topicText: "beta", topicId: 1002 },
-  { chunkId: 102, sequenceOrder: 1, topicIndex: 0, topicText: "gamma", topicId: 1003 },
-  { chunkId: 102, sequenceOrder: 1, topicIndex: 1, topicText: "delta", topicId: 1004 },
+const DETAIL_TOPICS: ReadonlyArray<TopicDef> = [
+  {
+    family: "detail",
+    chunkId: 101,
+    sequenceOrder: 0,
+    topicIndex: 0,
+    topicText: "alpha",
+    topicId: 1001,
+  },
+  {
+    family: "detail",
+    chunkId: 101,
+    sequenceOrder: 0,
+    topicIndex: 1,
+    topicText: "beta",
+    topicId: 1002,
+  },
+  {
+    family: "detail",
+    chunkId: 102,
+    sequenceOrder: 1,
+    topicIndex: 0,
+    topicText: "gamma",
+    topicId: 1003,
+  },
+  {
+    family: "detail",
+    chunkId: 102,
+    sequenceOrder: 1,
+    topicIndex: 1,
+    topicText: "delta",
+    topicId: 1004,
+  },
 ];
 
-const createCardsInvoke = () => {
+const SYNTHESIS_TOPICS: ReadonlyArray<TopicDef> = [
+  {
+    family: "synthesis",
+    chunkId: null,
+    sequenceOrder: null,
+    topicIndex: 0,
+    topicText: "cross-cutting theme",
+    topicId: 2001,
+  },
+];
+
+const createCardsInvoke = (allTopics: ReadonlyArray<TopicDef> = DETAIL_TOPICS) => {
   const sessionId = 77;
   const workspaceRootPath = FORGE_WORKSPACE_ROOT_PATH;
   const toSummary = (topic: TopicDef) => ({
     topicId: topic.topicId,
     sessionId,
-    family: "detail" as const,
+    family: topic.family,
     chunkId: topic.chunkId,
     chunkSequenceOrder: topic.sequenceOrder,
     topicIndex: topic.topicIndex,
@@ -44,45 +84,60 @@ const createCardsInvoke = () => {
     generationRevision: 1,
     selected: true,
   });
+  const detailTopics = allTopics.filter((t) => t.family === "detail");
+  const synthesisTopics = allTopics.filter((t) => t.family === "synthesis");
   const topicGroups = [
-    {
-      groupId: "chunk:101",
+    ...Array.from(new Set(detailTopics.map((t) => t.chunkId))).map((chunkId, i) => ({
+      groupId: `chunk:${chunkId}`,
       groupKind: "chunk" as const,
       family: "detail" as const,
-      title: "Chunk 1",
-      displayOrder: 0,
-      chunkId: 101,
-      topics: TOPICS.filter((topic) => topic.chunkId === 101).map((topic) => ({
-        topicId: topic.topicId,
-        sessionId,
-        family: "detail" as const,
-        chunkId: topic.chunkId,
-        chunkSequenceOrder: topic.sequenceOrder,
-        topicIndex: topic.topicIndex,
-        topicText: topic.topicText,
-        selected: false,
-      })),
-    },
-    {
-      groupId: "chunk:102",
-      groupKind: "chunk" as const,
-      family: "detail" as const,
-      title: "Chunk 2",
-      displayOrder: 1,
-      chunkId: 102,
-      topics: TOPICS.filter((topic) => topic.chunkId === 102).map((topic) => ({
-        topicId: topic.topicId,
-        sessionId,
-        family: "detail" as const,
-        chunkId: topic.chunkId,
-        chunkSequenceOrder: topic.sequenceOrder,
-        topicIndex: topic.topicIndex,
-        topicText: topic.topicText,
-        selected: false,
-      })),
-    },
-  ] as const;
-  const findTopic = (topicId: number) => TOPICS.find((topic) => topic.topicId === topicId) ?? null;
+      title: `Chunk ${i + 1}`,
+      displayOrder: i,
+      chunkId,
+      topics: detailTopics
+        .filter((t) => t.chunkId === chunkId)
+        .map((topic) => ({
+          topicId: topic.topicId,
+          sessionId,
+          family: "detail" as const,
+          chunkId: topic.chunkId,
+          chunkSequenceOrder: topic.sequenceOrder,
+          topicIndex: topic.topicIndex,
+          topicText: topic.topicText,
+          selected: false,
+        })),
+    })),
+    ...(synthesisTopics.length > 0
+      ? [
+          {
+            groupId: "section:synthesis",
+            groupKind: "section" as const,
+            family: "synthesis" as const,
+            title: "Synthesis",
+            displayOrder: 100,
+            chunkId: null,
+            topics: synthesisTopics.map((topic) => ({
+              topicId: topic.topicId,
+              sessionId,
+              family: "synthesis" as const,
+              chunkId: null,
+              chunkSequenceOrder: null,
+              topicIndex: topic.topicIndex,
+              topicText: topic.topicText,
+              selected: false,
+            })),
+          },
+        ]
+      : []),
+  ];
+  const outcomes = [
+    { family: "detail" as const, status: "extracted" as const, errorMessage: null },
+    ...(synthesisTopics.length > 0
+      ? [{ family: "synthesis" as const, status: "extracted" as const, errorMessage: null }]
+      : []),
+  ];
+  const findTopic = (topicId: number) =>
+    allTopics.find((topic) => topic.topicId === topicId) ?? null;
 
   return vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
     if (method === "GetSettings") {
@@ -133,7 +188,7 @@ const createCardsInvoke = () => {
             totalPages: 4,
             chunkCount: 2,
           },
-          outcomes: [{ family: "detail", status: "extracted", errorMessage: null }],
+          outcomes,
           groups: topicGroups,
         },
       };
@@ -154,7 +209,7 @@ const createCardsInvoke = () => {
             createdAt: "2026-02-27T00:00:00.000Z",
             updatedAt: "2026-02-27T00:00:00.000Z",
           },
-          outcomes: [{ family: "detail", status: "extracted", errorMessage: null }],
+          outcomes,
           groups: topicGroups,
         },
       };
@@ -163,7 +218,7 @@ const createCardsInvoke = () => {
       return {
         type: "success",
         data: {
-          topics: TOPICS.map(toSummary),
+          topics: allTopics.map(toSummary),
         },
       };
     }
@@ -245,14 +300,19 @@ const createCardsInvoke = () => {
   });
 };
 
-const navigateToCards = async (screen: Awaited<ReturnType<typeof renderWithIpcProviders>>) => {
+const navigateToCards = async (
+  screen: Awaited<ReturnType<typeof renderWithIpcProviders>>,
+  expectedTopicCount = 4,
+) => {
   await uploadPdf();
   await userEvent.click(screen.getByText("Begin Extraction"));
   await expect.element(screen.getByText("Select topics")).toBeVisible();
   await userEvent.click(screen.getByRole("button", { name: "Select all", exact: true }));
-  await expect.element(screen.getByText("4 topics selected")).toBeVisible();
+  await expect.element(screen.getByText(`${expectedTopicCount} topics selected`)).toBeVisible();
   await userEvent.click(screen.getByText("Continue to cards"));
-  await expect.element(screen.getByText("Topics · 4")).toBeVisible();
+  await expect
+    .element(screen.getByRole("complementary").getByText("alpha", { exact: true }))
+    .toBeVisible();
 };
 
 const findSidebarRow = (
@@ -394,5 +454,26 @@ describe("Forge cards sidebar multi-select", () => {
     gammaRow.click();
 
     expect(screen.getByText("selected", { exact: false }).query()).toBeNull();
+  });
+
+  it("shows Details and Synthesis section headers when both families are present", async () => {
+    const invoke = createCardsInvoke([...DETAIL_TOPICS, ...SYNTHESIS_TOPICS]);
+    mockDesktopGlobals(invoke);
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen, 5);
+
+    await expect.element(screen.getByText("Details", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("Synthesis", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("cross-cutting theme", { exact: true })).toBeVisible();
+  });
+
+  it("omits section headers when only detail topics are present", async () => {
+    const invoke = createCardsInvoke();
+    mockDesktopGlobals(invoke);
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    expect(screen.getByText("Details", { exact: true }).query()).toBeNull();
+    expect(screen.getByText("Synthesis", { exact: true }).query()).toBeNull();
   });
 });
