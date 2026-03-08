@@ -20,6 +20,7 @@ import type { DerivationParentRef, ForgeGetDerivedCardsResult } from "@shared/rp
 import { useForgeTargetDeckPath } from "../forge-page-context";
 import type { ExpansionColumnDescriptor } from "../forge-page-store";
 
+import { AddToDeckButton } from "./add-to-deck-button";
 import { ClozePanel } from "./cloze-panel";
 import { InlineEditor } from "./inline-editor";
 import { PermutationsPanel } from "./permutations-panel";
@@ -78,6 +79,7 @@ export function ExpansionColumn({
   const [addError, setAddError] = useState<string | null>(null);
   const [generationErrorMessage, setGenerationErrorMessage] = useState<string | null>(null);
   const instructionTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const didInitInstructionRef = useRef(false);
 
   const derivations = query.data?.derivations ?? [];
   const loading = isPending || inFlightForColumnCount > 0 || query.isLoading;
@@ -85,10 +87,11 @@ export function ExpansionColumn({
   const errorMessage = generationErrorMessage ?? query.error?.message ?? null;
 
   useEffect(() => {
-    if (!instruction && resolvedInstruction) {
+    if (!didInitInstructionRef.current && resolvedInstruction) {
+      didInitInstructionRef.current = true;
       setInstruction(resolvedInstruction);
     }
-  }, [instruction, resolvedInstruction]);
+  }, [resolvedInstruction]);
 
   useEffect(() => {
     setGenerationErrorMessage(null);
@@ -259,7 +262,9 @@ export function ExpansionColumn({
             {column.parentAnswer}
           </p>
           <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground/40">
-            {resolvedInstruction ? <span className="italic">"{resolvedInstruction}"</span> : null}
+            {resolvedInstruction ? (
+              <span className="italic max-w-[400px] mr-auto">"{resolvedInstruction}"</span>
+            ) : null}
             {derivations.length > 0 ? (
               <>
                 {resolvedInstruction ? <span className="text-border">·</span> : null}
@@ -326,11 +331,11 @@ export function ExpansionColumn({
               {[0, 1, 2, 3].map((i) => (
                 <div key={i} className="space-y-2">
                   <div
-                    className="h-2.5 animate-pulse rounded bg-muted/40"
+                    className="h-4 animate-pulse rounded bg-muted/40"
                     style={{ width: `${90 - i * 7}%` }}
                   />
                   <div
-                    className="h-2.5 animate-pulse rounded bg-muted/25"
+                    className="h-4 animate-pulse rounded bg-muted/25"
                     style={{ width: `${72 - i * 5}%` }}
                   />
                 </div>
@@ -352,48 +357,65 @@ export function ExpansionColumn({
                 const expandedPanel = expandedPanels.get(derivation.id) ?? null;
                 const isExpanded = expandedDerivationIds.has(derivation.id);
 
+                const hasExpanded = expandedPanel !== null || isExpanded;
+
                 return (
                   <div
                     key={derivation.id}
                     className={cn(
-                      "border-b border-border/20 py-4 last:border-b-0",
+                      "group relative border-b border-border/20 py-4 last:border-b-0",
                       isExpanded && "bg-muted/35",
                     )}
                   >
-                    <InlineEditor
-                      content={derivation.question}
-                      editable
-                      onContentChange={(value) =>
-                        handleEditDerivation(derivation.id, "question", value)
-                      }
-                      className="min-h-0 text-[14px] font-medium leading-relaxed"
-                    />
-                    <InlineEditor
-                      content={derivation.answer}
-                      editable
-                      onContentChange={(value) =>
-                        handleEditDerivation(derivation.id, "answer", value)
-                      }
-                      className="mt-1.5 min-h-0 text-sm leading-relaxed text-muted-foreground"
-                    />
+                    <div
+                      className={cn(
+                        "transition-opacity",
+                        derivation.addedCount > 0 && "opacity-40",
+                      )}
+                    >
+                      <InlineEditor
+                        content={derivation.question}
+                        editable={derivation.addedCount === 0}
+                        onContentChange={(value) =>
+                          handleEditDerivation(derivation.id, "question", value)
+                        }
+                        className="min-h-0 text-[14px] font-medium leading-relaxed"
+                      />
+                      <InlineEditor
+                        content={derivation.answer}
+                        editable={derivation.addedCount === 0}
+                        onContentChange={(value) =>
+                          handleEditDerivation(derivation.id, "answer", value)
+                        }
+                        className="mt-1.5 min-h-0 text-sm leading-relaxed text-muted-foreground"
+                      />
+                    </div>
 
-                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="xs"
-                        disabled={addingIds.has(derivation.id) || !targetDeckPath}
+                    <div
+                      className={cn(
+                        "mt-3 flex items-center gap-1.5 transition-all",
+                        hasExpanded
+                          ? "opacity-100"
+                          : "translate-y-0.5 opacity-0 group-hover:translate-y-0 group-hover:opacity-100",
+                      )}
+                    >
+                      <AddToDeckButton
+                        isAdded={derivation.addedCount > 0}
+                        isAdding={addingIds.has(derivation.id)}
+                        disabled={!targetDeckPath}
                         onClick={() =>
                           handleAddDerivation(derivation.id, derivation.question, derivation.answer)
                         }
-                      >
-                        {derivation.addedCount > 0 ? "Added" : "+ Add to deck"}
-                      </Button>
+                      />
+                      <div className="mx-1 h-4 w-px bg-border/30" />
                       <Button
                         type="button"
                         variant="ghost"
                         size="xs"
-                        className="gap-1.5"
+                        className={cn(
+                          "gap-1.5 text-muted-foreground/60 hover:bg-transparent hover:text-foreground",
+                          expandedPanel === "permutations" && "text-foreground",
+                        )}
                         onClick={() => togglePanel(derivation.id, "permutations")}
                       >
                         <ListTree className="size-3" />
@@ -403,7 +425,10 @@ export function ExpansionColumn({
                         type="button"
                         variant="ghost"
                         size="xs"
-                        className="gap-1.5"
+                        className={cn(
+                          "gap-1.5 text-muted-foreground/60 hover:bg-transparent hover:text-foreground",
+                          expandedPanel === "cloze" && "text-foreground",
+                        )}
                         onClick={() => togglePanel(derivation.id, "cloze")}
                       >
                         <Braces className="size-3" />
@@ -426,9 +451,6 @@ export function ExpansionColumn({
                               rootCardId: derivation.rootCardId,
                               parentQuestion: derivation.question,
                               parentAnswer: derivation.answer,
-                              ...(derivation.instruction
-                                ? { instruction: derivation.instruction }
-                                : {}),
                             },
                             column.parent,
                           )
@@ -440,18 +462,22 @@ export function ExpansionColumn({
                     </div>
 
                     {expandedPanel === "permutations" ? (
-                      <PermutationsPanel
-                        parent={{ derivationId: derivation.id }}
-                        rootCardId={column.rootCardId}
-                      />
+                      <div className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
+                        <PermutationsPanel
+                          parent={{ derivationId: derivation.id }}
+                          rootCardId={column.rootCardId}
+                        />
+                      </div>
                     ) : null}
 
                     {expandedPanel === "cloze" ? (
-                      <ClozePanel
-                        source={{ derivationId: derivation.id }}
-                        sourceQuestion={derivation.question}
-                        sourceAnswer={derivation.answer}
-                      />
+                      <div className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
+                        <ClozePanel
+                          source={{ derivationId: derivation.id }}
+                          sourceQuestion={derivation.question}
+                          sourceAnswer={derivation.answer}
+                        />
+                      </div>
                     ) : null}
                   </div>
                 );
