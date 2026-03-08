@@ -5,6 +5,7 @@ import { userEvent } from "vitest/browser";
 import { StoresProvider, createStores } from "@shared/state/stores-context";
 import { routeTree } from "../../src/renderer/src/routeTree.gen";
 import { renderWithIpcProviders } from "./render-with-providers";
+import { createForgeTopicExtractionSnapshotSuccess } from "./forge-ipc-mocks";
 
 const defaultOnStreamFrame: NonNullable<Window["desktopApi"]["onStreamFrame"]> = () => {
   return () => undefined;
@@ -547,8 +548,10 @@ describe("renderer integration", () => {
             topics: [
               {
                 topicId: 10,
+                sessionId: forgeSession.id,
+                family: "detail",
                 chunkId: 101,
-                sequenceOrder: 0,
+                chunkSequenceOrder: 0,
                 topicIndex: 0,
                 topicText: "biology",
                 status: "generated",
@@ -564,13 +567,12 @@ describe("renderer integration", () => {
       }
 
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: forgeSession,
-            topicsByChunk: [{ chunkId: 101, sequenceOrder: 0, topics: ["biology"] }],
-          },
-        };
+        return createForgeTopicExtractionSnapshotSuccess({
+          source: { kind: "pdf", sourceFilePath: "/forge/source.pdf" },
+          sessionId: forgeSession.id,
+          status: "topics_extracted",
+          topicsByChunk: [{ chunkId: 101, sequenceOrder: 0, topics: ["biology"] }],
+        });
       }
 
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };

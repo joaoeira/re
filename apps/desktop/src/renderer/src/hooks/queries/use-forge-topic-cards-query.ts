@@ -8,22 +8,20 @@ import type { ForgeGetTopicCardsResult } from "@shared/rpc/schemas/forge";
 
 export function useForgeTopicCardsQuery(
   sessionId: number | null,
-  chunkId: number | null,
-  topicIndex: number | null,
+  topicId: number | null,
 ) {
   const ipc = useIpc();
 
   return useQuery<ForgeGetTopicCardsResult, Error>({
-    queryKey: queryKeys.forgeTopicCards(sessionId, chunkId, topicIndex),
+    queryKey: queryKeys.forgeTopicCards(sessionId, topicId),
     queryFn:
-      sessionId !== null && chunkId !== null && topicIndex !== null
+      sessionId !== null && topicId !== null
         ? () =>
             runIpcEffect(
               ipc.client
                 .ForgeGetTopicCards({
                   sessionId,
-                  chunkId,
-                  topicIndex,
+                  topicId,
                 })
                 .pipe(
                   Effect.catchTag("RpcDefectError", (rpcDefect) =>

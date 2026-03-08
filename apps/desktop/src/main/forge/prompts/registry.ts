@@ -1,7 +1,9 @@
 import { CreateCardsPromptSpec } from "./create-cards";
+import { CreateSynthesisCardsPromptSpec } from "./create-synthesis-cards";
 import { GenerateClozePromptSpec } from "./generate-cloze";
 import { GeneratePermutationsPromptSpec } from "./generate-permutations";
 import { GetTopicsPromptSpec } from "./get-topics";
+import { GetSynthesisTopicsPromptSpec } from "./get-synthesis-topics";
 
 export interface PromptSpecIdentity {
   readonly promptId: string;
@@ -46,7 +48,9 @@ export const createForgePromptRegistry = <Spec extends PromptSpecIdentity>(
 
 export const ForgePromptRegistry = createForgePromptRegistry([
   GetTopicsPromptSpec,
+  GetSynthesisTopicsPromptSpec,
   CreateCardsPromptSpec,
+  CreateSynthesisCardsPromptSpec,
   GeneratePermutationsPromptSpec,
   GenerateClozePromptSpec,
 ]);

@@ -1,5 +1,9 @@
 import { createStore } from "@xstate/store";
-import type { ForgeSessionStatus } from "@shared/rpc/schemas/forge";
+import type {
+  ForgeSessionStatus,
+  ForgeTopicExtractionOutcome,
+  ForgeTopicGroup,
+} from "@shared/rpc/schemas/forge";
 
 import type { ForgeSelectedSource } from "./forge-source";
 
@@ -28,16 +32,10 @@ export type ExtractSummary = {
   readonly chunkCount: number;
 };
 
-export type ChunkTopics = {
-  readonly chunkId: number;
-  readonly sequenceOrder: number;
-  readonly topics: ReadonlyArray<string>;
-};
-
 export type ForgeStep = "source" | "topics" | "cards";
 export type ForgeSourceEntryMode = "picker" | "text-editor";
 
-export const topicKey = (chunkId: number, topicIndex: number): string => `${chunkId}:${topicIndex}`;
+export const topicKey = (topicId: number): string => `${topicId}`;
 
 export type TopicCardIdMap = ReadonlyMap<string, ReadonlySet<number>>;
 export type ForgeCardExpandedPanel = "permutations" | "cloze";
@@ -60,7 +58,8 @@ type ForgePageContext = {
   readonly activeExtractionSessionId: number | null;
   readonly topicSyncErrorMessage: string | null;
   readonly extractSummary: ExtractSummary | null;
-  readonly topicsByChunk: ReadonlyArray<ChunkTopics>;
+  readonly topicGroups: ReadonlyArray<ForgeTopicGroup>;
+  readonly extractionOutcomes: ReadonlyArray<ForgeTopicExtractionOutcome>;
   readonly selectedTopicKeys: ReadonlySet<string>;
   readonly activeTopicKey: string | null;
   readonly deletedCardIdsByTopicKey: TopicCardIdMap;
@@ -89,7 +88,8 @@ const initialForgePageContext = (): ForgePageContext => ({
   activeExtractionSessionId: null,
   topicSyncErrorMessage: null,
   extractSummary: null,
-  topicsByChunk: [],
+  topicGroups: [],
+  extractionOutcomes: [],
   selectedTopicKeys: emptyTopicKeys,
   activeTopicKey: null,
   deletedCardIdsByTopicKey: emptyTopicCardIdMap,
@@ -119,26 +119,28 @@ const extractStateFromSessionStatus = (
   }
 };
 
-const sortChunks = (chunks: ReadonlyArray<ChunkTopics>): ReadonlyArray<ChunkTopics> =>
-  chunks
+const sortGroups = (groups: ReadonlyArray<ForgeTopicGroup>): ReadonlyArray<ForgeTopicGroup> =>
+  groups
     .slice()
-    .sort(
-      (left, right) => left.sequenceOrder - right.sequenceOrder || left.chunkId - right.chunkId,
-    );
+    .sort((left, right) => left.displayOrder - right.displayOrder || left.groupId.localeCompare(right.groupId));
+
+const topicKeysFromGroups = (groups: ReadonlyArray<ForgeTopicGroup>): ReadonlySet<string> => {
+  const valid = new Set<string>();
+  for (const group of groups) {
+    for (const topic of group.topics) {
+      valid.add(topicKey(topic.topicId));
+    }
+  }
+  return valid;
+};
 
 const pruneSelectedTopicKeys = (
   selectedTopicKeys: ReadonlySet<string>,
-  topicsByChunk: ReadonlyArray<ChunkTopics>,
+  topicGroups: ReadonlyArray<ForgeTopicGroup>,
 ): ReadonlySet<string> => {
   if (selectedTopicKeys.size === 0) return selectedTopicKeys;
 
-  const valid = new Set<string>();
-  topicsByChunk.forEach((chunk) => {
-    chunk.topics.forEach((_, index) => {
-      valid.add(topicKey(chunk.chunkId, index));
-    });
-  });
-
+  const valid = topicKeysFromGroups(topicGroups);
   const next = new Set<string>();
   selectedTopicKeys.forEach((key) => {
     if (valid.has(key)) next.add(key);
@@ -266,38 +268,6 @@ const withoutExpandedCardPanelsForTopic = (
   return nextMap;
 };
 
-const mergeChunkTopics = (
-  current: ReadonlyArray<ChunkTopics>,
-  chunk: ChunkTopics,
-): ReadonlyArray<ChunkTopics> => {
-  const index = current.findIndex((entry) => entry.chunkId === chunk.chunkId);
-  if (index < 0) return sortChunks([...current, chunk]);
-  const next = current.slice();
-  next[index] = chunk;
-  return sortChunks(next);
-};
-
-const mergeTopicSnapshots = (
-  current: ReadonlyArray<ChunkTopics>,
-  incoming: ReadonlyArray<ChunkTopics>,
-): ReadonlyArray<ChunkTopics> => {
-  const byChunkId = new Map<number, ChunkTopics>();
-  for (const chunk of current) {
-    byChunkId.set(chunk.chunkId, chunk);
-  }
-
-  for (const chunk of incoming) {
-    const existing = byChunkId.get(chunk.chunkId);
-    // For one session/chunk, topic extraction is monotonic: once a chunk has N topics,
-    // later snapshots should not have fewer unless data is stale.
-    if (!existing || chunk.topics.length >= existing.topics.length) {
-      byChunkId.set(chunk.chunkId, chunk);
-    }
-  }
-
-  return sortChunks(Array.from(byChunkId.values()));
-};
-
 export const createForgePageStore = () =>
   createStore({
     context: initialForgePageContext(),
@@ -361,7 +331,8 @@ export const createForgePageStore = () =>
         activeExtractionSessionId: null,
         topicSyncErrorMessage: null,
         extractSummary: null,
-        topicsByChunk: [],
+        topicGroups: [],
+        extractionOutcomes: [],
         selectedTopicKeys: emptyTopicKeys,
         activeTopicKey: null,
         deletedCardIdsByTopicKey: emptyTopicCardIdMap,
@@ -392,7 +363,8 @@ export const createForgePageStore = () =>
         topicSyncErrorMessage: null,
         extractState: { status: "extracting" as const },
         extractSummary: null,
-        topicsByChunk: [],
+        topicGroups: [],
+        extractionOutcomes: [],
         selectedTopicKeys: emptyTopicKeys,
         activeTopicKey: null,
         deletedCardIdsByTopicKey: emptyTopicCardIdMap,
@@ -406,23 +378,6 @@ export const createForgePageStore = () =>
           activeExtractionSessionId: event.sessionId,
         };
       },
-      topicChunkExtracted: (
-        context,
-        event: {
-          chunk: ChunkTopics;
-        },
-      ) => {
-        const nextTopicsByChunk = mergeChunkTopics(context.topicsByChunk, event.chunk);
-        const nextSelectedTopicKeys = pruneSelectedTopicKeys(
-          context.selectedTopicKeys,
-          nextTopicsByChunk,
-        );
-        return {
-          ...context,
-          topicsByChunk: nextTopicsByChunk,
-          ...withPrunedSelections(context, nextSelectedTopicKeys),
-        };
-      },
       topicSnapshotSynced: (
         context,
         event: {
@@ -430,7 +385,8 @@ export const createForgePageStore = () =>
           sessionCreatedAt: string;
           sessionStatus: ForgeSessionStatus;
           sessionErrorMessage: string | null;
-          topicsByChunk: ReadonlyArray<ChunkTopics>;
+          groups: ReadonlyArray<ForgeTopicGroup>;
+          outcomes: ReadonlyArray<ForgeTopicExtractionOutcome>;
         },
       ) => {
         if (
@@ -449,10 +405,10 @@ export const createForgePageStore = () =>
           return context;
         }
 
-        const nextTopicsByChunk = mergeTopicSnapshots(context.topicsByChunk, event.topicsByChunk);
+        const nextTopicGroups = sortGroups(event.groups);
         const nextSelectedTopicKeys = pruneSelectedTopicKeys(
           context.selectedTopicKeys,
-          nextTopicsByChunk,
+          nextTopicGroups,
         );
         const nextExtractState = extractStateFromSessionStatus(
           event.sessionStatus,
@@ -472,7 +428,8 @@ export const createForgePageStore = () =>
             guardedExtractState.status === "extracting" ? context.activeExtractionStartedAt : null,
           topicSyncErrorMessage: null,
           extractState: guardedExtractState,
-          topicsByChunk: nextTopicsByChunk,
+          topicGroups: nextTopicGroups,
+          extractionOutcomes: event.outcomes,
           ...withPrunedSelections(context, nextSelectedTopicKeys),
         };
       },
@@ -485,14 +442,16 @@ export const createForgePageStore = () =>
         event: {
           duplicateOfSessionId: number | null;
           extraction: ExtractSummary;
-          topicsByChunk: ReadonlyArray<ChunkTopics>;
+          groups: ReadonlyArray<ForgeTopicGroup>;
+          outcomes: ReadonlyArray<ForgeTopicExtractionOutcome>;
         },
       ) => {
-        const nextTopicsByChunk = sortChunks(event.topicsByChunk);
+        const nextTopicGroups = sortGroups(event.groups);
         const nextSelectedTopicKeys = pruneSelectedTopicKeys(
           context.selectedTopicKeys,
-          nextTopicsByChunk,
+          nextTopicGroups,
         );
+
         return {
           ...context,
           currentStep: "topics" as const,
@@ -508,7 +467,8 @@ export const createForgePageStore = () =>
           activeExtractionSessionId: event.extraction.sessionId,
           topicSyncErrorMessage: null,
           extractSummary: event.extraction,
-          topicsByChunk: nextTopicsByChunk,
+          topicGroups: nextTopicGroups,
+          extractionOutcomes: event.outcomes,
           extractState: { status: "idle" as const },
           ...withPrunedSelections(context, nextSelectedTopicKeys),
         };
@@ -534,12 +494,14 @@ export const createForgePageStore = () =>
           status: "error" as const,
           message: event.message,
         },
+        topicGroups: [],
+        extractionOutcomes: [],
         activeTopicKey: null,
         deletedCardIdsByTopicKey: emptyTopicCardIdMap,
         expandedCardPanelsByTopicKey: emptyTopicExpandedCardPanelMap,
       }),
-      toggleTopic: (context, event: { chunkId: number; topicIndex: number }) => {
-        const key = topicKey(event.chunkId, event.topicIndex);
+      toggleTopic: (context, event: { topicId: number }) => {
+        const key = topicKey(event.topicId);
         const next = new Set(context.selectedTopicKeys);
         if (next.has(key)) next.delete(key);
         else next.add(key);
@@ -548,12 +510,12 @@ export const createForgePageStore = () =>
           ...withPrunedSelections(context, next),
         };
       },
-      toggleAllChunk: (context, event: { chunkId: number; select: boolean }) => {
-        const chunk = context.topicsByChunk.find((c) => c.chunkId === event.chunkId);
-        if (!chunk) return context;
+      toggleGroup: (context, event: { groupId: string; select: boolean }) => {
+        const group = context.topicGroups.find((g) => g.groupId === event.groupId);
+        if (!group) return context;
         const next = new Set(context.selectedTopicKeys);
-        chunk.topics.forEach((_, i) => {
-          const key = topicKey(event.chunkId, i);
+        group.topics.forEach((topic) => {
+          const key = topicKey(topic.topicId);
           if (event.select) next.add(key);
           else next.delete(key);
         });
@@ -564,8 +526,8 @@ export const createForgePageStore = () =>
       },
       selectAllTopics: (context) => {
         const next = new Set<string>();
-        context.topicsByChunk.forEach((chunk) => {
-          chunk.topics.forEach((_, i) => next.add(topicKey(chunk.chunkId, i)));
+        context.topicGroups.forEach((group) => {
+          group.topics.forEach((topic) => next.add(topicKey(topic.topicId)));
         });
         return {
           ...context,
@@ -623,10 +585,13 @@ export const createForgePageStore = () =>
         ...context,
         currentStep: "cards" as const,
       }),
-      setTargetDeckPath: (context, event: { deckPath: string | null }) => ({
-        ...context,
-        targetDeckPath: event.deckPath,
-      }),
+      setTargetDeckPath: (context, event: { deckPath: string | null }) => {
+        if (context.targetDeckPath === event.deckPath) return context;
+        return {
+          ...context,
+          targetDeckPath: event.deckPath,
+        };
+      },
       resumeSession: (
         _context,
         event: {
@@ -635,7 +600,8 @@ export const createForgePageStore = () =>
           extractState: ExtractState;
           sessionId: number;
           targetDeckPath: string | null;
-          topicsByChunk: ReadonlyArray<ChunkTopics>;
+          topicGroups: ReadonlyArray<ForgeTopicGroup>;
+          extractionOutcomes: ReadonlyArray<ForgeTopicExtractionOutcome>;
           selectedTopicKeys: ReadonlySet<string>;
         },
       ) => ({
@@ -648,7 +614,8 @@ export const createForgePageStore = () =>
         activeExtractionSessionId: event.sessionId,
         extractSummary: null,
         extractState: event.extractState,
-        topicsByChunk: event.topicsByChunk,
+        topicGroups: event.topicGroups,
+        extractionOutcomes: event.extractionOutcomes,
         selectedTopicKeys: event.selectedTopicKeys,
       }),
       resumeError: (context, event: { message: string }) => ({

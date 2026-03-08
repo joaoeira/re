@@ -6,38 +6,55 @@ import {
   useForgePreviewState,
   useForgeSelectedTopicCount,
   useForgeSelectedTopicKeys,
+  useForgeTopicExtractionOutcomes,
   useForgeTopicSyncErrorMessage,
   useForgeTopicActions,
-  useForgeTopicsByChunk,
+  useForgeTopicGroups,
 } from "../forge-page-context";
-import { ChunkSection } from "./chunk-section";
+import { TopicGroupSection } from "./topic-group-section";
 
 export function TopicSelection() {
-  const topicsByChunk = useForgeTopicsByChunk();
-  const chunksWithTopics = useMemo(
-    () => topicsByChunk.filter((chunk) => chunk.topics.length > 0),
-    [topicsByChunk],
+  const topicGroups = useForgeTopicGroups();
+  const populatedGroups = useMemo(
+    () => topicGroups.filter((group) => group.topics.length > 0),
+    [topicGroups],
   );
   const selectedKeys = useForgeSelectedTopicKeys();
   const extractSummary = useForgeExtractSummary();
   const extractState = useForgeExtractState();
   const previewState = useForgePreviewState();
   const topicSyncErrorMessage = useForgeTopicSyncErrorMessage();
+  const extractionOutcomes = useForgeTopicExtractionOutcomes();
   const actions = useForgeTopicActions();
   const selectedCount = useForgeSelectedTopicCount();
 
-  const totalTopics = useMemo(
-    () => topicsByChunk.reduce((sum, c) => sum + c.topics.length, 0),
-    [topicsByChunk],
-  );
+  const counts = useMemo(() => {
+    let total = 0;
+    let detail = 0;
+    let synthesis = 0;
+    let detailGroups = 0;
+
+    for (const group of topicGroups) {
+      total += group.topics.length;
+      if (group.family === "detail") {
+        detail += group.topics.length;
+        detailGroups += 1;
+      } else {
+        synthesis += group.topics.length;
+      }
+    }
+
+    return { total, detail, synthesis, detailGroups };
+  }, [topicGroups]);
 
   const chunkCount =
     extractSummary?.chunkCount ??
     (previewState.status === "ready" ? previewState.summary.chunkCount : null);
-  const extractedChunks = chunksWithTopics.length;
+  const extractedChunks = counts.detailGroups;
   const extractPct =
     chunkCount && chunkCount > 0 ? Math.min((extractedChunks / chunkCount) * 100, 100) : null;
-  const shouldShowSummary = totalTopics > 0 || chunksWithTopics.length > 0;
+  const shouldShowSummary = counts.total > 0 || populatedGroups.length > 0;
+  const synthesisOutcome = extractionOutcomes.find((outcome) => outcome.family === "synthesis");
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
@@ -50,8 +67,25 @@ export function TopicSelection() {
 
       {shouldShowSummary && (
         <p className="text-xs text-muted-foreground">
-          Extracted <span className="font-mono text-foreground/70">{totalTopics}</span> topics from{" "}
-          <span className="font-mono text-foreground/70">{chunksWithTopics.length}</span> chunks
+          {counts.detail > 0 ? (
+            <>
+              Extracted <span className="font-mono text-foreground/70">{counts.detail}</span>{" "}
+              topics from <span className="font-mono text-foreground/70">{counts.detailGroups}</span>{" "}
+              chunk{counts.detailGroups === 1 ? "" : "s"}
+              {counts.synthesis > 0 ? (
+                <>
+                  {" "}
+                  + <span className="font-mono text-foreground/70">{counts.synthesis}</span>{" "}
+                  synthesis topic{counts.synthesis === 1 ? "" : "s"}
+                </>
+              ) : null}
+            </>
+          ) : (
+            <>
+              Extracted <span className="font-mono text-foreground/70">{counts.synthesis}</span>{" "}
+              synthesis topic{counts.synthesis === 1 ? "" : "s"}
+            </>
+          )}
         </p>
       )}
 
@@ -80,6 +114,9 @@ export function TopicSelection() {
               />
             </div>
           ) : null}
+          {extractState.status === "extracting" && synthesisOutcome?.status !== "extracted" ? (
+            <p className="text-[11px] text-muted-foreground/70">Generating synthesis topics…</p>
+          ) : null}
         </div>
       )}
 
@@ -94,6 +131,12 @@ export function TopicSelection() {
           Sync warning: {topicSyncErrorMessage}
         </p>
       )}
+
+      {synthesisOutcome?.status === "error" ? (
+        <p role="alert" className="text-xs text-destructive/90">
+          Synthesis failed: {synthesisOutcome.errorMessage ?? "Unknown error"}
+        </p>
+      ) : null}
 
       <div className="flex items-center gap-1 border-b border-border/30 pb-3.5">
         <button
@@ -118,29 +161,27 @@ export function TopicSelection() {
       </div>
 
       <div>
-        {chunksWithTopics.map((chunk, i) => (
+        {populatedGroups.map((group, i) => (
           <div
-            key={chunk.chunkId}
+            key={group.groupId}
             className="animate-in fade-in-0 slide-in-from-bottom-1"
             style={{ animationDelay: `${i * 80}ms`, animationFillMode: "backwards" }}
           >
-            <ChunkSection
-              chunkId={chunk.chunkId}
-              sequenceOrder={chunk.sequenceOrder}
-              topics={chunk.topics}
+            <TopicGroupSection
+              group={group}
               selectedKeys={selectedKeys}
               onToggleTopic={actions.toggleTopic}
-              onToggleAllChunk={actions.toggleAllChunk}
+              onToggleGroup={actions.toggleGroup}
             />
           </div>
         ))}
-        {extractState.status === "extracting" && chunksWithTopics.length > 0 && (
+        {extractState.status === "extracting" && populatedGroups.length > 0 && (
           <div className="flex items-center gap-2.5 py-4 text-xs text-muted-foreground/60">
             <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-[1.5px] border-muted-foreground/25 border-t-transparent" />
             Processing next section…
           </div>
         )}
-        {chunksWithTopics.length === 0 && extractState.status === "extracting" ? (
+        {populatedGroups.length === 0 && extractState.status === "extracting" ? (
           <p className="py-6 text-xs text-muted-foreground/80">Waiting for first chunk...</p>
         ) : null}
       </div>

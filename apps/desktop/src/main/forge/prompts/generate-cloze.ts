@@ -8,7 +8,7 @@ const SourceCardSchema = Schema.Struct({
 });
 
 export const GenerateClozePromptInputSchema = Schema.Struct({
-  chunkText: Schema.String.pipe(Schema.minLength(1)),
+  contextText: Schema.String.pipe(Schema.minLength(1)),
   source: SourceCardSchema,
   instruction: Schema.optional(Schema.String),
 });
@@ -55,6 +55,11 @@ const renderBaseUserPrompt = (input: GenerateClozePromptInput): string => {
 
   5. **Review for Comprehensiveness**: Ensure that the resulting cloze deletions fully encompass all significant details and allow for a robust understanding of the topic across various fields.
   </guidelines>
+
+  Source context:
+  ${input.contextText}
+
+  ---
 
   Source card:
   Question: ${input.source.question}

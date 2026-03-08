@@ -8,7 +8,7 @@ import { CardQualityPrinciples } from "@main/forge/prompts/card-principles";
 describe("GeneratePermutationsPromptSpec", () => {
   it("renders principles as system prompt and includes source card/instruction", () => {
     const rendered = GeneratePermutationsPromptSpec.render({
-      chunkText: "Chunk context",
+      contextText: "Chunk context",
       source: {
         question: "What is ATP?",
         answer: "ATP is the primary energy currency.",
@@ -33,7 +33,7 @@ describe("GeneratePermutationsPromptSpec", () => {
 
   it("renders fallback text when instruction is omitted", () => {
     const rendered = GeneratePermutationsPromptSpec.render({
-      chunkText: "Chunk context",
+      contextText: "Chunk context",
       source: {
         question: "What is osmosis?",
         answer: "It is passive transport of water.",
@@ -52,7 +52,7 @@ describe("GeneratePermutationsPromptSpec", () => {
   it("renders retry context and normalizes permutations in output schema", async () => {
     const rendered = GeneratePermutationsPromptSpec.render(
       {
-        chunkText: "Chunk context",
+        contextText: "Chunk context",
         source: {
           question: "What is osmosis?",
           answer: "It is passive transport of water.",
@@ -98,7 +98,7 @@ describe("GeneratePermutationsPromptSpec", () => {
     });
 
     const normalized = GeneratePermutationsPromptSpec.normalize(decoded, {
-      chunkText: "Chunk context",
+      contextText: "Chunk context",
       source: {
         question: "What is osmosis?",
         answer: "It is passive transport of water.",

@@ -24,12 +24,26 @@ export {
   type GetTopicsPromptOutput,
 } from "./get-topics";
 export {
+  GetSynthesisTopicsPromptInputSchema,
+  GetSynthesisTopicsPromptOutputSchema,
+  GetSynthesisTopicsPromptSpec,
+  type GetSynthesisTopicsPromptInput,
+  type GetSynthesisTopicsPromptOutput,
+} from "./get-synthesis-topics";
+export {
   CreateCardsPromptInputSchema,
   CreateCardsPromptOutputSchema,
   CreateCardsPromptSpec,
   type CreateCardsPromptInput,
   type CreateCardsPromptOutput,
 } from "./create-cards";
+export {
+  CreateSynthesisCardsPromptInputSchema,
+  CreateSynthesisCardsPromptOutputSchema,
+  CreateSynthesisCardsPromptSpec,
+  type CreateSynthesisCardsPromptInput,
+  type CreateSynthesisCardsPromptOutput,
+} from "./create-synthesis-cards";
 export {
   GeneratePermutationsPromptInputSchema,
   GeneratePermutationsPromptOutputSchema,

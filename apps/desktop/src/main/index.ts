@@ -35,6 +35,7 @@ import {
   PdfExtractorServiceLive,
   SecretStoreServiceLive,
   SettingsRepositoryServiceLive,
+  TopicGroundingTextResolverServiceLive,
   WorkspaceWatcherControlService,
   makeAppEventPublisherBridgeService,
   makeDuplicateIndexInvalidationBridgeService,
@@ -354,8 +355,12 @@ if (!gotSingleInstanceLock) {
     const chunkService = makeChunkService();
     const aiClientLayer = AiClientServiceFromSecretStoreLive(secretStore);
     const pdfExtractorLayer = PdfExtractorServiceLive(pdfExtractor);
+    const forgeSessionRepositoryLayer = ForgeSessionRepositoryServiceLive(forgeSessionRepository);
     const forgeSourceResolverLayer = ForgeSourceResolverServiceLive.pipe(
       Layer.provide(pdfExtractorLayer),
+    );
+    const topicGroundingTextResolverLayer = TopicGroundingTextResolverServiceLive.pipe(
+      Layer.provide(forgeSessionRepositoryLayer),
     );
 
     const mainServicesLive = Layer.mergeAll(
@@ -364,10 +369,11 @@ if (!gotSingleInstanceLock) {
       aiClientLayer,
       AnalyticsRepositoryServiceLive(analyticsRepository),
       DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
-      ForgeSessionRepositoryServiceLive(forgeSessionRepository),
+      forgeSessionRepositoryLayer,
       ForgePromptRuntimeServiceLive.pipe(Layer.provide(aiClientLayer)),
       pdfExtractorLayer,
       forgeSourceResolverLayer,
+      topicGroundingTextResolverLayer,
       ChunkServiceLive(chunkService),
       Layer.succeed(AppEventPublisherService, appEventPublisher),
       Layer.succeed(WorkspaceWatcherControlService, workspaceWatcherControl),

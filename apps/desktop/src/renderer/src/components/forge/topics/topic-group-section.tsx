@@ -2,32 +2,35 @@ import { useState } from "react";
 import { ChevronDownIcon } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import type { ForgeTopicGroup } from "@shared/rpc/schemas/forge";
 
 import { topicKey } from "../forge-page-store";
 import { TopicRow } from "./topic-row";
 
-type ChunkSectionProps = {
-  readonly chunkId: number;
-  readonly sequenceOrder: number;
-  readonly topics: ReadonlyArray<string>;
+type TopicGroupSectionProps = {
+  readonly group: ForgeTopicGroup;
   readonly selectedKeys: ReadonlySet<string>;
-  readonly onToggleTopic: (chunkId: number, topicIndex: number) => void;
-  readonly onToggleAllChunk: (chunkId: number, select: boolean) => void;
+  readonly onToggleTopic: (topicId: number) => void;
+  readonly onToggleGroup: (groupId: string, select: boolean) => void;
 };
 
-export function ChunkSection({
-  chunkId,
-  sequenceOrder,
-  topics,
+export function TopicGroupSection({
+  group,
   selectedKeys,
   onToggleTopic,
-  onToggleAllChunk,
-}: ChunkSectionProps) {
+  onToggleGroup,
+}: TopicGroupSectionProps) {
   const [collapsed, setCollapsed] = useState(false);
 
-  const selectedCount = topics.filter((_, i) => selectedKeys.has(topicKey(chunkId, i))).length;
-  const allSelected = selectedCount === topics.length && topics.length > 0;
+  const selectedCount = group.topics.filter((topic) =>
+    selectedKeys.has(topicKey(topic.topicId)),
+  ).length;
+  const allSelected = selectedCount === group.topics.length && group.topics.length > 0;
   const someSelected = selectedCount > 0 && !allSelected;
+  const selectionLabel =
+    group.groupKind === "chunk"
+      ? `Select all topics in ${group.title.toLowerCase()}`
+      : `Select all topics in ${group.title}`;
 
   return (
     <div className="mb-1">
@@ -42,11 +45,11 @@ export function ChunkSection({
           <Checkbox
             checked={allSelected}
             indeterminate={someSelected}
-            onCheckedChange={() => onToggleAllChunk(chunkId, !allSelected)}
-            aria-label={`Select all topics in chunk ${sequenceOrder}`}
+            onCheckedChange={() => onToggleGroup(group.groupId, !allSelected)}
+            aria-label={selectionLabel}
           />
         </div>
-        <span className="text-sm font-medium text-foreground/90">Chunk {sequenceOrder}</span>
+        <span className="text-sm font-medium text-foreground/90">{group.title}</span>
         <div className="flex-1" />
         <span className="font-mono text-xs text-muted-foreground/60">
           {selectedCount > 0 && (
@@ -55,18 +58,18 @@ export function ChunkSection({
               <span className="text-muted-foreground/30">/</span>
             </>
           )}
-          {topics.length}
+          {group.topics.length}
         </span>
       </div>
 
       {!collapsed && (
         <div className="ml-6 border-t border-border/30 pt-2 flex flex-col gap-2">
-          {topics.map((text, i) => (
+          {group.topics.map((topic) => (
             <TopicRow
-              key={i}
-              text={text}
-              selected={selectedKeys.has(topicKey(chunkId, i))}
-              onToggle={() => onToggleTopic(chunkId, i)}
+              key={topic.topicId}
+              text={topic.topicText}
+              selected={selectedKeys.has(topicKey(topic.topicId))}
+              onToggle={() => onToggleTopic(topic.topicId)}
             />
           ))}
         </div>

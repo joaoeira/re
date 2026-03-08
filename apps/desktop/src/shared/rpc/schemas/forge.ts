@@ -56,6 +56,9 @@ export const ForgeSessionSchema = Schema.Struct({
 });
 export type ForgeSession = typeof ForgeSessionSchema.Type;
 
+export const ForgeTopicFamilySchema = Schema.Literal("detail", "synthesis");
+export type ForgeTopicFamily = typeof ForgeTopicFamilySchema.Type;
+
 export const ForgeCreateSessionInputSchema = Schema.Struct({
   source: ForgeSourceInputSchema,
 });
@@ -126,31 +129,62 @@ export const ForgeChunkTopicsSchema = Schema.Struct({
 });
 export type ForgeChunkTopics = typeof ForgeChunkTopicsSchema.Type;
 
-export const ForgeStartTopicExtractionResultSchema = Schema.Struct({
-  session: ForgeSessionSchema,
-  duplicateOfSessionId: Schema.Union(PositiveIntSchema, Schema.Null),
-  extraction: ForgeExtractTextResultSchema,
-  topicsByChunk: Schema.Array(ForgeChunkTopicsSchema),
-});
-export type ForgeStartTopicExtractionResult = typeof ForgeStartTopicExtractionResultSchema.Type;
-
 export const ForgeGetTopicExtractionSnapshotInputSchema = Schema.Struct({
   sessionId: PositiveIntSchema,
 });
 export type ForgeGetTopicExtractionSnapshotInput =
   typeof ForgeGetTopicExtractionSnapshotInputSchema.Type;
 
+export const ForgeTopicSummarySchema = Schema.Struct({
+  topicId: PositiveIntSchema,
+  sessionId: PositiveIntSchema,
+  family: ForgeTopicFamilySchema,
+  chunkId: Schema.Union(PositiveIntSchema, Schema.Null),
+  chunkSequenceOrder: Schema.Union(NonNegativeIntSchema, Schema.Null),
+  topicIndex: NonNegativeIntSchema,
+  topicText: Schema.String,
+  selected: Schema.Boolean,
+});
+export type ForgeTopicSummary = typeof ForgeTopicSummarySchema.Type;
+
+export const ForgeTopicGroupSchema = Schema.Struct({
+  groupId: Schema.String,
+  groupKind: Schema.Literal("chunk", "section"),
+  family: ForgeTopicFamilySchema,
+  title: Schema.String,
+  displayOrder: NonNegativeIntSchema,
+  chunkId: Schema.Union(PositiveIntSchema, Schema.Null),
+  topics: Schema.Array(ForgeTopicSummarySchema),
+});
+export type ForgeTopicGroup = typeof ForgeTopicGroupSchema.Type;
+
+export const ForgeTopicExtractionOutcomeSchema = Schema.Struct({
+  family: ForgeTopicFamilySchema,
+  status: Schema.Literal("extracted", "error"),
+  errorMessage: NullableStringSchema,
+});
+export type ForgeTopicExtractionOutcome = typeof ForgeTopicExtractionOutcomeSchema.Type;
+
+export const ForgeStartTopicExtractionResultSchema = Schema.Struct({
+  session: ForgeSessionSchema,
+  duplicateOfSessionId: Schema.Union(PositiveIntSchema, Schema.Null),
+  extraction: ForgeExtractTextResultSchema,
+  outcomes: Schema.Array(ForgeTopicExtractionOutcomeSchema),
+  groups: Schema.Array(ForgeTopicGroupSchema),
+});
+export type ForgeStartTopicExtractionResult = typeof ForgeStartTopicExtractionResultSchema.Type;
+
 export const ForgeGetTopicExtractionSnapshotResultSchema = Schema.Struct({
   session: ForgeSessionSchema,
-  topicsByChunk: Schema.Array(ForgeChunkTopicsSchema),
+  outcomes: Schema.Array(ForgeTopicExtractionOutcomeSchema),
+  groups: Schema.Array(ForgeTopicGroupSchema),
 });
 export type ForgeGetTopicExtractionSnapshotResult =
   typeof ForgeGetTopicExtractionSnapshotResultSchema.Type;
 
 export const ForgeTopicRefSchema = Schema.Struct({
   sessionId: PositiveIntSchema,
-  chunkId: PositiveIntSchema,
-  topicIndex: NonNegativeIntSchema,
+  topicId: PositiveIntSchema,
 });
 export type ForgeTopicRef = typeof ForgeTopicRefSchema.Type;
 
@@ -172,8 +206,10 @@ export type ForgeGeneratedCard = typeof ForgeGeneratedCardSchema.Type;
 
 export const ForgeTopicCardsSummarySchema = Schema.Struct({
   topicId: PositiveIntSchema,
-  chunkId: PositiveIntSchema,
-  sequenceOrder: NonNegativeIntSchema,
+  sessionId: PositiveIntSchema,
+  family: ForgeTopicFamilySchema,
+  chunkId: Schema.Union(PositiveIntSchema, Schema.Null),
+  chunkSequenceOrder: Schema.Union(NonNegativeIntSchema, Schema.Null),
   topicIndex: NonNegativeIntSchema,
   topicText: Schema.String,
   status: ForgeTopicCardsStatusSchema,
@@ -206,8 +242,7 @@ export type ForgeGetTopicCardsResult = typeof ForgeGetTopicCardsResultSchema.Typ
 
 export const ForgeGenerateTopicCardsInputSchema = Schema.Struct({
   sessionId: PositiveIntSchema,
-  chunkId: PositiveIntSchema,
-  topicIndex: NonNegativeIntSchema,
+  topicId: PositiveIntSchema,
   instruction: Schema.optional(Schema.String),
   model: Schema.optional(ModelIdSchema),
 });
@@ -218,12 +253,7 @@ export type ForgeGenerateTopicCardsResult = typeof ForgeGenerateTopicCardsResult
 
 export const ForgeGenerateSelectedTopicCardsInputSchema = Schema.Struct({
   sessionId: PositiveIntSchema,
-  topics: Schema.Array(
-    Schema.Struct({
-      chunkId: PositiveIntSchema,
-      topicIndex: NonNegativeIntSchema,
-    }),
-  ),
+  topicIds: Schema.Array(PositiveIntSchema),
   instruction: Schema.optional(Schema.String),
   model: Schema.optional(ModelIdSchema),
   concurrencyLimit: Schema.optional(
@@ -243,8 +273,7 @@ export type ForgeGenerateSelectedTopicCardsTopicStatus =
   typeof ForgeGenerateSelectedTopicCardsTopicStatusSchema.Type;
 
 export const ForgeGenerateSelectedTopicCardsTopicResultSchema = Schema.Struct({
-  chunkId: PositiveIntSchema,
-  topicIndex: NonNegativeIntSchema,
+  topicId: PositiveIntSchema,
   status: ForgeGenerateSelectedTopicCardsTopicStatusSchema,
   message: NullableStringSchema,
 });
@@ -336,12 +365,7 @@ export type ForgeUpdateCardResult = typeof ForgeUpdateCardResultSchema.Type;
 
 export const ForgeSaveTopicSelectionsInputSchema = Schema.Struct({
   sessionId: PositiveIntSchema,
-  selections: Schema.Array(
-    Schema.Struct({
-      chunkId: PositiveIntSchema,
-      topicIndex: NonNegativeIntSchema,
-    }),
-  ),
+  topicIds: Schema.Array(PositiveIntSchema),
 });
 export type ForgeSaveTopicSelectionsInput = typeof ForgeSaveTopicSelectionsInputSchema.Type;
 
@@ -365,9 +389,14 @@ export const ForgeTopicChunkExtractedEventSchema = Schema.Struct({
 export const ForgeExtractionSessionCreatedEventSchema = Schema.Struct({
   sessionId: PositiveIntSchema,
 });
+export const ForgeSynthesisTopicsExtractedEventSchema = Schema.Struct({
+  sessionId: PositiveIntSchema,
+});
 export type ForgeTopicChunkExtractedEvent = typeof ForgeTopicChunkExtractedEventSchema.Type;
 export type ForgeExtractionSessionCreatedEvent =
   typeof ForgeExtractionSessionCreatedEventSchema.Type;
+export type ForgeSynthesisTopicsExtractedEvent =
+  typeof ForgeSynthesisTopicsExtractedEventSchema.Type;
 
 export class ForgeOperationError extends Schema.TaggedError<ForgeOperationError>(
   "@re/desktop/rpc/ForgeOperationError",
@@ -460,8 +489,7 @@ export class ForgeTopicNotFoundError extends Schema.TaggedError<ForgeTopicNotFou
   "@re/desktop/rpc/ForgeTopicNotFoundError",
 )("topic_not_found", {
   sessionId: PositiveIntSchema,
-  chunkId: PositiveIntSchema,
-  topicIndex: NonNegativeIntSchema,
+  topicId: PositiveIntSchema,
 }) {}
 
 export class ForgeCardNotFoundError extends Schema.TaggedError<ForgeCardNotFoundError>(
@@ -480,8 +508,7 @@ export class ForgeCardGenerationError extends Schema.TaggedError<ForgeCardGenera
   "@re/desktop/rpc/ForgeCardGenerationError",
 )("card_generation_error", {
   sessionId: PositiveIntSchema,
-  chunkId: PositiveIntSchema,
-  topicIndex: NonNegativeIntSchema,
+  topicId: PositiveIntSchema,
   message: Schema.String,
 }) {}
 
@@ -489,8 +516,7 @@ export class ForgeTopicAlreadyGeneratingError extends Schema.TaggedError<ForgeTo
   "@re/desktop/rpc/ForgeTopicAlreadyGeneratingError",
 )("topic_already_generating", {
   sessionId: PositiveIntSchema,
-  chunkId: PositiveIntSchema,
-  topicIndex: NonNegativeIntSchema,
+  topicId: PositiveIntSchema,
 }) {}
 
 export class ForgePermutationGenerationError extends Schema.TaggedError<ForgePermutationGenerationError>(
@@ -584,6 +610,7 @@ export const ForgeGetCardsSnapshotErrorSchema = Schema.Union(
 export type ForgeGetCardsSnapshotError = typeof ForgeGetCardsSnapshotErrorSchema.Type;
 
 export const ForgeGetTopicCardsErrorSchema = Schema.Union(
+  ForgeSessionNotFoundError,
   ForgeTopicNotFoundError,
   ForgeSessionOperationError,
   ForgeOperationError,
@@ -591,6 +618,7 @@ export const ForgeGetTopicCardsErrorSchema = Schema.Union(
 export type ForgeGetTopicCardsError = typeof ForgeGetTopicCardsErrorSchema.Type;
 
 export const ForgeGenerateTopicCardsErrorSchema = Schema.Union(
+  ForgeSessionNotFoundError,
   ForgeTopicNotFoundError,
   ForgeTopicAlreadyGeneratingError,
   ForgeCardGenerationError,

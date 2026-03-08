@@ -2,15 +2,15 @@ import { Schema } from "@effect/schema";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
-import { CreateCardsPromptSpec } from "@main/forge/prompts";
+import { CreateSynthesisCardsPromptSpec } from "@main/forge/prompts";
 import { CardQualityPrinciples } from "@main/forge/prompts/card-principles";
 
-describe("CreateCardsPromptSpec", () => {
-  it("renders principles as system prompt and includes topic/instruction in user message", () => {
-    const rendered = CreateCardsPromptSpec.render({
-      contextText: "Chunk context",
-      topic: "ATP synthesis",
-      instruction: "Keep questions short.",
+describe("CreateSynthesisCardsPromptSpec", () => {
+  it("renders principles as system prompt and includes synthesis topic/instruction", () => {
+    const rendered = CreateSynthesisCardsPromptSpec.render({
+      contextText: "Whole-source context",
+      topic: "How two theories relate",
+      instruction: "Prefer contrastive cards.",
     });
 
     expect(rendered.systemPrompt).toBe(CardQualityPrinciples);
@@ -23,15 +23,15 @@ describe("CreateCardsPromptSpec", () => {
     }
 
     expect(message.role).toBe("user");
-    expect(message.content).toContain("ATP synthesis");
-    expect(message.content).toContain("Keep questions short.");
+    expect(message.content).toContain("How two theories relate");
+    expect(message.content).toContain("Prefer contrastive cards.");
     expect(message.content).toContain('"cards": [');
   });
 
   it("renders fallback text when instruction is omitted", () => {
-    const rendered = CreateCardsPromptSpec.render({
-      contextText: "Chunk context",
-      topic: "Cell membranes",
+    const rendered = CreateSynthesisCardsPromptSpec.render({
+      contextText: "Whole-source context",
+      topic: "Why the distinction matters",
     });
 
     const message = rendered.messages[0];
@@ -44,10 +44,10 @@ describe("CreateCardsPromptSpec", () => {
   });
 
   it("renders retry context and normalizes cards in output schema", async () => {
-    const rendered = CreateCardsPromptSpec.render(
+    const rendered = CreateSynthesisCardsPromptSpec.render(
       {
-        contextText: "Chunk context",
-        topic: "Mitochondria",
+        contextText: "Whole-source context",
+        topic: "How the ideas connect",
       },
       {
         attempt: 2,
@@ -66,26 +66,26 @@ describe("CreateCardsPromptSpec", () => {
     expect(assistantMessage.content).toContain("not-json");
 
     const decoded = await Effect.runPromise(
-      Schema.decodeUnknown(CreateCardsPromptSpec.outputSchema)({
+      Schema.decodeUnknown(CreateSynthesisCardsPromptSpec.outputSchema)({
         cards: [
-          { question: "  What   is ATP? ", answer: " Primary energy currency. " },
+          { question: "  How do they differ? ", answer: " One is associative. " },
           { question: "", answer: "discard me" },
-          { question: "What is ATP?", answer: "Primary energy currency." },
-          { question: "Where is it made?", answer: "  Mostly in mitochondria.  " },
+          { question: "How do they differ?", answer: "One is associative." },
+          { question: "Why does timing matter?", answer: "  It changes learning outcomes.  " },
         ],
       }),
     );
 
     expect(decoded).toEqual({
       cards: [
-        { question: "What is ATP?", answer: "Primary energy currency." },
-        { question: "Where is it made?", answer: "Mostly in mitochondria." },
+        { question: "How do they differ?", answer: "One is associative." },
+        { question: "Why does timing matter?", answer: "It changes learning outcomes." },
       ],
     });
 
-    const normalized = CreateCardsPromptSpec.normalize(decoded, {
-      contextText: "Chunk context",
-      topic: "Mitochondria",
+    const normalized = CreateSynthesisCardsPromptSpec.normalize(decoded, {
+      contextText: "Whole-source context",
+      topic: "How the ideas connect",
     });
 
     expect(normalized).toEqual(decoded);

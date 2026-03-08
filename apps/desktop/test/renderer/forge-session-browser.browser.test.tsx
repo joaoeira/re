@@ -2,7 +2,7 @@ import { userEvent } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 
 import { ForgePage } from "@/components/forge/forge-page";
-import { createForgeInvoke } from "./forge-ipc-mocks";
+import { createForgeInvoke, createForgeTopicExtractionSnapshotSuccess } from "./forge-ipc-mocks";
 import { renderWithIpcProviders } from "./render-with-providers";
 import { mockDesktopGlobals, waitForFileInput } from "./forge-test-helpers";
 
@@ -271,24 +271,12 @@ describe("ForgePage session browser", () => {
         };
       }
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: {
-              id: TEXT_SESSION.id,
-              sourceKind: "text",
-              sourceLabel: "Pasted text",
-              sourceFilePath: null,
-              deckPath: null,
-              sourceFingerprint: "fp:text",
-              status: "topics_extracted",
-              errorMessage: null,
-              createdAt: TEXT_SESSION.createdAt,
-              updatedAt: TEXT_SESSION.updatedAt,
-            },
-            topicsByChunk: [{ chunkId: 301, sequenceOrder: 0, topics: ["alpha"] }],
-          },
-        };
+        return createForgeTopicExtractionSnapshotSuccess({
+          source: { kind: "text", text: "alpha", sourceLabel: "Pasted text" },
+          sessionId: TEXT_SESSION.id,
+          status: "topics_extracted",
+          topicsByChunk: [{ chunkId: 301, sequenceOrder: 0, topics: ["alpha"] }],
+        });
       }
       if (method === "GetSettings") {
         return {
@@ -393,8 +381,10 @@ describe("ForgePage session browser", () => {
         topics: [
           {
             topicId: 10,
+            sessionId: 2,
+            family: "detail",
             chunkId: 100,
-            sequenceOrder: 0,
+            chunkSequenceOrder: 0,
             topicIndex: 0,
             topicText: "Cell biology",
             status: "generated",

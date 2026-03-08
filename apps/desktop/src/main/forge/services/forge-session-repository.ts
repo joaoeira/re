@@ -11,6 +11,7 @@ import {
   type ForgeSessionStatus,
   type ForgeSessionSummary,
   type ForgeSourceKind,
+  type ForgeTopicFamily,
   type ForgeTopicCardsStatus,
 } from "@shared/rpc/schemas/forge";
 import { runSqlInRuntimeOrMapRuntimeError } from "@main/sqlite/runtime-runner";
@@ -46,26 +47,15 @@ export type ForgeTopicWrite = {
   readonly topics: ReadonlyArray<string>;
 };
 
-export type ForgeChunkTopics = {
-  readonly chunkId: number;
-  readonly sequenceOrder: number;
-  readonly topics: ReadonlyArray<string>;
-};
-
-export type ForgeTopicRef = {
-  readonly sessionId: number;
-  readonly chunkId: number;
-  readonly topicIndex: number;
-};
-
 export type ForgeTopicRecord = {
   readonly topicId: number;
   readonly sessionId: number;
-  readonly chunkId: number;
-  readonly sequenceOrder: number;
+  readonly family: ForgeTopicFamily;
+  readonly chunkId: number | null;
+  readonly sequenceOrder: number | null;
   readonly topicIndex: number;
   readonly topicText: string;
-  readonly chunkText: string;
+  readonly chunkText: string | null;
 };
 
 export type ForgeTopicGenerationRow = {
@@ -75,6 +65,14 @@ export type ForgeTopicGenerationRow = {
   readonly generationStartedAt: string | null;
   readonly statusChangedAt: string;
   readonly generationRevision: number;
+};
+
+export type ForgeTopicExtractionOutcomeRecord = {
+  readonly sessionId: number;
+  readonly family: ForgeTopicFamily;
+  readonly status: "extracted" | "error";
+  readonly errorMessage: string | null;
+  readonly updatedAt: string;
 };
 
 export type ForgeGeneratedCard = {
@@ -88,8 +86,10 @@ export type ForgeGeneratedCard = {
 
 export type ForgeTopicCardsSnapshotRow = {
   readonly topicId: number;
-  readonly chunkId: number;
-  readonly sequenceOrder: number;
+  readonly sessionId: number;
+  readonly family: ForgeTopicFamily;
+  readonly chunkId: number | null;
+  readonly sequenceOrder: number | null;
   readonly topicIndex: number;
   readonly topicText: string;
   readonly status: ForgeTopicCardsStatus;
@@ -107,11 +107,11 @@ export type ForgeTopicCardsResultRow = {
 
 export type ForgeCardWithTopicContext = ForgeGeneratedCard & {
   readonly sessionId: number;
-  readonly chunkId: number;
-  readonly sequenceOrder: number;
+  readonly family: ForgeTopicFamily;
+  readonly chunkId: number | null;
+  readonly sequenceOrder: number | null;
   readonly topicIndex: number;
   readonly topicText: string;
-  readonly chunkText: string;
 };
 
 export type ForgeCardPermutation = {
@@ -167,30 +167,36 @@ export interface ForgeSessionRepository {
   readonly getChunks: (
     sessionId: number,
   ) => Effect.Effect<ReadonlyArray<ForgeChunk>, ForgeSessionRepositoryError>;
-  readonly replaceTopicsForSession: (
-    sessionId: number,
-    writes: ReadonlyArray<ForgeTopicWrite>,
-  ) => Effect.Effect<void, ForgeSessionRepositoryError>;
-  readonly replaceTopicsForChunk: (input: {
+  readonly replaceTopicsForSessionAndSetExtractionOutcome: (input: {
     readonly sessionId: number;
-    readonly sequenceOrder: number;
+    readonly writes: ReadonlyArray<ForgeTopicWrite>;
+    readonly status: "extracted" | "error";
+    readonly errorMessage: string | null;
+  }) => Effect.Effect<void, ForgeSessionRepositoryError>;
+  readonly replaceSynthesisTopicsForSessionAndSetExtractionOutcome: (input: {
+    readonly sessionId: number;
     readonly topics: ReadonlyArray<string>;
+    readonly status: "extracted" | "error";
+    readonly errorMessage: string | null;
   }) => Effect.Effect<void, ForgeSessionRepositoryError>;
-  readonly getTopicsBySession: (
+  readonly clearTopicExtractionOutcomes: (
     sessionId: number,
-  ) => Effect.Effect<ReadonlyArray<ForgeChunkTopics>, ForgeSessionRepositoryError>;
-  readonly saveTopicSelections: (input: {
+  ) => Effect.Effect<void, ForgeSessionRepositoryError>;
+  readonly getTopicExtractionOutcomes: (
+    sessionId: number,
+  ) => Effect.Effect<ReadonlyArray<ForgeTopicExtractionOutcomeRecord>, ForgeSessionRepositoryError>;
+  readonly saveTopicSelectionsByTopicIds: (input: {
     readonly sessionId: number;
-    readonly selections: ReadonlyArray<{ readonly chunkId: number; readonly topicIndex: number }>;
+    readonly topicIds: ReadonlyArray<number>;
   }) => Effect.Effect<void, ForgeSessionRepositoryError>;
-  readonly getTopicByRef: (
-    input: ForgeTopicRef,
+  readonly getTopicById: (
+    topicId: number,
   ) => Effect.Effect<ForgeTopicRecord | null, ForgeSessionRepositoryError>;
   readonly getCardsSnapshotBySession: (
     sessionId: number,
   ) => Effect.Effect<ReadonlyArray<ForgeTopicCardsSnapshotRow>, ForgeSessionRepositoryError>;
-  readonly getCardsForTopicRef: (
-    input: ForgeTopicRef,
+  readonly getCardsForTopicId: (
+    topicId: number,
   ) => Effect.Effect<ForgeTopicCardsResultRow | null, ForgeSessionRepositoryError>;
   readonly tryStartTopicGeneration: (
     topicId: number,
@@ -254,6 +260,9 @@ export interface ForgeSessionRepository {
     readonly message: string;
   }) => Effect.Effect<number, ForgeSessionRepositoryError>;
   readonly getChunkCount: (sessionId: number) => Effect.Effect<number, ForgeSessionRepositoryError>;
+  readonly getFullSessionText: (
+    sessionId: number,
+  ) => Effect.Effect<string, ForgeSessionRepositoryError>;
   readonly listRecentSessions: () => Effect.Effect<
     ReadonlyArray<ForgeSessionSummary>,
     ForgeSessionRepositoryError
@@ -287,21 +296,15 @@ type ForgeChunkReferenceRow = {
   sequence_order: number;
 };
 
-type ForgeTopicRow = {
-  chunk_id: number;
-  sequence_order: number;
-  topic_order: number | null;
-  topic_text: string | null;
-};
-
 type ForgeTopicRecordRow = {
   topic_id: number;
   session_id: number;
-  chunk_id: number;
-  sequence_order: number;
+  family: ForgeTopicFamily;
+  chunk_id: number | null;
+  sequence_order: number | null;
   topic_index: number;
   topic_text: string;
-  chunk_text: string;
+  chunk_text: string | null;
 };
 
 type ForgeTopicGenerationRowDb = {
@@ -313,10 +316,20 @@ type ForgeTopicGenerationRowDb = {
   generation_revision: number;
 };
 
+type ForgeTopicExtractionOutcomeRow = {
+  session_id: number;
+  family: ForgeTopicFamily;
+  status: "extracted" | "error";
+  error_message: string | null;
+  updated_at: string;
+};
+
 type ForgeTopicCardsSnapshotRowDb = {
   topic_id: number;
-  chunk_id: number;
-  sequence_order: number;
+  session_id: number;
+  family: ForgeTopicFamily;
+  chunk_id: number | null;
+  sequence_order: number | null;
   topic_index: number;
   topic_text: string;
   status: ForgeTopicCardsStatus;
@@ -344,11 +357,11 @@ type ForgeCardWithTopicContextRow = {
   answer: string;
   added_to_deck_at: string | null;
   session_id: number;
-  chunk_id: number;
-  sequence_order: number;
+  family: ForgeTopicFamily;
+  chunk_id: number | null;
+  sequence_order: number | null;
   topic_index: number;
   topic_text: string;
-  chunk_text: string;
 };
 
 type ForgeCardPermutationRow = {
@@ -408,12 +421,24 @@ const toTopicGenerationRow = (row: ForgeTopicGenerationRowDb): ForgeTopicGenerat
   generationRevision: Number(row.generation_revision),
 });
 
+const toTopicExtractionOutcomeRecord = (
+  row: ForgeTopicExtractionOutcomeRow,
+): ForgeTopicExtractionOutcomeRecord => ({
+  sessionId: Number(row.session_id),
+  family: row.family,
+  status: row.status,
+  errorMessage: row.error_message,
+  updatedAt: row.updated_at,
+});
+
 const toTopicCardsSnapshotRow = (
   row: ForgeTopicCardsSnapshotRowDb,
 ): ForgeTopicCardsSnapshotRow => ({
   topicId: Number(row.topic_id),
-  chunkId: Number(row.chunk_id),
-  sequenceOrder: Number(row.sequence_order),
+  sessionId: Number(row.session_id),
+  family: row.family,
+  chunkId: row.chunk_id === null ? null : Number(row.chunk_id),
+  sequenceOrder: row.sequence_order === null ? null : Number(row.sequence_order),
   topicIndex: Number(row.topic_index),
   topicText: row.topic_text,
   status: row.status,
@@ -611,27 +636,26 @@ export const makeSqliteForgeSessionRepository = ({
       return yield* Effect.forEach(rows, toForgeChunk, { concurrency: 1 });
     });
 
-  const loadTopicByRefSql = (
-    input: ForgeTopicRef,
+  const loadTopicByIdSql = (
+    topicId: number,
   ): Effect.Effect<ForgeTopicRecord | null, ForgeSessionRepositoryError, SqlClient.SqlClient> =>
     Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       const rows = yield* withSqlError(
-        "getTopicByRef.select",
+        "getTopicById.select",
         sql<ForgeTopicRecordRow>`
           SELECT
             forge_topics.id AS topic_id,
-            forge_chunks.session_id AS session_id,
-            forge_chunks.id AS chunk_id,
+            forge_topics.session_id AS session_id,
+            forge_topics.family AS family,
+            forge_topics.chunk_id AS chunk_id,
             forge_chunks.sequence_order AS sequence_order,
             forge_topics.topic_order AS topic_index,
             forge_topics.topic_text AS topic_text,
             forge_chunks.text AS chunk_text
           FROM forge_topics
-          JOIN forge_chunks ON forge_chunks.id = forge_topics.chunk_id
-          WHERE forge_chunks.session_id = ${input.sessionId}
-            AND forge_chunks.id = ${input.chunkId}
-            AND forge_topics.topic_order = ${input.topicIndex}
+          LEFT JOIN forge_chunks ON forge_chunks.id = forge_topics.chunk_id
+          WHERE forge_topics.id = ${topicId}
           LIMIT 1
         `,
       );
@@ -642,8 +666,9 @@ export const makeSqliteForgeSessionRepository = ({
       return {
         topicId: Number(row.topic_id),
         sessionId: Number(row.session_id),
-        chunkId: Number(row.chunk_id),
-        sequenceOrder: Number(row.sequence_order),
+        family: row.family,
+        chunkId: row.chunk_id === null ? null : Number(row.chunk_id),
+        sequenceOrder: row.sequence_order === null ? null : Number(row.sequence_order),
         topicIndex: Number(row.topic_index),
         topicText: row.topic_text,
         chunkText: row.chunk_text,
@@ -666,7 +691,9 @@ export const makeSqliteForgeSessionRepository = ({
         sql<ForgeTopicCardsSnapshotRowDb>`
           SELECT
             forge_topics.id AS topic_id,
-            forge_chunks.id AS chunk_id,
+            forge_topics.session_id AS session_id,
+            forge_topics.family AS family,
+            forge_topics.chunk_id AS chunk_id,
             forge_chunks.sequence_order AS sequence_order,
             forge_topics.topic_order AS topic_index,
             forge_topics.topic_text AS topic_text,
@@ -680,14 +707,16 @@ export const makeSqliteForgeSessionRepository = ({
             COALESCE(forge_topic_generation.generation_revision, 0) AS generation_revision,
             forge_topics.selected AS selected
           FROM forge_topics
-          JOIN forge_chunks ON forge_chunks.id = forge_topics.chunk_id
+          LEFT JOIN forge_chunks ON forge_chunks.id = forge_topics.chunk_id
           LEFT JOIN forge_topic_generation ON forge_topic_generation.topic_id = forge_topics.id
           LEFT JOIN forge_cards ON forge_cards.topic_id = forge_topics.id
-          WHERE (${input.sessionId} IS NULL OR forge_chunks.session_id = ${input.sessionId})
+          WHERE (${input.sessionId} IS NULL OR forge_topics.session_id = ${input.sessionId})
             AND (${input.topicId} IS NULL OR forge_topics.id = ${input.topicId})
           GROUP BY
             forge_topics.id,
-            forge_chunks.id,
+            forge_topics.session_id,
+            forge_topics.family,
+            forge_topics.chunk_id,
             forge_chunks.sequence_order,
             forge_topics.topic_order,
             forge_topics.topic_text,
@@ -695,7 +724,11 @@ export const makeSqliteForgeSessionRepository = ({
             forge_topic_generation.error_message,
             forge_topic_generation.generation_revision,
             forge_topics.selected
-          ORDER BY forge_chunks.sequence_order ASC, forge_topics.topic_order ASC, forge_topics.id ASC
+          ORDER BY
+            CASE WHEN forge_topics.family = 'detail' THEN 0 ELSE 1 END ASC,
+            forge_chunks.sequence_order ASC,
+            forge_topics.topic_order ASC,
+            forge_topics.id ASC
         `,
       );
 
@@ -779,6 +812,33 @@ export const makeSqliteForgeSessionRepository = ({
       return row ? toTopicGenerationRow(row) : null;
     });
 
+  const loadTopicExtractionOutcomesBySessionSql = (
+    sessionId: number,
+  ): Effect.Effect<
+    ReadonlyArray<ForgeTopicExtractionOutcomeRecord>,
+    ForgeSessionRepositoryError,
+    SqlClient.SqlClient
+  > =>
+    Effect.gen(function* () {
+      const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+      const rows = yield* withSqlError(
+        "getTopicExtractionOutcomes.select",
+        sql<ForgeTopicExtractionOutcomeRow>`
+          SELECT
+            session_id,
+            family,
+            status,
+            error_message,
+            updated_at
+          FROM forge_topic_extraction_outcomes
+          WHERE session_id = ${sessionId}
+          ORDER BY CASE family WHEN 'detail' THEN 0 ELSE 1 END ASC
+        `,
+      );
+
+      return rows.map(toTopicExtractionOutcomeRecord);
+    });
+
   const loadCardByIdWithContextSql = (
     cardId: number,
   ): Effect.Effect<
@@ -798,15 +858,15 @@ export const makeSqliteForgeSessionRepository = ({
             forge_cards.question AS question,
             forge_cards.answer AS answer,
             forge_cards.added_to_deck_at AS added_to_deck_at,
-            forge_chunks.session_id AS session_id,
-            forge_chunks.id AS chunk_id,
+            forge_topics.session_id AS session_id,
+            forge_topics.family AS family,
+            forge_topics.chunk_id AS chunk_id,
             forge_chunks.sequence_order AS sequence_order,
             forge_topics.topic_order AS topic_index,
-            forge_topics.topic_text AS topic_text,
-            forge_chunks.text AS chunk_text
+            forge_topics.topic_text AS topic_text
           FROM forge_cards
           JOIN forge_topics ON forge_topics.id = forge_cards.topic_id
-          JOIN forge_chunks ON forge_chunks.id = forge_topics.chunk_id
+          LEFT JOIN forge_chunks ON forge_chunks.id = forge_topics.chunk_id
           WHERE forge_cards.id = ${cardId}
           LIMIT 1
         `,
@@ -823,13 +883,20 @@ export const makeSqliteForgeSessionRepository = ({
         answer: row.answer,
         addedToDeck: row.added_to_deck_at !== null,
         sessionId: Number(row.session_id),
-        chunkId: Number(row.chunk_id),
-        sequenceOrder: Number(row.sequence_order),
+        family: row.family,
+        chunkId: row.chunk_id === null ? null : Number(row.chunk_id),
+        sequenceOrder: row.sequence_order === null ? null : Number(row.sequence_order),
         topicIndex: Number(row.topic_index),
         topicText: row.topic_text,
-        chunkText: row.chunk_text,
       };
     });
+
+  const loadFullSessionTextSql = (
+    sessionId: number,
+  ): Effect.Effect<string, ForgeSessionRepositoryError, SqlClient.SqlClient> =>
+    loadChunksBySessionSql(sessionId).pipe(
+      Effect.map((chunks) => chunks.map((chunk) => chunk.text).join("")),
+    );
 
   const loadPermutationsBySourceCardIdSql = (
     sourceCardId: number,
@@ -1186,14 +1253,19 @@ export const makeSqliteForgeSessionRepository = ({
           );
         }),
       ),
-    replaceTopicsForSession: (sessionId, writes) =>
+    replaceTopicsForSessionAndSetExtractionOutcome: ({
+      sessionId,
+      writes,
+      status,
+      errorMessage,
+    }) =>
       runSql(
-        "replaceTopicsForSession.runtime",
+        "replaceTopicsForSessionAndSetExtractionOutcome.runtime",
         Effect.gen(function* () {
           const sql = (yield* SqlClient.SqlClient).withoutTransforms();
-          const replaceEffect = Effect.gen(function* () {
+          const operation = Effect.gen(function* () {
             const chunkRows = yield* withSqlError(
-              "replaceTopicsForSession.selectChunks",
+              "replaceTopicsForSessionAndSetExtractionOutcome.selectChunks",
               sql<ForgeChunkReferenceRow>`
                 SELECT id, sequence_order
                 FROM forge_chunks
@@ -1217,7 +1289,7 @@ export const makeSqliteForgeSessionRepository = ({
               if (seenWriteSequences.has(write.sequenceOrder)) {
                 return yield* Effect.fail(
                   new ForgeSessionRepositoryError({
-                    operation: "replaceTopicsForSession.validateWrites",
+                    operation: "replaceTopicsForSessionAndSetExtractionOutcome.validateWrites",
                     message: `Duplicate topic write for sequence order ${write.sequenceOrder} in session ${sessionId}.`,
                   }),
                 );
@@ -1229,7 +1301,7 @@ export const makeSqliteForgeSessionRepository = ({
               if (chunkId === undefined) {
                 return yield* Effect.fail(
                   new ForgeSessionRepositoryError({
-                    operation: "replaceTopicsForSession.validateWrites",
+                    operation: "replaceTopicsForSessionAndSetExtractionOutcome.validateWrites",
                     message: `Chunk sequence order ${write.sequenceOrder} was not found for session ${sessionId}.`,
                   }),
                 );
@@ -1246,11 +1318,8 @@ export const makeSqliteForgeSessionRepository = ({
 
             yield* sql`
               DELETE FROM forge_topics
-              WHERE chunk_id IN (
-                SELECT id
-                FROM forge_chunks
-                WHERE session_id = ${sessionId}
-              )
+              WHERE session_id = ${sessionId}
+                AND family = 'detail'
             `;
 
             yield* Effect.forEach(
@@ -1258,62 +1327,71 @@ export const makeSqliteForgeSessionRepository = ({
               (row) =>
                 sql`
                   INSERT INTO forge_topics (
+                    session_id,
+                    family,
                     chunk_id,
                     topic_order,
-                    topic_text
+                    topic_text,
+                    selected
                   ) VALUES (
+                    ${sessionId},
+                    ${"detail"},
                     ${row.chunkId},
                     ${row.topicOrder},
-                    ${row.topicText}
+                    ${row.topicText},
+                    0
                   )
                 `,
               { discard: true },
             );
+
+            yield* sql`
+              INSERT INTO forge_topic_extraction_outcomes (
+                session_id,
+                family,
+                status,
+                error_message,
+                updated_at
+              ) VALUES (
+                ${sessionId},
+                ${"detail"},
+                ${status},
+                ${errorMessage},
+                (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+              )
+              ON CONFLICT(session_id, family) DO UPDATE SET
+                status = excluded.status,
+                error_message = excluded.error_message,
+                updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            `;
           });
 
-          yield* sql.withTransaction(replaceEffect).pipe(
+          yield* sql.withTransaction(operation).pipe(
             Effect.mapError(
               (error) =>
                 new ForgeSessionRepositoryError({
-                  operation: "replaceTopicsForSession.transaction",
+                  operation: "replaceTopicsForSessionAndSetExtractionOutcome.transaction",
                   message: toErrorMessage(error),
                 }),
             ),
           );
         }),
       ),
-    replaceTopicsForChunk: ({ sessionId, sequenceOrder, topics }) =>
+    replaceSynthesisTopicsForSessionAndSetExtractionOutcome: ({
+      sessionId,
+      topics,
+      status,
+      errorMessage,
+    }) =>
       runSql(
-        "replaceTopicsForChunk.runtime",
+        "replaceSynthesisTopicsForSessionAndSetExtractionOutcome.runtime",
         Effect.gen(function* () {
           const sql = (yield* SqlClient.SqlClient).withoutTransforms();
-          const replaceEffect = Effect.gen(function* () {
-            const chunkRows = yield* withSqlError(
-              "replaceTopicsForChunk.selectChunk",
-              sql<ForgeChunkReferenceRow>`
-                SELECT id, sequence_order
-                FROM forge_chunks
-                WHERE session_id = ${sessionId}
-                  AND sequence_order = ${sequenceOrder}
-                LIMIT 1
-              `,
-            );
-
-            const chunk = chunkRows[0];
-            if (!chunk) {
-              return yield* Effect.fail(
-                new ForgeSessionRepositoryError({
-                  operation: "replaceTopicsForChunk.selectChunk",
-                  message: `Chunk sequence order ${sequenceOrder} was not found for session ${sessionId}.`,
-                }),
-              );
-            }
-
-            const chunkId = Number(chunk.id);
-
+          const operation = Effect.gen(function* () {
             yield* sql`
               DELETE FROM forge_topics
-              WHERE chunk_id = ${chunkId}
+              WHERE session_id = ${sessionId}
+                AND family = 'synthesis'
             `;
 
             yield* Effect.forEach(
@@ -1321,119 +1399,103 @@ export const makeSqliteForgeSessionRepository = ({
               (topicText, topicOrder) =>
                 sql`
                   INSERT INTO forge_topics (
+                    session_id,
+                    family,
                     chunk_id,
                     topic_order,
-                    topic_text
+                    topic_text,
+                    selected
                   ) VALUES (
-                    ${chunkId},
+                    ${sessionId},
+                    ${"synthesis"},
+                    ${null},
                     ${topicOrder},
-                    ${topicText}
+                    ${topicText},
+                    0
                   )
                 `,
               { discard: true },
             );
+
+            yield* sql`
+              INSERT INTO forge_topic_extraction_outcomes (
+                session_id,
+                family,
+                status,
+                error_message,
+                updated_at
+              ) VALUES (
+                ${sessionId},
+                ${"synthesis"},
+                ${status},
+                ${errorMessage},
+                (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+              )
+              ON CONFLICT(session_id, family) DO UPDATE SET
+                status = excluded.status,
+                error_message = excluded.error_message,
+                updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+            `;
           });
 
-          yield* sql.withTransaction(replaceEffect).pipe(
+          yield* sql.withTransaction(operation).pipe(
             Effect.mapError(
               (error) =>
                 new ForgeSessionRepositoryError({
-                  operation: "replaceTopicsForChunk.transaction",
+                  operation: "replaceSynthesisTopicsForSessionAndSetExtractionOutcome.transaction",
                   message: toErrorMessage(error),
                 }),
             ),
           );
         }),
       ),
-    getTopicsBySession: (sessionId) =>
+    clearTopicExtractionOutcomes: (sessionId) =>
       runSql(
-        "getTopicsBySession.runtime",
+        "clearTopicExtractionOutcomes.runtime",
         Effect.gen(function* () {
           const sql = (yield* SqlClient.SqlClient).withoutTransforms();
-          const rows = yield* withSqlError(
-            "getTopicsBySession.select",
-            sql<ForgeTopicRow>`
-              SELECT
-                forge_chunks.id AS chunk_id,
-                forge_chunks.sequence_order AS sequence_order,
-                forge_topics.topic_order AS topic_order,
-                forge_topics.topic_text AS topic_text
-              FROM forge_chunks
-              LEFT JOIN forge_topics ON forge_topics.chunk_id = forge_chunks.id
-              WHERE forge_chunks.session_id = ${sessionId}
-              ORDER BY
-                forge_chunks.sequence_order ASC,
-                forge_topics.topic_order ASC,
-                forge_topics.id ASC
+          yield* withSqlError(
+            "clearTopicExtractionOutcomes.delete",
+            sql`
+              DELETE FROM forge_topic_extraction_outcomes
+              WHERE session_id = ${sessionId}
             `,
           );
-
-          const grouped: Array<{
-            readonly chunkId: number;
-            readonly sequenceOrder: number;
-            readonly topics: Array<string>;
-          }> = [];
-          const byChunkId = new Map<number, (typeof grouped)[number]>();
-
-          for (const row of rows) {
-            const chunkId = Number(row.chunk_id);
-            const sequenceOrder = Number(row.sequence_order);
-            const topicText = row.topic_text;
-
-            let chunk = byChunkId.get(chunkId);
-            if (!chunk) {
-              chunk = {
-                chunkId,
-                sequenceOrder,
-                topics: [],
-              };
-              byChunkId.set(chunkId, chunk);
-              grouped.push(chunk);
-            }
-
-            if (topicText !== null) {
-              chunk.topics.push(topicText);
-            }
-          }
-
-          return grouped.map((chunk) => ({
-            chunkId: chunk.chunkId,
-            sequenceOrder: chunk.sequenceOrder,
-            topics: chunk.topics.slice(),
-          }));
         }),
       ),
-    saveTopicSelections: ({ sessionId, selections }) =>
+    getTopicExtractionOutcomes: (sessionId) =>
       runSql(
-        "saveTopicSelections.runtime",
+        "getTopicExtractionOutcomes.runtime",
+        loadTopicExtractionOutcomesBySessionSql(sessionId),
+      ),
+    saveTopicSelectionsByTopicIds: ({ sessionId, topicIds }) =>
+      runSql(
+        "saveTopicSelectionsByTopicIds.runtime",
         Effect.gen(function* () {
           const sql = (yield* SqlClient.SqlClient).withoutTransforms();
           yield* sql
             .withTransaction(
               Effect.gen(function* () {
                 yield* withSqlError(
-                  "saveTopicSelections.deselectAll",
+                  "saveTopicSelectionsByTopicIds.deselectAll",
                   sql`
-                    UPDATE forge_topics SET selected = 0
-                    WHERE chunk_id IN (
-                      SELECT id FROM forge_chunks WHERE session_id = ${sessionId}
-                    )
+                    UPDATE forge_topics
+                    SET selected = 0
+                    WHERE session_id = ${sessionId}
                   `,
                 );
 
-                if (selections.length > 0) {
+                if (topicIds.length > 0) {
                   yield* Effect.forEach(
-                    selections,
-                    (sel) =>
+                    topicIds,
+                    (topicId) =>
                       withSqlError(
-                        "saveTopicSelections.select",
+                        "saveTopicSelectionsByTopicIds.select",
                         sql`
-                          UPDATE forge_topics SET selected = 1
-                          WHERE chunk_id = ${sel.chunkId}
-                            AND topic_order = ${sel.topicIndex}
-                            AND chunk_id IN (
-                              SELECT id FROM forge_chunks WHERE session_id = ${sessionId}
-                            )
+                          UPDATE forge_topics
+                          SET selected = 1
+                          WHERE id = ${topicId}
+                            AND session_id = ${sessionId}
                         `,
                       ),
                     { discard: true },
@@ -1445,34 +1507,34 @@ export const makeSqliteForgeSessionRepository = ({
               Effect.mapError(
                 (error) =>
                   new ForgeSessionRepositoryError({
-                    operation: "saveTopicSelections.transaction",
+                    operation: "saveTopicSelectionsByTopicIds.transaction",
                     message: toErrorMessage(error),
                   }),
               ),
             );
         }),
       ),
-    getTopicByRef: (input) => runSql("getTopicByRef.runtime", loadTopicByRefSql(input)),
+    getTopicById: (topicId) => runSql("getTopicById.runtime", loadTopicByIdSql(topicId)),
     getCardsSnapshotBySession: (sessionId) =>
       runSql("getCardsSnapshotBySession.runtime", loadCardsSnapshotBySessionSql(sessionId)),
-    getCardsForTopicRef: (input) =>
+    getCardsForTopicId: (topicId) =>
       runSql(
-        "getCardsForTopicRef.runtime",
+        "getCardsForTopicId.runtime",
         Effect.gen(function* () {
-          const topicRecord = yield* loadTopicByRefSql(input);
-          if (!topicRecord) return null;
+          const topic = yield* loadTopicByIdSql(topicId);
+          if (!topic) return null;
 
-          const snapshotRow = yield* loadCardsSnapshotByTopicIdSql(topicRecord.topicId);
+          const snapshotRow = yield* loadCardsSnapshotByTopicIdSql(topicId);
           if (!snapshotRow) {
             return yield* Effect.fail(
               new ForgeSessionRepositoryError({
-                operation: "getCardsForTopicRef.snapshotMissing",
-                message: `Topic ${topicRecord.topicId} was not found in cards snapshot for session ${topicRecord.sessionId}.`,
+                operation: "getCardsForTopicId.snapshotMissing",
+                message: `Topic ${topicId} was not found in cards snapshot for session ${topic.sessionId}.`,
               }),
             );
           }
 
-          const cards = yield* loadCardsForTopicIdSql(topicRecord.topicId);
+          const cards = yield* loadCardsForTopicIdSql(topicId);
           return {
             topic: snapshotRow,
             cards,
@@ -1905,8 +1967,7 @@ export const makeSqliteForgeSessionRepository = ({
                 AND topic_id IN (
                   SELECT forge_topics.id
                   FROM forge_topics
-                  JOIN forge_chunks ON forge_chunks.id = forge_topics.chunk_id
-                  WHERE forge_chunks.session_id = ${sessionId}
+                  WHERE forge_topics.session_id = ${sessionId}
                 )
               RETURNING 1 AS count
             `,
@@ -1933,6 +1994,8 @@ export const makeSqliteForgeSessionRepository = ({
           return Number.isFinite(count) && count >= 0 ? count : 0;
         }),
       ),
+    getFullSessionText: (sessionId) =>
+      runSql("getFullSessionText.runtime", loadFullSessionTextSql(sessionId)),
 
     listRecentSessions: () =>
       runSql(
@@ -1955,8 +2018,7 @@ export const makeSqliteForgeSessionRepository = ({
                 s.created_at,
                 s.updated_at
               FROM forge_sessions s
-              LEFT JOIN forge_chunks ch ON ch.session_id = s.id
-              LEFT JOIN forge_topics t ON t.chunk_id = ch.id
+              LEFT JOIN forge_topics t ON t.session_id = s.id
               LEFT JOIN forge_cards c ON c.topic_id = t.id
               GROUP BY s.id
               ORDER BY s.updated_at DESC
@@ -1995,7 +2057,9 @@ type InMemoryChunk = {
 
 type InMemoryTopic = {
   readonly id: number;
-  readonly chunkId: number;
+  readonly sessionId: number;
+  readonly family: ForgeTopicFamily;
+  readonly chunkId: number | null;
   readonly topicOrder: number;
   readonly topicText: string;
   readonly createdAt: string;
@@ -2003,6 +2067,7 @@ type InMemoryTopic = {
 };
 
 type InMemoryTopicGeneration = ForgeTopicGenerationRow;
+type InMemoryTopicExtractionOutcome = ForgeTopicExtractionOutcomeRecord;
 
 type InMemoryCard = {
   readonly id: number;
@@ -2027,31 +2092,28 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
   const chunks: InMemoryChunk[] = [];
   const topics: InMemoryTopic[] = [];
   const topicGeneration = new Map<number, InMemoryTopicGeneration>();
+  const extractionOutcomes = new Map<string, InMemoryTopicExtractionOutcome>();
   const cards: InMemoryCard[] = [];
   const permutations: InMemoryCardPermutation[] = [];
   const clozeBySourceCardId = new Map<number, InMemoryCardCloze>();
 
   const nowIso = (): string => new Date().toISOString();
 
-  const getTopicByRefInternal = (input: ForgeTopicRef): ForgeTopicRecord | null => {
-    const ownerChunk = chunks.find(
-      (chunk) => chunk.sessionId === input.sessionId && chunk.id === input.chunkId,
-    );
-    if (!ownerChunk) return null;
-
-    const topic = topics.find(
-      (entry) => entry.chunkId === ownerChunk.id && entry.topicOrder === input.topicIndex,
-    );
+  const getTopicByIdInternal = (topicId: number): ForgeTopicRecord | null => {
+    const topic = topics.find((entry) => entry.id === topicId);
     if (!topic) return null;
+
+    const ownerChunk = topic.chunkId === null ? null : chunks.find((chunk) => chunk.id === topic.chunkId);
 
     return {
       topicId: topic.id,
-      sessionId: input.sessionId,
-      chunkId: ownerChunk.id,
-      sequenceOrder: ownerChunk.sequenceOrder,
+      sessionId: topic.sessionId,
+      family: topic.family,
+      chunkId: topic.chunkId,
+      sequenceOrder: ownerChunk?.sequenceOrder ?? null,
       topicIndex: topic.topicOrder,
       topicText: topic.topicText,
-      chunkText: ownerChunk.text,
+      chunkText: ownerChunk?.text ?? null,
     };
   };
 
@@ -2076,6 +2138,8 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
     return next;
   };
 
+  const outcomeKey = (sessionId: number, family: ForgeTopicFamily): string => `${sessionId}:${family}`;
+
   const topicSnapshotBySessionInternal = (
     sessionId: number,
   ): ReadonlyArray<ForgeTopicCardsSnapshotRow> => {
@@ -2087,18 +2151,19 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
     }
 
     return topics
-      .filter((topic) => chunkById.has(topic.chunkId))
+      .filter((topic) => topic.sessionId === sessionId)
       .sort((left, right) => {
-        const leftChunk = chunkById.get(left.chunkId)!;
-        const rightChunk = chunkById.get(right.chunkId)!;
-        return (
-          leftChunk.sequenceOrder - rightChunk.sequenceOrder ||
-          left.topicOrder - right.topicOrder ||
-          left.id - right.id
-        );
+        const leftOrder = left.family === "detail" ? 0 : 1;
+        const rightOrder = right.family === "detail" ? 0 : 1;
+        const leftChunkOrder =
+          left.chunkId === null ? Number.MAX_SAFE_INTEGER : (chunkById.get(left.chunkId)?.sequenceOrder ?? Number.MAX_SAFE_INTEGER);
+        const rightChunkOrder =
+          right.chunkId === null ? Number.MAX_SAFE_INTEGER : (chunkById.get(right.chunkId)?.sequenceOrder ?? Number.MAX_SAFE_INTEGER);
+
+        return leftOrder - rightOrder || leftChunkOrder - rightChunkOrder || left.topicOrder - right.topicOrder || left.id - right.id;
       })
       .map((topic) => {
-        const ownerChunk = chunkById.get(topic.chunkId)!;
+        const ownerChunk = topic.chunkId === null ? null : (chunkById.get(topic.chunkId) ?? null);
         const generation = topicGeneration.get(topic.id);
         const cardsForTopic = cards.filter((card) => card.topicId === topic.id);
         const cardCount = cardsForTopic.length;
@@ -2106,8 +2171,10 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
 
         return {
           topicId: topic.id,
-          chunkId: ownerChunk.id,
-          sequenceOrder: ownerChunk.sequenceOrder,
+          sessionId: topic.sessionId,
+          family: topic.family,
+          chunkId: topic.chunkId,
+          sequenceOrder: ownerChunk?.sequenceOrder ?? null,
           topicIndex: topic.topicOrder,
           topicText: topic.topicText,
           status: generation?.status ?? "idle",
@@ -2118,6 +2185,38 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           selected: topic.selected,
         };
       });
+  };
+
+  const getFullSessionTextInternal = (sessionId: number): string =>
+    chunks
+      .filter((chunk) => chunk.sessionId === sessionId)
+      .sort((left, right) => left.sequenceOrder - right.sequenceOrder || left.id - right.id)
+      .map((chunk) => chunk.text)
+      .join("");
+
+  const removeTopicsAndDependentsInternal = (removedTopicIds: ReadonlySet<number>): void => {
+    if (removedTopicIds.size === 0) return;
+
+    for (const topicId of removedTopicIds) {
+      topicGeneration.delete(topicId);
+    }
+
+    const removedCardIds = new Set(
+      cards.filter((card) => removedTopicIds.has(card.topicId)).map((card) => card.id),
+    );
+    cards.splice(
+      0,
+      cards.length,
+      ...cards.filter((card) => !removedTopicIds.has(card.topicId)),
+    );
+    permutations.splice(
+      0,
+      permutations.length,
+      ...permutations.filter((permutation) => !removedCardIds.has(permutation.sourceCardId)),
+    );
+    for (const cardId of removedCardIds) {
+      clozeBySourceCardId.delete(cardId);
+    }
   };
 
   const replaceCardsForTopicInternal = (
@@ -2325,234 +2424,161 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
 
         return Effect.void;
       }),
-    replaceTopicsForSession: (sessionId, writes) =>
-      Effect.suspend(() => {
-        const chunkRows = chunks.filter((entry) => entry.sessionId === sessionId);
-        const chunkIdBySequence = new Map<number, number>();
-        for (const row of chunkRows) {
-          chunkIdBySequence.set(row.sequenceOrder, row.id);
-        }
+    replaceTopicsForSessionAndSetExtractionOutcome: ({ sessionId, writes, status, errorMessage }) =>
+      Effect.suspend(() =>
+        Effect.gen(function* () {
+          yield* Effect.suspend(() => {
+            const chunkRows = chunks.filter((entry) => entry.sessionId === sessionId);
+            const chunkIdBySequence = new Map<number, number>();
+            for (const row of chunkRows) {
+              chunkIdBySequence.set(row.sequenceOrder, row.id);
+            }
 
-        const seenWriteSequences = new Set<number>();
-        const stagedTopics: InMemoryTopic[] = [];
+            const seenWriteSequences = new Set<number>();
+            const stagedTopics: InMemoryTopic[] = [];
 
-        for (const write of writes) {
-          if (seenWriteSequences.has(write.sequenceOrder)) {
-            return Effect.fail(
-              new ForgeSessionRepositoryError({
-                operation: "replaceTopicsForSession.validateWrites",
-                message: `Duplicate topic write for sequence order ${write.sequenceOrder} in session ${sessionId}.`,
-              }),
+            for (const write of writes) {
+              if (seenWriteSequences.has(write.sequenceOrder)) {
+                return Effect.fail(
+                  new ForgeSessionRepositoryError({
+                    operation: "replaceTopicsForSessionAndSetExtractionOutcome.validateWrites",
+                    message: `Duplicate topic write for sequence order ${write.sequenceOrder} in session ${sessionId}.`,
+                  }),
+                );
+              }
+              seenWriteSequences.add(write.sequenceOrder);
+
+              const chunkId = chunkIdBySequence.get(write.sequenceOrder);
+              if (chunkId === undefined) {
+                return Effect.fail(
+                  new ForgeSessionRepositoryError({
+                    operation: "replaceTopicsForSessionAndSetExtractionOutcome.validateWrites",
+                    message: `Chunk sequence order ${write.sequenceOrder} was not found for session ${sessionId}.`,
+                  }),
+                );
+              }
+
+              for (let index = 0; index < write.topics.length; index += 1) {
+                stagedTopics.push({
+                  id: nextTopicId + stagedTopics.length,
+                  sessionId,
+                  family: "detail",
+                  chunkId,
+                  topicOrder: index,
+                  topicText: write.topics[index]!,
+                  createdAt: nowIso(),
+                  selected: false,
+                });
+              }
+            }
+
+            const removedTopicIds = new Set(
+              topics
+                .filter((topic) => topic.sessionId === sessionId && topic.family === "detail")
+                .map((topic) => topic.id),
             );
-          }
-          seenWriteSequences.add(write.sequenceOrder);
-
-          const chunkId = chunkIdBySequence.get(write.sequenceOrder);
-          if (chunkId === undefined) {
-            return Effect.fail(
-              new ForgeSessionRepositoryError({
-                operation: "replaceTopicsForSession.validateWrites",
-                message: `Chunk sequence order ${write.sequenceOrder} was not found for session ${sessionId}.`,
-              }),
+            const retainedTopics = topics.filter(
+              (topic) => !(topic.sessionId === sessionId && topic.family === "detail"),
             );
-          }
 
-          for (let index = 0; index < write.topics.length; index += 1) {
-            stagedTopics.push({
-              id: nextTopicId + stagedTopics.length,
-              chunkId,
-              topicOrder: index,
-              topicText: write.topics[index]!,
-              createdAt: nowIso(),
-              selected: false,
-            });
-          }
-        }
+            topics.length = 0;
+            topics.push(...retainedTopics, ...stagedTopics);
+            nextTopicId += stagedTopics.length;
 
-        const sessionChunkIds = new Set(chunkRows.map((row) => row.id));
-        const removedTopicIds = new Set(
-          topics.filter((topic) => sessionChunkIds.has(topic.chunkId)).map((topic) => topic.id),
-        );
-        const retainedTopics = topics.filter((topic) => !sessionChunkIds.has(topic.chunkId));
+            removeTopicsAndDependentsInternal(removedTopicIds);
+            return Effect.void;
+          });
 
-        topics.length = 0;
-        topics.push(...retainedTopics, ...stagedTopics);
-        nextTopicId += stagedTopics.length;
-
-        if (removedTopicIds.size > 0) {
-          for (const topicId of removedTopicIds) {
-            topicGeneration.delete(topicId);
-          }
-
-          const removedCardIds = new Set(
-            cards.filter((card) => removedTopicIds.has(card.topicId)).map((card) => card.id),
-          );
-          cards.splice(
-            0,
-            cards.length,
-            ...cards.filter((card) => !removedTopicIds.has(card.topicId)),
-          );
-          permutations.splice(
-            0,
-            permutations.length,
-            ...permutations.filter((permutation) => !removedCardIds.has(permutation.sourceCardId)),
-          );
-          for (const cardId of removedCardIds) {
-            clozeBySourceCardId.delete(cardId);
-          }
-        }
-
-        return Effect.void;
-      }),
-    replaceTopicsForChunk: ({ sessionId, sequenceOrder, topics: topicTexts }) =>
-      Effect.suspend(() => {
-        const ownerChunk = chunks.find(
-          (entry) => entry.sessionId === sessionId && entry.sequenceOrder === sequenceOrder,
-        );
-
-        if (!ownerChunk) {
-          return Effect.fail(
-            new ForgeSessionRepositoryError({
-              operation: "replaceTopicsForChunk.selectChunk",
-              message: `Chunk sequence order ${sequenceOrder} was not found for session ${sessionId}.`,
-            }),
-          );
-        }
-
-        const retainedTopics = topics.filter((topic) => topic.chunkId !== ownerChunk.id);
-        const removedTopicIds = new Set(
-          topics.filter((topic) => topic.chunkId === ownerChunk.id).map((topic) => topic.id),
-        );
+          extractionOutcomes.set(outcomeKey(sessionId, "detail"), {
+            sessionId,
+            family: "detail",
+            status,
+            errorMessage,
+            updatedAt: nowIso(),
+          });
+        }),
+      ),
+    replaceSynthesisTopicsForSessionAndSetExtractionOutcome: ({
+      sessionId,
+      topics: topicTexts,
+      status,
+      errorMessage,
+    }) =>
+      Effect.sync(() => {
         const stagedTopics = topicTexts.map((topicText, topicOrder) => ({
           id: nextTopicId + topicOrder,
-          chunkId: ownerChunk.id,
+          sessionId,
+          family: "synthesis" as const,
+          chunkId: null,
           topicOrder,
           topicText,
           createdAt: nowIso(),
           selected: false,
         }));
 
+        const removedTopicIds = new Set(
+          topics
+            .filter((topic) => topic.sessionId === sessionId && topic.family === "synthesis")
+            .map((topic) => topic.id),
+        );
+        const retainedTopics = topics.filter(
+          (topic) => !(topic.sessionId === sessionId && topic.family === "synthesis"),
+        );
+
         topics.length = 0;
         topics.push(...retainedTopics, ...stagedTopics);
         nextTopicId += stagedTopics.length;
 
-        if (removedTopicIds.size > 0) {
-          for (const topicId of removedTopicIds) {
-            topicGeneration.delete(topicId);
-          }
+        removeTopicsAndDependentsInternal(removedTopicIds);
 
-          const removedCardIds = new Set(
-            cards.filter((card) => removedTopicIds.has(card.topicId)).map((card) => card.id),
-          );
-          cards.splice(
-            0,
-            cards.length,
-            ...cards.filter((card) => !removedTopicIds.has(card.topicId)),
-          );
-          permutations.splice(
-            0,
-            permutations.length,
-            ...permutations.filter((permutation) => !removedCardIds.has(permutation.sourceCardId)),
-          );
-          for (const cardId of removedCardIds) {
-            clozeBySourceCardId.delete(cardId);
-          }
-        }
-
-        return Effect.void;
+        extractionOutcomes.set(outcomeKey(sessionId, "synthesis"), {
+          sessionId,
+          family: "synthesis",
+          status,
+          errorMessage,
+          updatedAt: nowIso(),
+        });
       }),
-    getTopicsBySession: (sessionId) =>
+    clearTopicExtractionOutcomes: (sessionId) =>
       Effect.sync(() => {
-        const chunkById = new Map<number, InMemoryChunk>();
-        const orderedChunks: InMemoryChunk[] = [];
-        for (const chunk of chunks) {
-          if (chunk.sessionId === sessionId) {
-            chunkById.set(chunk.id, chunk);
-            orderedChunks.push(chunk);
+        for (const key of extractionOutcomes.keys()) {
+          if (key.startsWith(`${sessionId}:`)) {
+            extractionOutcomes.delete(key);
           }
         }
-
-        orderedChunks.sort(
-          (left, right) => left.sequenceOrder - right.sequenceOrder || left.id - right.id,
-        );
-
-        const grouped = new Map<
-          number,
-          {
-            readonly chunkId: number;
-            readonly sequenceOrder: number;
-            readonly topics: Array<string>;
-          }
-        >();
-        for (const chunk of orderedChunks) {
-          grouped.set(chunk.id, {
-            chunkId: chunk.id,
-            sequenceOrder: chunk.sequenceOrder,
-            topics: [],
-          });
-        }
+      }),
+    getTopicExtractionOutcomes: (sessionId) =>
+      Effect.sync(() =>
+        Array.from(extractionOutcomes.values())
+          .filter((outcome) => outcome.sessionId === sessionId)
+          .sort((left, right) =>
+            left.family === right.family ? 0 : left.family === "detail" ? -1 : 1,
+          )
+          .map((outcome) => ({ ...outcome })),
+      ),
+    saveTopicSelectionsByTopicIds: ({ sessionId, topicIds }) =>
+      Effect.sync(() => {
+        const selectedTopicIds = new Set(topicIds);
 
         for (const topic of topics) {
-          let group = grouped.get(topic.chunkId);
-          if (!group) {
-            const ownerChunk = chunkById.get(topic.chunkId);
-            if (!ownerChunk) continue;
-            group = {
-              chunkId: ownerChunk.id,
-              sequenceOrder: ownerChunk.sequenceOrder,
-              topics: [],
-            };
-            grouped.set(topic.chunkId, group);
-          }
-
-          group.topics.push(topic.topicText);
-        }
-
-        return Array.from(grouped.values())
-          .sort((left, right) => left.sequenceOrder - right.sequenceOrder)
-          .map((group) => ({
-            chunkId: group.chunkId,
-            sequenceOrder: group.sequenceOrder,
-            topics: group.topics.slice(),
-          }));
-      }),
-    saveTopicSelections: ({ sessionId, selections }) =>
-      Effect.sync(() => {
-        const sessionChunkIds = new Set(
-          chunks.filter((chunk) => chunk.sessionId === sessionId).map((chunk) => chunk.id),
-        );
-
-        for (const topic of topics) {
-          if (!sessionChunkIds.has(topic.chunkId)) continue;
-          topic.selected = false;
-        }
-
-        for (const sel of selections) {
-          const topic = topics.find(
-            (t) =>
-              sessionChunkIds.has(t.chunkId) &&
-              t.chunkId === sel.chunkId &&
-              t.topicOrder === sel.topicIndex,
-          );
-          if (topic) {
-            topic.selected = true;
-          }
+          if (topic.sessionId !== sessionId) continue;
+          topic.selected = selectedTopicIds.has(topic.id);
         }
       }),
-    getTopicByRef: (input) =>
+    getTopicById: (topicId) =>
       Effect.sync(() => {
-        return getTopicByRefInternal(input);
+        return getTopicByIdInternal(topicId);
       }),
     getCardsSnapshotBySession: (sessionId) =>
       Effect.sync(() => {
         return topicSnapshotBySessionInternal(sessionId);
       }),
-    getCardsForTopicRef: (input) =>
+    getCardsForTopicId: (topicId) =>
       Effect.sync(() => {
-        const topicRecord = getTopicByRefInternal(input);
+        const topicRecord = getTopicByIdInternal(topicId);
         if (!topicRecord) return null;
 
-        const topicSnapshot = topicSnapshotBySessionInternal(input.sessionId).find(
+        const topicSnapshot = topicSnapshotBySessionInternal(topicRecord.sessionId).find(
           (entry) => entry.topicId === topicRecord.topicId,
         );
         if (!topicSnapshot) return null;
@@ -2727,8 +2753,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
         const topic = topics.find((entry) => entry.id === card.topicId);
         if (!topic) return null;
 
-        const chunk = chunks.find((entry) => entry.id === topic.chunkId);
-        if (!chunk) return null;
+        const chunk = topic.chunkId === null ? null : chunks.find((entry) => entry.id === topic.chunkId);
 
         return {
           id: card.id,
@@ -2737,12 +2762,12 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           question: card.question,
           answer: card.answer,
           addedToDeck: card.addedToDeckAt !== null,
-          sessionId: chunk.sessionId,
-          chunkId: chunk.id,
-          sequenceOrder: chunk.sequenceOrder,
+          sessionId: topic.sessionId,
+          family: topic.family,
+          chunkId: chunk?.id ?? null,
+          sequenceOrder: chunk?.sequenceOrder ?? null,
           topicIndex: topic.topicOrder,
           topicText: topic.topicText,
-          chunkText: chunk.text,
         };
       }),
     replacePermutationsForCard: ({ sourceCardId, permutations: nextPermutations }) =>
@@ -2853,11 +2878,8 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           return 0;
         }
 
-        const sessionChunkIds = new Set(
-          chunks.filter((chunk) => chunk.sessionId === sessionId).map((chunk) => chunk.id),
-        );
         const sessionTopicIds = new Set(
-          topics.filter((topic) => sessionChunkIds.has(topic.chunkId)).map((topic) => topic.id),
+          topics.filter((topic) => topic.sessionId === sessionId).map((topic) => topic.id),
         );
 
         let updated = 0;
@@ -2885,6 +2907,8 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
       }),
     getChunkCount: (sessionId) =>
       Effect.sync(() => chunks.filter((entry) => entry.sessionId === sessionId).length),
+    getFullSessionText: (sessionId) =>
+      Effect.sync(() => getFullSessionTextInternal(sessionId)),
     listRecentSessions: () =>
       Effect.sync(() =>
         sessions
@@ -2892,10 +2916,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
           .slice(0, 50)
           .map((session): ForgeSessionSummary => {
-            const sessionChunkIds = new Set(
-              chunks.filter((c) => c.sessionId === session.id).map((c) => c.id),
-            );
-            const sessionTopics = topics.filter((t) => sessionChunkIds.has(t.chunkId));
+            const sessionTopics = topics.filter((t) => t.sessionId === session.id);
             const sessionTopicIds = new Set(sessionTopics.map((t) => t.id));
             const sessionCardCount = cards.filter((c) => sessionTopicIds.has(c.topicId)).length;
             return {

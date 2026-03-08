@@ -1,13 +1,12 @@
 import { Schema } from "@effect/schema";
 
 import type { PromptAttemptContext, PromptSpec } from "./types";
+import { collapseWhitespace } from "./normalize";
 
 export const GetTopicsPromptInputSchema = Schema.Struct({
   chunkText: Schema.String.pipe(Schema.minLength(1)),
 });
 export type GetTopicsPromptInput = typeof GetTopicsPromptInputSchema.Type;
-
-const collapseWhitespace = (value: string): string => value.replace(/\s+/g, " ").trim();
 
 const normalizeTopicList = (topics: ReadonlyArray<string>): ReadonlyArray<string> => {
   const normalizedTopics: string[] = [];

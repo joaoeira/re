@@ -9,17 +9,22 @@ import { useForgeTopicSnapshotQuery } from "@/hooks/queries/use-forge-topic-snap
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { forgeSourceCacheKey, queryKeys } from "@/lib/query-keys";
-import { ForgeTopicChunkExtracted, ForgeExtractionSessionCreated } from "@shared/rpc/contracts";
+import {
+  ForgeExtractionSessionCreated,
+  ForgeSynthesisTopicsExtracted,
+  ForgeTopicChunkExtracted,
+} from "@shared/rpc/contracts";
 import type {
   ForgeSessionSummary,
   ForgeSourceInput,
   ForgeTopicCardsSummary,
+  ForgeTopicExtractionOutcome,
+  ForgeTopicGroup,
 } from "@shared/rpc/schemas/forge";
 import {
   createForgePageStore,
   type ForgeCardExpandedPanel,
   topicKey,
-  type ChunkTopics,
   type ExtractState,
   type ExtractSummary,
   type ForgePageStore,
@@ -126,8 +131,8 @@ export function useForgeResumeErrorMessage(): string | null {
   return useForgePageSelector((snapshot) => snapshot.context.resumeErrorMessage);
 }
 
-export function useForgeTopicsByChunk(): ReadonlyArray<ChunkTopics> {
-  return useForgePageSelector((snapshot) => snapshot.context.topicsByChunk);
+export function useForgeTopicGroups(): ReadonlyArray<ForgeTopicGroup> {
+  return useForgePageSelector((snapshot) => snapshot.context.topicGroups);
 }
 
 export function useForgeSelectedTopicKeys(): ReadonlySet<string> {
@@ -150,43 +155,47 @@ export function useForgeExpandedCardPanelsByTopicKey(): TopicExpandedCardPanelMa
   return useForgePageSelector((snapshot) => snapshot.context.expandedCardPanelsByTopicKey);
 }
 
+export function useForgeTopicExtractionOutcomes(): ReadonlyArray<ForgeTopicExtractionOutcome> {
+  return useForgePageSelector((snapshot) => snapshot.context.extractionOutcomes);
+}
+
 export function useForgeSelectedTopicCount(): number {
-  return useForgePageSelector((snapshot) => {
-    const { topicsByChunk, selectedTopicKeys } = snapshot.context;
-    let count = 0;
-    for (const chunk of topicsByChunk) {
-      for (let i = 0; i < chunk.topics.length; i++) {
-        if (selectedTopicKeys.has(topicKey(chunk.chunkId, i))) count++;
-      }
-    }
-    return count;
-  });
+  return useForgePageSelector((snapshot) => snapshot.context.selectedTopicKeys.size);
 }
 
 export type SelectedTopic = {
-  readonly chunkId: number;
+  readonly topicId: number;
+  readonly family: "detail" | "synthesis";
+  readonly chunkId: number | null;
   readonly topicIndex: number;
   readonly text: string;
 };
 
+const flattenTopicGroups = (groups: ReadonlyArray<ForgeTopicGroup>) =>
+  groups.flatMap((group) => group.topics);
+
 export function useForgeSelectedTopics(): ReadonlyArray<SelectedTopic> {
-  return useForgePageSelector((snapshot) => {
-    const { topicsByChunk, selectedTopicKeys } = snapshot.context;
-    const result: SelectedTopic[] = [];
-    for (const chunk of topicsByChunk) {
-      for (let i = 0; i < chunk.topics.length; i++) {
-        if (selectedTopicKeys.has(topicKey(chunk.chunkId, i))) {
-          result.push({ chunkId: chunk.chunkId, topicIndex: i, text: chunk.topics[i]! });
-        }
-      }
-    }
-    return result;
-  });
+  const topicGroups = useForgeTopicGroups();
+  const selectedTopicKeys = useForgeSelectedTopicKeys();
+
+  return useMemo(
+    () =>
+      flattenTopicGroups(topicGroups)
+        .filter((topic) => selectedTopicKeys.has(topicKey(topic.topicId)))
+        .map((topic) => ({
+          topicId: topic.topicId,
+          family: topic.family,
+          chunkId: topic.chunkId,
+          topicIndex: topic.topicIndex,
+          text: topic.topicText,
+        })),
+    [selectedTopicKeys, topicGroups],
+  );
 }
 
 export type ForgeTopicActions = {
-  readonly toggleTopic: (chunkId: number, topicIndex: number) => void;
-  readonly toggleAllChunk: (chunkId: number, select: boolean) => void;
+  readonly toggleTopic: (topicId: number) => void;
+  readonly toggleGroup: (groupId: string, select: boolean) => void;
   readonly selectAllTopics: () => void;
   readonly deselectAllTopics: () => void;
 };
@@ -195,10 +204,9 @@ export function useForgeTopicActions(): ForgeTopicActions {
   const store = useForgePageStore();
   return useMemo(
     () => ({
-      toggleTopic: (chunkId: number, topicIndex: number) =>
-        store.send({ type: "toggleTopic", chunkId, topicIndex }),
-      toggleAllChunk: (chunkId: number, select: boolean) =>
-        store.send({ type: "toggleAllChunk", chunkId, select }),
+      toggleTopic: (topicId: number) => store.send({ type: "toggleTopic", topicId }),
+      toggleGroup: (groupId: string, select: boolean) =>
+        store.send({ type: "toggleGroup", groupId, select }),
       selectAllTopics: () => store.send({ type: "selectAllTopics" }),
       deselectAllTopics: () => store.send({ type: "deselectAllTopics" }),
     }),
@@ -252,28 +260,100 @@ export function useForgeDeckTargetActions(): ForgeDeckTargetActions {
   );
 }
 
-export function topicsSummaryToChunkTopics(
+export function topicSummariesToTopicGroups(
   topics: ReadonlyArray<ForgeTopicCardsSummary>,
-): ReadonlyArray<ChunkTopics> {
-  const byChunkId = new Map<number, { sequenceOrder: number; topics: Map<number, string> }>();
-  for (const t of topics) {
-    let entry = byChunkId.get(t.chunkId);
-    if (!entry) {
-      entry = { sequenceOrder: t.sequenceOrder, topics: new Map() };
-      byChunkId.set(t.chunkId, entry);
+): ReadonlyArray<ForgeTopicGroup> {
+  const detailGroups = new Map<
+    number,
+    {
+      readonly chunkId: number;
+      readonly displayOrder: number;
+      readonly topics: Array<{
+        readonly topicId: number;
+        readonly sessionId: number;
+        readonly family: "detail" | "synthesis";
+        readonly chunkId: number | null;
+        readonly chunkSequenceOrder: number | null;
+        readonly topicIndex: number;
+        readonly topicText: string;
+        readonly selected: boolean;
+      }>;
     }
-    entry.topics.set(t.topicIndex, t.topicText);
+  >();
+  const synthesisTopics: Array<{
+    readonly topicId: number;
+    readonly sessionId: number;
+    readonly family: "detail" | "synthesis";
+    readonly chunkId: number | null;
+    readonly chunkSequenceOrder: number | null;
+    readonly topicIndex: number;
+    readonly topicText: string;
+    readonly selected: boolean;
+  }> = [];
+
+  for (const topic of topics) {
+    const summary = {
+      topicId: topic.topicId,
+      sessionId: topic.sessionId,
+      family: topic.family,
+      chunkId: topic.chunkId,
+      chunkSequenceOrder: topic.chunkSequenceOrder,
+      topicIndex: topic.topicIndex,
+      topicText: topic.topicText,
+      selected: topic.selected,
+    };
+
+    if (topic.family === "synthesis") {
+      synthesisTopics.push(summary);
+      continue;
+    }
+
+    if (topic.chunkId === null || topic.chunkSequenceOrder === null) {
+      continue;
+    }
+
+    const existing = detailGroups.get(topic.chunkId);
+    if (existing) {
+      existing.topics.push(summary);
+      continue;
+    }
+
+    detailGroups.set(topic.chunkId, {
+      chunkId: topic.chunkId,
+      displayOrder: topic.chunkSequenceOrder,
+      topics: [summary],
+    });
   }
 
-  return Array.from(byChunkId.entries())
-    .map(([chunkId, entry]) => ({
-      chunkId,
-      sequenceOrder: entry.sequenceOrder,
-      topics: Array.from(entry.topics.entries())
-        .sort(([a], [b]) => a - b)
-        .map(([, text]) => text),
-    }))
-    .sort((a, b) => a.sequenceOrder - b.sequenceOrder);
+  const groups: ForgeTopicGroup[] = Array.from(detailGroups.values())
+    .sort((left, right) => left.displayOrder - right.displayOrder || left.chunkId - right.chunkId)
+    .map((group) => ({
+      groupId: `chunk:${group.chunkId}`,
+      groupKind: "chunk",
+      family: "detail",
+      title: `Chunk ${group.displayOrder + 1}`,
+      displayOrder: group.displayOrder,
+      chunkId: group.chunkId,
+      topics: group.topics
+        .slice()
+        .sort((left, right) => left.topicIndex - right.topicIndex || left.topicId - right.topicId),
+    }));
+
+  if (synthesisTopics.length > 0) {
+    groups.push({
+      groupId: "section:synthesis",
+      groupKind: "section",
+      family: "synthesis",
+      title: "Synthesis",
+      displayOrder: (groups[groups.length - 1]?.displayOrder ?? -1) + 1,
+      chunkId: null,
+      topics: synthesisTopics
+        .slice()
+        .sort((left, right) => left.topicIndex - right.topicIndex || left.topicId - right.topicId),
+    });
+  }
+
+  return groups;
 }
 
 type ForgePageProviderProps = {
@@ -347,7 +427,8 @@ export function ForgePageProvider({
       sessionCreatedAt: topicSnapshotQuery.data.session.createdAt,
       sessionStatus: topicSnapshotQuery.data.session.status,
       sessionErrorMessage: topicSnapshotQuery.data.session.errorMessage,
-      topicsByChunk: topicSnapshotQuery.data.topicsByChunk,
+      groups: topicSnapshotQuery.data.groups,
+      outcomes: topicSnapshotQuery.data.outcomes,
     });
   }, [
     currentStep,
@@ -377,20 +458,34 @@ export function ForgePageProvider({
   useEffect(() => {
     return ipc.events.subscribe(ForgeTopicChunkExtracted, (event) => {
       const context = store.getSnapshot().context;
-
       if (context.activeExtractionSessionId === null) {
         store.send({ type: "extractionSessionCreated", sessionId: event.sessionId });
-        if (store.getSnapshot().context.activeExtractionSessionId !== event.sessionId) return;
       } else if (context.activeExtractionSessionId !== event.sessionId) {
         return;
       }
 
-      store.send({
-        type: "topicChunkExtracted",
-        chunk: event.chunk,
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.forgeTopicSnapshot(event.sessionId),
+        exact: true,
       });
     });
-  }, [ipc, store]);
+  }, [ipc, queryClient, store]);
+
+  useEffect(() => {
+    return ipc.events.subscribe(ForgeSynthesisTopicsExtracted, (event) => {
+      const context = store.getSnapshot().context;
+      if (context.activeExtractionSessionId === null) {
+        store.send({ type: "extractionSessionCreated", sessionId: event.sessionId });
+      } else if (context.activeExtractionSessionId !== event.sessionId) {
+        return;
+      }
+
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.forgeTopicSnapshot(event.sessionId),
+        exact: true,
+      });
+    });
+  }, [ipc, queryClient, store]);
 
   useEffect(() => {
     return ipc.events.subscribe(ForgeExtractionSessionCreated, (event) => {
@@ -404,6 +499,7 @@ export function ForgePageProvider({
   }, [ipc, queryClient, store]);
 
   const resumingRef = useRef(false);
+  const loadedInitialSessionIdRef = useRef<number | null>(null);
 
   const loadSessionData = useCallback(
     (session: ForgeSessionSummary) => {
@@ -426,34 +522,41 @@ export function ForgePageProvider({
               ? { status: "extracting" }
               : { status: "idle" };
 
-      runIpcEffect(
-        ipc.client
-          .ForgeGetCardsSnapshot({ sessionId: session.id })
-          .pipe(
-            Effect.catchTag("RpcDefectError", (rpcDefect) =>
-              Effect.fail(toRpcDefectError(rpcDefect)),
+      Promise.all([
+        runIpcEffect(
+          ipc.client
+            .ForgeGetCardsSnapshot({ sessionId: session.id })
+            .pipe(
+              Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                Effect.fail(toRpcDefectError(rpcDefect)),
+              ),
             ),
-          ),
-      )
-        .then((result) => {
-          const topicsByChunk = topicsSummaryToChunkTopics(result.topics);
+        ),
+        runIpcEffect(
+          ipc.client
+            .ForgeGetTopicExtractionSnapshot({ sessionId: session.id })
+            .pipe(
+              Effect.catchTag("RpcDefectError", (rpcDefect) =>
+                Effect.fail(toRpcDefectError(rpcDefect)),
+              ),
+            ),
+        ),
+      ])
+        .then(([cardsSnapshot, topicSnapshot]) => {
+          const topicGroups = topicSnapshot.groups;
           const selectedKeys = new Set<string>();
 
-          for (const topic of result.topics) {
+          for (const topic of cardsSnapshot.topics) {
             if (topic.selected) {
-              selectedKeys.add(topicKey(topic.chunkId, topic.topicIndex));
+              selectedKeys.add(topicKey(topic.topicId));
             }
           }
 
           if (targetStep === "cards" && selectedKeys.size === 0) {
-            for (const chunk of topicsByChunk) {
-              chunk.topics.forEach((_, index) => {
-                selectedKeys.add(topicKey(chunk.chunkId, index));
-              });
-            }
+            flattenTopicGroups(topicGroups).forEach((topic) => {
+              selectedKeys.add(topicKey(topic.topicId));
+            });
           }
-
-          const selectedTopicKeys: ReadonlySet<string> = selectedKeys;
 
           store.send({
             type: "resumeSession",
@@ -462,8 +565,9 @@ export function ForgePageProvider({
             extractState: resumeExtractState,
             sessionId: session.id,
             targetDeckPath: session.deckPath,
-            topicsByChunk,
-            selectedTopicKeys,
+            topicGroups,
+            extractionOutcomes: topicSnapshot.outcomes,
+            selectedTopicKeys: selectedKeys,
           });
 
           onSessionChangeRef.current({ id: session.id, sourceLabel: session.sourceLabel });
@@ -484,6 +588,7 @@ export function ForgePageProvider({
 
   useEffect(() => {
     if (!initialSessionId || !sessionListQuery.data) return;
+    if (loadedInitialSessionIdRef.current === initialSessionId) return;
 
     const match = sessionListQuery.data.sessions.find((s) => s.id === initialSessionId);
     if (!match) {
@@ -491,6 +596,7 @@ export function ForgePageProvider({
       return;
     }
 
+    loadedInitialSessionIdRef.current = initialSessionId;
     loadSessionData(match);
   }, [initialSessionId, sessionListQuery.data, loadSessionData]);
 
@@ -527,7 +633,8 @@ export function ForgePageProvider({
         type: "extractionSuccess",
         duplicateOfSessionId: result.duplicateOfSessionId,
         extraction: result.extraction,
-        topicsByChunk: result.topicsByChunk,
+        groups: result.groups,
+        outcomes: result.outcomes,
       });
 
       const updatedSessionId = store.getSnapshot().context.activeExtractionSessionId;
@@ -666,18 +773,13 @@ export function ForgePageProvider({
     if (snapshot.activeExtractionSessionId == null) return;
 
     const sessionId = snapshot.activeExtractionSessionId;
-    const selections: Array<{ chunkId: number; topicIndex: number }> = [];
-    for (const key of snapshot.selectedTopicKeys) {
-      const parts = key.split(":");
-      const chunkId = Number(parts[0]);
-      const topicIndex = Number(parts[1]);
-      if (!Number.isFinite(chunkId) || !Number.isFinite(topicIndex)) continue;
-      selections.push({ chunkId, topicIndex });
-    }
+    const topicIds = Array.from(snapshot.selectedTopicKeys)
+      .map((key) => Number(key))
+      .filter((id) => Number.isFinite(id) && id > 0);
 
     runIpcEffect(
       ipc.client
-        .ForgeSaveTopicSelections({ sessionId, selections })
+        .ForgeSaveTopicSelections({ sessionId, topicIds })
         .pipe(
           Effect.catchTag("RpcDefectError", (rpcDefect) =>
             Effect.fail(toRpcDefectError(rpcDefect)),

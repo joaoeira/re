@@ -26,14 +26,63 @@ const TOPICS: ReadonlyArray<TopicDef> = [
   { chunkId: 102, sequenceOrder: 1, topicIndex: 1, topicText: "delta", topicId: 1004 },
 ];
 
-const groupTopicsByChunk = () => [
-  { chunkId: 101, sequenceOrder: 0, topics: ["alpha", "beta"] },
-  { chunkId: 102, sequenceOrder: 1, topics: ["gamma", "delta"] },
-];
-
 const createCardsInvoke = () => {
   const sessionId = 77;
   const workspaceRootPath = FORGE_WORKSPACE_ROOT_PATH;
+  const toSummary = (topic: TopicDef) => ({
+    topicId: topic.topicId,
+    sessionId,
+    family: "detail" as const,
+    chunkId: topic.chunkId,
+    chunkSequenceOrder: topic.sequenceOrder,
+    topicIndex: topic.topicIndex,
+    topicText: topic.topicText,
+    status: "generated" as const,
+    errorMessage: null,
+    cardCount: 2,
+    addedCount: 0,
+    generationRevision: 1,
+    selected: true,
+  });
+  const topicGroups = [
+    {
+      groupId: "chunk:101",
+      groupKind: "chunk" as const,
+      family: "detail" as const,
+      title: "Chunk 1",
+      displayOrder: 0,
+      chunkId: 101,
+      topics: TOPICS.filter((topic) => topic.chunkId === 101).map((topic) => ({
+        topicId: topic.topicId,
+        sessionId,
+        family: "detail" as const,
+        chunkId: topic.chunkId,
+        chunkSequenceOrder: topic.sequenceOrder,
+        topicIndex: topic.topicIndex,
+        topicText: topic.topicText,
+        selected: false,
+      })),
+    },
+    {
+      groupId: "chunk:102",
+      groupKind: "chunk" as const,
+      family: "detail" as const,
+      title: "Chunk 2",
+      displayOrder: 1,
+      chunkId: 102,
+      topics: TOPICS.filter((topic) => topic.chunkId === 102).map((topic) => ({
+        topicId: topic.topicId,
+        sessionId,
+        family: "detail" as const,
+        chunkId: topic.chunkId,
+        chunkSequenceOrder: topic.sequenceOrder,
+        topicIndex: topic.topicIndex,
+        topicText: topic.topicText,
+        selected: false,
+      })),
+    },
+  ] as const;
+  const findTopic = (topicId: number) => TOPICS.find((topic) => topic.topicId === topicId) ?? null;
 
   return vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
     if (method === "GetSettings") {
@@ -84,50 +133,57 @@ const createCardsInvoke = () => {
             totalPages: 4,
             chunkCount: 2,
           },
-          topicsByChunk: groupTopicsByChunk(),
+          outcomes: [{ family: "detail", status: "extracted", errorMessage: null }],
+          groups: topicGroups,
         },
       };
     }
     if (method === "ForgeGetTopicExtractionSnapshot") {
-      return { type: "success", data: { session: null, topicsByChunk: [] } };
+      return {
+        type: "success",
+        data: {
+          session: {
+            id: sessionId,
+            sourceKind: "pdf",
+            sourceLabel: "source.pdf",
+            sourceFilePath: "/forge/source.pdf",
+            deckPath: null,
+            sourceFingerprint: "fp",
+            status: "topics_extracted",
+            errorMessage: null,
+            createdAt: "2026-02-27T00:00:00.000Z",
+            updatedAt: "2026-02-27T00:00:00.000Z",
+          },
+          outcomes: [{ family: "detail", status: "extracted", errorMessage: null }],
+          groups: topicGroups,
+        },
+      };
     }
     if (method === "ForgeGetCardsSnapshot") {
       return {
         type: "success",
         data: {
-          topics: TOPICS.map((topic) => ({
-            topicId: topic.topicId,
-            chunkId: topic.chunkId,
-            sequenceOrder: topic.sequenceOrder,
-            topicIndex: topic.topicIndex,
-            topicText: topic.topicText,
-            status: "generated",
-            errorMessage: null,
-            cardCount: 2,
-            addedCount: 0,
-            generationRevision: 1,
-            selected: true,
-          })),
+          topics: TOPICS.map(toSummary),
         },
       };
     }
     if (method === "ForgeGetTopicCards") {
+      const input = payload as { topicId: number };
+      const topic = findTopic(input.topicId);
+      if (!topic) {
+        return {
+          type: "failure",
+          error: {
+            _tag: "topic_not_found",
+            sessionId,
+            topicId: input.topicId,
+          },
+        };
+      }
       return {
         type: "success",
         data: {
-          topic: {
-            topicId: 1001,
-            chunkId: 101,
-            sequenceOrder: 0,
-            topicIndex: 0,
-            topicText: "alpha",
-            status: "generated",
-            errorMessage: null,
-            cardCount: 2,
-            addedCount: 0,
-            generationRevision: 1,
-            selected: true,
-          },
+          topic: toSummary(topic),
           cards: [
             { id: 9001, question: "Q1", answer: "A1", addedToDeck: false },
             { id: 9002, question: "Q2", answer: "A2", addedToDeck: false },
@@ -139,22 +195,22 @@ const createCardsInvoke = () => {
       return { type: "success", data: {} };
     }
     if (method === "ForgeGenerateTopicCards") {
+      const input = payload as { topicId: number };
+      const topic = findTopic(input.topicId);
+      if (!topic) {
+        return {
+          type: "failure",
+          error: {
+            _tag: "topic_not_found",
+            sessionId,
+            topicId: input.topicId,
+          },
+        };
+      }
       return {
         type: "success",
         data: {
-          topic: {
-            topicId: 1001,
-            chunkId: 101,
-            sequenceOrder: 0,
-            topicIndex: 0,
-            topicText: "alpha",
-            status: "generated",
-            errorMessage: null,
-            cardCount: 2,
-            addedCount: 0,
-            generationRevision: 1,
-            selected: true,
-          },
+          topic: toSummary(topic),
           cards: [
             { id: 9001, question: "Q1", answer: "A1", addedToDeck: false },
             { id: 9002, question: "Q2", answer: "A2", addedToDeck: false },
@@ -165,15 +221,14 @@ const createCardsInvoke = () => {
     if (method === "ForgeGenerateSelectedTopicCards") {
       const input = payload as {
         sessionId: number;
-        topics: Array<{ chunkId: number; topicIndex: number }>;
+        topicIds: Array<number>;
       };
       return {
         type: "success",
         data: {
           sessionId: input.sessionId,
-          results: input.topics.map((topic) => ({
-            chunkId: topic.chunkId,
-            topicIndex: topic.topicIndex,
+          results: input.topicIds.map((topicId) => ({
+            topicId,
             status: "generated",
             message: null,
           })),
@@ -316,10 +371,7 @@ describe("Forge cards sidebar multi-select", () => {
           invoke.mock.calls.find(
             ([method]: unknown[]) => method === "ForgeGenerateSelectedTopicCards",
           ) as
-            | [
-                string,
-                { sessionId: number; topics: Array<{ chunkId: number; topicIndex: number }> },
-              ]
+            | [string, { sessionId: number; topicIds: Array<number> }]
             | undefined,
       )
       .toBeTruthy();
@@ -327,11 +379,11 @@ describe("Forge cards sidebar multi-select", () => {
     const generateCall = invoke.mock.calls.find(
       ([method]: unknown[]) => method === "ForgeGenerateSelectedTopicCards",
     ) as
-      | [string, { sessionId: number; topics: Array<{ chunkId: number; topicIndex: number }> }]
+      | [string, { sessionId: number; topicIds: Array<number> }]
       | undefined;
     expect(generateCall?.[1]).toEqual({
       sessionId: 77,
-      topics: [{ chunkId: 101, topicIndex: 1 }],
+      topicIds: [1002],
       concurrencyLimit: 3,
     });
   });

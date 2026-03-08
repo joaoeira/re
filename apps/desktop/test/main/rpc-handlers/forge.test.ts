@@ -29,10 +29,7 @@ import {
   PdfTextExtractError,
   type PdfExtractor,
 } from "@main/forge/services/pdf-extractor";
-import { AiCompletionError } from "@shared/rpc/schemas/ai";
 import type { ForgeChunkPageBoundary } from "@shared/rpc/schemas/forge";
-import { ForgeTopicChunkExtracted, ForgeExtractionSessionCreated } from "@shared/rpc/contracts";
-
 import { createHandlersWithOverrides } from "./helpers";
 
 const createPdfExtractor = (options?: {
@@ -77,8 +74,9 @@ const createPdfExtractor = (options?: {
 
 const createPromptRuntime = (
   run: (input: {
-    readonly chunkText: string;
-    readonly maxTopics: number;
+    readonly chunkText?: string;
+    readonly sourceText?: string;
+    readonly maxTopics?: number;
   }) => Effect.Effect<
     ReadonlyArray<string>,
     | PromptInputValidationError
@@ -93,7 +91,13 @@ const createPromptRuntime = (
     input: Input,
     options?: PromptRunOptions,
   ) =>
-    run(input as { readonly chunkText: string; readonly maxTopics: number }).pipe(
+    run(
+      input as {
+        readonly chunkText?: string;
+        readonly sourceText?: string;
+        readonly maxTopics?: number;
+      },
+    ).pipe(
       Effect.map((topics) => ({
         output: { topics } as unknown as Output,
         rawText: JSON.stringify({ topics }),
@@ -113,13 +117,16 @@ const createCardsDomainPromptRuntime = (options?: {
   readonly holdCreateCards?: Promise<void>;
   readonly failCreateCards?: boolean;
 }): ForgePromptRuntime => ({
-  run: <Input, Output>(
-    spec: PromptSpec<Input, Output>,
-    input: Input,
-    runOptions?: PromptRunOptions,
-  ) =>
-    Effect.gen(function* () {
-      if (spec.promptId === "forge/create-cards") {
+    run: <Input, Output>(
+      spec: PromptSpec<Input, Output>,
+      input: Input,
+      runOptions?: PromptRunOptions,
+    ) =>
+      Effect.gen(function* () {
+      if (
+        spec.promptId === "forge/create-cards" ||
+        spec.promptId === "forge/create-synthesis-cards"
+      ) {
         if (options?.holdCreateCards) {
           yield* Effect.promise(() => options.holdCreateCards!);
         }
@@ -315,22 +322,78 @@ describe("forge handlers", () => {
         : {}),
     });
 
-  const startTextTopicExtraction = (
-    handlers: ForgeHandlers,
-    input: {
-      readonly text: string;
-      readonly sourceLabel?: string;
-      readonly model?: string;
-      readonly maxTopicsPerChunk?: number;
-    },
-  ) =>
-    handlers.ForgeStartTopicExtraction({
-      source: textSource(input),
-      ...(input.model ? { model: input.model } : {}),
-      ...(typeof input.maxTopicsPerChunk === "number"
-        ? { maxTopicsPerChunk: input.maxTopicsPerChunk }
-        : {}),
-    });
+  const getOnlyTopicId = async (
+    repository: ForgeSessionRepository,
+    sessionId: number,
+  ): Promise<number> => {
+    const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(sessionId));
+    const topicId = snapshot[0]?.topicId;
+    if (!topicId) {
+      throw new Error("Expected topic id.");
+    }
+    return topicId;
+  };
+
+  const seedDetailTopics = async (
+    repository: ForgeSessionRepository,
+    sessionId: number,
+    writes: ReadonlyArray<{ readonly sequenceOrder: number; readonly topics: ReadonlyArray<string> }>,
+  ): Promise<void> => {
+    await Effect.runPromise(
+      repository.replaceTopicsForSessionAndSetExtractionOutcome({
+        sessionId,
+        writes,
+        status: "extracted",
+        errorMessage: null,
+      }),
+    );
+  };
+
+  const getTopicIdBySequenceOrderAndIndex = async (
+    repository: ForgeSessionRepository,
+    sessionId: number,
+    sequenceOrder: number,
+    topicIndex: number,
+  ): Promise<number> => {
+    const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(sessionId));
+    const topicId = snapshot.find(
+      (topic) => topic.sequenceOrder === sequenceOrder && topic.topicIndex === topicIndex,
+    )?.topicId;
+    if (!topicId) {
+      throw new Error("Expected topic id.");
+    }
+    return topicId;
+  };
+
+  const getTopicBySequenceOrderAndIndex = async (
+    repository: ForgeSessionRepository,
+    sessionId: number,
+    sequenceOrder: number,
+    topicIndex: number,
+  ) => {
+    const topicId = await getTopicIdBySequenceOrderAndIndex(
+      repository,
+      sessionId,
+      sequenceOrder,
+      topicIndex,
+    );
+    return Effect.runPromise(repository.getTopicById(topicId));
+  };
+
+  const getCardsForTopicBySequenceOrderAndIndex = async (
+    repository: ForgeSessionRepository,
+    sessionId: number,
+    sequenceOrder: number,
+    topicIndex: number,
+  ) => {
+    const topicId = await getTopicIdBySequenceOrderAndIndex(
+      repository,
+      sessionId,
+      sequenceOrder,
+      topicIndex,
+    );
+    return Effect.runPromise(repository.getCardsForTopicId(topicId));
+  };
 
   it("creates a session with source_kind=pdf and stores the computed fingerprint", async () => {
     const sourceFilePath = "/tmp/forge-a.pdf";
@@ -484,26 +547,19 @@ describe("forge handlers", () => {
           { text: "chunk-0", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
         ]),
       );
+      await seedDetailTopics(repository, sessionA.id, [
+        { sequenceOrder: 0, topics: ["alpha", "beta"] },
+      ]);
+      const alphaTopicId = await getTopicIdBySequenceOrderAndIndex(repository, sessionA.id, 0, 0);
+      const betaTopicId = await getTopicIdBySequenceOrderAndIndex(repository, sessionA.id, 0, 1);
       await Effect.runPromise(
-        repository.replaceTopicsForChunk({
+        repository.saveTopicSelectionsByTopicIds({
           sessionId: sessionA.id,
-          sequenceOrder: 0,
-          topics: ["alpha", "beta"],
-        }),
-      );
-      await Effect.runPromise(
-        repository.saveTopicSelections({
-          sessionId: sessionA.id,
-          selections: [
-            { chunkId: 1, topicIndex: 0 },
-            { chunkId: 1, topicIndex: 1 },
-          ],
+          topicIds: [alphaTopicId, betaTopicId],
         }),
       );
 
-      const topic = await Effect.runPromise(
-        repository.getTopicByRef({ sessionId: sessionA.id, chunkId: 1, topicIndex: 0 }),
-      );
+      const topic = await getTopicBySequenceOrderAndIndex(repository, sessionA.id, 0, 0);
       if (!topic) throw new Error("Expected persisted topic.");
       await Effect.runPromise(repository.tryStartTopicGeneration(topic.topicId));
       await Effect.runPromise(
@@ -1018,998 +1074,6 @@ describe("forge handlers", () => {
     }
   });
 
-  it("runs start-topic-extraction from session creation through persisted topics", async () => {
-    const sourceFilePath = "/tmp/forge-start-success.pdf";
-    const extractor = createPdfExtractor({
-      textByPath: {
-        [sourceFilePath]: "cell membrane nucleus mitochondria",
-      },
-      pageBreaksByPath: {
-        [sourceFilePath]: [{ offset: 0, page: 1 }],
-      },
-      totalPagesByPath: {
-        [sourceFilePath]: 1,
-      },
-    });
-    const promptRuntime = createPromptRuntime(({ chunkText }) =>
-      Effect.succeed([chunkText.slice(0, 4), "biology"]),
-    );
-    const { handlers, repository, dispose } = await setupHandlers({
-      extractor,
-      promptRuntime,
-    });
-
-    try {
-      const result = await Effect.runPromise(
-        startPdfTopicExtraction(handlers, {
-          sourceFilePath,
-          maxTopicsPerChunk: 3,
-        }),
-      );
-
-      expect(result.duplicateOfSessionId).toBeNull();
-      expect(result.session.status).toBe("topics_extracted");
-      expect(result.extraction.chunkCount).toBe(1);
-      expect(result.topicsByChunk).toHaveLength(1);
-      expect(result.topicsByChunk[0]?.sequenceOrder).toBe(0);
-      expect(result.topicsByChunk[0]?.topics).toEqual(["cell", "biology"]);
-
-      const persistedTopics = await Effect.runPromise(
-        repository.getTopicsBySession(result.session.id),
-      );
-      expect(persistedTopics).toEqual(result.topicsByChunk);
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("runs start-topic-extraction for text sources through persisted topics", async () => {
-    const promptRuntime = createPromptRuntime(({ chunkText }) =>
-      Effect.succeed([chunkText.slice(0, 4), "biology"]),
-    );
-    const { handlers, repository, dispose } = await setupHandlers({
-      promptRuntime,
-    });
-
-    try {
-      const result = await Effect.runPromise(
-        startTextTopicExtraction(handlers, {
-          text: "cell membrane nucleus mitochondria",
-          sourceLabel: "Lecture notes",
-          maxTopicsPerChunk: 3,
-        }),
-      );
-
-      expect(result.duplicateOfSessionId).toBeNull();
-      expect(result.session.sourceKind).toBe("text");
-      expect(result.session.sourceLabel).toBe("Lecture notes");
-      expect(result.session.sourceFilePath).toBeNull();
-      expect(result.session.status).toBe("topics_extracted");
-      expect(result.extraction.totalPages).toBe(1);
-      expect(result.topicsByChunk[0]?.topics).toEqual(["cell", "biology"]);
-
-      const persistedTopics = await Effect.runPromise(
-        repository.getTopicsBySession(result.session.id),
-      );
-      expect(persistedTopics).toEqual(result.topicsByChunk);
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("returns the topic snapshot for a session id", async () => {
-    const sourceFilePath = "/tmp/forge-topic-snapshot.pdf";
-    const extractor = createPdfExtractor({
-      textByPath: {
-        [sourceFilePath]: "snapshot content",
-      },
-    });
-    const promptRuntime = createPromptRuntime(() => Effect.succeed(["topic-a", "topic-b"]));
-    const { handlers, dispose } = await setupHandlers({
-      extractor,
-      promptRuntime,
-    });
-
-    try {
-      const extracted = await Effect.runPromise(
-        startPdfTopicExtraction(handlers, {
-          sourceFilePath,
-        }),
-      );
-
-      const snapshot = await Effect.runPromise(
-        handlers.ForgeGetTopicExtractionSnapshot({
-          sessionId: extracted.session.id,
-        }),
-      );
-
-      expect(snapshot.session).not.toBeNull();
-      expect(snapshot.session?.id).toBe(extracted.session.id);
-      expect(snapshot.topicsByChunk).toEqual(extracted.topicsByChunk);
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("publishes a ForgeTopicChunkExtracted event for each completed chunk", async () => {
-    const sourceFilePath = "/tmp/forge-topic-events.pdf";
-    const extractor = createPdfExtractor({
-      textByPath: {
-        [sourceFilePath]: `${"A".repeat(16_000)}${"B".repeat(48)}`,
-      },
-      pageBreaksByPath: {
-        [sourceFilePath]: [
-          { offset: 0, page: 1 },
-          { offset: 16_000, page: 2 },
-        ],
-      },
-      totalPagesByPath: {
-        [sourceFilePath]: 2,
-      },
-    });
-    const promptRuntime = createPromptRuntime(({ chunkText }) =>
-      Effect.succeed(chunkText.startsWith("A") ? ["chunk-a"] : ["chunk-b"]),
-    );
-
-    const publishedChunks: Array<{
-      readonly sessionId: number;
-      readonly chunk: {
-        readonly chunkId: number;
-        readonly sequenceOrder: number;
-        readonly topics: readonly string[];
-      };
-    }> = [];
-    const publishedSessionCreated: Array<{ readonly sessionId: number }> = [];
-
-    const publish = vi.fn().mockImplementation((event: unknown, payload: unknown) => {
-      if (event === ForgeTopicChunkExtracted) {
-        publishedChunks.push(
-          payload as {
-            readonly sessionId: number;
-            readonly chunk: {
-              readonly chunkId: number;
-              readonly sequenceOrder: number;
-              readonly topics: readonly string[];
-            };
-          },
-        );
-      }
-      if (event === ForgeExtractionSessionCreated) {
-        publishedSessionCreated.push(payload as { readonly sessionId: number });
-      }
-      return Effect.void;
-    });
-
-    const { handlers, dispose } = await setupHandlers({
-      extractor,
-      promptRuntime,
-      publish,
-    });
-
-    try {
-      await Effect.runPromise(
-        startPdfTopicExtraction(handlers, {
-          sourceFilePath,
-        }),
-      );
-
-      expect(publishedSessionCreated).toHaveLength(1);
-      expect(publishedSessionCreated[0]!.sessionId).toBeGreaterThan(0);
-
-      expect(publishedChunks).toHaveLength(2);
-      const sessionIds = new Set(publishedChunks.map((entry) => entry.sessionId));
-      expect(sessionIds.size).toBe(1);
-      expect(sessionIds.has(publishedSessionCreated[0]!.sessionId)).toBe(true);
-      expect(publishedChunks.map((entry) => entry.chunk.sequenceOrder).sort()).toEqual([0, 1]);
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("keeps chunks with empty topic arrays in topicsByChunk", async () => {
-    const sourceFilePath = "/tmp/forge-start-empty-topic-chunk.pdf";
-    const extractor = createPdfExtractor({
-      textByPath: {
-        [sourceFilePath]: `${"A".repeat(12_000)}${"B".repeat(32)}`,
-      },
-      pageBreaksByPath: {
-        [sourceFilePath]: [
-          { offset: 0, page: 1 },
-          { offset: 12_000, page: 2 },
-        ],
-      },
-      totalPagesByPath: {
-        [sourceFilePath]: 2,
-      },
-    });
-    const promptRuntime = createPromptRuntime(({ chunkText }) => {
-      if (chunkText.startsWith("A")) {
-        return Effect.succeed([]);
-      }
-      return Effect.succeed(["second-chunk-topic"]);
-    });
-    const { handlers, dispose } = await setupHandlers({
-      extractor,
-      promptRuntime,
-    });
-
-    try {
-      const result = await Effect.runPromise(
-        startPdfTopicExtraction(handlers, {
-          sourceFilePath,
-        }),
-      );
-
-      expect(result.topicsByChunk).toHaveLength(2);
-      expect(result.topicsByChunk[0]?.sequenceOrder).toBe(0);
-      expect(result.topicsByChunk[0]?.topics).toEqual([]);
-      expect(result.topicsByChunk[1]?.sequenceOrder).toBe(1);
-      expect(result.topicsByChunk[1]?.topics).toEqual(["second-chunk-topic"]);
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("returns duplicateOfSessionId on start-topic-extraction while creating a fresh session", async () => {
-    const sourceFilePath = "/tmp/forge-start-duplicate.pdf";
-    const sourceFingerprint = "fingerprint-duplicate-start";
-    const extractor = createPdfExtractor({
-      fingerprintByPath: {
-        [sourceFilePath]: sourceFingerprint,
-      },
-      textByPath: {
-        [sourceFilePath]: "duplicate content",
-      },
-    });
-    const promptRuntime = createPromptRuntime(() => Effect.succeed(["topic"]));
-    const { handlers, dispose } = await setupHandlers({
-      extractor,
-      promptRuntime,
-    });
-
-    try {
-      const first = await Effect.runPromise(
-        startPdfTopicExtraction(handlers, {
-          sourceFilePath,
-        }),
-      );
-      const second = await Effect.runPromise(
-        startPdfTopicExtraction(handlers, {
-          sourceFilePath,
-        }),
-      );
-
-      expect(second.duplicateOfSessionId).toBe(first.session.id);
-      expect(second.session.id).not.toBe(first.session.id);
-      expect(second.session.sourceFingerprint).toBe(sourceFingerprint);
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("fails with source_mismatch when source content diverges after session creation", async () => {
-    const sourceFilePath = "/tmp/forge-start-source-mismatch.pdf";
-    const extractor: PdfExtractor = {
-      resolveFingerprint: () => Effect.succeed("fp:metadata"),
-      extractText: () =>
-        Effect.succeed({
-          text: "content changed after metadata read",
-          pageBreaks: [{ offset: 0, page: 1 }],
-          totalPages: 1,
-          sourceFingerprint: "fp:content",
-        }),
-    };
-    const { handlers, repository, dispose } = await setupHandlers({ extractor });
-
-    try {
-      const exit = await Effect.runPromiseExit(
-        startPdfTopicExtraction(handlers, {
-          sourceFilePath,
-        }),
-      );
-      expect(Exit.isFailure(exit)).toBe(true);
-      if (Exit.isSuccess(exit)) {
-        throw new Error("Expected ForgeStartTopicExtraction to fail.");
-      }
-
-      const failure = Cause.failureOption(exit.cause);
-      expect(failure._tag).toBe("Some");
-      if (failure._tag === "Some") {
-        expect(failure.value._tag).toBe("source_mismatch");
-        if ("sessionId" in failure.value && typeof failure.value.sessionId === "number") {
-          const stored = await Effect.runPromise(repository.getSession(failure.value.sessionId));
-          expect(stored?.status).toBe("error");
-        }
-      }
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("fails with topic_extraction_error when chunk loading returns empty", async () => {
-    const sourceFilePath = "/tmp/forge-zero-chunks.pdf";
-    const extractor = createPdfExtractor({
-      textByPath: {
-        [sourceFilePath]: "text that should be chunked",
-      },
-    });
-    const promptRuntime = createPromptRuntime(() => Effect.succeed(["topic"]));
-    const chunkService: ChunkService = {
-      chunkText: () => Effect.succeed({ chunks: [], chunkCount: 0 }),
-    };
-    const { handlers, repository, dispose } = await setupHandlers({
-      extractor,
-      promptRuntime,
-      chunkService,
-    });
-
-    try {
-      const exit = await Effect.runPromiseExit(
-        startPdfTopicExtraction(handlers, {
-          sourceFilePath,
-        }),
-      );
-      expect(Exit.isFailure(exit)).toBe(true);
-      if (Exit.isSuccess(exit)) {
-        throw new Error("Expected ForgeStartTopicExtraction to fail.");
-      }
-
-      const failure = Cause.failureOption(exit.cause);
-      expect(failure._tag).toBe("Some");
-      if (failure._tag === "Some") {
-        expect(failure.value._tag).toBe("topic_extraction_error");
-        const sessionId =
-          "sessionId" in failure.value && typeof failure.value.sessionId === "number"
-            ? failure.value.sessionId
-            : null;
-        expect(sessionId).not.toBeNull();
-        if (sessionId !== null) {
-          const stored = await Effect.runPromise(repository.getSession(sessionId));
-          expect(stored?.status).toBe("error");
-        }
-      }
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("marks session as error and keeps already-completed chunk topics when chunk N fails", async () => {
-    const sourceFilePath = "/tmp/forge-start-partial-failure.pdf";
-    const extractor = createPdfExtractor({
-      textByPath: {
-        [sourceFilePath]: `${"A".repeat(12_000)}${"B".repeat(80)}`,
-      },
-      pageBreaksByPath: {
-        [sourceFilePath]: [
-          { offset: 0, page: 1 },
-          { offset: 12_000, page: 2 },
-        ],
-      },
-      totalPagesByPath: {
-        [sourceFilePath]: 2,
-      },
-    });
-    const promptRuntime = createPromptRuntime(({ chunkText }) => {
-      if (chunkText.startsWith("B")) {
-        return Effect.sleep("30 millis").pipe(
-          Effect.zipRight(
-            Effect.fail(
-              new PromptOutputParseError({
-                promptId: "forge/get-topics",
-                message: "second chunk parse failure",
-                rawExcerpt: "invalid",
-              }),
-            ),
-          ),
-        );
-      }
-
-      return Effect.succeed(["first-chunk-topic"]);
-    });
-    const { handlers, repository, dispose } = await setupHandlers({
-      extractor,
-      promptRuntime,
-    });
-
-    try {
-      const exit = await Effect.runPromiseExit(
-        startPdfTopicExtraction(handlers, {
-          sourceFilePath,
-        }),
-      );
-      expect(Exit.isFailure(exit)).toBe(true);
-      if (Exit.isSuccess(exit)) {
-        throw new Error("Expected ForgeStartTopicExtraction to fail.");
-      }
-
-      const failure = Cause.failureOption(exit.cause);
-      expect(failure._tag).toBe("Some");
-      if (failure._tag === "Some") {
-        expect(failure.value._tag).toBe("topic_extraction_error");
-        if ("sessionId" in failure.value && typeof failure.value.sessionId === "number") {
-          const stored = await Effect.runPromise(repository.getSession(failure.value.sessionId));
-          expect(stored?.status).toBe("error");
-          const persistedTopics = await Effect.runPromise(
-            repository.getTopicsBySession(failure.value.sessionId),
-          );
-          expect(persistedTopics).toHaveLength(2);
-          expect(
-            persistedTopics.some((chunkTopics) => chunkTopics.topics.includes("first-chunk-topic")),
-          ).toBe(true);
-        }
-      }
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("maps all prompt runtime error variants to topic_extraction_error", async () => {
-    const sourceFilePath = "/tmp/forge-start-runtime-union.pdf";
-    const extractor = createPdfExtractor({
-      textByPath: {
-        [sourceFilePath]: "runtime union text",
-      },
-    });
-
-    const runtimeErrors = [
-      new PromptInputValidationError({
-        promptId: "forge/get-topics",
-        message: "input invalid",
-      }),
-      new PromptOutputParseError({
-        promptId: "forge/get-topics",
-        message: "parse invalid",
-        rawExcerpt: "bad json",
-      }),
-      new PromptOutputValidationError({
-        promptId: "forge/get-topics",
-        message: "schema invalid",
-        rawExcerpt: '{"topics":1}',
-      }),
-      new PromptNormalizationError({
-        promptId: "forge/get-topics",
-        message: "normalization invalid",
-      }),
-      new PromptModelInvocationError({
-        promptId: "forge/get-topics",
-        model: "anthropic:claude-sonnet-4-20250514",
-        attempt: 1,
-        cause: new AiCompletionError({ message: "provider failed" }),
-      }),
-    ] as const;
-
-    for (const runtimeError of runtimeErrors) {
-      const promptRuntime = createPromptRuntime(() => Effect.fail(runtimeError));
-      const { handlers, dispose } = await setupHandlers({
-        extractor,
-        promptRuntime,
-      });
-
-      try {
-        const exit = await Effect.runPromiseExit(
-          startPdfTopicExtraction(handlers, {
-            sourceFilePath,
-          }),
-        );
-        expect(Exit.isFailure(exit)).toBe(true);
-        if (Exit.isSuccess(exit)) {
-          throw new Error("Expected ForgeStartTopicExtraction to fail.");
-        }
-
-        const failure = Cause.failureOption(exit.cause);
-        expect(failure._tag).toBe("Some");
-        if (failure._tag === "Some") {
-          expect(failure.value._tag).toBe("topic_extraction_error");
-        }
-      } finally {
-        await dispose();
-      }
-    }
-  });
-
-  it("returns a typed session_not_found error", async () => {
-    const { handlers, dispose } = await setupHandlers();
-
-    try {
-      const exit = await Effect.runPromiseExit(
-        extractPdfText(handlers, {
-          sessionId: 999,
-          sourceFilePath: "/tmp/forge-missing-session.pdf",
-        }),
-      );
-
-      expect(Exit.isFailure(exit)).toBe(true);
-      if (Exit.isSuccess(exit)) {
-        throw new Error("Expected ForgeExtractText to fail.");
-      }
-
-      const failure = Cause.failureOption(exit.cause);
-      expect(failure._tag).toBe("Some");
-      if (failure._tag === "Some") {
-        expect(failure.value._tag).toBe("session_not_found");
-      }
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("generates cards for a persisted topic and returns cards snapshot state", async () => {
-    const promptRuntime = createCardsDomainPromptRuntime();
-    const { handlers, repository, dispose } = await setupHandlers({
-      promptRuntime,
-    });
-
-    try {
-      const sourceFilePath = "/tmp/forge-cards-topic.pdf";
-      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
-
-      await Effect.runPromise(
-        repository.saveChunks(created.session.id, [
-          {
-            text: "chunk text",
-            sequenceOrder: 0,
-            pageBoundaries: [{ offset: 0, page: 1 }],
-          },
-        ]),
-      );
-      await Effect.runPromise(
-        repository.replaceTopicsForChunk({
-          sessionId: created.session.id,
-          sequenceOrder: 0,
-          topics: ["ATP"],
-        }),
-      );
-
-      const generated = await Effect.runPromise(
-        handlers.ForgeGenerateTopicCards({
-          sessionId: created.session.id,
-          chunkId: 1,
-          topicIndex: 0,
-        }),
-      );
-
-      expect(generated.topic.status).toBe("generated");
-      expect(generated.cards).toHaveLength(2);
-
-      const snapshot = await Effect.runPromise(
-        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
-      );
-      expect(snapshot.topics).toHaveLength(1);
-      expect(snapshot.topics[0]?.cardCount).toBe(2);
-      expect(snapshot.topics[0]?.status).toBe("generated");
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("returns topic_already_generating when two card generations race for the same topic", async () => {
-    let resolveCreateCards: () => void = () => undefined;
-    const holdCreateCards = new Promise<void>((resolve) => {
-      resolveCreateCards = resolve;
-    });
-
-    const promptRuntime = createCardsDomainPromptRuntime({
-      holdCreateCards,
-    });
-    const { handlers, repository, dispose } = await setupHandlers({
-      promptRuntime,
-    });
-
-    try {
-      const sourceFilePath = "/tmp/forge-cards-race.pdf";
-      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
-
-      await Effect.runPromise(
-        repository.saveChunks(created.session.id, [
-          {
-            text: "chunk text",
-            sequenceOrder: 0,
-            pageBoundaries: [{ offset: 0, page: 1 }],
-          },
-        ]),
-      );
-      await Effect.runPromise(
-        repository.replaceTopicsForChunk({
-          sessionId: created.session.id,
-          sequenceOrder: 0,
-          topics: ["ATP"],
-        }),
-      );
-
-      const first = Effect.runPromise(
-        handlers.ForgeGenerateTopicCards({
-          sessionId: created.session.id,
-          chunkId: 1,
-          topicIndex: 0,
-        }),
-      );
-
-      await expect
-        .poll(async () => {
-          const snapshot = await Effect.runPromise(
-            repository.getCardsSnapshotBySession(created.session.id),
-          );
-          return snapshot[0]?.status ?? null;
-        })
-        .toBe("generating");
-
-      const secondExit = await Effect.runPromiseExit(
-        handlers.ForgeGenerateTopicCards({
-          sessionId: created.session.id,
-          chunkId: 1,
-          topicIndex: 0,
-        }),
-      );
-
-      expect(Exit.isFailure(secondExit)).toBe(true);
-      if (Exit.isSuccess(secondExit)) {
-        throw new Error("Expected second generation to fail.");
-      }
-      const secondFailure = Cause.failureOption(secondExit.cause);
-      expect(secondFailure._tag).toBe("Some");
-      if (secondFailure._tag === "Some") {
-        expect(secondFailure.value._tag).toBe("topic_already_generating");
-      }
-
-      resolveCreateCards();
-      await first;
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("marks topic generation as error when card generation fails", async () => {
-    const promptRuntime = createCardsDomainPromptRuntime({
-      failCreateCards: true,
-    });
-    const { handlers, repository, dispose } = await setupHandlers({
-      promptRuntime,
-    });
-
-    try {
-      const sourceFilePath = "/tmp/forge-cards-failure.pdf";
-      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
-
-      await Effect.runPromise(
-        repository.saveChunks(created.session.id, [
-          {
-            text: "chunk text",
-            sequenceOrder: 0,
-            pageBoundaries: [{ offset: 0, page: 1 }],
-          },
-        ]),
-      );
-      await Effect.runPromise(
-        repository.replaceTopicsForChunk({
-          sessionId: created.session.id,
-          sequenceOrder: 0,
-          topics: ["ATP"],
-        }),
-      );
-
-      const failedGeneration = await Effect.runPromiseExit(
-        handlers.ForgeGenerateTopicCards({
-          sessionId: created.session.id,
-          chunkId: 1,
-          topicIndex: 0,
-        }),
-      );
-
-      expect(Exit.isFailure(failedGeneration)).toBe(true);
-      if (Exit.isSuccess(failedGeneration)) {
-        throw new Error("Expected topic card generation to fail.");
-      }
-      const failure = Cause.failureOption(failedGeneration.cause);
-      expect(failure._tag).toBe("Some");
-      if (failure._tag === "Some") {
-        expect(failure.value._tag).toBe("card_generation_error");
-      }
-
-      const snapshot = await Effect.runPromise(
-        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
-      );
-      expect(snapshot.topics).toHaveLength(1);
-      expect(snapshot.topics[0]?.status).toBe("error");
-      expect(snapshot.topics[0]?.cardCount).toBe(0);
-      expect(snapshot.topics[0]?.errorMessage).toContain("create-cards parse failure");
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("generates selected topics in main with a bounded concurrency limit", async () => {
-    let inFlightCreateCards = 0;
-    let maxInFlightCreateCards = 0;
-
-    const promptRuntime: ForgePromptRuntime = {
-      run: <Input, Output>(
-        spec: PromptSpec<Input, Output>,
-        _input: Input,
-        options?: PromptRunOptions,
-      ) =>
-        Effect.gen(function* () {
-          if (spec.promptId !== "forge/create-cards") {
-            return yield* Effect.fail(
-              new PromptInputValidationError({
-                promptId: spec.promptId,
-                message: "Unsupported prompt in test runtime.",
-              }),
-            );
-          }
-
-          inFlightCreateCards += 1;
-          maxInFlightCreateCards = Math.max(maxInFlightCreateCards, inFlightCreateCards);
-          yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 25)));
-          inFlightCreateCards -= 1;
-
-          return {
-            output: {
-              cards: [{ question: "Q", answer: "A" }],
-            } as unknown as Output,
-            rawText: '{"cards":[{"question":"Q","answer":"A"}]}',
-            metadata: {
-              promptId: spec.promptId,
-              promptVersion: "1",
-              model: options?.model ?? "mock:model",
-              attemptCount: 1,
-              promptHash: "x".repeat(64),
-              outputChars: 32,
-            },
-          };
-        }),
-    };
-
-    const { handlers, repository, dispose } = await setupHandlers({ promptRuntime });
-
-    try {
-      const sourceFilePath = "/tmp/forge-cards-batch-concurrency.pdf";
-      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
-
-      await Effect.runPromise(
-        repository.saveChunks(created.session.id, [
-          {
-            text: "chunk one",
-            sequenceOrder: 0,
-            pageBoundaries: [{ offset: 0, page: 1 }],
-          },
-          {
-            text: "chunk two",
-            sequenceOrder: 1,
-            pageBoundaries: [{ offset: 10, page: 2 }],
-          },
-        ]),
-      );
-      await Effect.runPromise(
-        repository.replaceTopicsForChunk({
-          sessionId: created.session.id,
-          sequenceOrder: 0,
-          topics: ["topic a", "topic b"],
-        }),
-      );
-      await Effect.runPromise(
-        repository.replaceTopicsForChunk({
-          sessionId: created.session.id,
-          sequenceOrder: 1,
-          topics: ["topic c", "topic d"],
-        }),
-      );
-
-      const result = await Effect.runPromise(
-        handlers.ForgeGenerateSelectedTopicCards({
-          sessionId: created.session.id,
-          topics: [
-            { chunkId: 1, topicIndex: 0 },
-            { chunkId: 1, topicIndex: 1 },
-            { chunkId: 2, topicIndex: 0 },
-            { chunkId: 2, topicIndex: 1 },
-          ],
-          concurrencyLimit: 2,
-        }),
-      );
-
-      expect(result.results).toHaveLength(4);
-      expect(result.results.every((entry) => entry.status === "generated")).toBe(true);
-      expect(maxInFlightCreateCards).toBeLessThanOrEqual(2);
-
-      const snapshot = await Effect.runPromise(
-        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
-      );
-      expect(snapshot.topics).toHaveLength(4);
-      expect(snapshot.topics.every((topic) => topic.status === "generated")).toBe(true);
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("regenerates cards in batch for topics that already have cards", async () => {
-    const promptRuntime = createCardsDomainPromptRuntime();
-    const { handlers, repository, dispose } = await setupHandlers({
-      promptRuntime,
-    });
-
-    try {
-      const sourceFilePath = "/tmp/forge-cards-batch-regenerate.pdf";
-      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
-
-      await Effect.runPromise(
-        repository.saveChunks(created.session.id, [
-          {
-            text: "chunk text",
-            sequenceOrder: 0,
-            pageBoundaries: [{ offset: 0, page: 1 }],
-          },
-        ]),
-      );
-      await Effect.runPromise(
-        repository.replaceTopicsForChunk({
-          sessionId: created.session.id,
-          sequenceOrder: 0,
-          topics: ["ATP"],
-        }),
-      );
-
-      await Effect.runPromise(
-        handlers.ForgeGenerateTopicCards({
-          sessionId: created.session.id,
-          chunkId: 1,
-          topicIndex: 0,
-        }),
-      );
-
-      const firstSnapshot = await Effect.runPromise(
-        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
-      );
-      const firstRevision = firstSnapshot.topics[0]?.generationRevision;
-      expect(typeof firstRevision).toBe("number");
-
-      const batchResult = await Effect.runPromise(
-        handlers.ForgeGenerateSelectedTopicCards({
-          sessionId: created.session.id,
-          topics: [{ chunkId: 1, topicIndex: 0 }],
-          concurrencyLimit: 1,
-        }),
-      );
-      expect(batchResult.results[0]?.status).toBe("generated");
-
-      const secondSnapshot = await Effect.runPromise(
-        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
-      );
-      expect(secondSnapshot.topics[0]?.status).toBe("generated");
-      expect(secondSnapshot.topics[0]?.generationRevision).toBe((firstRevision ?? 0) + 1);
-      expect(secondSnapshot.topics[0]?.cardCount).toBeGreaterThan(0);
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("returns isolated per-topic statuses for already_generating, topic_not_found, typed errors, and defects", async () => {
-    let resolveBusyTopicGeneration: () => void = () => undefined;
-    const holdBusyTopicGeneration = new Promise<void>((resolve) => {
-      resolveBusyTopicGeneration = resolve;
-    });
-
-    const promptRuntime: ForgePromptRuntime = {
-      run: <Input, Output>(
-        spec: PromptSpec<Input, Output>,
-        input: Input,
-        options?: PromptRunOptions,
-      ) =>
-        Effect.gen(function* () {
-          if (spec.promptId !== "forge/create-cards") {
-            return yield* Effect.fail(
-              new PromptInputValidationError({
-                promptId: spec.promptId,
-                message: "Unsupported prompt in test runtime.",
-              }),
-            );
-          }
-
-          const createCardsInput = input as { readonly topic: string };
-          if (createCardsInput.topic === "Busy topic") {
-            yield* Effect.promise(() => holdBusyTopicGeneration);
-          } else if (createCardsInput.topic === "Fail topic") {
-            return yield* Effect.fail(
-              new PromptOutputParseError({
-                promptId: spec.promptId,
-                message: "forced topic failure",
-                rawExcerpt: "invalid",
-              }),
-            );
-          } else if (createCardsInput.topic === "Defect topic") {
-            return yield* Effect.die(new Error("defect in batch generation"));
-          }
-
-          return {
-            output: {
-              cards: [{ question: "Q", answer: "A" }],
-            } as unknown as Output,
-            rawText: '{"cards":[{"question":"Q","answer":"A"}]}',
-            metadata: {
-              promptId: spec.promptId,
-              promptVersion: "1",
-              model: options?.model ?? "mock:model",
-              attemptCount: 1,
-              promptHash: "x".repeat(64),
-              outputChars: 32,
-            },
-          };
-        }),
-    };
-
-    const { handlers, repository, dispose } = await setupHandlers({ promptRuntime });
-
-    try {
-      const sourceFilePath = "/tmp/forge-cards-batch-statuses.pdf";
-      const created = await Effect.runPromise(createPdfSession(handlers, sourceFilePath));
-
-      await Effect.runPromise(
-        repository.saveChunks(created.session.id, [
-          {
-            text: "chunk text",
-            sequenceOrder: 0,
-            pageBoundaries: [{ offset: 0, page: 1 }],
-          },
-        ]),
-      );
-      await Effect.runPromise(
-        repository.replaceTopicsForChunk({
-          sessionId: created.session.id,
-          sequenceOrder: 0,
-          topics: ["Busy topic", "Fail topic", "Defect topic"],
-        }),
-      );
-
-      const busyGeneration = Effect.runPromise(
-        handlers.ForgeGenerateTopicCards({
-          sessionId: created.session.id,
-          chunkId: 1,
-          topicIndex: 0,
-        }),
-      );
-
-      await expect
-        .poll(async () => {
-          const snapshot = await Effect.runPromise(
-            repository.getCardsSnapshotBySession(created.session.id),
-          );
-          return snapshot[0]?.status ?? null;
-        })
-        .toBe("generating");
-
-      const batchResult = await Effect.runPromise(
-        handlers.ForgeGenerateSelectedTopicCards({
-          sessionId: created.session.id,
-          topics: [
-            { chunkId: 1, topicIndex: 0 },
-            { chunkId: 1, topicIndex: 1 },
-            { chunkId: 1, topicIndex: 2 },
-            { chunkId: 999, topicIndex: 0 },
-          ],
-          concurrencyLimit: 2,
-        }),
-      );
-
-      const resultByKey = new Map(
-        batchResult.results.map(
-          (entry) => [`${entry.chunkId}:${entry.topicIndex}`, entry] as const,
-        ),
-      );
-      expect(resultByKey.get("1:0")?.status).toBe("already_generating");
-      expect(resultByKey.get("1:0")?.message).toBeNull();
-      expect(resultByKey.get("1:1")?.status).toBe("error");
-      expect(resultByKey.get("1:1")?.message).toContain("forced topic failure");
-      expect(resultByKey.get("1:2")?.status).toBe("error");
-      expect(resultByKey.get("1:2")?.message).toContain("defect in batch generation");
-      expect(resultByKey.get("999:0")?.status).toBe("topic_not_found");
-      expect(resultByKey.get("999:0")?.message).toBeNull();
-
-      resolveBusyTopicGeneration();
-      await busyGeneration;
-    } finally {
-      await dispose();
-    }
-  });
-
   it("generates permutations and cloze and persists inline card edits", async () => {
     const promptRuntime = createCardsDomainPromptRuntime();
     const { handlers, repository, dispose } = await setupHandlers({
@@ -2029,19 +1093,15 @@ describe("forge handlers", () => {
           },
         ]),
       );
-      await Effect.runPromise(
-        repository.replaceTopicsForChunk({
-          sessionId: created.session.id,
-          sequenceOrder: 0,
-          topics: ["ATP"],
-        }),
-      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["ATP"] },
+      ]);
+      const topicId = await getOnlyTopicId(repository, created.session.id);
 
       const generated = await Effect.runPromise(
         handlers.ForgeGenerateTopicCards({
           sessionId: created.session.id,
-          chunkId: 1,
-          topicIndex: 0,
+          topicId,
         }),
       );
       const sourceCardId = generated.cards[0]?.id;
@@ -2094,8 +1154,7 @@ describe("forge handlers", () => {
       const topicCards = await Effect.runPromise(
         handlers.ForgeGetTopicCards({
           sessionId: created.session.id,
-          chunkId: 1,
-          topicIndex: 0,
+          topicId: generated.topic.topicId,
         }),
       );
       expect(topicCards.cards[0]?.question).toBe("Updated question?");
@@ -2123,19 +1182,15 @@ describe("forge handlers", () => {
           },
         ]),
       );
-      await Effect.runPromise(
-        repository.replaceTopicsForChunk({
-          sessionId: created.session.id,
-          sequenceOrder: 0,
-          topics: ["Permutation topic"],
-        }),
-      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["Permutation topic"] },
+      ]);
+      const topicId = await getOnlyTopicId(repository, created.session.id);
 
       const generated = await Effect.runPromise(
         handlers.ForgeGenerateTopicCards({
           sessionId: created.session.id,
-          chunkId: 1,
-          topicIndex: 0,
+          topicId,
         }),
       );
       const sourceCardId = generated.cards[0]?.id;
@@ -2238,17 +1293,11 @@ describe("forge handlers", () => {
           },
         ]),
       );
-      await Effect.runPromise(
-        repository.replaceTopicsForChunk({
-          sessionId: session.id,
-          sequenceOrder: 0,
-          topics: ["topic-a"],
-        }),
-      );
+      await seedDetailTopics(repository, session.id, [
+        { sequenceOrder: 0, topics: ["topic-a"] },
+      ]);
 
-      const topic = await Effect.runPromise(
-        repository.getTopicByRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
-      );
+      const topic = await getTopicBySequenceOrderAndIndex(repository, session.id, 0, 0);
       if (!topic) throw new Error("Expected topic for source card.");
 
       await Effect.runPromise(
@@ -2258,8 +1307,11 @@ describe("forge handlers", () => {
         }),
       );
 
-      const detailBefore = await Effect.runPromise(
-        repository.getCardsForTopicRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
+      const detailBefore = await getCardsForTopicBySequenceOrderAndIndex(
+        repository,
+        session.id,
+        0,
+        0,
       );
       const sourceCardId = detailBefore?.cards[0]?.id;
       if (!sourceCardId) throw new Error("Expected source card id.");
@@ -2274,8 +1326,11 @@ describe("forge handlers", () => {
         }),
       );
 
-      const detailAfter = await Effect.runPromise(
-        repository.getCardsForTopicRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
+      const detailAfter = await getCardsForTopicBySequenceOrderAndIndex(
+        repository,
+        session.id,
+        0,
+        0,
       );
       expect(detailAfter?.cards[0]?.addedToDeck).toBe(true);
 
@@ -2317,19 +1372,13 @@ describe("forge handlers", () => {
           },
         ]),
       );
-      await Effect.runPromise(
-        repository.replaceTopicsForChunk({
-          sessionId: session.id,
-          sequenceOrder: 0,
-          topics: ["topic-a"],
-        }),
-      );
+      await seedDetailTopics(repository, session.id, [{ sequenceOrder: 0, topics: ["topic-a"] }]);
+      const topicId = await getOnlyTopicId(repository, session.id);
 
       const generated = await Effect.runPromise(
         handlers.ForgeGenerateTopicCards({
           sessionId: session.id,
-          chunkId: 1,
-          topicIndex: 0,
+          topicId,
         }),
       );
       const sourceCardId = generated.cards[0]?.id;
@@ -2480,17 +1529,9 @@ describe("forge handlers", () => {
           },
         ]),
       );
-      await Effect.runPromise(
-        repository.replaceTopicsForChunk({
-          sessionId: session.id,
-          sequenceOrder: 0,
-          topics: ["topic-a"],
-        }),
-      );
+      await seedDetailTopics(repository, session.id, [{ sequenceOrder: 0, topics: ["topic-a"] }]);
 
-      const topic = await Effect.runPromise(
-        repository.getTopicByRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
-      );
+      const topic = await getTopicBySequenceOrderAndIndex(repository, session.id, 0, 0);
       if (!topic) throw new Error("Expected topic for source card.");
 
       await Effect.runPromise(
@@ -2500,9 +1541,7 @@ describe("forge handlers", () => {
         }),
       );
 
-      const detail = await Effect.runPromise(
-        repository.getCardsForTopicRef({ sessionId: session.id, chunkId: 1, topicIndex: 0 }),
-      );
+      const detail = await getCardsForTopicBySequenceOrderAndIndex(repository, session.id, 0, 0);
       const sourceCardId = detail?.cards[0]?.id;
       if (!sourceCardId) throw new Error("Expected source card id.");
 
@@ -2708,6 +1747,441 @@ describe("forge handlers", () => {
       expect(parsed.items[1]!.content).toContain("New Q?");
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
+      await dispose();
+    }
+  });
+
+  it("returns mixed-family groups and outcomes from ForgeStartTopicExtraction", async () => {
+    const sourceFilePath = "/tmp/forge-v2-start.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: {
+        [sourceFilePath]: "Alpha topic text. Beta topic text.",
+      },
+    });
+    const promptRuntime = createPromptRuntime(({ chunkText, sourceText }) =>
+      Effect.succeed([(chunkText ?? sourceText ?? "").slice(0, 5), "cross-source idea"]),
+    );
+    const { handlers, dispose } = await setupHandlers({
+      extractor,
+      promptRuntime,
+    });
+
+    try {
+      const result = await Effect.runPromise(
+        startPdfTopicExtraction(handlers, { sourceFilePath }),
+      );
+
+      expect(result.session.status).toBe("topics_extracted");
+      expect(result.outcomes).toEqual([
+        {
+          family: "detail",
+          status: "extracted",
+          errorMessage: null,
+        },
+        {
+          family: "synthesis",
+          status: "extracted",
+          errorMessage: null,
+        },
+      ]);
+      expect(result.groups).toHaveLength(2);
+      expect(result.groups[0]?.groupKind).toBe("chunk");
+      expect(result.groups[0]?.family).toBe("detail");
+      expect(result.groups[0]?.topics).toHaveLength(2);
+      expect(result.groups[0]?.topics[0]?.sessionId).toBe(result.session.id);
+      expect(result.groups[1]?.groupKind).toBe("section");
+      expect(result.groups[1]?.family).toBe("synthesis");
+      expect(result.groups[1]?.topics).toHaveLength(2);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("keeps session usable when synthesis extraction fails but detail succeeds in V2", async () => {
+    const sourceFilePath = "/tmp/forge-v2-detail-success.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: {
+        [sourceFilePath]: "Alpha topic text. Beta topic text.",
+      },
+    });
+    const promptRuntime = createPromptRuntime(({ chunkText, sourceText }) => {
+      if (sourceText) {
+        return Effect.fail(
+          new PromptOutputParseError({
+            promptId: "forge/get-synthesis-topics",
+            message: "synthesis parse failure",
+            rawExcerpt: "invalid",
+          }),
+        );
+      }
+
+      return Effect.succeed([(chunkText ?? "").slice(0, 5), "detail idea"]);
+    });
+    const { handlers, dispose } = await setupHandlers({
+      extractor,
+      promptRuntime,
+    });
+
+    try {
+      const result = await Effect.runPromise(
+        startPdfTopicExtraction(handlers, { sourceFilePath }),
+      );
+
+      expect(result.session.status).toBe("topics_extracted");
+      expect(result.outcomes).toEqual([
+        {
+          family: "detail",
+          status: "extracted",
+          errorMessage: null,
+        },
+        {
+          family: "synthesis",
+          status: "error",
+          errorMessage: "synthesis parse failure",
+        },
+      ]);
+      expect(result.groups).toHaveLength(1);
+      expect(result.groups[0]?.family).toBe("detail");
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("fails V2 extraction when both detail and synthesis extraction fail", async () => {
+    const sourceFilePath = "/tmp/forge-v2-all-fail.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: {
+        [sourceFilePath]: "Alpha topic text. Beta topic text.",
+      },
+    });
+    const promptRuntime = createPromptRuntime(() =>
+      Effect.fail(
+        new PromptOutputParseError({
+          promptId: "forge/get-topics",
+          message: "all extraction failed",
+          rawExcerpt: "invalid",
+        }),
+      ),
+    );
+    const { handlers, repository, dispose } = await setupHandlers({
+      extractor,
+      promptRuntime,
+    });
+
+    try {
+      const exit = await Effect.runPromiseExit(
+        startPdfTopicExtraction(handlers, { sourceFilePath }),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected ForgeStartTopicExtraction to fail.");
+      }
+
+      const sessions = await Effect.runPromise(repository.listRecentSessions());
+      expect(sessions[0]?.status).toBe("error");
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("returns V2 cards snapshot rows with detail family metadata", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime();
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-v2-snapshot.pdf"));
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk text",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["ATP"] },
+      ]);
+      const topicId = await getOnlyTopicId(repository, created.session.id);
+      await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          topicId,
+        }),
+      );
+
+      const snapshot = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
+      );
+
+      expect(snapshot.topics).toHaveLength(1);
+      expect(snapshot.topics[0]?.family).toBe("detail");
+      expect(snapshot.topics[0]?.sessionId).toBe(created.session.id);
+      expect(snapshot.topics[0]?.chunkId).toBe(1);
+      expect(snapshot.topics[0]?.chunkSequenceOrder).toBe(0);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("generates synthesis cards through ForgeGenerateTopicCards", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime();
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-v2-synthesis-cards.pdf"));
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk a ",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+          {
+            text: "chunk b",
+            sequenceOrder: 1,
+            pageBoundaries: [{ offset: 0, page: 2 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceSynthesisTopicsForSessionAndSetExtractionOutcome({
+          sessionId: created.session.id,
+          topics: ["synthesis topic"],
+          status: "extracted",
+          errorMessage: null,
+        }),
+      );
+
+      const snapshot = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
+      );
+      const topicId = snapshot.topics.find((topic) => topic.family === "synthesis")?.topicId;
+      if (!topicId) {
+        throw new Error("Expected synthesis topic id.");
+      }
+
+      const result = await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          topicId,
+        }),
+      );
+
+      expect(result.topic.family).toBe("synthesis");
+      expect(result.cards.length).toBeGreaterThan(0);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("rejects cross-session topicId access in ForgeGetTopicCards", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime();
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const first = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-v2-cross-a.pdf"));
+      const second = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-v2-cross-b.pdf"));
+
+      await Effect.runPromise(
+        repository.saveChunks(second.session.id, [
+          {
+            text: "chunk second",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await seedDetailTopics(repository, second.session.id, [
+        { sequenceOrder: 0, topics: ["topic second"] },
+      ]);
+
+      const snapshot = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: second.session.id }),
+      );
+      const foreignTopicId = snapshot.topics[0]?.topicId;
+      if (!foreignTopicId) {
+        throw new Error("Expected topic id in second session.");
+      }
+
+      const exit = await Effect.runPromiseExit(
+        handlers.ForgeGetTopicCards({
+          sessionId: first.session.id,
+          topicId: foreignTopicId,
+        }),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("rejects ForgeSaveTopicSelections for missing sessions", async () => {
+    const { handlers, dispose } = await setupHandlers();
+
+    try {
+      const exit = await Effect.runPromiseExit(
+        handlers.ForgeSaveTopicSelections({
+          sessionId: 999,
+          topicIds: [1],
+        }),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("generates permutations and cloze for synthesis-derived cards", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime();
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-v2-synthesis-variants.pdf"));
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk a ",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+          {
+            text: "chunk b",
+            sequenceOrder: 1,
+            pageBoundaries: [{ offset: 0, page: 2 }],
+          },
+        ]),
+      );
+      await Effect.runPromise(
+        repository.replaceSynthesisTopicsForSessionAndSetExtractionOutcome({
+          sessionId: created.session.id,
+          topics: ["synthesis topic"],
+          status: "extracted",
+          errorMessage: null,
+        }),
+      );
+
+      const snapshot = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
+      );
+      const topicId = snapshot.topics.find((topic) => topic.family === "synthesis")?.topicId;
+      if (!topicId) {
+        throw new Error("Expected synthesis topic id.");
+      }
+
+      const generated = await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          topicId,
+        }),
+      );
+      const sourceCardId = generated.cards[0]?.id;
+      if (!sourceCardId) {
+        throw new Error("Expected synthesis source card.");
+      }
+
+      const permutations = await Effect.runPromise(
+        handlers.ForgeGenerateCardPermutations({
+          sourceCardId,
+        }),
+      );
+      expect(permutations.permutations).toHaveLength(1);
+
+      const cloze = await Effect.runPromise(
+        handlers.ForgeGenerateCardCloze({
+          sourceCardId,
+        }),
+      );
+      expect(cloze.cloze).toContain("{{c1::");
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("supports topic-id based cards access and selection through V2 handlers", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime();
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-v2-topic-id.pdf"));
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk a",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+          {
+            text: "chunk b",
+            sequenceOrder: 1,
+            pageBoundaries: [{ offset: 0, page: 2 }],
+          },
+        ]),
+      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["topic a"] },
+        { sequenceOrder: 1, topics: ["topic b"] },
+      ]);
+
+      const initialSnapshot = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
+      );
+      const firstTopicId = initialSnapshot.topics[0]?.topicId;
+      const secondTopicId = initialSnapshot.topics[1]?.topicId;
+
+      if (!firstTopicId || !secondTopicId) {
+        throw new Error("Expected two topic ids in V2 snapshot.");
+      }
+
+      await Effect.runPromise(
+        handlers.ForgeSaveTopicSelections({
+          sessionId: created.session.id,
+          topicIds: [secondTopicId],
+        }),
+      );
+
+      const selectedSnapshot = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
+      );
+      expect(selectedSnapshot.topics.find((topic) => topic.topicId === firstTopicId)?.selected).toBe(
+        false,
+      );
+      expect(
+        selectedSnapshot.topics.find((topic) => topic.topicId === secondTopicId)?.selected,
+      ).toBe(true);
+
+      const generated = await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          topicId: secondTopicId,
+        }),
+      );
+      expect(generated.topic.topicId).toBe(secondTopicId);
+      expect(generated.cards.length).toBeGreaterThan(0);
+
+      const reread = await Effect.runPromise(
+        handlers.ForgeGetTopicCards({
+          sessionId: created.session.id,
+          topicId: secondTopicId,
+        }),
+      );
+      expect(reread.topic.topicId).toBe(secondTopicId);
+      expect(reread.cards.length).toBeGreaterThan(0);
+    } finally {
       await dispose();
     }
   });

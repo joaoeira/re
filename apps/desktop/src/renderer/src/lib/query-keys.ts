@@ -36,8 +36,8 @@ export const queryKeys = {
     ["forgePreview", forgeSourceCacheKey(source)] as const,
   forgeTopicSnapshot: (sessionId: number | null) => ["forgeTopicSnapshot", sessionId] as const,
   forgeCardsSnapshot: (sessionId: number | null) => ["forgeCardsSnapshot", sessionId] as const,
-  forgeTopicCards: (sessionId: number | null, chunkId: number | null, topicIndex: number | null) =>
-    ["forgeTopicCards", sessionId, chunkId, topicIndex] as const,
+  forgeTopicCards: (sessionId: number | null, topicId: number | null) =>
+    ["forgeTopicCards", sessionId, topicId] as const,
   forgeCardPermutations: (sourceCardId: number | null) =>
     ["forgeCardPermutations", sourceCardId] as const,
   forgeCardCloze: (sourceCardId: number | null) => ["forgeCardCloze", sourceCardId] as const,

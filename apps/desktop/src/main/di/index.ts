@@ -35,6 +35,11 @@ export {
   ForgeSourceResolverServiceLive,
 } from "./services/ForgeSourceResolverService";
 export {
+  TopicGroundingTextResolverService,
+  TopicGroundingTextResolverServiceLive,
+  type TopicGroundingTextResolverService as TopicGroundingTextResolver,
+} from "./services/TopicGroundingTextResolverService";
+export {
   DuplicateIndexInvalidationService,
   DuplicateIndexInvalidationBridgeLive,
   DuplicateIndexInvalidationServiceLive,

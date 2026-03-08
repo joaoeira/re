@@ -2,7 +2,12 @@ import { userEvent } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 
 import { ForgePage } from "@/components/forge/forge-page";
-import { createForgeInvoke, createForgeStartTopicExtractionSuccess } from "./forge-ipc-mocks";
+import {
+  createForgeInvoke,
+  createForgeStartTopicExtractionSuccess,
+  createForgeTopicExtractionSnapshotSuccess,
+  type ForgeTopicsByChunk,
+} from "./forge-ipc-mocks";
 import { renderWithIpcProviders } from "./render-with-providers";
 import { mockDesktopGlobals, uploadPdf, waitForFileInput } from "./forge-test-helpers";
 
@@ -17,6 +22,74 @@ const openTextEditor = async (screen: Awaited<ReturnType<typeof renderForgePage>
   await userEvent.click(screen.getByText("Drop a PDF, or click to paste text"));
   await expect.element(screen.getByRole("textbox", { name: "Paste source text" })).toBeVisible();
 };
+
+const createTextSource = (
+  text = "alpha beta gamma",
+  sourceLabel?: string,
+): { kind: "text"; text: string; sourceLabel?: string } =>
+  sourceLabel ? { kind: "text", text, sourceLabel } : { kind: "text", text };
+
+const createPdfSource = (sourceFilePath = "/forge/source.pdf") => ({
+  kind: "pdf" as const,
+  sourceFilePath,
+});
+
+const alphaTopicChunk = (): ReadonlyArray<ForgeTopicsByChunk> => [
+  {
+    chunkId: 101,
+    sequenceOrder: 0,
+    topics: ["alpha topic"],
+  },
+];
+
+const createTextExtractionSuccess = (options?: {
+  readonly sessionId?: number;
+  readonly sourceLabel?: string;
+  readonly sourceFingerprint?: string;
+  readonly topicsByChunk?: ReadonlyArray<ForgeTopicsByChunk>;
+}) => {
+  const topicsByChunk = options?.topicsByChunk ?? alphaTopicChunk();
+  return createForgeStartTopicExtractionSuccess({
+    source: createTextSource("alpha beta gamma", options?.sourceLabel),
+    ...(typeof options?.sessionId === "number" ? { sessionId: options.sessionId } : {}),
+    ...(options?.sourceFingerprint ? { sourceFingerprint: options.sourceFingerprint } : {}),
+    textLength: 17,
+    preview: "alpha beta gamma",
+    totalPages: 1,
+    chunkCount: 1,
+    topicsByChunk,
+  });
+};
+
+const createTextExtractionSnapshot = (options?: {
+  readonly sessionId?: number;
+  readonly sourceLabel?: string;
+  readonly status?: "topics_extracted" | "topics_extracting" | "error";
+  readonly topicsByChunk?: ReadonlyArray<ForgeTopicsByChunk>;
+  readonly errorMessage?: string | null;
+}) =>
+  createForgeTopicExtractionSnapshotSuccess({
+    source: createTextSource("alpha beta gamma", options?.sourceLabel),
+    ...(typeof options?.sessionId === "number" ? { sessionId: options.sessionId } : {}),
+    ...(options?.status ? { status: options.status } : {}),
+    ...(options?.topicsByChunk ? { topicsByChunk: options.topicsByChunk } : {}),
+    ...(options?.errorMessage !== undefined ? { errorMessage: options.errorMessage } : {}),
+  });
+
+const createPdfExtractionSnapshot = (options?: {
+  readonly sessionId?: number;
+  readonly sourceFilePath?: string;
+  readonly status?: "topics_extracted" | "topics_extracting" | "error";
+  readonly topicsByChunk?: ReadonlyArray<ForgeTopicsByChunk>;
+  readonly errorMessage?: string | null;
+}) =>
+  createForgeTopicExtractionSnapshotSuccess({
+    source: createPdfSource(options?.sourceFilePath),
+    ...(typeof options?.sessionId === "number" ? { sessionId: options.sessionId } : {}),
+    ...(options?.status ? { status: options.status } : {}),
+    ...(options?.topicsByChunk ? { topicsByChunk: options.topicsByChunk } : {}),
+    ...(options?.errorMessage !== undefined ? { errorMessage: options.errorMessage } : {}),
+  });
 
 const createSuccessInvoke = () =>
   createForgeInvoke({
@@ -103,48 +176,18 @@ describe("ForgePage", () => {
           },
         });
 
-        return {
-          type: "success",
-          data: {
-            session: {
-              id: 12,
-              sourceKind: "text",
-              sourceLabel: "Pasted text",
-              sourceFilePath: null,
-              deckPath: null,
-              sourceFingerprint: "fp:text",
-              status: "topics_extracted",
-              errorMessage: null,
-              createdAt: "2025-01-10T00:00:00.000Z",
-              updatedAt: "2025-01-10T00:00:00.000Z",
-            },
-            duplicateOfSessionId: null,
-            extraction: {
-              sessionId: 12,
-              textLength: 17,
-              preview: "alpha beta gamma",
-              totalPages: 1,
-              chunkCount: 1,
-            },
-            topicsByChunk: [
-              {
-                chunkId: 101,
-                sequenceOrder: 0,
-                topics: ["alpha topic"],
-              },
-            ],
-          },
-        };
+        return createTextExtractionSuccess({
+          sessionId: 12,
+          sourceFingerprint: "fp:text",
+        });
       }
 
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: null,
-            topicsByChunk: [],
-          },
-        };
+        return createTextExtractionSnapshot({
+          sessionId: 12,
+          status: "topics_extracted",
+          topicsByChunk: alphaTopicChunk(),
+        });
       }
 
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
@@ -176,48 +219,18 @@ describe("ForgePage", () => {
       }
 
       if (method === "ForgeStartTopicExtraction") {
-        return {
-          type: "success",
-          data: {
-            session: {
-              id: 22,
-              sourceKind: "text",
-              sourceLabel: "Pasted text",
-              sourceFilePath: null,
-              deckPath: null,
-              sourceFingerprint: "fp:text",
-              status: "topics_extracted",
-              errorMessage: null,
-              createdAt: "2025-01-10T00:00:00.000Z",
-              updatedAt: "2025-01-10T00:00:00.000Z",
-            },
-            duplicateOfSessionId: null,
-            extraction: {
-              sessionId: 22,
-              textLength: 17,
-              preview: "alpha beta gamma",
-              totalPages: 1,
-              chunkCount: 1,
-            },
-            topicsByChunk: [
-              {
-                chunkId: 101,
-                sequenceOrder: 0,
-                topics: ["alpha topic"],
-              },
-            ],
-          },
-        };
+        return createTextExtractionSuccess({
+          sessionId: 22,
+          sourceFingerprint: "fp:text",
+        });
       }
 
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: null,
-            topicsByChunk: [],
-          },
-        };
+        return createTextExtractionSnapshot({
+          sessionId: 22,
+          status: "topics_extracted",
+          topicsByChunk: alphaTopicChunk(),
+        });
       }
 
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
@@ -249,48 +262,18 @@ describe("ForgePage", () => {
       }
 
       if (method === "ForgeStartTopicExtraction") {
-        return {
-          type: "success",
-          data: {
-            session: {
-              id: 33,
-              sourceKind: "text",
-              sourceLabel: "Pasted text",
-              sourceFilePath: null,
-              deckPath: null,
-              sourceFingerprint: "fp:text",
-              status: "topics_extracted",
-              errorMessage: null,
-              createdAt: "2025-01-10T00:00:00.000Z",
-              updatedAt: "2025-01-10T00:00:00.000Z",
-            },
-            duplicateOfSessionId: null,
-            extraction: {
-              sessionId: 33,
-              textLength: 17,
-              preview: "alpha beta gamma",
-              totalPages: 1,
-              chunkCount: 1,
-            },
-            topicsByChunk: [
-              {
-                chunkId: 101,
-                sequenceOrder: 0,
-                topics: ["alpha topic"],
-              },
-            ],
-          },
-        };
+        return createTextExtractionSuccess({
+          sessionId: 33,
+          sourceFingerprint: "fp:text",
+        });
       }
 
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: null,
-            topicsByChunk: [],
-          },
-        };
+        return createTextExtractionSnapshot({
+          sessionId: 33,
+          status: "topics_extracted",
+          topicsByChunk: alphaTopicChunk(),
+        });
       }
 
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
@@ -347,24 +330,11 @@ describe("ForgePage", () => {
       }
 
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: {
-              id: 44,
-              sourceKind: "text",
-              sourceLabel: "Pasted text",
-              sourceFilePath: null,
-              deckPath: null,
-              sourceFingerprint: "fp:text",
-              status: "topics_extracting",
-              errorMessage: null,
-              createdAt: "2025-01-10T00:00:00.000Z",
-              updatedAt: "2025-01-10T00:00:00.000Z",
-            },
-            topicsByChunk: [],
-          },
-        };
+        return createTextExtractionSnapshot({
+          sessionId: 44,
+          status: "topics_extracting",
+          topicsByChunk: [],
+        });
       }
 
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
@@ -427,30 +397,11 @@ describe("ForgePage", () => {
       }
 
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: {
-              id: 46,
-              sourceKind: "text",
-              sourceLabel: "Pasted text",
-              sourceFilePath: null,
-              deckPath: null,
-              sourceFingerprint: "fp:text",
-              status: "topics_extracted",
-              errorMessage: null,
-              createdAt: "2025-01-10T00:00:00.000Z",
-              updatedAt: "2025-01-10T00:00:00.000Z",
-            },
-            topicsByChunk: [
-              {
-                chunkId: 101,
-                sequenceOrder: 0,
-                topics: ["alpha topic"],
-              },
-            ],
-          },
-        };
+        return createTextExtractionSnapshot({
+          sessionId: 46,
+          status: "topics_extracted",
+          topicsByChunk: alphaTopicChunk(),
+        });
       }
 
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
@@ -505,24 +456,11 @@ describe("ForgePage", () => {
       }
 
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: {
-              id: 45,
-              sourceKind: "text",
-              sourceLabel: "Pasted text",
-              sourceFilePath: null,
-              deckPath: null,
-              sourceFingerprint: "fp:text",
-              status: "topics_extracting",
-              errorMessage: null,
-              createdAt: "2025-01-10T00:00:00.000Z",
-              updatedAt: "2025-01-10T00:00:00.000Z",
-            },
-            topicsByChunk: [],
-          },
-        };
+        return createTextExtractionSnapshot({
+          sessionId: 45,
+          status: "topics_extracting",
+          topicsByChunk: [],
+        });
       }
 
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
@@ -565,13 +503,11 @@ describe("ForgePage", () => {
       }
 
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: null,
-            topicsByChunk: [],
-          },
-        };
+        return createTextExtractionSnapshot({
+          sessionId: 77,
+          status: "topics_extracting",
+          topicsByChunk: [],
+        });
       }
 
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
@@ -615,48 +551,20 @@ describe("ForgePage", () => {
           },
         });
 
-        return {
-          type: "success",
-          data: {
-            session: {
-              id: 12,
-              sourceKind: "text",
-              sourceLabel: "My custom title",
-              sourceFilePath: null,
-              deckPath: null,
-              sourceFingerprint: "fp:text",
-              status: "topics_extracted",
-              errorMessage: null,
-              createdAt: "2025-01-10T00:00:00.000Z",
-              updatedAt: "2025-01-10T00:00:00.000Z",
-            },
-            duplicateOfSessionId: null,
-            extraction: {
-              sessionId: 12,
-              textLength: 17,
-              preview: "alpha beta gamma",
-              totalPages: 1,
-              chunkCount: 1,
-            },
-            topicsByChunk: [
-              {
-                chunkId: 101,
-                sequenceOrder: 0,
-                topics: ["alpha topic"],
-              },
-            ],
-          },
-        };
+        return createTextExtractionSuccess({
+          sessionId: 12,
+          sourceLabel: "My custom title",
+          sourceFingerprint: "fp:text",
+        });
       }
 
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: null,
-            topicsByChunk: [],
-          },
-        };
+        return createTextExtractionSnapshot({
+          sessionId: 12,
+          sourceLabel: "My custom title",
+          status: "topics_extracted",
+          topicsByChunk: alphaTopicChunk(),
+        });
       }
 
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
@@ -686,48 +594,18 @@ describe("ForgePage", () => {
         const source = (payload as { source: Record<string, unknown> }).source;
         expect(source).not.toHaveProperty("sourceLabel");
 
-        return {
-          type: "success",
-          data: {
-            session: {
-              id: 13,
-              sourceKind: "text",
-              sourceLabel: "alpha beta gamma",
-              sourceFilePath: null,
-              deckPath: null,
-              sourceFingerprint: "fp:text2",
-              status: "topics_extracted",
-              errorMessage: null,
-              createdAt: "2025-01-10T00:00:00.000Z",
-              updatedAt: "2025-01-10T00:00:00.000Z",
-            },
-            duplicateOfSessionId: null,
-            extraction: {
-              sessionId: 13,
-              textLength: 17,
-              preview: "alpha beta gamma",
-              totalPages: 1,
-              chunkCount: 1,
-            },
-            topicsByChunk: [
-              {
-                chunkId: 101,
-                sequenceOrder: 0,
-                topics: ["alpha topic"],
-              },
-            ],
-          },
-        };
+        return createTextExtractionSuccess({
+          sessionId: 13,
+          sourceFingerprint: "fp:text2",
+        });
       }
 
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: null,
-            topicsByChunk: [],
-          },
-        };
+        return createTextExtractionSnapshot({
+          sessionId: 13,
+          status: "topics_extracted",
+          topicsByChunk: alphaTopicChunk(),
+        });
       }
 
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
@@ -767,13 +645,11 @@ describe("ForgePage", () => {
       }
 
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: null,
-            topicsByChunk: [],
-          },
-        };
+        return createTextExtractionSnapshot({
+          sessionId: 78,
+          status: "topics_extracting",
+          topicsByChunk: [],
+        });
       }
 
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
@@ -874,6 +750,7 @@ describe("ForgePage", () => {
       });
 
     let resolveStartExtraction: ((value: { type: "success"; data: unknown }) => void) | undefined;
+    let snapshotTopicsByChunk: ReadonlyArray<ForgeTopicsByChunk> = [];
 
     const invoke = vi.fn().mockImplementation(async (method: string, _payload?: unknown) => {
       if (method === "ForgeListSessions") {
@@ -892,24 +769,11 @@ describe("ForgePage", () => {
       }
 
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: {
-              id: 12,
-              sourceKind: "pdf",
-              sourceLabel: "source.pdf",
-              sourceFilePath: "/forge/source.pdf",
-              deckPath: null,
-              sourceFingerprint: "fp:start",
-              status: "topics_extracting",
-              errorMessage: null,
-              createdAt: "9999-01-10T00:00:00.000Z",
-              updatedAt: "9999-01-10T00:00:00.000Z",
-            },
-            topicsByChunk: [],
-          },
-        };
+        return createPdfExtractionSnapshot({
+          sessionId: 12,
+          status: "topics_extracting",
+          topicsByChunk: snapshotTopicsByChunk,
+        });
       }
 
       if (method === "ForgeStartTopicExtraction") {
@@ -947,47 +811,39 @@ describe("ForgePage", () => {
         topics: ["biology", "cells"],
       },
     });
+    snapshotTopicsByChunk = [
+      {
+        chunkId: 101,
+        sequenceOrder: 0,
+        topics: ["biology", "cells"],
+      },
+    ];
 
     await expect.element(screen.getByText("biology")).toBeVisible();
     await expect.element(screen.getByText("cells")).toBeVisible();
 
-    resolveStartExtraction?.({
-      type: "success",
-      data: {
-        session: {
-          id: 12,
-          sourceKind: "pdf",
-          sourceLabel: "source.pdf",
-          sourceFilePath: "/forge/source.pdf",
-          deckPath: null,
-          sourceFingerprint: "fp:start",
-          status: "topics_extracted",
-          errorMessage: null,
-          createdAt: "2025-01-10T00:00:00.000Z",
-          updatedAt: "2025-01-10T00:00:00.000Z",
-        },
-        duplicateOfSessionId: null,
-        extraction: {
-          sessionId: 12,
-          textLength: 230,
-          preview: "sample extracted preview",
-          totalPages: 4,
-          chunkCount: 2,
-        },
-        topicsByChunk: [
-          {
-            chunkId: 101,
-            sequenceOrder: 0,
-            topics: ["biology", "cells"],
-          },
-          {
-            chunkId: 102,
-            sequenceOrder: 1,
-            topics: ["membranes"],
-          },
-        ],
+    snapshotTopicsByChunk = [
+      {
+        chunkId: 101,
+        sequenceOrder: 0,
+        topics: ["biology", "cells"],
       },
+      {
+        chunkId: 102,
+        sequenceOrder: 1,
+        topics: ["membranes"],
+      },
+    ];
+    const startExtractionSuccess = createForgeStartTopicExtractionSuccess({
+      source: createPdfSource(),
+      sessionId: 12,
+      sourceFingerprint: "fp:start",
+      topicsByChunk: snapshotTopicsByChunk,
     });
+    if (startExtractionSuccess.type !== "success") {
+      throw new Error("Expected start extraction success result.");
+    }
+    resolveStartExtraction?.(startExtractionSuccess);
 
     await expect.element(screen.getByText("membranes")).toBeVisible();
   });
@@ -1002,6 +858,8 @@ describe("ForgePage", () => {
           eventHandlers.delete(name);
         };
       });
+
+    let snapshotTopicsByChunk: ReadonlyArray<ForgeTopicsByChunk> = [];
 
     const invoke = vi.fn().mockImplementation(async (method: string) => {
       if (method === "ForgeListSessions") {
@@ -1020,24 +878,11 @@ describe("ForgePage", () => {
       }
 
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: {
-              id: 500,
-              sourceKind: "pdf",
-              sourceLabel: "source.pdf",
-              sourceFilePath: "/forge/source.pdf",
-              deckPath: null,
-              sourceFingerprint: "fp:start",
-              status: "topics_extracting",
-              errorMessage: null,
-              createdAt: "9999-01-10T00:00:00.000Z",
-              updatedAt: "9999-01-10T00:00:00.000Z",
-            },
-            topicsByChunk: [],
-          },
-        };
+        return createPdfExtractionSnapshot({
+          sessionId: 500,
+          status: "topics_extracting",
+          topicsByChunk: snapshotTopicsByChunk,
+        });
       }
 
       if (method === "ForgeStartTopicExtraction") {
@@ -1076,6 +921,13 @@ describe("ForgePage", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(screen.getByText("stale-topic").query()).toBeNull();
 
+    snapshotTopicsByChunk = [
+      {
+        chunkId: 102,
+        sequenceOrder: 1,
+        topics: ["fresh-topic"],
+      },
+    ];
     onChunkExtracted?.({
       sessionId: 500,
       chunk: {
@@ -1101,13 +953,11 @@ describe("ForgePage", () => {
       }
 
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: null,
-            topicsByChunk: [],
-          },
-        };
+        return createPdfExtractionSnapshot({
+          sessionId: 12,
+          status: "topics_extracting",
+          topicsByChunk: [],
+        });
       }
 
       if (method === "ForgeStartTopicExtraction") {
@@ -1244,13 +1094,11 @@ describe("ForgePage", () => {
         };
       }
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: null,
-            topicsByChunk: [],
-          },
-        };
+        return createPdfExtractionSnapshot({
+          sessionId: 11,
+          status: "topics_extracting",
+          topicsByChunk: [],
+        });
       }
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
     });
@@ -1290,41 +1138,24 @@ describe("ForgePage", () => {
       }
 
       if (method === "ForgeStartTopicExtraction") {
-        return {
-          type: "success",
-          data: {
-            session: {
-              id: 99,
-              sourceKind: "pdf",
-              sourceLabel: "second.pdf",
-              sourceFilePath: "/forge/second.pdf",
-              deckPath: null,
-              sourceFingerprint: "fp",
-              status: "topics_extracted",
-              errorMessage: null,
-              createdAt: "2025-01-10T00:00:00.000Z",
-              updatedAt: "2025-01-10T00:00:00.000Z",
-            },
-            duplicateOfSessionId: null,
-            extraction: {
-              sessionId: 99,
-              textLength: 10,
-              preview: "ok",
-              totalPages: 1,
-              chunkCount: 1,
-            },
-            topicsByChunk: [],
-          },
-        };
+        return createForgeStartTopicExtractionSuccess({
+          source: createPdfSource("/forge/second.pdf"),
+          sessionId: 99,
+          sourceFingerprint: "fp",
+          textLength: 10,
+          preview: "ok",
+          totalPages: 1,
+          chunkCount: 1,
+          topicsByChunk: [],
+        });
       }
       if (method === "ForgeGetTopicExtractionSnapshot") {
-        return {
-          type: "success",
-          data: {
-            session: null,
-            topicsByChunk: [],
-          },
-        };
+        return createPdfExtractionSnapshot({
+          sessionId: 99,
+          sourceFilePath: "/forge/second.pdf",
+          status: "topics_extracting",
+          topicsByChunk: [],
+        });
       }
 
       return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };

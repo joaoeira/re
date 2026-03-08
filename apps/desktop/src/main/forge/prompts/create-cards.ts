@@ -3,55 +3,14 @@ import { Schema } from "@effect/schema";
 import type { PromptAttemptContext, PromptSpec } from "./types";
 
 import { CardQualityPrinciples } from "./card-principles";
+import { NormalizedCardArraySchema } from "./normalize";
 
 export const CreateCardsPromptInputSchema = Schema.Struct({
-  chunkText: Schema.String.pipe(Schema.minLength(1)),
+  contextText: Schema.String.pipe(Schema.minLength(1)),
   topic: Schema.String.pipe(Schema.minLength(1)),
   instruction: Schema.optional(Schema.String),
 });
 export type CreateCardsPromptInput = typeof CreateCardsPromptInputSchema.Type;
-
-const RawCardSchema = Schema.Struct({
-  question: Schema.String,
-  answer: Schema.String,
-});
-
-type RawCard = typeof RawCardSchema.Type;
-
-const collapseWhitespace = (value: string): string => value.replace(/\s+/g, " ").trim();
-
-const normalizeCards = (cards: ReadonlyArray<RawCard>): ReadonlyArray<RawCard> => {
-  const normalizedCards: RawCard[] = [];
-  const seen = new Set<string>();
-
-  for (const card of cards) {
-    const question = collapseWhitespace(card.question);
-    const answer = collapseWhitespace(card.answer);
-    if (question.length === 0 || answer.length === 0) {
-      continue;
-    }
-
-    const dedupeKey = `${question}\u0000${answer}`;
-    if (seen.has(dedupeKey)) {
-      continue;
-    }
-
-    seen.add(dedupeKey);
-    normalizedCards.push({ question, answer });
-  }
-
-  return normalizedCards;
-};
-
-const NormalizedCardArraySchema = Schema.transform(
-  Schema.Array(RawCardSchema),
-  Schema.Array(RawCardSchema),
-  {
-    strict: true,
-    decode: (cards) => normalizeCards(cards),
-    encode: (cards) => cards,
-  },
-);
 
 export const CreateCardsPromptOutputSchema = Schema.Struct({
   cards: NormalizedCardArraySchema,
@@ -91,7 +50,7 @@ const renderBaseUserPrompt = (input: CreateCardsPromptInput): string => {
 
 ---
       Source text:
-      ${input.chunkText}
+      ${input.contextText}
 
       ---
 

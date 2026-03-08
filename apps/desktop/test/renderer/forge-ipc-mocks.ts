@@ -20,6 +20,25 @@ export type ForgeTopicsByChunk = {
   readonly topics: ReadonlyArray<string>;
 };
 
+type ForgeTopicGroup = {
+  readonly groupId: string;
+  readonly groupKind: "chunk" | "section";
+  readonly family: "detail" | "synthesis";
+  readonly title: string;
+  readonly displayOrder: number;
+  readonly chunkId: number | null;
+  readonly topics: ReadonlyArray<{
+    readonly topicId: number;
+    readonly sessionId: number;
+    readonly family: "detail" | "synthesis";
+    readonly chunkId: number | null;
+    readonly chunkSequenceOrder: number | null;
+    readonly topicIndex: number;
+    readonly topicText: string;
+    readonly selected: boolean;
+  }>;
+};
+
 export const DEFAULT_FORGE_PREVIEW_DATA = {
   textLength: 230,
   totalPages: 4,
@@ -42,8 +61,10 @@ export const DEFAULT_FORGE_TOPICS_BY_CHUNK = [
 export const DEFAULT_FORGE_CARDS_SNAPSHOT_TOPICS = [
   {
     topicId: 10,
+    sessionId: 12,
+    family: "detail",
     chunkId: 100,
-    sequenceOrder: 0,
+    chunkSequenceOrder: 0,
     topicIndex: 0,
     topicText: "Cell biology",
     status: "generated",
@@ -54,6 +75,88 @@ export const DEFAULT_FORGE_CARDS_SNAPSHOT_TOPICS = [
     selected: true,
   },
 ] as const;
+
+const groupsFromTopicsByChunk = (
+  sessionId: number,
+  topicsByChunk: ReadonlyArray<ForgeTopicsByChunk>,
+): ReadonlyArray<ForgeTopicGroup> =>
+  topicsByChunk.map((chunk, index) => ({
+    groupId: `chunk:${chunk.chunkId}`,
+    groupKind: "chunk",
+    family: "detail",
+    title: `Chunk ${index + 1}`,
+    displayOrder: chunk.sequenceOrder,
+    chunkId: chunk.chunkId,
+    topics: chunk.topics.map((topicText, topicIndex) => ({
+      topicId: chunk.chunkId * 100 + topicIndex + 1,
+      sessionId,
+      family: "detail",
+      chunkId: chunk.chunkId,
+      chunkSequenceOrder: chunk.sequenceOrder,
+      topicIndex,
+      topicText,
+      selected: false,
+      })),
+  }));
+
+export const createForgeTopicExtractionSnapshotSuccess = (options?: {
+  readonly source?: ForgeSourceInput | undefined;
+  readonly sessionId?: number;
+  readonly topicsByChunk?: ReadonlyArray<ForgeTopicsByChunk>;
+  readonly status?: "topics_extracted" | "topics_extracting" | "error";
+  readonly errorMessage?: string | null;
+}) => {
+  const {
+    sessionId = 12,
+    topicsByChunk = DEFAULT_FORGE_TOPICS_BY_CHUNK,
+    status = "topics_extracted",
+    errorMessage = null,
+  } = options ?? {};
+  const { sourceKind, sourceLabel, sourceFilePath } = resolveSourceDetails(options?.source);
+
+  return success({
+    session: {
+      id: sessionId,
+      sourceKind,
+      sourceLabel,
+      sourceFilePath,
+      deckPath: null,
+      sourceFingerprint: "fp:start",
+      status,
+      errorMessage,
+      createdAt: "2025-01-10T00:00:00.000Z",
+      updatedAt: "2025-01-10T00:00:00.000Z",
+    },
+    outcomes:
+      status === "error"
+        ? [{ family: "detail", status: "error", errorMessage }]
+        : [{ family: "detail", status: "extracted", errorMessage: null }],
+    groups: groupsFromTopicsByChunk(sessionId, topicsByChunk),
+  });
+};
+
+const normalizeCardsSnapshotTopics = (
+  sessionId: number,
+  topics: ReadonlyArray<unknown>,
+): ReadonlyArray<unknown> =>
+  topics.map((topic, index) => {
+    const entry = topic as Record<string, unknown>;
+    return {
+      topicId: Number(entry.topicId ?? index + 1),
+      sessionId: Number(entry.sessionId ?? sessionId),
+      family: (entry.family as "detail" | "synthesis" | undefined) ?? "detail",
+      chunkId: (entry.chunkId as number | null | undefined) ?? 100 + index,
+      chunkSequenceOrder: (entry.chunkSequenceOrder as number | null | undefined) ?? index,
+      topicIndex: Number(entry.topicIndex ?? 0),
+      topicText: String(entry.topicText ?? `topic-${index + 1}`),
+      status: (entry.status as string | undefined) ?? "generated",
+      errorMessage: (entry.errorMessage as string | null | undefined) ?? null,
+      cardCount: Number(entry.cardCount ?? 0),
+      addedCount: Number(entry.addedCount ?? 0),
+      generationRevision: Number(entry.generationRevision ?? 0),
+      selected: Boolean(entry.selected ?? false),
+    };
+  });
 
 type InvokeResult =
   | { readonly type: "success"; readonly data: unknown }
@@ -115,7 +218,7 @@ export const createForgeStartTopicExtractionSuccess = (options?: {
   readonly topicsByChunk?: ReadonlyArray<ForgeTopicsByChunk>;
   readonly duplicateOfSessionId?: number | null;
   readonly sourceFingerprint?: string;
-  readonly status?: "topics_extracted" | "topics_extracting";
+  readonly status?: "topics_extracted" | "topics_extracting" | "error";
   readonly errorMessage?: string | null;
   readonly createdAt?: string;
   readonly updatedAt?: string;
@@ -161,7 +264,14 @@ export const createForgeStartTopicExtractionSuccess = (options?: {
       totalPages,
       chunkCount,
     },
-    topicsByChunk,
+    outcomes: [
+      {
+        family: "detail",
+        status: status === "error" ? "error" : "extracted",
+        errorMessage,
+      },
+    ],
+    groups: groupsFromTopicsByChunk(sessionId, topicsByChunk),
   });
 };
 
@@ -205,13 +315,16 @@ export const createForgeInvoke = (options: ForgeInvokeOptions = {}) => {
           ...(options.topicsByChunk ? { topicsByChunk: options.topicsByChunk } : {}),
         });
       case "ForgeGetTopicExtractionSnapshot":
-        return success({
-          session: null,
-          topicsByChunk: [],
+        return createForgeTopicExtractionSnapshotSuccess({
+          sessionId: 12,
+          topicsByChunk: options.topicsByChunk ?? DEFAULT_FORGE_TOPICS_BY_CHUNK,
         });
       case "ForgeGetCardsSnapshot":
         return success({
-          topics: options.cardsSnapshotTopics ?? DEFAULT_FORGE_CARDS_SNAPSHOT_TOPICS,
+          topics: normalizeCardsSnapshotTopics(
+            12,
+            options.cardsSnapshotTopics ?? DEFAULT_FORGE_CARDS_SNAPSHOT_TOPICS,
+          ),
         });
       case "ForgeSaveTopicSelections":
       case "ForgeSetSessionDeckPath":

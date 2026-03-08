@@ -23,6 +23,7 @@ import {
   type ForgePromptRuntimeService as ForgePromptRuntime,
 } from "../services/ForgePromptRuntimeService";
 import { ForgeSourceResolverServiceLive } from "../services/ForgeSourceResolverService";
+import { TopicGroundingTextResolverServiceLive } from "../services/TopicGroundingTextResolverService";
 import {
   DuplicateIndexInvalidationBridgeLive,
   DuplicateIndexInvalidationServiceLive,
@@ -72,13 +73,18 @@ const MainStaticLive = ({
   pdfExtractor,
   chunkService,
 }: MainStaticDependencies) => {
+  const repository = forgeSessionRepository ?? makeInMemoryForgeSessionRepository();
   const aiClientLayer = AiClientServiceFromSecretStoreLive(secretStore);
   const forgePromptRuntimeLayer = forgePromptRuntime
     ? Layer.succeed(ForgePromptRuntimeService, forgePromptRuntime)
     : ForgePromptRuntimeServiceLive.pipe(Layer.provide(aiClientLayer));
+  const forgeSessionRepositoryLayer = ForgeSessionRepositoryServiceLive(repository);
   const pdfExtractorLayer = PdfExtractorServiceLive(pdfExtractor ?? makeStubPdfExtractor());
   const forgeSourceResolverLayer = ForgeSourceResolverServiceLive.pipe(
     Layer.provide(pdfExtractorLayer),
+  );
+  const topicGroundingTextResolverLayer = TopicGroundingTextResolverServiceLive.pipe(
+    Layer.provide(forgeSessionRepositoryLayer),
   );
 
   return Layer.mergeAll(
@@ -88,12 +94,11 @@ const MainStaticLive = ({
     aiClientLayer,
     AnalyticsRepositoryServiceLive(analyticsRepository),
     DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
-    ForgeSessionRepositoryServiceLive(
-      forgeSessionRepository ?? makeInMemoryForgeSessionRepository(),
-    ),
+    forgeSessionRepositoryLayer,
     forgePromptRuntimeLayer,
     pdfExtractorLayer,
     forgeSourceResolverLayer,
+    topicGroundingTextResolverLayer,
     ChunkServiceLive(chunkService ?? makeChunkService()),
   );
 };

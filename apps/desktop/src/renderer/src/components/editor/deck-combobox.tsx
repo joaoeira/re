@@ -28,9 +28,10 @@ type DeckComboboxProps = {
 };
 
 type CreateAction = { readonly __action: "create"; readonly relativePath: string };
-type ComboboxValue = DeckOption | CreateAction;
+type DeckComboboxValue = string | CreateAction;
 
-const isCreateAction = (v: ComboboxValue): v is CreateAction => "__action" in v;
+const isCreateAction = (v: DeckComboboxValue): v is CreateAction =>
+  typeof v === "object" && v !== null && "__action" in v;
 
 export function DeckCombobox({
   deckPath,
@@ -40,11 +41,9 @@ export function DeckCombobox({
   onCreateDeck,
 }: DeckComboboxProps) {
   const [inputValue, setInputValue] = useState("");
-  const [open, setOpen] = useState(false);
-
-  const selectedDeck = useMemo(
-    () => decks.find((d) => d.absolutePath === deckPath) ?? null,
-    [decks, deckPath],
+  const deckPathToRelativePath = useMemo(
+    () => new Map(decks.map((deck) => [deck.absolutePath, deck.relativePath])),
+    [decks],
   );
 
   const filteredDecks = useMemo(() => {
@@ -70,38 +69,45 @@ export function DeckCombobox({
     (relativePath: string) => {
       onCreateDeck(relativePath);
       setInputValue("");
-      setOpen(false);
     },
     [onCreateDeck],
   );
 
   const handleValueChange = useCallback(
-    (value: ComboboxValue | null) => {
+    (value: DeckComboboxValue | null) => {
       if (value && isCreateAction(value)) {
         commitCreateDeck(value.relativePath);
         return;
       }
-      onChange(value ? (value as DeckOption).absolutePath : null);
+      onChange(value);
       setInputValue("");
     },
     [commitCreateDeck, onChange],
   );
 
+  const handleInputValueChange = useCallback((value: string) => {
+    setInputValue((current) => (current === value ? current : value));
+  }, []);
+
+  const itemToStringLabel = useCallback(
+    (item: DeckComboboxValue) =>
+      isCreateAction(item) ? `Create ${item.relativePath}` : (deckPathToRelativePath.get(item) ?? item),
+    [deckPathToRelativePath],
+  );
+
+  const isItemEqualToValue = useCallback((a: DeckComboboxValue, b: DeckComboboxValue) => {
+    if (isCreateAction(a) || isCreateAction(b)) return false;
+    return a === b;
+  }, []);
+
   return (
-    <Combobox<ComboboxValue>
-      value={selectedDeck}
+    <Combobox<DeckComboboxValue>
+      value={deckPath}
       onValueChange={handleValueChange}
-      onInputValueChange={(value) => setInputValue(value)}
-      itemToStringLabel={(item) =>
-        isCreateAction(item) ? `Create ${item.relativePath}` : item.relativePath
-      }
-      isItemEqualToValue={(a, b) => {
-        if (isCreateAction(a) || isCreateAction(b)) return false;
-        return a.absolutePath === b.absolutePath;
-      }}
+      onInputValueChange={handleInputValueChange}
+      itemToStringLabel={itemToStringLabel}
+      isItemEqualToValue={isItemEqualToValue}
       filter={null}
-      open={open}
-      onOpenChange={setOpen}
       disabled={disabled}
     >
       <div className="flex items-center gap-1.5">
@@ -135,7 +141,7 @@ export function DeckCombobox({
         </div>
         <ComboboxList>
           {filteredDecks.map((deck) => (
-            <ComboboxItem key={deck.absolutePath} value={deck}>
+            <ComboboxItem key={deck.absolutePath} value={deck.absolutePath}>
               <span className="truncate font-mono">{deck.relativePath}</span>
             </ComboboxItem>
           ))}

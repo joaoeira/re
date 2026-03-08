@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSelector } from "@xstate/store-react";
 import { Effect } from "effect";
 
 import {
@@ -10,9 +9,8 @@ import {
   useForgeDeletedCardIdsByTopicKey,
   useForgeExpandedCardPanelsByTopicKey,
   useForgeSessionId,
-  useForgeSelectedTopicKeys,
+  useForgeSelectedTopics,
   useForgeTargetDeckPath,
-  useForgeTopicsByChunk,
 } from "../forge-page-context";
 import { topicKey } from "../forge-page-store";
 import {
@@ -37,16 +35,17 @@ import { mapCreateDeckErrorToError } from "@shared/rpc/schemas/workspace";
 import { CardsCanvas } from "./cards-canvas";
 import { CardsFooter } from "./cards-footer";
 import { CardsSidebar } from "./cards-sidebar";
-import {
-  createDeckTargetControllerStore,
-  type PersistSessionDeckPathVariables,
-} from "./deck-target-controller-store";
 
 type CardsTopic = {
   readonly topicKey: string;
-  readonly chunkId: number;
-  readonly topicIndex: number;
+  readonly topicId: number;
+  readonly family: "detail" | "synthesis";
   readonly text: string;
+};
+
+type PersistSessionDeckPathVariables = {
+  readonly sessionId: number;
+  readonly deckPath: string | null;
 };
 
 type ActiveStatusInput = {
@@ -100,6 +99,7 @@ const inFlightTopicKey = (sessionId: number, topicKeyValue: string): string =>
 const TOPIC_BATCH_GENERATION_CONCURRENCY = 3;
 const SESSION_DECK_PATH_PERSIST_RETRY_COUNT = 2;
 const SESSION_DECK_PATH_PERSIST_RETRY_DELAY_MS = 300;
+const EMPTY_DECK_OPTIONS: ReadonlyArray<ScanDecksResult["decks"][number]> = [];
 
 const normalizeDeckRelativePath = (relativePath: string): string =>
   relativePath.endsWith(".md") ? relativePath : `${relativePath}.md`;
@@ -118,26 +118,29 @@ export function CardsStep() {
   const activeTopicKey = useForgeActiveTopicKey();
   const deletedByTopicKey = useForgeDeletedCardIdsByTopicKey();
   const expandedPanelsByTopicKey = useForgeExpandedCardPanelsByTopicKey();
-  const topicsByChunk = useForgeTopicsByChunk();
-  const selectedTopicKeys = useForgeSelectedTopicKeys();
+  const selectedTopics = useForgeSelectedTopics();
   const targetDeckPath = useForgeTargetDeckPath();
   const deckTargetActions = useForgeDeckTargetActions();
 
   const settingsQuery = useSettingsQuery();
   const rootPath = settingsQuery.data?.workspace.rootPath ?? null;
   const scanDecksQuery = useScanDecksQuery(rootPath);
-  const deckOptions = scanDecksQuery.data?.decks ?? [];
+  const deckOptions = scanDecksQuery.data?.decks ?? EMPTY_DECK_OPTIONS;
   const [createDeckErrorMessage, setCreateDeckErrorMessage] = useState<string | null>(null);
   const deckOptionPaths = useMemo(
     () => deckOptions.map((deck) => deck.absolutePath),
     [deckOptions],
   );
   const autoSelectScopeKey = `${sessionId ?? "none"}:${rootPath ?? "none"}`;
-  const [deckTargetControllerStore] = useState(() => createDeckTargetControllerStore());
-  const pendingDeckTargetCommands = useSelector(
-    deckTargetControllerStore,
-    (snapshot) => snapshot.context.pendingCommands,
-  );
+  const pendingCreatedDeckPathRef = useRef<string | null>(null);
+  const persistedDeckPathBySessionIdRef = useRef(new Map<number, string | null>());
+  const inFlightDeckPersistKeysRef = useRef(new Set<string>());
+  const autoResolvedScopeKeysRef = useRef(new Set<string>());
+  const targetDeckPathRef = useRef<string | null>(targetDeckPath);
+
+  useEffect(() => {
+    targetDeckPathRef.current = targetDeckPath;
+  }, [targetDeckPath]);
 
   const { mutate: persistSessionDeckPath } = useMutation({
     mutationFn: ({ sessionId, deckPath }: PersistSessionDeckPathVariables) =>
@@ -153,20 +156,20 @@ export function CardsStep() {
     retry: SESSION_DECK_PATH_PERSIST_RETRY_COUNT,
     retryDelay: SESSION_DECK_PATH_PERSIST_RETRY_DELAY_MS,
     onSuccess: (_result, variables) => {
-      deckTargetControllerStore.send({
-        type: "persistSucceeded",
-        requestId: variables.requestId,
-      });
+      inFlightDeckPersistKeysRef.current.delete(
+        `${variables.sessionId}:${variables.deckPath ?? "null"}`,
+      );
+      if (targetDeckPathRef.current === variables.deckPath) {
+        persistedDeckPathBySessionIdRef.current.set(variables.sessionId, variables.deckPath);
+      }
       void queryClient.invalidateQueries({ queryKey: queryKeys.forgeSessionList, exact: true });
     },
     onError: (error, variables) => {
-      deckTargetControllerStore.send({
-        type: "persistFailed",
-        requestId: variables.requestId,
-      });
+      inFlightDeckPersistKeysRef.current.delete(
+        `${variables.sessionId}:${variables.deckPath ?? "null"}`,
+      );
 
       console.warn("[forge/cards] failed to persist session deck path", {
-        requestId: variables.requestId,
         sessionId: variables.sessionId,
         deckPath: variables.deckPath,
         error: error.message,
@@ -220,10 +223,8 @@ export function CardsStep() {
           };
         },
       );
-      deckTargetControllerStore.send({
-        type: "createDeckSucceeded",
-        deckPath: result.absolutePath,
-      });
+      pendingCreatedDeckPathRef.current = result.absolutePath;
+      deckTargetActions.setTargetDeckPath(result.absolutePath);
     },
     onError: (error) => {
       setCreateDeckErrorMessage(error.message);
@@ -239,65 +240,78 @@ export function CardsStep() {
   });
 
   useEffect(() => {
-    deckTargetControllerStore.send({
-      type: "syncFromView",
-      sessionId,
-      scopeKey: autoSelectScopeKey,
-      targetDeckPath,
-      deckPaths: deckOptionPaths,
-      decksQuerySuccess: scanDecksQuery.isSuccess,
-      decksQueryFetching: scanDecksQuery.isFetching,
-    });
+    if (sessionId === null) return;
+    if (!persistedDeckPathBySessionIdRef.current.has(sessionId)) {
+      persistedDeckPathBySessionIdRef.current.set(sessionId, targetDeckPath);
+    }
   }, [
-    autoSelectScopeKey,
-    deckOptionPaths,
-    deckTargetControllerStore,
-    scanDecksQuery.isFetching,
-    scanDecksQuery.isSuccess,
     sessionId,
     targetDeckPath,
   ]);
 
   useEffect(() => {
-    if (pendingDeckTargetCommands.length === 0) return;
-
-    pendingDeckTargetCommands.forEach((command) => {
-      if (command.type === "setTargetDeckPath") {
-        deckTargetActions.setTargetDeckPath(command.deckPath);
-        return;
+    if (scanDecksQuery.isFetching || !scanDecksQuery.isSuccess) return;
+    if (targetDeckPath === null) {
+      if (
+        deckOptionPaths.length > 0 &&
+        !autoResolvedScopeKeysRef.current.has(autoSelectScopeKey)
+      ) {
+        autoResolvedScopeKeysRef.current.add(autoSelectScopeKey);
+        deckTargetActions.setTargetDeckPath(deckOptionPaths[0]!);
       }
+      return;
+    }
 
-      persistSessionDeckPath({
-        requestId: command.requestId,
-        sessionId: command.sessionId,
-        deckPath: command.deckPath,
-      });
-    });
+    if (deckOptionPaths.includes(targetDeckPath)) {
+      autoResolvedScopeKeysRef.current.add(autoSelectScopeKey);
+      if (pendingCreatedDeckPathRef.current === targetDeckPath) {
+        pendingCreatedDeckPathRef.current = null;
+      }
+      return;
+    }
 
-    deckTargetControllerStore.send({ type: "commandsFlushed" });
+    if (pendingCreatedDeckPathRef.current === targetDeckPath) return;
+    autoResolvedScopeKeysRef.current.add(autoSelectScopeKey);
+    deckTargetActions.setTargetDeckPath(null);
   }, [
+    autoSelectScopeKey,
+    deckOptionPaths,
     deckTargetActions,
-    deckTargetControllerStore,
-    pendingDeckTargetCommands,
-    persistSessionDeckPath,
+    scanDecksQuery.isFetching,
+    scanDecksQuery.isSuccess,
+    targetDeckPath,
   ]);
 
-  const topics = useMemo<ReadonlyArray<CardsTopic>>(() => {
-    const selected: CardsTopic[] = [];
-    for (const chunk of topicsByChunk) {
-      for (let index = 0; index < chunk.topics.length; index += 1) {
-        const key = topicKey(chunk.chunkId, index);
-        if (!selectedTopicKeys.has(key)) continue;
-        selected.push({
-          topicKey: key,
-          chunkId: chunk.chunkId,
-          topicIndex: index,
-          text: chunk.topics[index]!,
-        });
-      }
-    }
-    return selected;
-  }, [selectedTopicKeys, topicsByChunk]);
+  useEffect(() => {
+    if (sessionId === null) return;
+
+    const persistedDeckPath = persistedDeckPathBySessionIdRef.current.get(sessionId);
+    if (persistedDeckPath === undefined || persistedDeckPath === targetDeckPath) return;
+
+    const persistKey = `${sessionId}:${targetDeckPath ?? "null"}`;
+    if (inFlightDeckPersistKeysRef.current.has(persistKey)) return;
+
+    inFlightDeckPersistKeysRef.current.add(persistKey);
+    persistSessionDeckPath({
+      sessionId,
+      deckPath: targetDeckPath,
+    });
+  }, [
+    persistSessionDeckPath,
+    sessionId,
+    targetDeckPath,
+  ]);
+
+  const topics = useMemo<ReadonlyArray<CardsTopic>>(
+    () =>
+      selectedTopics.map((topic) => ({
+        topicKey: topicKey(topic.topicId),
+        topicId: topic.topicId,
+        family: topic.family,
+        text: topic.text,
+      })),
+    [selectedTopics],
+  );
 
   useEffect(() => {
     if (topics.length === 0) {
@@ -317,7 +331,7 @@ export function CardsStep() {
     const next = new Map<string, ForgeTopicCardsSummary>();
     const rows = cardsSnapshotQuery.data?.topics ?? [];
     rows.forEach((row) => {
-      next.set(topicKey(row.chunkId, row.topicIndex), row);
+      next.set(topicKey(row.topicId), row);
     });
     return next;
   }, [cardsSnapshotQuery.data]);
@@ -337,8 +351,7 @@ export function CardsStep() {
 
   const activeTopicCardsQuery = useForgeTopicCardsQuery(
     sessionId,
-    activeTopic?.chunkId ?? null,
-    activeTopic?.topicIndex ?? null,
+    activeTopic?.topicId ?? null,
   );
   const [checkedTopicKeys, setCheckedTopicKeys] = useState<ReadonlySet<string>>(new Set());
   const [checkedTopicBatchInFlight, setCheckedTopicBatchInFlight] = useState(false);
@@ -376,7 +389,7 @@ export function CardsStep() {
         if (!previous) return previous;
         return {
           topics: previous.topics.map((topic) => {
-            const key = topicKey(topic.chunkId, topic.topicIndex);
+            const key = topicKey(topic.topicId);
             if (!checkedTopicKeySet.has(key)) return topic;
             return {
               ...topic,
@@ -390,11 +403,7 @@ export function CardsStep() {
 
     const currentActiveTopic = activeTopicRef.current;
     if (currentActiveTopic && checkedTopicKeySet.has(currentActiveTopic.topicKey)) {
-      const activeTopicQueryKey = queryKeys.forgeTopicCards(
-        sessionId,
-        currentActiveTopic.chunkId,
-        currentActiveTopic.topicIndex,
-      );
+      const activeTopicQueryKey = queryKeys.forgeTopicCards(sessionId, currentActiveTopic.topicId);
       queryClient.setQueryData<ForgeGetTopicCardsResult>(activeTopicQueryKey, (previous) => {
         if (!previous) return previous;
         return {
@@ -412,10 +421,7 @@ export function CardsStep() {
       ipc.client
         .ForgeGenerateSelectedTopicCards({
           sessionId,
-          topics: checkedTopics.map((topic) => ({
-            chunkId: topic.chunkId,
-            topicIndex: topic.topicIndex,
-          })),
+          topicIds: checkedTopics.map((topic) => topic.topicId),
           concurrencyLimit: TOPIC_BATCH_GENERATION_CONCURRENCY,
         })
         .pipe(
@@ -434,11 +440,7 @@ export function CardsStep() {
         const latestActiveTopic = activeTopicRef.current;
         if (latestActiveTopic) {
           void queryClient.invalidateQueries({
-            queryKey: queryKeys.forgeTopicCards(
-              sessionId,
-              latestActiveTopic.chunkId,
-              latestActiveTopic.topicIndex,
-            ),
+            queryKey: queryKeys.forgeTopicCards(sessionId, latestActiveTopic.topicId),
             exact: true,
           });
         }
@@ -495,11 +497,7 @@ export function CardsStep() {
 
       if (activeTopic) {
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.forgeTopicCards(
-            sessionId,
-            activeTopic.chunkId,
-            activeTopic.topicIndex,
-          ),
+          queryKey: queryKeys.forgeTopicCards(sessionId, activeTopic.topicId),
           exact: true,
         });
       }
@@ -544,19 +542,7 @@ export function CardsStep() {
 
   const patchSnapshotTopicSummary = useCallback(
     (
-      nextSummary: {
-        readonly topicId: number;
-        readonly chunkId: number;
-        readonly sequenceOrder: number;
-        readonly topicIndex: number;
-        readonly topicText: string;
-        readonly status: "idle" | "generating" | "generated" | "error";
-        readonly errorMessage: string | null;
-        readonly cardCount: number;
-        readonly addedCount: number;
-        readonly generationRevision: number;
-        readonly selected: boolean;
-      },
+      nextSummary: ForgeTopicCardsSummary,
       fallbackInvalidate = true,
     ) => {
       if (sessionId === null) return;
@@ -598,7 +584,7 @@ export function CardsStep() {
       }
 
       const existing = summaryByTopicKey.get(topic.topicKey);
-      const topicQueryKey = queryKeys.forgeTopicCards(sessionId, topic.chunkId, topic.topicIndex);
+      const topicQueryKey = queryKeys.forgeTopicCards(sessionId, topic.topicId);
       setTopicInFlight(sessionId, topic.topicKey, true);
       queryClient.setQueryData<ForgeGetTopicCardsResult>(topicQueryKey, (previous) => {
         if (previous) {
@@ -636,8 +622,7 @@ export function CardsStep() {
         ipc.client
           .ForgeGenerateTopicCards({
             sessionId,
-            chunkId: topic.chunkId,
-            topicIndex: topic.topicIndex,
+            topicId: topic.topicId,
           })
           .pipe(
             Effect.catchTag("RpcDefectError", (rpcDefect) =>
@@ -772,11 +757,7 @@ export function CardsStep() {
     (cardId: number, field: "question" | "answer", value: string) => {
       if (!activeTopic || sessionId === null) return;
 
-      const topicQueryKey = queryKeys.forgeTopicCards(
-        sessionId,
-        activeTopic.chunkId,
-        activeTopic.topicIndex,
-      );
+      const topicQueryKey = queryKeys.forgeTopicCards(sessionId, activeTopic.topicId);
       const previous = queryClient.getQueryData<ForgeGetTopicCardsResult>(topicQueryKey);
 
       const previousCard = previous?.cards.find((card) => card.id === cardId);
@@ -816,10 +797,11 @@ export function CardsStep() {
 
   const handleDeckPathChange = useCallback(
     (deckPath: string | null) => {
+      if (deckPath === targetDeckPath) return;
       setCreateDeckErrorMessage(null);
       deckTargetActions.setTargetDeckPath(deckPath);
     },
-    [deckTargetActions],
+    [deckTargetActions, targetDeckPath],
   );
 
   const handleCreateDeck = useCallback(
@@ -863,11 +845,7 @@ export function CardsStep() {
             if (addingCardIds.has(cardId)) return;
             const card = activeCards.find((c) => c.id === cardId);
             if (!card) return;
-            const topicQueryKey = queryKeys.forgeTopicCards(
-              sessionId,
-              activeTopic.chunkId,
-              activeTopic.topicIndex,
-            );
+            const topicQueryKey = queryKeys.forgeTopicCards(sessionId, activeTopic.topicId);
             setAddingCardIds((prev) => new Set([...prev, cardId]));
             setAddCardError(null);
             addCardToDeck(
@@ -895,10 +873,7 @@ export function CardsStep() {
                       if (!previous) return previous;
                       return {
                         topics: previous.topics.map((topic) => {
-                          if (
-                            topic.chunkId !== activeTopic.chunkId ||
-                            topic.topicIndex !== activeTopic.topicIndex
-                          ) {
+                          if (topic.topicId !== activeTopic.topicId) {
                             return topic;
                           }
                           return {

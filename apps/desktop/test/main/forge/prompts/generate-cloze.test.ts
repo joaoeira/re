@@ -7,7 +7,7 @@ import { GenerateClozePromptSpec } from "@main/forge/prompts";
 describe("GenerateClozePromptSpec", () => {
   it("renders without a system prompt and includes source card/instruction", () => {
     const rendered = GenerateClozePromptSpec.render({
-      chunkText: "Chunk context",
+      contextText: "Chunk context",
       source: {
         question: "What does ATP provide?",
         answer: "ATP provides energy for cellular work.",
@@ -25,6 +25,7 @@ describe("GenerateClozePromptSpec", () => {
     }
 
     expect(message.role).toBe("user");
+    expect(message.content).toContain("Chunk context");
     expect(message.content).toContain("What does ATP provide?");
     expect(message.content).toContain("Prefer one to three deletions.");
     expect(message.content).toContain('"cloze"');
@@ -32,7 +33,7 @@ describe("GenerateClozePromptSpec", () => {
 
   it("renders fallback text when instruction is omitted", () => {
     const rendered = GenerateClozePromptSpec.render({
-      chunkText: "Chunk context",
+      contextText: "Chunk context",
       source: {
         question: "What is diffusion?",
         answer: "Diffusion is movement from high to low concentration.",
@@ -51,7 +52,7 @@ describe("GenerateClozePromptSpec", () => {
   it("renders retry context and normalizes cloze output in output schema", async () => {
     const rendered = GenerateClozePromptSpec.render(
       {
-        chunkText: "Chunk context",
+        contextText: "Chunk context",
         source: {
           question: "What is diffusion?",
           answer: "Diffusion is movement from high to low concentration.",
@@ -84,7 +85,7 @@ describe("GenerateClozePromptSpec", () => {
     });
 
     const normalized = GenerateClozePromptSpec.normalize(decoded, {
-      chunkText: "Chunk context",
+      contextText: "Chunk context",
       source: {
         question: "What is ATP?",
         answer: "ATP is the primary energy currency.",

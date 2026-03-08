@@ -2,6 +2,7 @@ import { Schema } from "@effect/schema";
 
 import type { PromptAttemptContext, PromptSpec } from "./types";
 import { CardQualityPrinciples } from "./card-principles";
+import { NormalizedCardArraySchema } from "./normalize";
 
 const SourceCardSchema = Schema.Struct({
   question: Schema.String.pipe(Schema.minLength(1)),
@@ -9,58 +10,14 @@ const SourceCardSchema = Schema.Struct({
 });
 
 export const GeneratePermutationsPromptInputSchema = Schema.Struct({
-  chunkText: Schema.String.pipe(Schema.minLength(1)),
+  contextText: Schema.String.pipe(Schema.minLength(1)),
   source: SourceCardSchema,
   instruction: Schema.optional(Schema.String),
 });
 export type GeneratePermutationsPromptInput = typeof GeneratePermutationsPromptInputSchema.Type;
 
-const RawPermutationSchema = Schema.Struct({
-  question: Schema.String,
-  answer: Schema.String,
-});
-
-type RawPermutation = typeof RawPermutationSchema.Type;
-
-const collapseWhitespace = (value: string): string => value.replace(/\s+/g, " ").trim();
-
-const normalizePermutations = (
-  permutations: ReadonlyArray<RawPermutation>,
-): ReadonlyArray<RawPermutation> => {
-  const normalizedPermutations: RawPermutation[] = [];
-  const seen = new Set<string>();
-
-  for (const permutation of permutations) {
-    const question = collapseWhitespace(permutation.question);
-    const answer = collapseWhitespace(permutation.answer);
-    if (question.length === 0 || answer.length === 0) {
-      continue;
-    }
-
-    const dedupeKey = `${question}\u0000${answer}`;
-    if (seen.has(dedupeKey)) {
-      continue;
-    }
-
-    seen.add(dedupeKey);
-    normalizedPermutations.push({ question, answer });
-  }
-
-  return normalizedPermutations;
-};
-
-const NormalizedPermutationArraySchema = Schema.transform(
-  Schema.Array(RawPermutationSchema),
-  Schema.Array(RawPermutationSchema),
-  {
-    strict: true,
-    decode: (permutations) => normalizePermutations(permutations),
-    encode: (permutations) => permutations,
-  },
-);
-
 export const GeneratePermutationsPromptOutputSchema = Schema.Struct({
-  permutations: NormalizedPermutationArraySchema,
+  permutations: NormalizedCardArraySchema,
 });
 export type GeneratePermutationsPromptOutput = typeof GeneratePermutationsPromptOutputSchema.Type;
 
@@ -79,7 +36,7 @@ const renderBaseUserPrompt = (input: GeneratePermutationsPromptInput): string =>
   ---
   Source text:
 
-  ${input.chunkText}
+  ${input.contextText}
 
   ----
 
