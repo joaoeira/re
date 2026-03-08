@@ -114,9 +114,6 @@ export function TopicSelection() {
               />
             </div>
           ) : null}
-          {extractState.status === "extracting" && synthesisOutcome?.status !== "extracted" ? (
-            <p className="text-[11px] text-muted-foreground/70">Generating synthesis topics…</p>
-          ) : null}
         </div>
       )}
 
