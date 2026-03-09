@@ -13,6 +13,8 @@ describe("GeneralSettings", () => {
         error={null}
         onSelectDirectory={vi.fn()}
         onClearRootPath={vi.fn()}
+        theme="system"
+        onThemeChange={vi.fn()}
       />,
     );
 
@@ -27,6 +29,8 @@ describe("GeneralSettings", () => {
         error={null}
         onSelectDirectory={vi.fn()}
         onClearRootPath={vi.fn()}
+        theme="system"
+        onThemeChange={vi.fn()}
       />,
     );
 
@@ -41,6 +45,8 @@ describe("GeneralSettings", () => {
         error={null}
         onSelectDirectory={vi.fn()}
         onClearRootPath={vi.fn()}
+        theme="system"
+        onThemeChange={vi.fn()}
       />,
     );
 
@@ -55,6 +61,8 @@ describe("GeneralSettings", () => {
         error={null}
         onSelectDirectory={vi.fn()}
         onClearRootPath={vi.fn()}
+        theme="system"
+        onThemeChange={vi.fn()}
       />,
     );
 
@@ -72,6 +80,8 @@ describe("GeneralSettings", () => {
         error={null}
         onSelectDirectory={onSelectDirectory}
         onClearRootPath={vi.fn()}
+        theme="system"
+        onThemeChange={vi.fn()}
       />,
     );
 
@@ -88,6 +98,8 @@ describe("GeneralSettings", () => {
         error={null}
         onSelectDirectory={vi.fn()}
         onClearRootPath={onClearRootPath}
+        theme="system"
+        onThemeChange={vi.fn()}
       />,
     );
 
@@ -103,6 +115,8 @@ describe("GeneralSettings", () => {
         error={null}
         onSelectDirectory={vi.fn()}
         onClearRootPath={vi.fn()}
+        theme="system"
+        onThemeChange={vi.fn()}
       />,
     );
 
@@ -120,6 +134,8 @@ describe("GeneralSettings", () => {
         error="Failed to set workspace path"
         onSelectDirectory={vi.fn()}
         onClearRootPath={vi.fn()}
+        theme="system"
+        onThemeChange={vi.fn()}
       />,
     );
 

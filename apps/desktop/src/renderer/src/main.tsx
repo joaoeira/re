@@ -7,6 +7,7 @@ import "./styles.css";
 
 import { IpcProvider } from "./lib/ipc-context";
 import { router } from "./lib/router";
+import { ThemeProvider } from "./lib/theme-context";
 import { StoresProvider, createStores } from "@shared/state/stores-context";
 import { SettingsPageProvider } from "@/components/settings/settings-page-context";
 import { createQueryClient } from "./lib/query-client";
@@ -21,14 +22,16 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <IpcProvider>
-        <SettingsPageProvider>
-          <StoresProvider stores={stores}>
-            <RouterProvider router={router} />
-          </StoresProvider>
-        </SettingsPageProvider>
-      </IpcProvider>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <IpcProvider>
+          <SettingsPageProvider>
+            <StoresProvider stores={stores}>
+              <RouterProvider router={router} />
+            </StoresProvider>
+          </SettingsPageProvider>
+        </IpcProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   </StrictMode>,
 );
