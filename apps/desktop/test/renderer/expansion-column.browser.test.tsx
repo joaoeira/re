@@ -69,6 +69,31 @@ const populatedQueryResult = (instruction: string | null = "focus on key concept
   error: null,
 });
 
+const multiDerivationQueryResult = () => ({
+  data: {
+    derivations: [
+      {
+        id: 1,
+        rootCardId: 100,
+        question: "What are the phases of mitosis?",
+        answer: "Prophase, metaphase, anaphase, telophase.",
+        instruction: "focus on key concepts",
+        addedCount: 0,
+      },
+      {
+        id: 2,
+        rootCardId: 100,
+        question: "What triggers mitosis?",
+        answer: "Cell signaling and growth factors.",
+        instruction: "focus on key concepts",
+        addedCount: 0,
+      },
+    ],
+  },
+  isLoading: false,
+  error: null,
+});
+
 const renderExpansionColumn = async ({
   columnOverrides = {},
   onRegenerated = vi.fn(),
@@ -305,5 +330,20 @@ describe("ExpansionColumn", () => {
       kind: "expansion",
     });
     expect(onRegenerated).toHaveBeenCalledOnce();
+  });
+
+  it("removes a derivation card from the list when its delete button is clicked", async () => {
+    mockUseForgeDerivedCardsQuery.mockReturnValue(multiDerivationQueryResult());
+
+    const { screen } = await renderExpansionColumn();
+
+    await expect.element(screen.getByText("What are the phases of mitosis?")).toBeVisible();
+    await expect.element(screen.getByText("What triggers mitosis?")).toBeVisible();
+
+    const firstDeleteButton = screen.container.querySelector(".lucide-trash-2")?.closest("button");
+    firstDeleteButton?.click();
+
+    await expect.poll(() => screen.getByText("What are the phases of mitosis?").query()).toBeNull();
+    await expect.element(screen.getByText("What triggers mitosis?")).toBeVisible();
   });
 });

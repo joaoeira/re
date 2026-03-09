@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import { useIsMutating, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Braces, ListTree, X } from "lucide-react";
+import { ArrowRight, Braces, ListTree, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -57,6 +57,7 @@ type ExpansionColumnState = {
   readonly pendingRegenerationConfirmation: PendingRegenerationConfirmation | null;
   readonly expandedPanels: ExpandedPanelMap;
   readonly addingIds: ReadonlySet<number>;
+  readonly deletedDerivationIds: ReadonlySet<number>;
   readonly addError: string | null;
   readonly generationErrorMessage: string | null;
 };
@@ -80,6 +81,7 @@ type ExpansionColumnAction =
     }
   | { readonly type: "startAdding"; readonly derivationId: number }
   | { readonly type: "finishAdding"; readonly derivationId: number }
+  | { readonly type: "deleteDerivation"; readonly derivationId: number }
   | { readonly type: "setAddError"; readonly message: string | null };
 
 const autoResizeTextarea = (textarea: HTMLTextAreaElement | null) => {
@@ -97,6 +99,7 @@ const createExpansionColumnState = (instruction: string): ExpansionColumnState =
   pendingRegenerationConfirmation: null,
   expandedPanels: new Map(),
   addingIds: new Set(),
+  deletedDerivationIds: new Set(),
   addError: null,
   generationErrorMessage: null,
 });
@@ -186,6 +189,14 @@ const expansionColumnReducer = (
         addingIds: next,
       };
     }
+    case "deleteDerivation": {
+      const next = new Set(state.deletedDerivationIds);
+      next.add(action.derivationId);
+      return {
+        ...state,
+        deletedDerivationIds: next,
+      };
+    }
     case "setAddError":
       return {
         ...state,
@@ -229,7 +240,8 @@ export function ExpansionColumn({
   );
   const instructionTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const derivations = query.data?.derivations ?? [];
+  const allDerivations = query.data?.derivations ?? [];
+  const derivations = allDerivations.filter((d) => !state.deletedDerivationIds.has(d.id));
   const isGenerating = isPending || inFlightForColumnCount > 0;
   const loading = isGenerating || query.isLoading;
   const resolvedInstruction = derivations[0]?.instruction ?? column.instruction ?? "";
@@ -345,8 +357,10 @@ export function ExpansionColumn({
   const handleReplacementConfirm = useCallback(() => {
     if (!state.pendingRegenerationConfirmation) return;
 
+    const { instructionText } = state.pendingRegenerationConfirmation;
+    dispatch({ type: "setPendingRegenerationConfirmation", confirmation: null });
     void handleRunGeneration({
-      instructionText: state.pendingRegenerationConfirmation.instructionText,
+      instructionText,
       confirmed: true,
     }).catch(() => undefined);
   }, [handleRunGeneration, state.pendingRegenerationConfirmation]);
@@ -457,7 +471,7 @@ export function ExpansionColumn({
             {resolvedInstruction ? (
               <span className="mr-auto max-w-[400px] italic">"{resolvedInstruction}"</span>
             ) : null}
-            {derivations.length > 0 ? (
+            {!isGenerating && derivations.length > 0 ? (
               <>
                 {resolvedInstruction ? <span className="text-border">·</span> : null}
                 <span>{derivations.length} cards</span>
@@ -556,7 +570,7 @@ export function ExpansionColumn({
           <p className="mt-4 text-[11px] text-destructive">{state.addError}</p>
         ) : null}
 
-        {derivations.length > 0 ? (
+        {!isGenerating && derivations.length > 0 ? (
           <div>
             {derivations.map((derivation) => {
               const expandedPanel = state.expandedPanels.get(derivation.id) ?? null;
@@ -671,6 +685,19 @@ export function ExpansionColumn({
                     >
                       <ArrowRight className="size-3" />
                       {isExpanded ? "Expanded" : "Expand"}
+                    </Button>
+
+                    <div className="flex-1" />
+
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="xs"
+                      onClick={() =>
+                        dispatch({ type: "deleteDerivation", derivationId: derivation.id })
+                      }
+                    >
+                      <Trash2 className="size-3" />
                     </Button>
                   </div>
 
