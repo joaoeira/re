@@ -30,11 +30,14 @@ type CardsCanvasProps = {
   readonly addCardError: string | null;
   readonly deletedCardIds: ReadonlySet<number>;
   readonly expandedPanels: ReadonlyMap<number, "permutations" | "cloze">;
+  readonly reformulatingCardIds: ReadonlySet<number>;
+  readonly reformulateErrorsByCardId: ReadonlyMap<number, string>;
   readonly expansionPresentationByCardId: ReadonlyMap<number, RootCardExpansionPresentation>;
   readonly expansionColumns: ReadonlyArray<ExpansionColumnDescriptor>;
   readonly expandedDerivationIds: ReadonlySet<number>;
   readonly onAddCard: (cardId: number) => void;
   readonly onDeleteCard: (cardId: number) => void;
+  readonly onReformulateCard: (card: ForgeGeneratedCard) => void;
   readonly onTogglePanel: (cardId: number, panel: "permutations" | "cloze") => void;
   readonly onEditCard: (cardId: number, field: "question" | "answer", value: string) => void;
   readonly onRegenerate: () => void;
@@ -67,11 +70,14 @@ export function CardsCanvas({
   addCardError,
   deletedCardIds,
   expandedPanels,
+  reformulatingCardIds,
+  reformulateErrorsByCardId,
   expansionPresentationByCardId,
   expansionColumns,
   expandedDerivationIds,
   onAddCard,
   onDeleteCard,
+  onReformulateCard,
   onTogglePanel,
   onEditCard,
   onRegenerate,
@@ -155,8 +161,11 @@ export function CardsCanvas({
                     addDisabled={addDisabled}
                     expandedPanel={expandedPanels.get(card.id) ?? null}
                     expansionStatus={expansionPresentation?.status ?? "idle"}
+                    isReformulating={reformulatingCardIds.has(card.id)}
+                    reformulateErrorMessage={reformulateErrorsByCardId.get(card.id) ?? null}
                     onAdd={() => onAddCard(card.id)}
                     onDelete={() => onDeleteCard(card.id)}
+                    onReformulate={() => onReformulateCard(card)}
                     onTogglePermutations={() => onTogglePanel(card.id, "permutations")}
                     onToggleCloze={() => onTogglePanel(card.id, "cloze")}
                     onRequestExpansion={() => onRequestExpansionFromRoot(card)}

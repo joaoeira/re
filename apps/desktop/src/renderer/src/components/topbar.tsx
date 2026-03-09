@@ -164,24 +164,22 @@ export function Topbar() {
         <TooltipProvider>
           <div className="flex items-center gap-2">
             <Tooltip>
-              <TooltipTrigger className="inline-flex">
-                <span className="inline-flex">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={syncDisabled}
-                    aria-busy={runGitSyncMutation.isPending}
-                    onClick={() => {
-                      if (!rootPath) return;
-                      runGitSyncMutation.mutate({ rootPath });
-                    }}
-                  >
-                    <span aria-live="polite">
-                      {runGitSyncMutation.isPending ? "Syncing..." : "Sync"}
-                    </span>
-                  </Button>
-                </span>
+              <TooltipTrigger render={<span className="inline-flex" />}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={syncDisabled}
+                  aria-busy={runGitSyncMutation.isPending}
+                  onClick={() => {
+                    if (!rootPath) return;
+                    runGitSyncMutation.mutate({ rootPath });
+                  }}
+                >
+                  <span aria-live="polite">
+                    {runGitSyncMutation.isPending ? "Syncing..." : "Sync"}
+                  </span>
+                </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">{syncTooltip}</TooltipContent>
             </Tooltip>

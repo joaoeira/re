@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
-import { useIsMutating, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Braces, ListTree, Trash2, X } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import { useIsMutating, useMutationState, useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, Braces, ListTree, Loader2, RotateCcw, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -12,11 +20,16 @@ import {
   sameDerivationParentRef,
   useForgeAddCardToDeckMutation,
   useForgeGenerateDerivedCardsMutation,
+  useForgeReformulateCardMutation,
   useForgeUpdateDerivationMutation,
 } from "@/hooks/mutations/use-forge-cards-mutations";
 import { useForgeDerivedCardsQuery } from "@/hooks/queries/use-forge-derived-cards-query";
 import { queryKeys } from "@/lib/query-keys";
-import type { DerivationParentRef, ForgeGetDerivedCardsResult } from "@shared/rpc/schemas/forge";
+import type {
+  DerivationParentRef,
+  ForgeGetDerivedCardsResult,
+  ForgeReformulateCardInput,
+} from "@shared/rpc/schemas/forge";
 import { useForgeTargetDeckPath } from "../forge-page-context";
 import type { ExpansionColumnDescriptor } from "../forge-page-store";
 
@@ -217,6 +230,7 @@ export function ExpansionColumn({
   const targetDeckPath = useForgeTargetDeckPath();
   const query = useForgeDerivedCardsQuery(column.rootCardId, column.parent, "expansion");
   const { mutateAsync: generateDerivedCards, isPending } = useForgeGenerateDerivedCardsMutation();
+  const { mutate: reformulateCard } = useForgeReformulateCardMutation();
   const { mutate: updateDerivation } = useForgeUpdateDerivationMutation();
   const { mutate: addCardToDeck } = useForgeAddCardToDeckMutation();
   const queryKey = queryKeys.forgeDerivedCards(column.rootCardId, column.parent, "expansion");
@@ -238,7 +252,17 @@ export function ExpansionColumn({
     column.instruction ?? "",
     createExpansionColumnState,
   );
+  const [reformulateErrorsByDerivationId, setReformulateErrorsByDerivationId] = useState<
+    ReadonlyMap<number, string>
+  >(new Map());
   const instructionTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const pendingReformulations = useMutationState({
+    filters: {
+      mutationKey: forgeCardsMutationKeys.reformulateCard,
+      status: "pending",
+    },
+    select: (mutation) => mutation.state.variables as ForgeReformulateCardInput | undefined,
+  }).filter((variables): variables is ForgeReformulateCardInput => variables !== undefined);
 
   const allDerivations = query.data?.derivations ?? [];
   const derivations = allDerivations.filter((d) => !state.deletedDerivationIds.has(d.id));
@@ -249,6 +273,7 @@ export function ExpansionColumn({
 
   useEffect(() => {
     dispatch({ type: "reset", instruction: column.instruction ?? "" });
+    setReformulateErrorsByDerivationId(new Map());
   }, [column.id, column.instruction]);
 
   useEffect(() => {
@@ -403,6 +428,52 @@ export function ExpansionColumn({
     [queryClient, queryKey, updateDerivation],
   );
 
+  const handleReformulateDerivation = useCallback(
+    (derivationId: number, question: string, answer: string) => {
+      const currentDerivation = queryClient
+        .getQueryData<ForgeGetDerivedCardsResult>(queryKey)
+        ?.derivations.find((entry) => entry.id === derivationId) ?? { question, answer };
+      setReformulateErrorsByDerivationId((previous) => {
+        const next = new Map(previous);
+        next.delete(derivationId);
+        return next;
+      });
+
+      reformulateCard(
+        {
+          source: { derivationId },
+          sourceQuestion: currentDerivation.question,
+          sourceAnswer: currentDerivation.answer,
+        },
+        {
+          onSuccess: (result) => {
+            if (!("derivation" in result)) return;
+
+            queryClient.setQueryData<ForgeGetDerivedCardsResult>(queryKey, (previous) => {
+              if (!previous) return previous;
+              return {
+                ...previous,
+                derivations: previous.derivations.map((entry) =>
+                  entry.id === derivationId ? result.derivation : entry,
+                ),
+              };
+            });
+          },
+          onError: (error) =>
+            setReformulateErrorsByDerivationId((previous) => {
+              const next = new Map(previous);
+              next.set(derivationId, error.message);
+              return next;
+            }),
+          onSettled: () => {
+            void queryClient.invalidateQueries({ queryKey, exact: true });
+          },
+        },
+      );
+    },
+    [queryClient, queryKey, reformulateCard],
+  );
+
   const handleAddDerivation = useCallback(
     (derivationId: number, question: string, answer: string) => {
       if (!targetDeckPath || state.addingIds.has(derivationId)) return;
@@ -442,6 +513,15 @@ export function ExpansionColumn({
     if (loading || derivations.length > 0) return "EXPANDED FROM";
     return "EXPANDING";
   }, [derivations.length, loading]);
+  const reformulatingDerivationIds = useMemo(() => {
+    const next = new Set<number>();
+    for (const variables of pendingReformulations) {
+      if ("derivationId" in variables.source) {
+        next.add(variables.source.derivationId);
+      }
+    }
+    return next;
+  }, [pendingReformulations]);
 
   return (
     <section className="min-h-0 w-[760px] shrink-0 overflow-y-auto border-l border-border/30">
@@ -576,6 +656,7 @@ export function ExpansionColumn({
               const expandedPanel = state.expandedPanels.get(derivation.id) ?? null;
               const isExpanded = expandedDerivationIds.has(derivation.id);
               const hasExpanded = expandedPanel !== null || isExpanded;
+              const isReformulating = reformulatingDerivationIds.has(derivation.id);
 
               return (
                 <div
@@ -583,6 +664,7 @@ export function ExpansionColumn({
                   className={cn(
                     "group relative border-b border-border/20 py-4 last:border-b-0",
                     isExpanded && "bg-muted/35",
+                    isReformulating && "animate-pulse pointer-events-none",
                   )}
                 >
                   <div
@@ -590,7 +672,7 @@ export function ExpansionColumn({
                   >
                     <InlineEditor
                       content={derivation.question}
-                      editable={derivation.addedCount === 0}
+                      editable={derivation.addedCount === 0 && !isReformulating}
                       onContentChange={(value) =>
                         handleEditDerivation(derivation.id, "question", value)
                       }
@@ -598,7 +680,7 @@ export function ExpansionColumn({
                     />
                     <InlineEditor
                       content={derivation.answer}
-                      editable={derivation.addedCount === 0}
+                      editable={derivation.addedCount === 0 && !isReformulating}
                       onContentChange={(value) =>
                         handleEditDerivation(derivation.id, "answer", value)
                       }
@@ -617,7 +699,7 @@ export function ExpansionColumn({
                     <AddToDeckButton
                       isAdded={derivation.addedCount > 0}
                       isAdding={state.addingIds.has(derivation.id)}
-                      disabled={!targetDeckPath}
+                      disabled={!targetDeckPath || isReformulating}
                       onClick={() =>
                         handleAddDerivation(derivation.id, derivation.question, derivation.answer)
                       }
@@ -627,6 +709,7 @@ export function ExpansionColumn({
                       type="button"
                       variant="ghost"
                       size="xs"
+                      disabled={isReformulating}
                       className={cn(
                         "gap-1.5 text-muted-foreground/60 hover:bg-transparent hover:text-foreground",
                         expandedPanel === "permutations" && "text-foreground",
@@ -646,6 +729,7 @@ export function ExpansionColumn({
                       type="button"
                       variant="ghost"
                       size="xs"
+                      disabled={isReformulating}
                       className={cn(
                         "gap-1.5 text-muted-foreground/60 hover:bg-transparent hover:text-foreground",
                         expandedPanel === "cloze" && "text-foreground",
@@ -665,6 +749,7 @@ export function ExpansionColumn({
                       type="button"
                       variant={isExpanded ? "secondary" : "ghost"}
                       size="xs"
+                      disabled={isReformulating}
                       className={cn(
                         "gap-1.5",
                         !isExpanded &&
@@ -691,8 +776,30 @@ export function ExpansionColumn({
 
                     <Button
                       type="button"
+                      variant="ghost"
+                      size="xs"
+                      aria-label="Reformulate card"
+                      disabled={derivation.addedCount > 0 || isReformulating}
+                      onClick={() =>
+                        handleReformulateDerivation(
+                          derivation.id,
+                          derivation.question,
+                          derivation.answer,
+                        )
+                      }
+                    >
+                      {isReformulating ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <RotateCcw className="size-3" />
+                      )}
+                    </Button>
+
+                    <Button
+                      type="button"
                       variant="destructive"
                       size="xs"
+                      disabled={isReformulating}
                       onClick={() =>
                         dispatch({ type: "deleteDerivation", derivationId: derivation.id })
                       }
@@ -700,6 +807,12 @@ export function ExpansionColumn({
                       <Trash2 className="size-3" />
                     </Button>
                   </div>
+
+                  {reformulateErrorsByDerivationId.get(derivation.id) ? (
+                    <p className="mt-3 text-[11px] text-destructive">
+                      {reformulateErrorsByDerivationId.get(derivation.id)}
+                    </p>
+                  ) : null}
 
                   {expandedPanel === "permutations" ? (
                     <div className="ml-5 mt-2 border-l-2 border-border/30 pl-5">

@@ -5,6 +5,7 @@ import { GenerateExpansionsPromptSpec } from "./generate-expansions";
 import { GeneratePermutationsPromptSpec } from "./generate-permutations";
 import { GetTopicsPromptSpec } from "./get-topics";
 import { GetSynthesisTopicsPromptSpec } from "./get-synthesis-topics";
+import { ReformulateCardPromptSpec } from "./reformulate-card";
 
 export interface PromptSpecIdentity {
   readonly promptId: string;
@@ -55,4 +56,5 @@ export const ForgePromptRegistry = createForgePromptRegistry([
   GenerateExpansionsPromptSpec,
   GeneratePermutationsPromptSpec,
   GenerateClozePromptSpec,
+  ReformulateCardPromptSpec,
 ]);

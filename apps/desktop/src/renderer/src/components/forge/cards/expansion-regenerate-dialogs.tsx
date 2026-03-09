@@ -113,7 +113,7 @@ export function ExpansionRegenerateDialogs({
       </Dialog>
 
       <AlertDialog open={pendingConfirmation !== null} onOpenChange={onConfirmationOpenChange}>
-        <AlertDialogContent size="sm">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete descendant cards?</AlertDialogTitle>
             <AlertDialogDescription>

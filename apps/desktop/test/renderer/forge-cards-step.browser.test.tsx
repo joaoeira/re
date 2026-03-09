@@ -121,6 +121,8 @@ const createCardsInvoke = (options?: {
   >;
   readonly permutationsGenerationDelayMs?: number;
   readonly clozeGenerationDelayMs?: number;
+  readonly reformulationDelayMs?: number;
+  readonly reformulationFailureMessage?: string;
   readonly initialDecks?: ReadonlyArray<ForgeDeckEntry>;
   readonly scanDecksByCall?: ReadonlyArray<ReadonlyArray<ForgeDeckEntry>>;
   readonly createDeckFailureMessage?: string;
@@ -141,6 +143,8 @@ const createCardsInvoke = (options?: {
     options?.derivedGenerationFailureMessageByKind ?? {};
   const permutationsGenerationDelayMs = options?.permutationsGenerationDelayMs ?? 0;
   const clozeGenerationDelayMs = options?.clozeGenerationDelayMs ?? 0;
+  const reformulationDelayMs = options?.reformulationDelayMs ?? 0;
+  const reformulationFailureMessage = options?.reformulationFailureMessage ?? null;
 
   const topicByKey = new Map<string, TopicState>();
   TOPICS.forEach((topic) => {
@@ -670,6 +674,90 @@ const createCardsInvoke = (options?: {
           addedCount: clozeAddedCountBySourceKey.get(key) ?? 0,
         },
       };
+    }
+
+    if (method === "ForgeReformulateCard") {
+      const input = payload as {
+        source: { readonly cardId: number } | { readonly derivationId: number };
+        sourceQuestion?: string;
+        sourceAnswer?: string;
+      };
+      const source = input.source;
+      if (reformulationDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, reformulationDelayMs));
+      }
+      if (reformulationFailureMessage) {
+        return typedFailure({
+          _tag: "card_reformulation_error",
+          source,
+          message: reformulationFailureMessage,
+        });
+      }
+
+      if ("cardId" in source) {
+        const { cardId } = source;
+        const state = findTopicStateByCardId(cardId);
+        if (!state) {
+          return typedFailure({
+            _tag: "card_not_found",
+            sourceCardId: cardId,
+          });
+        }
+
+        const currentCard = state.cards.find((card) => card.id === cardId);
+        if (!currentCard) {
+          return typedFailure({
+            _tag: "card_not_found",
+            sourceCardId: cardId,
+          });
+        }
+
+        const rewrittenCard = {
+          ...currentCard,
+          question: `Reformulated: ${input.sourceQuestion ?? currentCard.question}`,
+          answer: `Reformulated: ${input.sourceAnswer ?? currentCard.answer}`,
+        };
+        state.cards = state.cards.map((card) => (card.id === cardId ? rewrittenCard : card));
+
+        return {
+          type: "success",
+          data: {
+            source,
+            card: rewrittenCard,
+          },
+        };
+      }
+
+      const { derivationId } = source;
+      for (const [parentKey, derivations] of derivationsByParentKey.entries()) {
+        const index = derivations.findIndex((entry) => entry.id === derivationId);
+        if (index < 0) continue;
+
+        const current = derivations[index]!;
+        const rewrittenDerivation = {
+          ...current,
+          question: `Reformulated: ${input.sourceQuestion ?? current.question}`,
+          answer: `Reformulated: ${input.sourceAnswer ?? current.answer}`,
+        };
+        derivationsByParentKey.set(parentKey, [
+          ...derivations.slice(0, index),
+          rewrittenDerivation,
+          ...derivations.slice(index + 1),
+        ]);
+
+        return {
+          type: "success",
+          data: {
+            source,
+            derivation: rewrittenDerivation,
+          },
+        };
+      }
+
+      return typedFailure({
+        _tag: "derivation_not_found",
+        derivationId,
+      });
     }
 
     if (method === "ForgeListSessions") {
@@ -1614,6 +1702,174 @@ describe("Forge cards step", () => {
       sourceQuestion: "editable cloze question",
       sourceAnswer: "edited cloze answer",
     });
+  });
+
+  it("reformulates a root card with the latest visible content and disables the row while pending", async () => {
+    const invoke = createCardsInvoke({
+      reformulationDelayMs: 150,
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "generated",
+          generationRevision: 1,
+          cards: [
+            {
+              id: 8_225,
+              question: "editable reformulate question",
+              answer: "editable reformulate answer",
+            },
+          ],
+        },
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    const questionEditor = await vi.waitFor(() => {
+      const el = document.querySelector<HTMLElement>(".editor-prosemirror[contenteditable='true']");
+      if (!el) throw new Error("tiptap editor not found");
+      return el;
+    });
+    questionEditor.focus();
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- no replacement API for contenteditable editing in tests
+    document.execCommand("selectAll");
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    document.execCommand("insertText", false, "edited reformulate question");
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeUpdateCard")
+          .length;
+      })
+      .toBeGreaterThanOrEqual(1);
+
+    const reformulateButton = screen.getByRole("button", { name: "Reformulate card" });
+    (reformulateButton.element() as HTMLButtonElement).click();
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeReformulateCard")
+          .length;
+      })
+      .toBe(1);
+
+    const reformulateCall = invoke.mock.calls.findLast(
+      ([method]: unknown[]) => method === "ForgeReformulateCard",
+    ) as
+      | [
+          string,
+          {
+            source: { cardId: number };
+            sourceQuestion: string;
+            sourceAnswer: string;
+          },
+        ]
+      | undefined;
+    expect(reformulateCall?.[1]).toEqual({
+      source: { cardId: 8_225 },
+      sourceQuestion: "edited reformulate question",
+      sourceAnswer: "editable reformulate answer",
+    });
+
+    await expect
+      .poll(
+        () =>
+          (screen.getByRole("button", { name: "Reformulate card" }).element() as HTMLButtonElement)
+            .disabled,
+      )
+      .toBe(true);
+    await expect
+      .poll(
+        () =>
+          screen.getByRole("button", { name: "Reformulate card" }).element().closest(".group")
+            ?.className,
+      )
+      .toContain("animate-pulse");
+
+    await expect
+      .element(screen.getByText("Reformulated: edited reformulate question"))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Reformulated: editable reformulate answer"))
+      .toBeVisible();
+  });
+
+  it("reformulates a derivation card from the expansion column", async () => {
+    const invoke = createCardsInvoke({
+      initialByTopicKey: {
+        ...defaultInteractiveState(),
+        "101:0": {
+          status: "generated",
+          generationRevision: 1,
+          cards: [
+            {
+              id: 8_228,
+              question: "expandable reformulate question",
+              answer: "expandable reformulate answer",
+            },
+          ],
+        },
+      },
+    });
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderWithIpcProviders(<ForgePage />);
+    await navigateToCards(screen);
+
+    await userEvent.click(screen.getByRole("button", { name: "Expand" }));
+    await userEvent.click(screen.getByText("Generate cards", { exact: false }));
+
+    await expect
+      .element(screen.getByText("Expansion for expandable reformulate question"))
+      .toBeVisible();
+
+    const derivationRow = screen
+      .getByText("Expansion for expandable reformulate question")
+      .element()
+      .closest(".group");
+    if (!(derivationRow instanceof HTMLElement)) {
+      throw new Error("Expected derivation row.");
+    }
+
+    const reformulateButton = derivationRow.querySelector("button[aria-label='Reformulate card']");
+    if (!(reformulateButton instanceof HTMLButtonElement)) {
+      throw new Error("Expected derivation reformulate button.");
+    }
+    reformulateButton.click();
+
+    await expect
+      .poll(() => {
+        return invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeReformulateCard")
+          .length;
+      })
+      .toBe(1);
+
+    const reformulateCall = invoke.mock.calls.findLast(
+      ([method]: unknown[]) => method === "ForgeReformulateCard",
+    ) as
+      | [
+          string,
+          {
+            source: { derivationId: number };
+            sourceQuestion: string;
+            sourceAnswer: string;
+          },
+        ]
+      | undefined;
+    expect(reformulateCall?.[1]).toEqual({
+      source: { derivationId: 12_000 },
+      sourceQuestion: "Expansion for expandable reformulate question",
+      sourceAnswer: "expandable reformulate answer",
+    });
+
+    await expect
+      .element(screen.getByText("Reformulated: Expansion for expandable reformulate question"))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Reformulated: expandable reformulate answer"))
+      .toBeVisible();
   });
 
   it("renders permutation generation errors from the mutation path", async () => {

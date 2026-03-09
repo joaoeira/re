@@ -120,6 +120,7 @@ const createPromptRuntime = (
 const createCardsDomainPromptRuntime = (options?: {
   readonly holdCreateCards?: Promise<void>;
   readonly failCreateCards?: boolean;
+  readonly failReformulateCard?: boolean;
   readonly onGenerateExpansionsInput?: (input: {
     readonly topic: string;
     readonly ancestryChain: ReadonlyArray<{
@@ -131,6 +132,10 @@ const createCardsDomainPromptRuntime = (options?: {
       readonly instruction?: string;
     }>;
     readonly instruction?: string;
+  }) => void;
+  readonly onReformulateCardInput?: (input: {
+    readonly contextText: string;
+    readonly source: { readonly question: string; readonly answer: string };
   }) => void;
 }): ForgePromptRuntime => ({
   run: <Input, Output>(
@@ -211,6 +216,40 @@ const createCardsDomainPromptRuntime = (options?: {
             cloze: `The energy currency of the cell is {{c1::${answerToken}}}.`,
           } as unknown as Output,
           rawText: '{"cloze":"x"}',
+          metadata: {
+            promptId: spec.promptId,
+            promptVersion: "1",
+            model: runOptions?.model ?? "mock:model",
+            attemptCount: 1,
+            promptHash: "x".repeat(64),
+            outputChars: 10,
+          },
+        };
+      }
+
+      if (spec.promptId === "forge/reformulate-card") {
+        const reformulateInput = input as {
+          readonly contextText: string;
+          readonly source: { readonly question: string; readonly answer: string };
+        };
+        options?.onReformulateCardInput?.(reformulateInput);
+
+        if (options?.failReformulateCard) {
+          return yield* Effect.fail(
+            new PromptOutputParseError({
+              promptId: spec.promptId,
+              message: "reformulate-card parse failure",
+              rawExcerpt: "invalid",
+            }),
+          );
+        }
+
+        return {
+          output: {
+            question: `Rewritten: ${reformulateInput.source.question}`,
+            answer: `Rewritten: ${reformulateInput.source.answer}`,
+          } as unknown as Output,
+          rawText: '{"question":"x","answer":"y"}',
           metadata: {
             promptId: spec.promptId,
             promptVersion: "1",
@@ -1244,6 +1283,89 @@ describe("forge handlers", () => {
     }
   });
 
+  it("reformulates a source card in place and prefers visible source overrides", async () => {
+    let seenReformulateInput:
+      | {
+          readonly contextText: string;
+          readonly source: { readonly question: string; readonly answer: string };
+        }
+      | undefined;
+    const promptRuntime = createCardsDomainPromptRuntime({
+      onReformulateCardInput: (input) => {
+        seenReformulateInput = input;
+      },
+    });
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-reformulate-source.pdf"),
+      );
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "ATP is the primary energy currency in cells.",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["ATP"] },
+      ]);
+      const topicId = await getOnlyTopicId(repository, created.session.id);
+
+      const generated = await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          topicId,
+        }),
+      );
+      const sourceCardId = generated.cards[0]?.id;
+      if (!sourceCardId) {
+        throw new Error("Expected generated source card.");
+      }
+
+      const reformulated = await Effect.runPromise(
+        handlers.ForgeReformulateCard({
+          source: { cardId: sourceCardId },
+          sourceQuestion: "How should ATP be remembered?",
+          sourceAnswer: "As the cell's energy currency.",
+        }),
+      );
+
+      expect("card" in reformulated).toBe(true);
+      if ("card" in reformulated) {
+        expect(reformulated.card.question).toBe("Rewritten: How should ATP be remembered?");
+        expect(reformulated.card.answer).toBe("Rewritten: As the cell's energy currency.");
+      }
+      expect(seenReformulateInput).toEqual({
+        contextText: "ATP is the primary energy currency in cells.",
+        source: {
+          question: "How should ATP be remembered?",
+          answer: "As the cell's energy currency.",
+        },
+      });
+
+      const topicCards = await Effect.runPromise(
+        handlers.ForgeGetTopicCards({
+          sessionId: created.session.id,
+          topicId,
+        }),
+      );
+      expect(topicCards.cards[0]).toMatchObject({
+        id: sourceCardId,
+        question: "Rewritten: How should ATP be remembered?",
+        answer: "Rewritten: As the cell's energy currency.",
+      });
+    } finally {
+      await dispose();
+    }
+  });
+
   it("updates a derivation's content and returns derivation_not_found for missing id", async () => {
     const promptRuntime = createCardsDomainPromptRuntime();
     const { handlers, repository, dispose } = await setupHandlers({
@@ -1314,6 +1436,157 @@ describe("forge handlers", () => {
         expect(failure._tag).toBe("Some");
         if (failure._tag === "Some") {
           expect((failure.value as { readonly _tag: string })._tag).toBe("derivation_not_found");
+        }
+      }
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("reformulates a derivation in place and surfaces typed failures", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime();
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-reformulate-derivation.pdf"),
+      );
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk text",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["Permutation topic"] },
+      ]);
+      const topicId = await getOnlyTopicId(repository, created.session.id);
+
+      const generated = await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          topicId,
+        }),
+      );
+      const sourceCardId = generated.cards[0]?.id;
+      if (!sourceCardId) {
+        throw new Error("Expected generated source card.");
+      }
+
+      const permutations = unwrapDerivedCardsResult(
+        await Effect.runPromise(
+          handlers.ForgeGenerateDerivedCards({
+            parent: { cardId: sourceCardId },
+            kind: "permutation",
+          }),
+        ),
+      );
+      const derivationId = permutations.derivations[0]?.id;
+      if (!derivationId) {
+        throw new Error("Expected generated derivation.");
+      }
+
+      const reformulated = await Effect.runPromise(
+        handlers.ForgeReformulateCard({
+          source: { derivationId },
+        }),
+      );
+
+      expect("derivation" in reformulated).toBe(true);
+      if ("derivation" in reformulated) {
+        expect(reformulated.derivation.question).toBe("Rewritten: Permutation of: What is ATP?");
+        expect(reformulated.derivation.answer).toBe(
+          "Rewritten: ATP is the cellular energy currency.",
+        );
+      }
+
+      const derivedCards = await Effect.runPromise(
+        handlers.ForgeGetDerivedCards({
+          parent: { cardId: sourceCardId },
+          kind: "permutation",
+        }),
+      );
+      expect(derivedCards.derivations[0]).toMatchObject({
+        id: derivationId,
+        question: "Rewritten: Permutation of: What is ATP?",
+        answer: "Rewritten: ATP is the cellular energy currency.",
+      });
+
+      const notFoundExit = await Effect.runPromiseExit(
+        handlers.ForgeReformulateCard({
+          source: { derivationId: 999_999 },
+        }),
+      );
+      expect(Exit.isFailure(notFoundExit)).toBe(true);
+      if (Exit.isFailure(notFoundExit)) {
+        const failure = Cause.failureOption(notFoundExit.cause);
+        expect(failure._tag).toBe("Some");
+        if (failure._tag === "Some") {
+          expect((failure.value as { readonly _tag: string })._tag).toBe("derivation_not_found");
+        }
+      }
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("returns card_reformulation_error when reformulation prompt execution fails", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime({
+      failReformulateCard: true,
+    });
+    const { handlers, repository, dispose } = await setupHandlers({
+      promptRuntime,
+    });
+
+    try {
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-reformulate-failure.pdf"),
+      );
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          {
+            text: "chunk text",
+            sequenceOrder: 0,
+            pageBoundaries: [{ offset: 0, page: 1 }],
+          },
+        ]),
+      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["ATP"] },
+      ]);
+      const topicId = await getOnlyTopicId(repository, created.session.id);
+
+      const generated = await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          topicId,
+        }),
+      );
+      const sourceCardId = generated.cards[0]?.id;
+      if (!sourceCardId) {
+        throw new Error("Expected generated source card.");
+      }
+
+      const reformulationExit = await Effect.runPromiseExit(
+        handlers.ForgeReformulateCard({
+          source: { cardId: sourceCardId },
+        }),
+      );
+      expect(Exit.isFailure(reformulationExit)).toBe(true);
+      if (Exit.isFailure(reformulationExit)) {
+        const failure = Cause.failureOption(reformulationExit.cause);
+        expect(failure._tag).toBe("Some");
+        if (failure._tag === "Some") {
+          expect((failure.value as { readonly _tag: string })._tag).toBe(
+            "card_reformulation_error",
+          );
         }
       }
     } finally {

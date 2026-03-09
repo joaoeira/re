@@ -21,6 +21,7 @@ import {
   GenerateClozePromptSpec,
   GenerateExpansionsPromptSpec,
   GeneratePermutationsPromptSpec,
+  ReformulateCardPromptSpec,
   GetSynthesisTopicsPromptSpec,
   GetTopicsPromptSpec,
 } from "@main/forge/prompts";
@@ -57,6 +58,7 @@ import {
   ForgeSessionOperationError,
   ForgeCardGenerationError,
   ForgeCardNotFoundError,
+  ForgeCardReformulationError,
   ForgeClozeGenerationError,
   ForgeDerivationAlreadyGeneratingError,
   ForgeDerivationGenerationError,
@@ -85,6 +87,7 @@ type ForgeHandlerKeys =
   | "ForgeGenerateDerivedCards"
   | "ForgeGetCardCloze"
   | "ForgeGenerateCardCloze"
+  | "ForgeReformulateCard"
   | "ForgeUpdateCard"
   | "ForgeUpdateDerivation"
   | "ForgeSaveTopicSelections"
@@ -1898,6 +1901,99 @@ export const createForgeHandlers = () =>
             source: cloze.source,
             cloze: cloze.clozeText,
             addedCount: cloze.addedCount,
+          };
+        }),
+      ForgeReformulateCard: ({ source, sourceQuestion, sourceAnswer, model }) =>
+        Effect.gen(function* () {
+          const resolvedParent = yield* loadResolvedDerivationParent(source);
+          const currentSourceQuestion = sourceQuestion ?? resolvedParent.question;
+          const currentSourceAnswer = sourceAnswer ?? resolvedParent.answer;
+          const rootTopic = yield* loadRootTopicForCard(resolvedParent.rootCard);
+          const contextText = yield* topicGroundingTextResolver
+            .resolveForTopic(rootTopic)
+            .pipe(
+              Effect.mapError((error) =>
+                toSessionOperationErrorFromRepositoryError(resolvedParent.sessionId, error),
+              ),
+            );
+
+          const promptResult = yield* forgePromptRuntime
+            .run(
+              ReformulateCardPromptSpec,
+              {
+                contextText,
+                source: {
+                  question: currentSourceQuestion,
+                  answer: currentSourceAnswer,
+                },
+              },
+              model ? { model } : undefined,
+            )
+            .pipe(
+              Effect.mapError(
+                (error) =>
+                  new ForgeCardReformulationError({
+                    source,
+                    message: toErrorMessage(error),
+                  }),
+              ),
+            );
+
+          if (isCardParentRef(source)) {
+            const updatedCard = yield* mapSessionRepositoryError(
+              resolvedParent.sessionId,
+              forgeSessionRepository.updateCardContent({
+                cardId: source.cardId,
+                question: promptResult.output.question,
+                answer: promptResult.output.answer,
+              }),
+            );
+
+            if (!updatedCard) {
+              return yield* Effect.fail(
+                new ForgeCardNotFoundError({
+                  sourceCardId: source.cardId,
+                }),
+              );
+            }
+
+            return {
+              source,
+              card: {
+                id: updatedCard.id,
+                question: updatedCard.question,
+                answer: updatedCard.answer,
+                addedToDeck: updatedCard.addedToDeck,
+              },
+            };
+          }
+
+          const updatedDerivation = yield* mapSessionRepositoryError(
+            resolvedParent.sessionId,
+            forgeSessionRepository.updateDerivedCardContent({
+              derivationId: source.derivationId,
+              question: promptResult.output.question,
+              answer: promptResult.output.answer,
+            }),
+          );
+
+          if (!updatedDerivation) {
+            return yield* Effect.fail(new ForgeDerivationNotFoundError(source));
+          }
+
+          return {
+            source,
+            derivation: {
+              id: updatedDerivation.id,
+              rootCardId: updatedDerivation.rootCardId,
+              parentDerivationId: updatedDerivation.parentDerivationId,
+              kind: updatedDerivation.kind,
+              derivationOrder: updatedDerivation.derivationOrder,
+              question: updatedDerivation.question,
+              answer: updatedDerivation.answer,
+              instruction: updatedDerivation.instruction,
+              addedCount: updatedDerivation.addedCount,
+            },
           };
         }),
       ForgeUpdateCard: ({ cardId, question, answer }) =>

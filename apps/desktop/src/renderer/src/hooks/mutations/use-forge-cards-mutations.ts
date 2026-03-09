@@ -5,6 +5,7 @@ import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
 import {
+  mapForgeReformulateCardErrorToError,
   sameDerivationParentRef,
   mapForgeGenerateCardClozeErrorToError,
   DerivationParentRef,
@@ -15,6 +16,8 @@ import {
   type ForgeGenerateCardClozeResult,
   type ForgeGenerateDerivedCardsInput,
   type ForgeGenerateDerivedCardsResult,
+  type ForgeReformulateCardInput,
+  type ForgeReformulateCardResult,
   type ForgeUpdateCardInput,
   type ForgeUpdateCardResult,
   type ForgeUpdateDerivationInput,
@@ -27,6 +30,7 @@ export const formatQAContent = (question: string, answer: string): string =>
 export const forgeCardsMutationKeys = {
   generateDerivedCards: ["forgeGenerateDerivedCards"] as const,
   generateCloze: ["forgeGenerateCardCloze"] as const,
+  reformulateCard: ["forgeReformulateCard"] as const,
   updateCard: ["forgeUpdateCard"] as const,
   updateDerivation: ["forgeUpdateDerivation"] as const,
   addCardToDeck: ["forgeAddCardToDeck"] as const,
@@ -110,6 +114,23 @@ export function useForgeGenerateClozeMutation() {
       queryClient.setQueryData(queryKeys.forgeCardCloze(input.source), () => result);
       return result;
     },
+  });
+}
+
+export function useForgeReformulateCardMutation() {
+  const ipc = useIpc();
+
+  return useMutation<ForgeReformulateCardResult, Error, ForgeReformulateCardInput>({
+    mutationKey: forgeCardsMutationKeys.reformulateCard,
+    mutationFn: (input) =>
+      runIpcEffect(
+        ipc.client.ForgeReformulateCard(input).pipe(
+          Effect.catchTag("RpcDefectError", (rpcDefect) =>
+            Effect.fail(toRpcDefectError(rpcDefect)),
+          ),
+          Effect.mapError(mapForgeReformulateCardErrorToError),
+        ),
+      ),
   });
 }
 

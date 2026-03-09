@@ -35,7 +35,19 @@ const renderInstructionBlock = (instruction: string | undefined): string => {
     return "";
   }
 
-  return `Focus your flashcards on the following topic: ${trimmedInstruction}`;
+  return `
+  User instruction (this takes priority over the default strategies above): ${trimmedInstruction}
+
+  Interpret this instruction broadly. It may ask you to:
+
+  Generate basic factual cards rather than synthesis cards (e.g., "basic cards on what X is," "define the key terms," "cover the fundamentals")
+  Focus on a specific sub-element, entity, or mechanism mentioned in the card
+  Change the difficulty level, angle, or emphasis
+  Expand in the default synthesis direction (if the instruction is about relationships, causes, or tradeoffs)
+
+  If the instruction requests factual or definitional cards, override the synthesis-first strategy and generate straightforward recall cards that test individual facts, definitions, or identifications. The context-independence and formatting principles still apply regardless of card type.
+
+  Before generating cards, determine: Is the user instruction asking for (a) more synthesis cards exploring the same relationship from different angles, (b) factual/foundational cards about entities mentioned in the original card, or (c) something else specific? Let this classification determine your generation strategy.`;
 };
 
 const renderGoDeeperPrompt = (input: {

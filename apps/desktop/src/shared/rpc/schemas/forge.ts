@@ -382,6 +382,26 @@ export type ForgeGenerateCardClozeInput = typeof ForgeGenerateCardClozeInputSche
 export const ForgeGenerateCardClozeResultSchema = ForgeCardClozeSchema;
 export type ForgeGenerateCardClozeResult = typeof ForgeGenerateCardClozeResultSchema.Type;
 
+export const ForgeReformulateCardInputSchema = Schema.Struct({
+  source: DerivationParentRefSchema,
+  sourceQuestion: Schema.optional(Schema.String),
+  sourceAnswer: Schema.optional(Schema.String),
+  model: Schema.optional(ModelIdSchema),
+});
+export type ForgeReformulateCardInput = typeof ForgeReformulateCardInputSchema.Type;
+
+export const ForgeReformulateCardResultSchema = Schema.Union(
+  Schema.Struct({
+    source: Schema.Struct({ cardId: PositiveIntSchema }),
+    card: ForgeGeneratedCardSchema,
+  }),
+  Schema.Struct({
+    source: Schema.Struct({ derivationId: PositiveIntSchema }),
+    derivation: ForgeDerivationSchema,
+  }),
+);
+export type ForgeReformulateCardResult = typeof ForgeReformulateCardResultSchema.Type;
+
 export const ForgeUpdateCardInputSchema = Schema.Struct({
   cardId: PositiveIntSchema,
   question: Schema.String,
@@ -572,6 +592,13 @@ export class ForgeClozeGenerationError extends Schema.TaggedError<ForgeClozeGene
   message: Schema.String,
 }) {}
 
+export class ForgeCardReformulationError extends Schema.TaggedError<ForgeCardReformulationError>(
+  "@re/desktop/rpc/ForgeCardReformulationError",
+)("card_reformulation_error", {
+  source: DerivationParentRefSchema,
+  message: Schema.String,
+}) {}
+
 export const ForgeSessionSummarySchema = Schema.Struct({
   id: PositiveIntSchema,
   sourceKind: ForgeSourceKindSchema,
@@ -707,6 +734,15 @@ export const ForgeGenerateCardClozeErrorSchema = Schema.Union(
 );
 export type ForgeGenerateCardClozeError = typeof ForgeGenerateCardClozeErrorSchema.Type;
 
+export const ForgeReformulateCardErrorSchema = Schema.Union(
+  ForgeCardNotFoundError,
+  ForgeDerivationNotFoundError,
+  ForgeCardReformulationError,
+  ForgeSessionOperationError,
+  ForgeOperationError,
+);
+export type ForgeReformulateCardError = typeof ForgeReformulateCardErrorSchema.Type;
+
 export const ForgeUpdateCardErrorSchema = Schema.Union(
   ForgeCardNotFoundError,
   ForgeSessionOperationError,
@@ -829,3 +865,20 @@ export const toForgeGenerateCardClozeErrorMessage = (
 export const mapForgeGenerateCardClozeErrorToError = (
   error: ForgeGenerateCardClozeError | Error,
 ): Error => ("_tag" in error ? new Error(toForgeGenerateCardClozeErrorMessage(error)) : error);
+
+export const toForgeReformulateCardErrorMessage = (error: ForgeReformulateCardError): string => {
+  switch (error._tag) {
+    case "card_not_found":
+      return `Card not found: ${error.sourceCardId}`;
+    case "derivation_not_found":
+      return `Derivation not found: ${error.derivationId}`;
+    case "card_reformulation_error":
+    case "session_operation_error":
+    case "forge_operation_error":
+      return error.message;
+  }
+};
+
+export const mapForgeReformulateCardErrorToError = (
+  error: ForgeReformulateCardError | Error,
+): Error => ("_tag" in error ? new Error(toForgeReformulateCardErrorMessage(error)) : error);

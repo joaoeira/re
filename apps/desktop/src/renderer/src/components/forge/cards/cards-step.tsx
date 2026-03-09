@@ -20,6 +20,7 @@ import {
   formatQAContent,
   forgeCardsMutationKeys,
   useForgeAddCardToDeckMutation,
+  useForgeReformulateCardMutation,
   useForgeUpdateCardMutation,
 } from "@/hooks/mutations/use-forge-cards-mutations";
 import { useForgeCardsSnapshotQuery } from "@/hooks/queries/use-forge-cards-snapshot-query";
@@ -35,6 +36,7 @@ import {
   type DerivationParentRef,
   type ForgeGetDerivedCardsResult,
   type ForgeGeneratedCard,
+  type ForgeReformulateCardInput,
   type ForgeGetTopicCardsResult,
   type ForgeTopicCardsStatus,
   type ForgeTopicCardsSummary,
@@ -485,9 +487,13 @@ export function CardsStep() {
   );
 
   const { mutate: updateCard } = useForgeUpdateCardMutation();
+  const { mutate: reformulateCard } = useForgeReformulateCardMutation();
   const { mutate: addCardToDeck } = useForgeAddCardToDeckMutation();
   const [addingCardIds, setAddingCardIds] = useState<ReadonlySet<number>>(new Set());
   const [addCardError, setAddCardError] = useState<string | null>(null);
+  const [reformulateErrorsByCardId, setReformulateErrorsByCardId] = useState<
+    ReadonlyMap<number, string>
+  >(new Map());
 
   const generationRevisionByTopicKeyRef = useRef<Map<string, number>>(new Map());
   useEffect(() => {
@@ -658,6 +664,26 @@ export function CardsStep() {
   }).filter(
     (variables): variables is ForgeGenerateDerivedCardsMutationInput => variables !== undefined,
   );
+  const pendingCardReformulations = useMutationState({
+    filters: {
+      mutationKey: forgeCardsMutationKeys.reformulateCard,
+      status: "pending",
+    },
+    select: (mutation) => mutation.state.variables as ForgeReformulateCardInput | undefined,
+  }).filter((variables): variables is ForgeReformulateCardInput => variables !== undefined);
+  const reformulatingRootCardIds = useMemo(() => {
+    const next = new Set<number>();
+    for (const variables of pendingCardReformulations) {
+      if ("cardId" in variables.source) {
+        next.add(variables.source.cardId);
+      }
+    }
+    return next;
+  }, [pendingCardReformulations]);
+
+  useEffect(() => {
+    setReformulateErrorsByCardId(new Map());
+  }, [activeTopicKey]);
 
   const sidebarTopics = useMemo(() => {
     return topics.map((topic) => {
@@ -832,6 +858,54 @@ export function CardsStep() {
     [activeTopic, queryClient, sessionId, updateCard],
   );
 
+  const handleReformulateCard = useCallback(
+    (card: ForgeGeneratedCard) => {
+      if (!activeTopic || sessionId === null || card.addedToDeck) return;
+
+      const topicQueryKey = queryKeys.forgeTopicCards(sessionId, activeTopic.topicId);
+      const currentCard =
+        queryClient
+          .getQueryData<ForgeGetTopicCardsResult>(topicQueryKey)
+          ?.cards.find((entry) => entry.id === card.id) ?? card;
+      setReformulateErrorsByCardId((previous) => {
+        const next = new Map(previous);
+        next.delete(card.id);
+        return next;
+      });
+
+      reformulateCard(
+        {
+          source: { cardId: card.id },
+          sourceQuestion: currentCard.question,
+          sourceAnswer: currentCard.answer,
+        },
+        {
+          onSuccess: (result) => {
+            if (!("card" in result)) return;
+
+            queryClient.setQueryData<ForgeGetTopicCardsResult>(topicQueryKey, (previous) => {
+              if (!previous) return previous;
+              return {
+                ...previous,
+                cards: previous.cards.map((entry) => (entry.id === card.id ? result.card : entry)),
+              };
+            });
+          },
+          onError: (error) =>
+            setReformulateErrorsByCardId((previous) => {
+              const next = new Map(previous);
+              next.set(card.id, error.message);
+              return next;
+            }),
+          onSettled: () => {
+            void queryClient.invalidateQueries({ queryKey: topicQueryKey, exact: true });
+          },
+        },
+      );
+    },
+    [activeTopic, queryClient, reformulateCard, sessionId],
+  );
+
   const handleDeckPathChange = useCallback(
     (deckPath: string | null) => {
       if (deckPath === targetDeckPath) return;
@@ -926,6 +1000,8 @@ export function CardsStep() {
           addedCardIds={activeAddedCardIds}
           deletedCardIds={activeDeletedCardIds}
           expandedPanels={activeExpandedPanels}
+          reformulatingCardIds={reformulatingRootCardIds}
+          reformulateErrorsByCardId={reformulateErrorsByCardId}
           expansionPresentationByCardId={expansionPresentationByCardId}
           expansionColumns={expansionColumns}
           expandedDerivationIds={expandedDerivationIds}
@@ -991,6 +1067,7 @@ export function CardsStep() {
             if (!activeTopicKey) return;
             curationActions.markCardDeleted(activeTopicKey, cardId);
           }}
+          onReformulateCard={handleReformulateCard}
           onTogglePanel={(cardId, panel) => {
             if (!activeTopicKey) return;
             const current = activeExpandedPanels.get(cardId) ?? null;

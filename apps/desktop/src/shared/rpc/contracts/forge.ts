@@ -13,6 +13,9 @@ import {
   ForgeGenerateCardClozeErrorSchema,
   ForgeGenerateCardClozeInputSchema,
   ForgeGenerateCardClozeResultSchema,
+  ForgeReformulateCardErrorSchema,
+  ForgeReformulateCardInputSchema,
+  ForgeReformulateCardResultSchema,
   ForgeGenerateSelectedTopicCardsErrorSchema,
   ForgeGenerateSelectedTopicCardsInputSchema,
   ForgeGenerateSelectedTopicCardsResultSchema,
@@ -152,6 +155,13 @@ export const ForgeGenerateCardCloze = rpc(
   ForgeGenerateCardClozeInputSchema,
   ForgeGenerateCardClozeResultSchema,
   ForgeGenerateCardClozeErrorSchema,
+);
+
+export const ForgeReformulateCard = rpc(
+  "ForgeReformulateCard",
+  ForgeReformulateCardInputSchema,
+  ForgeReformulateCardResultSchema,
+  ForgeReformulateCardErrorSchema,
 );
 
 export const ForgeUpdateCard = rpc(

@@ -66,6 +66,13 @@ export {
   type GenerateClozePromptOutput,
 } from "./generate-cloze";
 export {
+  ReformulateCardPromptInputSchema,
+  ReformulateCardPromptOutputSchema,
+  ReformulateCardPromptSpec,
+  type ReformulateCardPromptInput,
+  type ReformulateCardPromptOutput,
+} from "./reformulate-card";
+export {
   createForgePromptRegistry,
   ForgePromptRegistry,
   type ForgePromptRegistryData,

@@ -22,8 +22,11 @@ const makeProps = (overrides: Partial<CardBlockProps> = {}): CardBlockProps => (
   addDisabled: false,
   expandedPanel: null,
   expansionStatus: "idle",
+  isReformulating: false,
+  reformulateErrorMessage: null,
   onAdd: vi.fn(),
   onDelete: vi.fn(),
+  onReformulate: vi.fn(),
   onTogglePermutations: vi.fn(),
   onToggleCloze: vi.fn(),
   onRequestExpansion: vi.fn(),
@@ -76,15 +79,17 @@ describe("CardBlock", () => {
     await expect.element(screen.getByRole("button", { name: "Add to deck" })).toBeDisabled();
   });
 
-  it("calls permutations, cloze, and delete callbacks", async () => {
+  it("calls permutations, cloze, reformulate, and delete callbacks", async () => {
     const onTogglePermutations = vi.fn();
     const onToggleCloze = vi.fn();
+    const onReformulate = vi.fn();
     const onDelete = vi.fn();
     const screen = await render(
       <CardBlock
         {...makeProps({
           onTogglePermutations,
           onToggleCloze,
+          onReformulate,
           onDelete,
         })}
       />,
@@ -92,6 +97,7 @@ describe("CardBlock", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Permutations" }));
     await userEvent.click(screen.getByRole("button", { name: "Cloze" }));
+    await userEvent.click(screen.getByRole("button", { name: "Reformulate card" }));
 
     const deleteButton = screen.container.querySelector(
       "button[data-slot='button'].text-destructive",
@@ -103,6 +109,15 @@ describe("CardBlock", () => {
 
     expect(onTogglePermutations).toHaveBeenCalledOnce();
     expect(onToggleCloze).toHaveBeenCalledOnce();
+    expect(onReformulate).toHaveBeenCalledOnce();
     expect(onDelete).toHaveBeenCalledOnce();
+  });
+
+  it("pulses and disables reformulate while a reformulation request is in flight", async () => {
+    const screen = await render(<CardBlock {...makeProps({ isReformulating: true })} />);
+
+    await expect.element(screen.getByRole("button", { name: "Reformulate card" })).toBeDisabled();
+    expect(screen.container.firstElementChild?.className).toContain("animate-pulse");
+    expect(screen.container.firstElementChild?.className).toContain("pointer-events-none");
   });
 });

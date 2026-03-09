@@ -8,6 +8,7 @@ import { ExpansionColumn } from "@/components/forge/cards/expansion-column";
 
 const mockUseForgeDerivedCardsQuery = vi.fn();
 const mockGenerateDerivedCards = vi.fn();
+const mockReformulateCard = vi.fn();
 
 vi.mock("@/hooks/queries/use-forge-derived-cards-query", () => ({
   useForgeDerivedCardsQuery: (...args: unknown[]) => mockUseForgeDerivedCardsQuery(...args),
@@ -23,6 +24,9 @@ vi.mock("@/hooks/mutations/use-forge-cards-mutations", () => ({
   useForgeGenerateDerivedCardsMutation: () => ({
     mutateAsync: (...args: unknown[]) => mockGenerateDerivedCards(...args),
     isPending: false,
+  }),
+  useForgeReformulateCardMutation: () => ({
+    mutate: (...args: unknown[]) => mockReformulateCard(...args),
   }),
   useForgeGenerateClozeMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useForgeUpdateCardMutation: () => ({ mutate: vi.fn() }),
@@ -124,6 +128,7 @@ const renderExpansionColumn = async ({
 beforeEach(() => {
   mockUseForgeDerivedCardsQuery.mockReset();
   mockGenerateDerivedCards.mockReset();
+  mockReformulateCard.mockReset();
 });
 
 describe("ExpansionColumn", () => {
@@ -345,5 +350,20 @@ describe("ExpansionColumn", () => {
 
     await expect.poll(() => screen.getByText("What are the phases of mitosis?").query()).toBeNull();
     await expect.element(screen.getByText("What triggers mitosis?")).toBeVisible();
+  });
+
+  it("calls reformulate mutation for a derivation card", async () => {
+    mockUseForgeDerivedCardsQuery.mockReturnValue(populatedQueryResult());
+
+    const { screen } = await renderExpansionColumn();
+
+    await userEvent.click(screen.getByRole("button", { name: "Reformulate card" }));
+
+    expect(mockReformulateCard).toHaveBeenCalledOnce();
+    expect(mockReformulateCard.mock.calls[0]?.[0]).toEqual({
+      source: { derivationId: 1 },
+      sourceQuestion: "What are the phases of mitosis?",
+      sourceAnswer: "Prophase, metaphase, anaphase, telophase.",
+    });
   });
 });
