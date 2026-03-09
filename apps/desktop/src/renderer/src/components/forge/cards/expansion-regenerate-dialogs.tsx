@@ -11,7 +11,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 export type PendingRegenerationConfirmation = {
   readonly descendantCount: number;
@@ -60,17 +60,14 @@ export function ExpansionRegenerateDialogs({
   return (
     <>
       <Dialog open={editOpen} onOpenChange={onEditOpenChange}>
-        <DialogContent className="w-[560px] max-w-[calc(100vw-2rem)] p-0">
-          <div className="border-b border-border px-5 py-4">
-            <DialogTitle>Edit regeneration instruction</DialogTitle>
-            <DialogDescription>
-              Update or clear the instruction before regenerating these cards.
-            </DialogDescription>
-          </div>
+        <DialogContent className="w-[460px] max-w-[calc(100vw-2rem)] p-0">
+          <div className="flex flex-col gap-4 px-5 pt-5 pb-4">
+            <DialogTitle className="text-[11px] tracking-wider uppercase text-muted-foreground">
+              Regeneration instruction
+            </DialogTitle>
 
-          <div className="px-5 py-4">
             {errorMessage ? (
-              <p role="alert" className="mb-3 text-xs text-destructive">
+              <p role="alert" className="text-xs text-destructive">
                 {errorMessage}
               </p>
             ) : null}
@@ -94,20 +91,19 @@ export function ExpansionRegenerateDialogs({
             />
           </div>
 
-          <div className="flex items-center justify-between gap-4 border-t border-border px-5 py-3">
-            <kbd className="text-[11px] text-muted-foreground/35">⌘↵</kbd>
+          <div className="flex items-center justify-between gap-4 border-t border-foreground/[0.06] px-5 py-2.5">
+            <kbd className="text-[11px] text-foreground/20">⌘↵</kbd>
             <div className="flex items-center gap-2">
-              <Button
+              <button
                 type="button"
-                variant="outline"
-                size="sm"
                 onClick={() => onEditOpenChange(false)}
                 disabled={isGenerating}
+                className="text-xs text-muted-foreground disabled:pointer-events-none disabled:opacity-50"
               >
                 Cancel
-              </Button>
+              </button>
               <Button type="button" size="sm" onClick={onEditConfirm} disabled={isGenerating}>
-                Regenerate cards
+                Regenerate
               </Button>
             </div>
           </div>
