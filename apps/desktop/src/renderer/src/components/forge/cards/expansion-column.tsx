@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Braces, ListTree, X } from "lucide-react";
 
@@ -22,6 +22,10 @@ import type { ExpansionColumnDescriptor } from "../forge-page-store";
 
 import { AddToDeckButton } from "./add-to-deck-button";
 import { ClozePanel } from "./cloze-panel";
+import {
+  ExpansionRegenerateDialogs,
+  type PendingRegenerationConfirmation,
+} from "./expansion-regenerate-dialogs";
 import { InlineEditor } from "./inline-editor";
 import { PermutationsPanel } from "./permutations-panel";
 
@@ -37,12 +41,158 @@ type ExpansionColumnProps = {
   ) => void;
 };
 
-const confirmReplacement = (descendantCount: number): boolean =>
-  window.confirm(
-    `Regenerating these cards will delete ${descendantCount} descendant card${descendantCount === 1 ? "" : "s"}. Continue?`,
-  );
-
 type ExpandedPanelMap = ReadonlyMap<number, "permutations" | "cloze">;
+type RequestGenerationInput = {
+  readonly instructionText: string;
+  readonly confirmed?: boolean;
+};
+type RequestGenerationResult =
+  | { readonly status: "completed" }
+  | { readonly status: "confirm_required"; readonly descendantCount: number };
+type ExpansionColumnState = {
+  readonly instruction: string;
+  readonly hasInitializedInstruction: boolean;
+  readonly regenerateDialogOpen: boolean;
+  readonly regenerateInstructionDraft: string;
+  readonly pendingRegenerationConfirmation: PendingRegenerationConfirmation | null;
+  readonly expandedPanels: ExpandedPanelMap;
+  readonly addingIds: ReadonlySet<number>;
+  readonly addError: string | null;
+  readonly generationErrorMessage: string | null;
+};
+type ExpansionColumnAction =
+  | { readonly type: "reset"; readonly instruction: string }
+  | { readonly type: "initializeInstruction"; readonly instruction: string }
+  | { readonly type: "setInstruction"; readonly instruction: string }
+  | { readonly type: "clearGenerationError" }
+  | { readonly type: "setGenerationError"; readonly message: string }
+  | { readonly type: "openRegenerateDialog"; readonly instruction: string }
+  | { readonly type: "closeRegenerateDialog"; readonly instruction: string }
+  | { readonly type: "setRegenerateInstructionDraft"; readonly instruction: string }
+  | {
+      readonly type: "setPendingRegenerationConfirmation";
+      readonly confirmation: PendingRegenerationConfirmation | null;
+    }
+  | {
+      readonly type: "togglePanel";
+      readonly derivationId: number;
+      readonly panel: "permutations" | "cloze";
+    }
+  | { readonly type: "startAdding"; readonly derivationId: number }
+  | { readonly type: "finishAdding"; readonly derivationId: number }
+  | { readonly type: "setAddError"; readonly message: string | null };
+
+const autoResizeTextarea = (textarea: HTMLTextAreaElement | null) => {
+  if (!textarea) return;
+
+  textarea.style.height = "0px";
+  textarea.style.height = `${textarea.scrollHeight}px`;
+};
+
+const createExpansionColumnState = (instruction: string): ExpansionColumnState => ({
+  instruction,
+  hasInitializedInstruction: instruction.length > 0,
+  regenerateDialogOpen: false,
+  regenerateInstructionDraft: "",
+  pendingRegenerationConfirmation: null,
+  expandedPanels: new Map(),
+  addingIds: new Set(),
+  addError: null,
+  generationErrorMessage: null,
+});
+
+const expansionColumnReducer = (
+  state: ExpansionColumnState,
+  action: ExpansionColumnAction,
+): ExpansionColumnState => {
+  switch (action.type) {
+    case "reset":
+      return createExpansionColumnState(action.instruction);
+    case "initializeInstruction":
+      if (state.hasInitializedInstruction || action.instruction.length === 0) {
+        return state;
+      }
+      return {
+        ...state,
+        instruction: action.instruction,
+        hasInitializedInstruction: true,
+      };
+    case "setInstruction":
+      return {
+        ...state,
+        instruction: action.instruction,
+        hasInitializedInstruction: true,
+      };
+    case "clearGenerationError":
+      if (state.generationErrorMessage === null) return state;
+      return {
+        ...state,
+        generationErrorMessage: null,
+      };
+    case "setGenerationError":
+      return {
+        ...state,
+        generationErrorMessage: action.message,
+      };
+    case "openRegenerateDialog":
+      return {
+        ...state,
+        generationErrorMessage: null,
+        regenerateDialogOpen: true,
+        regenerateInstructionDraft: action.instruction,
+      };
+    case "closeRegenerateDialog":
+      return {
+        ...state,
+        regenerateDialogOpen: false,
+        regenerateInstructionDraft: action.instruction,
+      };
+    case "setRegenerateInstructionDraft":
+      return {
+        ...state,
+        regenerateInstructionDraft: action.instruction,
+      };
+    case "setPendingRegenerationConfirmation":
+      return {
+        ...state,
+        pendingRegenerationConfirmation: action.confirmation,
+      };
+    case "togglePanel": {
+      const next = new Map(state.expandedPanels);
+      const existing = next.get(action.derivationId) ?? null;
+      if (existing === action.panel) {
+        next.delete(action.derivationId);
+      } else {
+        next.set(action.derivationId, action.panel);
+      }
+      return {
+        ...state,
+        expandedPanels: next,
+      };
+    }
+    case "startAdding": {
+      const next = new Set(state.addingIds);
+      next.add(action.derivationId);
+      return {
+        ...state,
+        addingIds: next,
+      };
+    }
+    case "finishAdding": {
+      const next = new Set(state.addingIds);
+      next.delete(action.derivationId);
+      return {
+        ...state,
+        addingIds: next,
+      };
+    }
+    case "setAddError":
+      return {
+        ...state,
+        addError: action.message,
+      };
+  }
+};
 
 export function ExpansionColumn({
   topicKey: _topicKey,
@@ -72,87 +222,134 @@ export function ExpansionColumn({
       );
     },
   });
-
-  const [instruction, setInstruction] = useState(column.instruction ?? "");
-  const [expandedPanels, setExpandedPanels] = useState<ExpandedPanelMap>(new Map());
-  const [addingIds, setAddingIds] = useState<ReadonlySet<number>>(new Set());
-  const [addError, setAddError] = useState<string | null>(null);
-  const [generationErrorMessage, setGenerationErrorMessage] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(
+    expansionColumnReducer,
+    column.instruction ?? "",
+    createExpansionColumnState,
+  );
   const instructionTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const didInitInstructionRef = useRef(false);
 
   const derivations = query.data?.derivations ?? [];
-  const loading = isPending || inFlightForColumnCount > 0 || query.isLoading;
+  const isGenerating = isPending || inFlightForColumnCount > 0;
+  const loading = isGenerating || query.isLoading;
   const resolvedInstruction = derivations[0]?.instruction ?? column.instruction ?? "";
-  const errorMessage = generationErrorMessage ?? query.error?.message ?? null;
+  const errorMessage = state.generationErrorMessage ?? query.error?.message ?? null;
 
   useEffect(() => {
-    if (!didInitInstructionRef.current && resolvedInstruction) {
-      didInitInstructionRef.current = true;
-      setInstruction(resolvedInstruction);
+    dispatch({ type: "reset", instruction: column.instruction ?? "" });
+  }, [column.id, column.instruction]);
+
+  useEffect(() => {
+    if (!state.hasInitializedInstruction && resolvedInstruction) {
+      dispatch({ type: "initializeInstruction", instruction: resolvedInstruction });
     }
-  }, [resolvedInstruction]);
-
-  useEffect(() => {
-    setGenerationErrorMessage(null);
-  }, [column.id]);
+  }, [resolvedInstruction, state.hasInitializedInstruction]);
 
   useLayoutEffect(() => {
-    const textarea = instructionTextareaRef.current;
-    if (!textarea) return;
-
-    textarea.style.height = "0px";
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  }, [instruction]);
+    autoResizeTextarea(instructionTextareaRef.current);
+  }, [state.instruction]);
 
   const requestGeneration = useCallback(
-    async (confirmed?: boolean) => {
-      setGenerationErrorMessage(null);
+    async ({
+      instructionText,
+      confirmed = false,
+    }: RequestGenerationInput): Promise<RequestGenerationResult> => {
+      dispatch({ type: "clearGenerationError" });
       try {
+        const trimmedInstruction = instructionText.trim();
         const result = await generateDerivedCards({
           rootCardId: column.rootCardId,
           parent: column.parent,
           kind: "expansion",
-          ...(instruction.trim() ? { instruction: instruction.trim() } : {}),
-          ...(confirmed ? { confirmed } : {}),
+          ...(trimmedInstruction ? { instruction: trimmedInstruction } : {}),
+          ...(confirmed ? { confirmed: true } : {}),
         });
 
         if (isForgeDerivationConfirmationResult(result)) {
-          if (!confirmReplacement(result.descendantCount)) {
-            return;
-          }
-
-          await generateDerivedCards({
-            rootCardId: column.rootCardId,
-            parent: column.parent,
-            kind: "expansion",
-            ...(instruction.trim() ? { instruction: instruction.trim() } : {}),
-            confirmed: true,
-          });
+          return {
+            status: "confirm_required",
+            descendantCount: result.descendantCount,
+          };
         }
 
-        onRegenerated();
-        return;
+        return { status: "completed" };
       } catch (error) {
-        setGenerationErrorMessage((error as Error).message);
+        dispatch({ type: "setGenerationError", message: (error as Error).message });
         throw error;
       }
     },
-    [column.parent, column.rootCardId, generateDerivedCards, instruction, onRegenerated],
+    [column.parent, column.rootCardId, generateDerivedCards],
   );
 
-  const togglePanel = useCallback((derivationId: number, panel: "permutations" | "cloze") => {
-    setExpandedPanels((current) => {
-      const next = new Map(current);
-      const existing = next.get(derivationId) ?? null;
-      if (existing === panel) {
-        next.delete(derivationId);
-      } else {
-        next.set(derivationId, panel);
+  const handleRegenerateDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) {
+        dispatch({ type: "openRegenerateDialog", instruction: resolvedInstruction });
+        return;
       }
-      return next;
-    });
-  }, []);
+      dispatch({ type: "closeRegenerateDialog", instruction: resolvedInstruction });
+    },
+    [resolvedInstruction],
+  );
+
+  const handleRunGeneration = useCallback(
+    async ({
+      instructionText,
+      closeRegenerateDialog,
+      confirmed = false,
+    }: {
+      readonly instructionText: string;
+      readonly closeRegenerateDialog?: boolean;
+      readonly confirmed?: boolean;
+    }) => {
+      const result = await requestGeneration({ instructionText, confirmed });
+      if (result.status === "confirm_required") {
+        dispatch({
+          type: "setPendingRegenerationConfirmation",
+          confirmation: {
+            instructionText,
+            descendantCount: result.descendantCount,
+          },
+        });
+        if (closeRegenerateDialog) {
+          dispatch({ type: "closeRegenerateDialog", instruction: resolvedInstruction });
+        }
+        return;
+      }
+
+      if (closeRegenerateDialog) {
+        dispatch({ type: "closeRegenerateDialog", instruction: resolvedInstruction });
+      }
+      dispatch({ type: "setPendingRegenerationConfirmation", confirmation: null });
+      onRegenerated();
+    },
+    [onRegenerated, requestGeneration, resolvedInstruction],
+  );
+
+  const handleRegenerateClick = useCallback(() => {
+    if (resolvedInstruction.trim()) {
+      dispatch({ type: "openRegenerateDialog", instruction: resolvedInstruction });
+      return;
+    }
+
+    void handleRunGeneration({ instructionText: resolvedInstruction }).catch(() => undefined);
+  }, [handleRunGeneration, resolvedInstruction]);
+
+  const handleRegenerateConfirm = useCallback(() => {
+    void handleRunGeneration({
+      instructionText: state.regenerateInstructionDraft,
+      closeRegenerateDialog: true,
+    }).catch(() => undefined);
+  }, [handleRunGeneration, state.regenerateInstructionDraft]);
+
+  const handleReplacementConfirm = useCallback(() => {
+    if (!state.pendingRegenerationConfirmation) return;
+
+    void handleRunGeneration({
+      instructionText: state.pendingRegenerationConfirmation.instructionText,
+      confirmed: true,
+    }).catch(() => undefined);
+  }, [handleRunGeneration, state.pendingRegenerationConfirmation]);
 
   const handleEditDerivation = useCallback(
     (derivationId: number, field: "question" | "answer", value: string) => {
@@ -194,10 +391,10 @@ export function ExpansionColumn({
 
   const handleAddDerivation = useCallback(
     (derivationId: number, question: string, answer: string) => {
-      if (!targetDeckPath || addingIds.has(derivationId)) return;
+      if (!targetDeckPath || state.addingIds.has(derivationId)) return;
 
-      setAddingIds((prev) => new Set([...prev, derivationId]));
-      setAddError(null);
+      dispatch({ type: "startAdding", derivationId });
+      dispatch({ type: "setAddError", message: null });
       addCardToDeck(
         {
           deckPath: targetDeckPath,
@@ -219,17 +416,12 @@ export function ExpansionColumn({
               };
             });
           },
-          onError: (error) => setAddError(error.message),
-          onSettled: () =>
-            setAddingIds((prev) => {
-              const next = new Set(prev);
-              next.delete(derivationId);
-              return next;
-            }),
+          onError: (error) => dispatch({ type: "setAddError", message: error.message }),
+          onSettled: () => dispatch({ type: "finishAdding", derivationId }),
         },
       );
     },
-    [addCardToDeck, addingIds, queryClient, queryKey, targetDeckPath],
+    [addCardToDeck, queryClient, queryKey, state.addingIds, targetDeckPath],
   );
 
   const headerLabel = useMemo(() => {
@@ -263,7 +455,7 @@ export function ExpansionColumn({
           </p>
           <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground/40">
             {resolvedInstruction ? (
-              <span className="italic max-w-[400px] mr-auto">"{resolvedInstruction}"</span>
+              <span className="mr-auto max-w-[400px] italic">"{resolvedInstruction}"</span>
             ) : null}
             {derivations.length > 0 ? (
               <>
@@ -272,7 +464,7 @@ export function ExpansionColumn({
                 <span className="text-border">·</span>
                 <button
                   type="button"
-                  onClick={() => void requestGeneration().catch(() => undefined)}
+                  onClick={handleRegenerateClick}
                   className="text-muted-foreground/50 underline decoration-border underline-offset-4 transition-colors hover:text-foreground/60"
                 >
                   regenerate
@@ -290,7 +482,11 @@ export function ExpansionColumn({
               variant="outline"
               size="xs"
               className="mt-3"
-              onClick={() => void requestGeneration().catch(() => undefined)}
+              onClick={() =>
+                void handleRunGeneration({ instructionText: state.instruction }).catch(
+                  () => undefined,
+                )
+              }
             >
               Retry
             </Button>
@@ -301,12 +497,16 @@ export function ExpansionColumn({
           <div className="mt-6">
             <textarea
               ref={instructionTextareaRef}
-              value={instruction}
-              onChange={(event) => setInstruction(event.target.value)}
+              value={state.instruction}
+              onChange={(event) =>
+                dispatch({ type: "setInstruction", instruction: event.target.value })
+              }
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
                   event.preventDefault();
-                  void requestGeneration().catch(() => undefined);
+                  void handleRunGeneration({ instructionText: state.instruction }).catch(
+                    () => undefined,
+                  );
                 }
               }}
               rows={1}
@@ -316,7 +516,11 @@ export function ExpansionColumn({
             <button
               type="button"
               className="mt-5 flex items-center gap-1.5 text-[13px] text-muted-foreground/40 transition-colors hover:text-foreground/60"
-              onClick={() => void requestGeneration().catch(() => undefined)}
+              onClick={() =>
+                void handleRunGeneration({ instructionText: state.instruction }).catch(
+                  () => undefined,
+                )
+              }
             >
               ✦ Generate cards
               <kbd className="ml-1 text-[11px] text-muted-foreground/25">⌘↵</kbd>
@@ -348,144 +552,171 @@ export function ExpansionColumn({
           <p className="mt-4 text-[11px] text-destructive">{errorMessage}</p>
         ) : null}
 
-        {addError ? <p className="mt-4 text-[11px] text-destructive">{addError}</p> : null}
+        {state.addError ? (
+          <p className="mt-4 text-[11px] text-destructive">{state.addError}</p>
+        ) : null}
 
         {derivations.length > 0 ? (
-          <>
-            <div>
-              {derivations.map((derivation) => {
-                const expandedPanel = expandedPanels.get(derivation.id) ?? null;
-                const isExpanded = expandedDerivationIds.has(derivation.id);
+          <div>
+            {derivations.map((derivation) => {
+              const expandedPanel = state.expandedPanels.get(derivation.id) ?? null;
+              const isExpanded = expandedDerivationIds.has(derivation.id);
+              const hasExpanded = expandedPanel !== null || isExpanded;
 
-                const hasExpanded = expandedPanel !== null || isExpanded;
-
-                return (
+              return (
+                <div
+                  key={derivation.id}
+                  className={cn(
+                    "group relative border-b border-border/20 py-4 last:border-b-0",
+                    isExpanded && "bg-muted/35",
+                  )}
+                >
                   <div
-                    key={derivation.id}
+                    className={cn("transition-opacity", derivation.addedCount > 0 && "opacity-40")}
+                  >
+                    <InlineEditor
+                      content={derivation.question}
+                      editable={derivation.addedCount === 0}
+                      onContentChange={(value) =>
+                        handleEditDerivation(derivation.id, "question", value)
+                      }
+                      className="min-h-0 text-[14px] font-medium leading-relaxed"
+                    />
+                    <InlineEditor
+                      content={derivation.answer}
+                      editable={derivation.addedCount === 0}
+                      onContentChange={(value) =>
+                        handleEditDerivation(derivation.id, "answer", value)
+                      }
+                      className="mt-1.5 min-h-0 text-sm leading-relaxed text-muted-foreground"
+                    />
+                  </div>
+
+                  <div
                     className={cn(
-                      "group relative border-b border-border/20 py-4 last:border-b-0",
-                      isExpanded && "bg-muted/35",
+                      "mt-3 flex items-center gap-1.5 transition-all",
+                      hasExpanded
+                        ? "opacity-100"
+                        : "translate-y-0.5 opacity-0 group-hover:translate-y-0 group-hover:opacity-100",
                     )}
                   >
-                    <div
+                    <AddToDeckButton
+                      isAdded={derivation.addedCount > 0}
+                      isAdding={state.addingIds.has(derivation.id)}
+                      disabled={!targetDeckPath}
+                      onClick={() =>
+                        handleAddDerivation(derivation.id, derivation.question, derivation.answer)
+                      }
+                    />
+                    <div className="mx-1 h-4 w-px bg-border/30" />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
                       className={cn(
-                        "transition-opacity",
-                        derivation.addedCount > 0 && "opacity-40",
+                        "gap-1.5 text-muted-foreground/60 hover:bg-transparent hover:text-foreground",
+                        expandedPanel === "permutations" && "text-foreground",
                       )}
+                      onClick={() =>
+                        dispatch({
+                          type: "togglePanel",
+                          derivationId: derivation.id,
+                          panel: "permutations",
+                        })
+                      }
                     >
-                      <InlineEditor
-                        content={derivation.question}
-                        editable={derivation.addedCount === 0}
-                        onContentChange={(value) =>
-                          handleEditDerivation(derivation.id, "question", value)
-                        }
-                        className="min-h-0 text-[14px] font-medium leading-relaxed"
-                      />
-                      <InlineEditor
-                        content={derivation.answer}
-                        editable={derivation.addedCount === 0}
-                        onContentChange={(value) =>
-                          handleEditDerivation(derivation.id, "answer", value)
-                        }
-                        className="mt-1.5 min-h-0 text-sm leading-relaxed text-muted-foreground"
-                      />
-                    </div>
-
-                    <div
+                      <ListTree className="size-3" />
+                      Permutations
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
                       className={cn(
-                        "mt-3 flex items-center gap-1.5 transition-all",
-                        hasExpanded
-                          ? "opacity-100"
-                          : "translate-y-0.5 opacity-0 group-hover:translate-y-0 group-hover:opacity-100",
+                        "gap-1.5 text-muted-foreground/60 hover:bg-transparent hover:text-foreground",
+                        expandedPanel === "cloze" && "text-foreground",
                       )}
+                      onClick={() =>
+                        dispatch({
+                          type: "togglePanel",
+                          derivationId: derivation.id,
+                          panel: "cloze",
+                        })
+                      }
                     >
-                      <AddToDeckButton
-                        isAdded={derivation.addedCount > 0}
-                        isAdding={addingIds.has(derivation.id)}
-                        disabled={!targetDeckPath}
-                        onClick={() =>
-                          handleAddDerivation(derivation.id, derivation.question, derivation.answer)
-                        }
-                      />
-                      <div className="mx-1 h-4 w-px bg-border/30" />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        className={cn(
-                          "gap-1.5 text-muted-foreground/60 hover:bg-transparent hover:text-foreground",
-                          expandedPanel === "permutations" && "text-foreground",
-                        )}
-                        onClick={() => togglePanel(derivation.id, "permutations")}
-                      >
-                        <ListTree className="size-3" />
-                        Permutations
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        className={cn(
-                          "gap-1.5 text-muted-foreground/60 hover:bg-transparent hover:text-foreground",
-                          expandedPanel === "cloze" && "text-foreground",
-                        )}
-                        onClick={() => togglePanel(derivation.id, "cloze")}
-                      >
-                        <Braces className="size-3" />
-                        Cloze
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={isExpanded ? "secondary" : "ghost"}
-                        size="xs"
-                        className={cn(
-                          "gap-1.5",
-                          !isExpanded &&
-                            "text-muted-foreground/60 hover:bg-transparent hover:text-foreground",
-                        )}
-                        onClick={() =>
-                          onRequestExpansion(
-                            {
-                              id: `derivation:${derivation.id}`,
-                              parent: { derivationId: derivation.id },
-                              rootCardId: derivation.rootCardId,
-                              parentQuestion: derivation.question,
-                              parentAnswer: derivation.answer,
-                            },
-                            column.parent,
-                          )
-                        }
-                      >
-                        <ArrowRight className="size-3" />
-                        {isExpanded ? "Expanded" : "Expand"}
-                      </Button>
-                    </div>
-
-                    {expandedPanel === "permutations" ? (
-                      <div className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
-                        <PermutationsPanel
-                          parent={{ derivationId: derivation.id }}
-                          rootCardId={column.rootCardId}
-                        />
-                      </div>
-                    ) : null}
-
-                    {expandedPanel === "cloze" ? (
-                      <div className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
-                        <ClozePanel
-                          source={{ derivationId: derivation.id }}
-                          sourceQuestion={derivation.question}
-                          sourceAnswer={derivation.answer}
-                        />
-                      </div>
-                    ) : null}
+                      <Braces className="size-3" />
+                      Cloze
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={isExpanded ? "secondary" : "ghost"}
+                      size="xs"
+                      className={cn(
+                        "gap-1.5",
+                        !isExpanded &&
+                          "text-muted-foreground/60 hover:bg-transparent hover:text-foreground",
+                      )}
+                      onClick={() =>
+                        onRequestExpansion(
+                          {
+                            id: `derivation:${derivation.id}`,
+                            parent: { derivationId: derivation.id },
+                            rootCardId: derivation.rootCardId,
+                            parentQuestion: derivation.question,
+                            parentAnswer: derivation.answer,
+                          },
+                          column.parent,
+                        )
+                      }
+                    >
+                      <ArrowRight className="size-3" />
+                      {isExpanded ? "Expanded" : "Expand"}
+                    </Button>
                   </div>
-                );
-              })}
-            </div>
-          </>
+
+                  {expandedPanel === "permutations" ? (
+                    <div className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
+                      <PermutationsPanel
+                        parent={{ derivationId: derivation.id }}
+                        rootCardId={column.rootCardId}
+                      />
+                    </div>
+                  ) : null}
+
+                  {expandedPanel === "cloze" ? (
+                    <div className="ml-5 mt-2 border-l-2 border-border/30 pl-5">
+                      <ClozePanel
+                        source={{ derivationId: derivation.id }}
+                        sourceQuestion={derivation.question}
+                        sourceAnswer={derivation.answer}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
         ) : null}
       </div>
+
+      <ExpansionRegenerateDialogs
+        editOpen={state.regenerateDialogOpen}
+        editInstruction={state.regenerateInstructionDraft}
+        pendingConfirmation={state.pendingRegenerationConfirmation}
+        errorMessage={errorMessage}
+        isGenerating={isGenerating}
+        onEditOpenChange={handleRegenerateDialogOpenChange}
+        onEditInstructionChange={(instruction) =>
+          dispatch({ type: "setRegenerateInstructionDraft", instruction })
+        }
+        onEditConfirm={handleRegenerateConfirm}
+        onConfirmationOpenChange={(open) => {
+          if (!open) {
+            dispatch({ type: "setPendingRegenerationConfirmation", confirmation: null });
+          }
+        }}
+        onConfirmationConfirm={handleReplacementConfirm}
+      />
     </section>
   );
 }
