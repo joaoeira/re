@@ -68,11 +68,16 @@ export function GeneralSettings({
           <p className="text-muted-foreground mt-1 text-xs">Choose how the app looks.</p>
         </div>
 
-        <div className="border-border flex w-fit overflow-hidden border">
+        <div
+          role="group"
+          aria-label="Theme"
+          className="border-border flex w-fit overflow-hidden border"
+        >
           {THEME_OPTIONS.map((option) => (
             <button
               key={option.value}
               type="button"
+              aria-pressed={theme === option.value}
               onClick={() => onThemeChange(option.value)}
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                 theme === option.value

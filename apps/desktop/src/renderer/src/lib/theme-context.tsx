@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useState } from "react";
 
 export type Theme = "light" | "dark" | "system";
 
@@ -25,6 +25,7 @@ function getResolvedDark(theme: Theme): boolean {
 
 function applyTheme(dark: boolean): void {
   document.documentElement.classList.toggle("dark", dark);
+  document.documentElement.style.colorScheme = dark ? "dark" : "light";
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -35,7 +36,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setThemeState(next);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     applyTheme(getResolvedDark(theme));
 
     if (theme !== "system") return;

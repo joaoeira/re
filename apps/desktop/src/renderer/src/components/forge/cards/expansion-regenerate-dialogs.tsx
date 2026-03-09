@@ -94,14 +94,16 @@ export function ExpansionRegenerateDialogs({
           <div className="flex items-center justify-between gap-4 border-t border-foreground/[0.06] px-5 py-2.5">
             <kbd className="text-[11px] text-foreground/20">⌘↵</kbd>
             <div className="flex items-center gap-2">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => onEditOpenChange(false)}
                 disabled={isGenerating}
-                className="text-xs text-muted-foreground disabled:pointer-events-none disabled:opacity-50"
+                className="text-muted-foreground"
               >
                 Cancel
-              </button>
+              </Button>
               <Button type="button" size="sm" onClick={onEditConfirm} disabled={isGenerating}>
                 Regenerate
               </Button>

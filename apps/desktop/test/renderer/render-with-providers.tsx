@@ -4,10 +4,13 @@ import { render } from "vitest-browser-react";
 
 import { IpcProvider } from "@/lib/ipc-context";
 import { createQueryClient } from "@/lib/query-client";
+import { ThemeProvider } from "@/lib/theme-context";
 
 export const renderWithIpcProviders = async (ui: ReactElement) =>
   render(
-    <QueryClientProvider client={createQueryClient()}>
-      <IpcProvider>{ui}</IpcProvider>
-    </QueryClientProvider>,
+    <ThemeProvider>
+      <QueryClientProvider client={createQueryClient()}>
+        <IpcProvider>{ui}</IpcProvider>
+      </QueryClientProvider>
+    </ThemeProvider>,
   );

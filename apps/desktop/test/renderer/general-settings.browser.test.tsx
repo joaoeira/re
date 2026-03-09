@@ -126,6 +126,66 @@ describe("GeneralSettings", () => {
       .toBeDisabled();
   });
 
+  it("renders all three theme options", async () => {
+    const screen = await render(
+      <GeneralSettings
+        rootPath={null}
+        saving={false}
+        error={null}
+        onSelectDirectory={vi.fn()}
+        onClearRootPath={vi.fn()}
+        theme="system"
+        onThemeChange={vi.fn()}
+      />,
+    );
+
+    await expect.element(screen.getByRole("button", { name: "Light" })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Dark" })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "System" })).toBeVisible();
+  });
+
+  it("marks the active theme with aria-pressed", async () => {
+    const screen = await render(
+      <GeneralSettings
+        rootPath={null}
+        saving={false}
+        error={null}
+        onSelectDirectory={vi.fn()}
+        onClearRootPath={vi.fn()}
+        theme="dark"
+        onThemeChange={vi.fn()}
+      />,
+    );
+
+    await expect
+      .element(screen.getByRole("button", { name: "Dark" }))
+      .toHaveAttribute("aria-pressed", "true");
+    await expect
+      .element(screen.getByRole("button", { name: "Light" }))
+      .toHaveAttribute("aria-pressed", "false");
+    await expect
+      .element(screen.getByRole("button", { name: "System" }))
+      .toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("calls onThemeChange when a theme option is clicked", async () => {
+    const onThemeChange = vi.fn();
+    const screen = await render(
+      <GeneralSettings
+        rootPath={null}
+        saving={false}
+        error={null}
+        onSelectDirectory={vi.fn()}
+        onClearRootPath={vi.fn()}
+        theme="system"
+        onThemeChange={onThemeChange}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Dark" }));
+    expect(onThemeChange).toHaveBeenCalledWith("dark");
+  });
+
   it("shows an error message", async () => {
     const screen = await render(
       <GeneralSettings
