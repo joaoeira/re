@@ -133,7 +133,7 @@ describe("ExpansionColumn", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "regenerate", exact: true }));
 
-    await expect.element(screen.getByText("Edit regeneration instruction")).toBeVisible();
+    await expect.element(screen.getByText("Regeneration instruction")).toBeVisible();
     await expect
       .element(screen.getByPlaceholder("What should these cards focus on?"))
       .toHaveValue("focus on key concepts");
@@ -152,7 +152,7 @@ describe("ExpansionColumn", () => {
       screen.getByRole("button", { name: "Cancel", exact: true }).element() as HTMLButtonElement
     ).click();
 
-    await expect.poll(() => screen.getByText("Edit regeneration instruction").query()).toBeNull();
+    await expect.poll(() => screen.getByText("Regeneration instruction").query()).toBeNull();
     expect(mockGenerateDerivedCards).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole("button", { name: "regenerate", exact: true }));
@@ -175,7 +175,7 @@ describe("ExpansionColumn", () => {
     );
 
     (
-      screen.getByRole("button", { name: "Regenerate cards", exact: true }).element() as
+      screen.getByRole("button", { name: "Regenerate", exact: true }).element() as
         | HTMLButtonElement
         | undefined
     )?.click();
@@ -201,7 +201,7 @@ describe("ExpansionColumn", () => {
     await userEvent.fill(screen.getByPlaceholder("What should these cards focus on?"), "");
 
     (
-      screen.getByRole("button", { name: "Regenerate cards", exact: true }).element() as
+      screen.getByRole("button", { name: "Regenerate", exact: true }).element() as
         | HTMLButtonElement
         | undefined
     )?.click();
@@ -231,7 +231,7 @@ describe("ExpansionColumn", () => {
     );
 
     (
-      screen.getByRole("button", { name: "Regenerate cards", exact: true }).element() as
+      screen.getByRole("button", { name: "Regenerate", exact: true }).element() as
         | HTMLButtonElement
         | undefined
     )?.click();
@@ -271,7 +271,7 @@ describe("ExpansionColumn", () => {
     await userEvent.click(screen.getByRole("button", { name: "regenerate", exact: true }));
 
     (
-      screen.getByRole("button", { name: "Regenerate cards", exact: true }).element() as
+      screen.getByRole("button", { name: "Regenerate", exact: true }).element() as
         | HTMLButtonElement
         | undefined
     )?.click();
@@ -298,7 +298,7 @@ describe("ExpansionColumn", () => {
     await userEvent.click(screen.getByRole("button", { name: "regenerate", exact: true }));
 
     await expect.poll(() => mockGenerateDerivedCards.mock.calls.length).toBe(1);
-    expect(screen.getByText("Edit regeneration instruction").query()).toBeNull();
+    expect(screen.getByText("Regeneration instruction").query()).toBeNull();
     expect(mockGenerateDerivedCards.mock.calls[0]?.[0]).toEqual({
       rootCardId: 100,
       parent: { cardId: 100 },
