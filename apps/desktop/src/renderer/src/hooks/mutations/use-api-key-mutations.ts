@@ -2,28 +2,19 @@ import { useCallback, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Effect } from "effect";
 
-import { mapSecretStoreErrorToError, type SecretKey } from "@shared/secrets";
+import { createSecretKeyRecord, mapSecretStoreErrorToError, type SecretKey } from "@shared/secrets";
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
 
-const createConfiguredMap = (value: boolean): Record<SecretKey, boolean> => ({
-  "openai-api-key": value,
-  "anthropic-api-key": value,
-  "gemini-api-key": value,
-});
+const createConfiguredMap = (value: boolean): Record<SecretKey, boolean> =>
+  createSecretKeyRecord(() => value);
 
-const createErrorMap = (value: string | null): Record<SecretKey, string | null> => ({
-  "openai-api-key": value,
-  "anthropic-api-key": value,
-  "gemini-api-key": value,
-});
+const createErrorMap = (value: string | null): Record<SecretKey, string | null> =>
+  createSecretKeyRecord(() => value);
 
-const createSavingMap = (value: boolean): Record<SecretKey, boolean> => ({
-  "openai-api-key": value,
-  "anthropic-api-key": value,
-  "gemini-api-key": value,
-});
+const createSavingMap = (value: boolean): Record<SecretKey, boolean> =>
+  createSecretKeyRecord(() => value);
 
 const setKey = <T>(
   record: Record<SecretKey, T>,

@@ -2,6 +2,7 @@ import { RetryError, generateText, streamText, type ModelMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { APICallError, type LanguageModelV3 } from "@ai-sdk/provider";
 import { Effect, Stream } from "effect";
 
@@ -36,6 +37,11 @@ const providers = {
   openai: {
     secretKey: "openai-api-key",
     createModel: (apiKey, modelId) => createOpenAI({ apiKey })(modelId),
+  },
+  openrouter: {
+    secretKey: "openrouter-api-key",
+    createModel: (apiKey, modelId) =>
+      createOpenRouter({ apiKey, compatibility: "strict" })(modelId),
   },
 } satisfies Record<string, ProviderConfig>;
 

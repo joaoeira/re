@@ -25,6 +25,13 @@ const mocks = vi.hoisted(() => ({
     provider: "openai",
     model,
   })),
+  createOpenRouter: vi.fn(
+    (_options: { readonly apiKey: string; readonly compatibility: "strict" }) =>
+      (model: string) => ({
+        provider: "openrouter",
+        model,
+      }),
+  ),
 }));
 
 vi.mock("ai", () => ({
@@ -53,6 +60,10 @@ vi.mock("@ai-sdk/google", () => ({
 
 vi.mock("@ai-sdk/openai", () => ({
   createOpenAI: mocks.createOpenAI,
+}));
+
+vi.mock("@openrouter/ai-sdk-provider", () => ({
+  createOpenRouter: mocks.createOpenRouter,
 }));
 
 vi.mock("@ai-sdk/provider", () => ({

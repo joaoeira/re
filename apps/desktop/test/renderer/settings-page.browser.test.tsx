@@ -349,6 +349,7 @@ describe("SettingsPage", () => {
       await expect.element(page.getByText("OpenAI")).toBeVisible();
       await expect.element(page.getByText("Anthropic")).toBeVisible();
       await expect.element(page.getByText("Gemini")).toBeVisible();
+      await expect.element(page.getByText("OpenRouter")).toBeVisible();
     });
 
     it("shows preview for configured keys and Add key for unconfigured providers", async () => {
@@ -358,6 +359,7 @@ describe("SettingsPage", () => {
       await expect.element(page.getByLabelText("OpenAI key preview")).toBeVisible();
       await expect.element(page.getByRole("button", { name: "Add Anthropic key" })).toBeVisible();
       await expect.element(page.getByRole("button", { name: "Add Gemini key" })).toBeVisible();
+      await expect.element(page.getByRole("button", { name: "Add OpenRouter key" })).toBeVisible();
     });
 
     it("saves an API key via SetApiKey then confirms via HasApiKey", async () => {
@@ -596,7 +598,7 @@ describe("SettingsPage", () => {
         .poll(
           () => invoke.mock.calls.filter(([method]: unknown[]) => method === "HasApiKey").length,
         )
-        .toBe(3);
+        .toBe(4);
     });
 
     it("defaults to General section on /settings", async () => {

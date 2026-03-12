@@ -15,6 +15,7 @@ import { SecretNotFound, SecretStoreUnavailable } from "@shared/secrets";
 const ANTHROPIC_MODEL = "anthropic:claude-sonnet-4-20250514";
 const GEMINI_MODEL = "gemini:gemini-2.5-flash";
 const OPENAI_MODEL = "openai:gpt-4o";
+const OPENROUTER_MODEL = "openrouter:openai/gpt-4o";
 
 const DEFAULT_MESSAGES = [{ role: "user", content: "hello" }] as const;
 
@@ -135,6 +136,13 @@ const mocks = vi.hoisted(() => {
       provider: "openai",
       model,
     })),
+    createOpenRouter: vi.fn(
+      (_options: { readonly apiKey: string; readonly compatibility: "strict" }) =>
+        (model: string) => ({
+          provider: "openrouter",
+          model,
+        }),
+    ),
   };
 });
 
@@ -154,6 +162,10 @@ vi.mock("@ai-sdk/google", () => ({
 
 vi.mock("@ai-sdk/openai", () => ({
   createOpenAI: mocks.createOpenAI,
+}));
+
+vi.mock("@openrouter/ai-sdk-provider", () => ({
+  createOpenRouter: mocks.createOpenRouter,
 }));
 
 vi.mock("@ai-sdk/provider", () => ({
@@ -177,6 +189,8 @@ const makeServiceWithKey = () =>
           return Effect.succeed("sk-anthropic-test");
         case "gemini-api-key":
           return Effect.succeed("sk-gemini-test");
+        case "openrouter-api-key":
+          return Effect.succeed("sk-openrouter-test");
       }
     }),
   });
@@ -201,6 +215,7 @@ describe("makeAiClient", () => {
     mocks.createAnthropic.mockClear();
     mocks.createGoogleGenerativeAI.mockClear();
     mocks.createOpenAI.mockClear();
+    mocks.createOpenRouter.mockClear();
   });
 
   it("routes anthropic stream requests to anthropic provider with anthropic key", async () => {
@@ -272,6 +287,7 @@ describe("makeAiClient", () => {
     expect(mocks.createOpenAI).toHaveBeenCalledWith({ apiKey: "sk-openai-test" });
     expect(mocks.createAnthropic).not.toHaveBeenCalled();
     expect(mocks.createGoogleGenerativeAI).not.toHaveBeenCalled();
+    expect(mocks.createOpenRouter).not.toHaveBeenCalled();
     expect(mocks.streamText).toHaveBeenCalledWith(
       expect.objectContaining({
         model: { provider: "openai", model: "gpt-4o" },
@@ -310,9 +326,52 @@ describe("makeAiClient", () => {
     expect(mocks.createGoogleGenerativeAI).toHaveBeenCalledWith({ apiKey: "sk-gemini-test" });
     expect(mocks.createAnthropic).not.toHaveBeenCalled();
     expect(mocks.createOpenAI).not.toHaveBeenCalled();
+    expect(mocks.createOpenRouter).not.toHaveBeenCalled();
     expect(mocks.streamText).toHaveBeenCalledWith(
       expect.objectContaining({
         model: { provider: "gemini", model: "gemini-2.5-flash" },
+        maxRetries: 0,
+      }),
+    );
+  });
+
+  it("routes openrouter stream requests to openrouter provider with openrouter key", async () => {
+    const requestedKeys: string[] = [];
+    const service = makeAiClient({
+      secretStore: makeSecretStore((key) =>
+        Effect.sync(() => {
+          requestedKeys.push(key);
+          return "sk-openrouter-test";
+        }),
+      ),
+    });
+
+    mocks.streamText.mockImplementation(() => ({
+      textStream: {
+        async *[Symbol.asyncIterator]() {
+          yield "ok";
+        },
+      },
+    }));
+
+    const chunks = await Effect.runPromise(
+      service
+        .streamText({ model: OPENROUTER_MODEL, messages: DEFAULT_MESSAGES })
+        .pipe(Stream.runCollect),
+    );
+
+    expect(Array.from(chunks)).toEqual(["ok"]);
+    expect(requestedKeys).toEqual(["openrouter-api-key"]);
+    expect(mocks.createOpenRouter).toHaveBeenCalledWith({
+      apiKey: "sk-openrouter-test",
+      compatibility: "strict",
+    });
+    expect(mocks.createAnthropic).not.toHaveBeenCalled();
+    expect(mocks.createGoogleGenerativeAI).not.toHaveBeenCalled();
+    expect(mocks.createOpenAI).not.toHaveBeenCalled();
+    expect(mocks.streamText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: { provider: "openrouter", model: "openai/gpt-4o" },
         maxRetries: 0,
       }),
     );
@@ -384,6 +443,50 @@ describe("makeAiClient", () => {
       maxRetries: 1,
       abortSignal: expect.any(AbortSignal),
     });
+  });
+
+  it("generateText routes openrouter requests to openrouter provider with openrouter key", async () => {
+    const requestedKeys: string[] = [];
+    const service = makeAiClient({
+      secretStore: makeSecretStore((key) =>
+        Effect.sync(() => {
+          requestedKeys.push(key);
+          return "sk-openrouter-test";
+        }),
+      ),
+    });
+
+    mocks.generateText.mockResolvedValue(
+      makeGenerateResult({
+        text: "openrouter text",
+        response: { modelId: "openai/gpt-4o" },
+      }),
+    );
+
+    const result = await Effect.runPromise(
+      service.generateText({
+        model: OPENROUTER_MODEL,
+        messages: DEFAULT_MESSAGES,
+      }),
+    );
+
+    expect(result.text).toBe("openrouter text");
+    expect(requestedKeys).toEqual(["openrouter-api-key"]);
+    expect(mocks.createOpenRouter).toHaveBeenCalledWith({
+      apiKey: "sk-openrouter-test",
+      compatibility: "strict",
+    });
+    expect(mocks.createAnthropic).not.toHaveBeenCalled();
+    expect(mocks.createGoogleGenerativeAI).not.toHaveBeenCalled();
+    expect(mocks.createOpenAI).not.toHaveBeenCalled();
+    expect(mocks.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: { provider: "openrouter", model: "openai/gpt-4o" },
+        messages: [{ role: "user", content: "hello" }],
+        maxRetries: 0,
+        abortSignal: expect.any(AbortSignal),
+      }),
+    );
   });
 
   it("generateText defaults maxRetries to 0 and omits optional provider settings when unset", async () => {

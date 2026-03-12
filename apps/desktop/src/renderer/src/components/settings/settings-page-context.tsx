@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import type { SecretKey } from "@shared/secrets";
+import { createSecretKeyRecord, type SecretKey } from "@shared/secrets";
 import { useApiKeyMutations } from "@/hooks/mutations/use-api-key-mutations";
 import { useWorkspaceRootMutations } from "@/hooks/mutations/use-workspace-root-mutations";
 import { useApiKeysConfiguredQuery } from "@/hooks/queries/use-api-keys-configured-query";
@@ -86,11 +86,7 @@ export function SettingsPageProvider({ children }: { children: React.ReactNode }
     return null;
   })();
 
-  const configuredByKey = apiKeysConfiguredQuery.data ?? {
-    "openai-api-key": false,
-    "anthropic-api-key": false,
-    "gemini-api-key": false,
-  };
+  const configuredByKey = apiKeysConfiguredQuery.data ?? createSecretKeyRecord(() => false);
 
   const state = useMemo<SettingsPageState>(
     () => ({
@@ -99,23 +95,11 @@ export function SettingsPageProvider({ children }: { children: React.ReactNode }
       rootPath: settingsQuery.data?.workspace.rootPath ?? null,
       rootPathSaving,
       rootPathError,
-      apiKeys: {
-        "openai-api-key": {
-          configured: configuredByKey["openai-api-key"],
-          saving: apiKeySaving["openai-api-key"],
-          error: apiKeyErrors["openai-api-key"],
-        },
-        "anthropic-api-key": {
-          configured: configuredByKey["anthropic-api-key"],
-          saving: apiKeySaving["anthropic-api-key"],
-          error: apiKeyErrors["anthropic-api-key"],
-        },
-        "gemini-api-key": {
-          configured: configuredByKey["gemini-api-key"],
-          saving: apiKeySaving["gemini-api-key"],
-          error: apiKeyErrors["gemini-api-key"],
-        },
-      },
+      apiKeys: createSecretKeyRecord((key) => ({
+        configured: configuredByKey[key],
+        saving: apiKeySaving[key],
+        error: apiKeyErrors[key],
+      })),
     }),
     [
       settingsQuery.isPending,

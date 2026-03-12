@@ -1,16 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
 
-import { mapSecretStoreErrorToError, type SecretKey } from "@shared/secrets";
+import { mapSecretStoreErrorToError, SECRET_KEYS, type SecretKey } from "@shared/secrets";
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
-
-export const SECRET_KEYS: readonly SecretKey[] = [
-  "openai-api-key",
-  "anthropic-api-key",
-  "gemini-api-key",
-] as const;
 
 export function useApiKeysConfiguredQuery() {
   const ipc = useIpc();

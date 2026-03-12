@@ -1,27 +1,39 @@
-import type { SecretKey } from "@shared/secrets";
+import { SECRET_KEYS, type SecretKey } from "@shared/secrets";
 import { ProviderKeyRow, type ApiKeyState } from "./provider-key-row";
 
-const PROVIDERS: ReadonlyArray<{
-  key: SecretKey;
-  providerName: string;
-  preview: string;
-}> = [
-  {
-    key: "openai-api-key",
+const PROVIDERS_BY_KEY = {
+  "openai-api-key": {
     providerName: "OpenAI",
     preview: "••••••••••••",
   },
-  {
-    key: "anthropic-api-key",
+  "anthropic-api-key": {
     providerName: "Anthropic",
     preview: "••••••••••••",
   },
-  {
-    key: "gemini-api-key",
+  "gemini-api-key": {
     providerName: "Gemini",
     preview: "••••••••••••",
   },
-];
+  "openrouter-api-key": {
+    providerName: "OpenRouter",
+    preview: "••••••••••••",
+  },
+} satisfies Record<
+  SecretKey,
+  {
+    readonly providerName: string;
+    readonly preview: string;
+  }
+>;
+
+const PROVIDERS: ReadonlyArray<{
+  readonly key: SecretKey;
+  providerName: string;
+  preview: string;
+}> = SECRET_KEYS.map((key) => ({
+  key,
+  ...PROVIDERS_BY_KEY[key],
+}));
 
 export function SecretsSettings({
   apiKeys,

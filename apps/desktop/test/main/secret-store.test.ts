@@ -197,7 +197,7 @@ describe("secret store", () => {
 
   it("preserves unknown keys when writing known keys", async () => {
     await withTempSecretsDir(async ({ encryptedFilePath }) => {
-      const unknownKey = "gemini-api-key";
+      const unknownKey = "future-api-key";
       const unknownValue = "opaque-forward-compat-payload";
       const existingOpenAiValue = toEncodedSecret("existing-openai");
 

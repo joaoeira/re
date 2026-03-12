@@ -1,4 +1,4 @@
-export { SecretKeySchema, type SecretKey } from "./keys";
+export { createSecretKeyRecord, SECRET_KEYS, SecretKeySchema, type SecretKey } from "./keys";
 
 export {
   SecretDecryptionFailed,
