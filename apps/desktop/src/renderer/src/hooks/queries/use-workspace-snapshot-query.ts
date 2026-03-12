@@ -25,6 +25,7 @@ export function useWorkspaceSnapshotQuery(rootPath: string | null) {
 
   return useQuery({
     queryKey: queryKeys.workspaceSnapshot(rootPath),
+    refetchOnWindowFocus: true,
     queryFn: rootPath
       ? () =>
           runIpcEffect(
