@@ -19,15 +19,19 @@ const ExpansionAncestryEntrySchema = Schema.Struct({
 export const GenerateExpansionsPromptInputSchema = Schema.Struct({
   contextText: Schema.String.pipe(Schema.minLength(1)),
   topic: Schema.String.pipe(Schema.minLength(1)),
-  ancestryChain: Schema.Array(ExpansionAncestryEntrySchema).pipe(Schema.minItems(1)),
+  ancestryChain: Schema.Array(ExpansionAncestryEntrySchema).pipe(
+    Schema.minItems(1),
+  ),
   instruction: Schema.optional(Schema.String),
 });
-export type GenerateExpansionsPromptInput = typeof GenerateExpansionsPromptInputSchema.Type;
+export type GenerateExpansionsPromptInput =
+  typeof GenerateExpansionsPromptInputSchema.Type;
 
 export const GenerateExpansionsPromptOutputSchema = Schema.Struct({
   cards: NormalizedCardArraySchema,
 });
-export type GenerateExpansionsPromptOutput = typeof GenerateExpansionsPromptOutputSchema.Type;
+export type GenerateExpansionsPromptOutput =
+  typeof GenerateExpansionsPromptOutputSchema.Type;
 
 const renderInstructionBlock = (instruction: string | undefined): string => {
   const trimmedInstruction = instruction?.trim();
@@ -109,7 +113,6 @@ export const GenerateExpansionsPromptSpec: PromptSpec<
   inputSchema: GenerateExpansionsPromptInputSchema,
   outputSchema: GenerateExpansionsPromptOutputSchema,
   defaults: {
-    model: "gemini:gemini-3-flash-preview",
     temperature: 1.0,
   },
   render: (input, context) => {
@@ -120,7 +123,11 @@ export const GenerateExpansionsPromptSpec: PromptSpec<
       },
       {
         role: "assistant" as const,
-        content: JSON.stringify({ cards: input.ancestryChain[0]!.siblingCards }, null, 2),
+        content: JSON.stringify(
+          { cards: input.ancestryChain[0]!.siblingCards },
+          null,
+          2,
+        ),
       },
     ];
 
@@ -143,7 +150,8 @@ export const GenerateExpansionsPromptSpec: PromptSpec<
     messages.push({
       role: "user" as const,
       content: renderGoDeeperPrompt({
-        selectedCard: input.ancestryChain[input.ancestryChain.length - 1]!.selectedCard,
+        selectedCard:
+          input.ancestryChain[input.ancestryChain.length - 1]!.selectedCard,
         instruction: input.instruction,
       }),
     });

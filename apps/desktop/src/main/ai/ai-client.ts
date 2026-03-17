@@ -7,6 +7,7 @@ import { APICallError, type LanguageModelV3 } from "@ai-sdk/provider";
 import { Effect, Stream } from "effect";
 
 import type { SecretStore } from "@main/secrets/secret-store";
+import type { AiProviderId, ResolvedAiModel } from "@shared/ai-models";
 import type { SecretKey } from "@shared/secrets";
 import {
   type AiMessage,
@@ -43,7 +44,7 @@ const providers = {
     createModel: (apiKey, modelId) =>
       createOpenRouter({ apiKey, compatibility: "strict" })(modelId),
   },
-} satisfies Record<string, ProviderConfig>;
+} satisfies Record<AiProviderId, ProviderConfig>;
 
 const hasProvider = (providerId: string): providerId is keyof typeof providers =>
   Object.hasOwn(providers, providerId);
@@ -101,29 +102,12 @@ const mapProviderInvocationError = (error: unknown): AiProviderInvocationError =
   return new AiCompletionError({ message: toMessage(sourceError) });
 };
 
-const resolveProvider = (
-  model: string,
-): Effect.Effect<
-  {
-    readonly config: ProviderConfig;
-    readonly modelId: string;
-  },
-  AiProviderNotSupportedError
-> => {
-  const colonIndex = model.indexOf(":");
+const resolveProvider = (model: ResolvedAiModel): Effect.Effect<ProviderConfig, AiProviderNotSupportedError> => {
+  const providerId = model.providerId as string;
 
-  if (colonIndex === -1) {
-    return Effect.fail(new AiProviderNotSupportedError({ model }));
-  }
-
-  const providerId = model.slice(0, colonIndex);
-  const modelId = model.slice(colonIndex + 1);
-
-  if (!hasProvider(providerId)) {
-    return Effect.fail(new AiProviderNotSupportedError({ model }));
-  }
-
-  return Effect.succeed({ config: providers[providerId], modelId });
+  return !hasProvider(providerId)
+    ? Effect.fail(new AiProviderNotSupportedError({ model: model.key }))
+    : Effect.succeed(providers[providerId]);
 };
 
 const loadProviderApiKey = (
@@ -144,16 +128,16 @@ const loadProviderApiKey = (
 
 const resolveLanguageModel = (
   secretStore: SecretStore,
-  model: string,
+  model: ResolvedAiModel,
 ): Effect.Effect<LanguageModelV3, AiProviderResolutionError> =>
   Effect.gen(function* () {
-    const { config, modelId } = yield* resolveProvider(model);
+    const config = yield* resolveProvider(model);
     const apiKey = yield* loadProviderApiKey(secretStore, config.secretKey);
-    return config.createModel(apiKey, modelId);
+    return config.createModel(apiKey, model.providerModelId);
   });
 
 export interface AiGenerateTextInput {
-  readonly model: string;
+  readonly model: ResolvedAiModel;
   readonly messages: ReadonlyArray<AiMessage>;
   readonly systemPrompt?: string | undefined;
   readonly temperature?: number | undefined;

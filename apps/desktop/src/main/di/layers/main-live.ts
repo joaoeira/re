@@ -1,12 +1,17 @@
 import { Layer } from "effect";
 
 import type { ReviewAnalyticsRepository } from "@main/analytics";
+import { makeAiModelCatalog, type AiModelCatalog } from "@main/ai/model-catalog";
+import { getBundledAiModelCatalogDocument } from "@main/ai/model-catalog-repository";
 import { makeChunkService, type ChunkService } from "@main/forge/services/chunk-service";
 import {
   makeInMemoryForgeSessionRepository,
   type ForgeSessionRepository,
 } from "@main/forge/services/forge-session-repository";
 import { makeStubPdfExtractor, type PdfExtractor } from "@main/forge/services/pdf-extractor";
+import {
+  AiModelCatalogService,
+} from "../services/AiModelCatalogService";
 import {
   type AppEventPublisher,
   AppEventPublisherBridgeLive,
@@ -37,6 +42,9 @@ import { SecretStoreServiceLive } from "../services/SecretStoreService";
 import { SettingsRepositoryServiceLive } from "../services/SettingsRepositoryService";
 import { PdfExtractorServiceLive } from "../services/PdfExtractorService";
 import {
+  PromptModelResolverServiceLive,
+} from "../services/PromptModelResolverService";
+import {
   WorkspaceWatcherControlBridgeLive,
   WorkspaceWatcherControlServiceLive,
 } from "../services/WorkspaceWatcherControlService";
@@ -51,6 +59,7 @@ type MainStaticDependencies = {
   readonly secretStore: SecretStore;
   readonly analyticsRepository: ReviewAnalyticsRepository;
   readonly deckWriteCoordinator: DeckWriteCoordinator;
+  readonly aiModelCatalog?: AiModelCatalog;
   readonly forgeSessionRepository?: ForgeSessionRepository;
   readonly forgePromptRuntime?: ForgePromptRuntime;
   readonly pdfExtractor?: PdfExtractor;
@@ -68,16 +77,32 @@ const MainStaticLive = ({
   secretStore,
   analyticsRepository,
   deckWriteCoordinator,
+  aiModelCatalog,
   forgeSessionRepository,
   forgePromptRuntime,
   pdfExtractor,
   chunkService,
 }: MainStaticDependencies) => {
   const repository = forgeSessionRepository ?? makeInMemoryForgeSessionRepository();
+  const settingsRepositoryLayer = SettingsRepositoryServiceLive(settingsRepository);
   const aiClientLayer = AiClientServiceFromSecretStoreLive(secretStore);
+  const aiModelCatalogLayer = aiModelCatalog
+    ? Layer.succeed(AiModelCatalogService, aiModelCatalog)
+    : Layer.succeed(
+        AiModelCatalogService,
+        makeAiModelCatalog(getBundledAiModelCatalogDocument()),
+      );
+  const promptModelResolverLayer = PromptModelResolverServiceLive.pipe(
+    Layer.provideMerge(settingsRepositoryLayer),
+    Layer.provideMerge(aiModelCatalogLayer),
+  );
   const forgePromptRuntimeLayer = forgePromptRuntime
     ? Layer.succeed(ForgePromptRuntimeService, forgePromptRuntime)
-    : ForgePromptRuntimeServiceLive.pipe(Layer.provide(aiClientLayer));
+    : ForgePromptRuntimeServiceLive.pipe(
+        Layer.provideMerge(aiClientLayer),
+        Layer.provideMerge(aiModelCatalogLayer),
+        Layer.provideMerge(promptModelResolverLayer),
+      );
   const forgeSessionRepositoryLayer = ForgeSessionRepositoryServiceLive(repository);
   const pdfExtractorLayer = PdfExtractorServiceLive(pdfExtractor ?? makeStubPdfExtractor());
   const forgeSourceResolverLayer = ForgeSourceResolverServiceLive.pipe(
@@ -89,12 +114,14 @@ const MainStaticLive = ({
 
   return Layer.mergeAll(
     NodeServicesLive,
-    SettingsRepositoryServiceLive(settingsRepository),
+    settingsRepositoryLayer,
     SecretStoreServiceLive(secretStore),
+    aiModelCatalogLayer,
     aiClientLayer,
     AnalyticsRepositoryServiceLive(analyticsRepository),
     DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
     forgeSessionRepositoryLayer,
+    promptModelResolverLayer,
     forgePromptRuntimeLayer,
     pdfExtractorLayer,
     forgeSourceResolverLayer,
@@ -121,6 +148,7 @@ export const MainAppDirectLive = ({
   publish,
   watcher,
   openEditorWindow,
+  aiModelCatalog,
   forgeSessionRepository,
   forgePromptRuntime,
   pdfExtractor,
@@ -132,6 +160,7 @@ export const MainAppDirectLive = ({
       secretStore,
       analyticsRepository,
       deckWriteCoordinator,
+      ...(aiModelCatalog ? { aiModelCatalog } : {}),
       ...(forgeSessionRepository ? { forgeSessionRepository } : {}),
       ...(forgePromptRuntime ? { forgePromptRuntime } : {}),
       ...(pdfExtractor ? { pdfExtractor } : {}),

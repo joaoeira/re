@@ -73,7 +73,6 @@ export const ReformulateCardPromptSpec: PromptSpec<
   inputSchema: ReformulateCardPromptInputSchema,
   outputSchema: ReformulateCardPromptOutputSchema,
   defaults: {
-    model: "openai:gpt-5.4",
     temperature: 1.0,
   },
   render: (input, context) => {

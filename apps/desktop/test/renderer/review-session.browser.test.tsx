@@ -11,6 +11,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 
 import { ReviewSession } from "@/components/review-session/review-session";
+import { DEFAULT_SETTINGS } from "@shared/settings";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { IpcProvider } from "@/lib/ipc-context";
 import { createQueryClient } from "@/lib/query-client";
@@ -33,7 +34,7 @@ const renderReviewSession = async (options?: {
         return {
           type: "success",
           data: {
-            settingsVersion: 1,
+            ...DEFAULT_SETTINGS,
             workspace: { rootPath: REVIEW_ROOT_PATH },
           },
         };

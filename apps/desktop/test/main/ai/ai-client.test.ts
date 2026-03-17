@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { makeAiClient } from "@main/ai/ai-client";
 import type { SecretStore } from "@main/secrets/secret-store";
+import type { ResolvedAiModel } from "@shared/ai-models";
 import {
   AiCompletionError,
   AiKeyMissingError,
@@ -12,10 +13,37 @@ import {
 } from "@shared/rpc/schemas/ai";
 import { SecretNotFound, SecretStoreUnavailable } from "@shared/secrets";
 
-const ANTHROPIC_MODEL = "anthropic:claude-sonnet-4-20250514";
-const GEMINI_MODEL = "gemini:gemini-2.5-flash";
-const OPENAI_MODEL = "openai:gpt-4o";
-const OPENROUTER_MODEL = "openrouter:openai/gpt-4o";
+const makeModel = (
+  key: string,
+  providerId: ResolvedAiModel["providerId"],
+  providerModelId: string,
+  displayName: string,
+): ResolvedAiModel => ({
+  key,
+  providerId,
+  providerModelId,
+  displayName,
+});
+
+const ANTHROPIC_MODEL = makeModel(
+  "anthropic/claude-sonnet-4-20250514",
+  "anthropic",
+  "claude-sonnet-4-20250514",
+  "Claude Sonnet 4",
+);
+const GEMINI_MODEL = makeModel(
+  "gemini/gemini-2.5-flash",
+  "gemini",
+  "gemini-2.5-flash",
+  "Gemini 2.5 Flash",
+);
+const OPENAI_MODEL = makeModel("openai/gpt-4o", "openai", "gpt-4o", "OpenAI GPT-4o");
+const OPENROUTER_MODEL = makeModel(
+  "openrouter/gpt-4o",
+  "openrouter",
+  "openai/gpt-4o",
+  "OpenRouter GPT-4o",
+);
 
 const DEFAULT_MESSAGES = [{ role: "user", content: "hello" }] as const;
 
@@ -559,56 +587,24 @@ describe("makeAiClient", () => {
     const service = makeAiClient({
       secretStore: makeSecretStore(getSecret),
     });
+    const invalidModel = {
+      key: "mistral/mixtral-8x7b",
+      providerId: "mistral",
+      providerModelId: "mixtral-8x7b",
+      displayName: "Mixtral 8x7B",
+    } as unknown as ResolvedAiModel;
 
     const exit = await Effect.runPromiseExit(
-      service.generateText({ model: "mistral:mixtral-8x7b", messages: DEFAULT_MESSAGES }),
+      service.generateText({ model: invalidModel, messages: DEFAULT_MESSAGES }),
     );
     const failure = getFailure(exit);
 
     expect(failure).toBeInstanceOf(AiProviderNotSupportedError);
     if (failure instanceof AiProviderNotSupportedError) {
-      expect(failure.model).toBe("mistral:mixtral-8x7b");
+      expect(failure.model).toBe("mistral/mixtral-8x7b");
     }
     expect(getSecret).not.toHaveBeenCalled();
     expect(mocks.generateText).not.toHaveBeenCalled();
-  });
-
-  it("rejects google model prefix now that only gemini is supported", async () => {
-    const getSecret = vi.fn<SecretStore["getSecret"]>((_key) => Effect.succeed("unused"));
-    const service = makeAiClient({
-      secretStore: makeSecretStore(getSecret),
-    });
-
-    const exit = await Effect.runPromiseExit(
-      service.generateText({ model: "google:gemini-2.5-flash", messages: DEFAULT_MESSAGES }),
-    );
-    const failure = getFailure(exit);
-
-    expect(failure).toBeInstanceOf(AiProviderNotSupportedError);
-    if (failure instanceof AiProviderNotSupportedError) {
-      expect(failure.model).toBe("google:gemini-2.5-flash");
-    }
-    expect(getSecret).not.toHaveBeenCalled();
-    expect(mocks.generateText).not.toHaveBeenCalled();
-  });
-
-  it("fails with ai_provider_not_supported for model ids without colon", async () => {
-    const getSecret = vi.fn<SecretStore["getSecret"]>((_key) => Effect.succeed("unused"));
-    const service = makeAiClient({
-      secretStore: makeSecretStore(getSecret),
-    });
-
-    const exit = await Effect.runPromiseExit(
-      service.streamText({ model: "openai", messages: DEFAULT_MESSAGES }).pipe(Stream.runCollect),
-    );
-    const failure = getFailure(exit);
-
-    expect(failure).toBeInstanceOf(AiProviderNotSupportedError);
-    if (failure instanceof AiProviderNotSupportedError) {
-      expect(failure.model).toBe("openai");
-    }
-    expect(getSecret).not.toHaveBeenCalled();
-    expect(mocks.streamText).not.toHaveBeenCalled();
   });
 
   it("blocks prototype-pollution provider ids like constructor", async () => {
@@ -616,15 +612,21 @@ describe("makeAiClient", () => {
     const service = makeAiClient({
       secretStore: makeSecretStore(getSecret),
     });
+    const invalidModel = {
+      key: "constructor/gpt-4o",
+      providerId: "constructor",
+      providerModelId: "gpt-4o",
+      displayName: "Constructor GPT-4o",
+    } as unknown as ResolvedAiModel;
 
     const exit = await Effect.runPromiseExit(
-      service.generateText({ model: "constructor:gpt-4o", messages: DEFAULT_MESSAGES }),
+      service.generateText({ model: invalidModel, messages: DEFAULT_MESSAGES }),
     );
     const failure = getFailure(exit);
 
     expect(failure).toBeInstanceOf(AiProviderNotSupportedError);
     if (failure instanceof AiProviderNotSupportedError) {
-      expect(failure.model).toBe("constructor:gpt-4o");
+      expect(failure.model).toBe("constructor/gpt-4o");
     }
     expect(getSecret).not.toHaveBeenCalled();
     expect(mocks.generateText).not.toHaveBeenCalled();

@@ -14,7 +14,10 @@ import {
   WorkspaceRootNotFound as SnapshotWorkspaceRootNotFound,
 } from "@re/workspace";
 import { WorkspaceRootPathNotConfiguredError } from "@shared/rpc/schemas/workspace";
-import { WorkspaceRootNotFound as SettingsWorkspaceRootNotFound } from "@shared/settings";
+import {
+  DEFAULT_SETTINGS,
+  WorkspaceRootNotFound as SettingsWorkspaceRootNotFound,
+} from "@shared/settings";
 
 import { createHandlersWithOverrides, defaultHandlers } from "./helpers";
 
@@ -199,10 +202,7 @@ Answer
       const handlers = await createHandlersWithOverrides(settingsFilePath);
       const result = await Effect.runPromise(handlers.GetSettings({}));
 
-      expect(result).toEqual({
-        settingsVersion: 1,
-        workspace: { rootPath: null },
-      });
+      expect(result).toEqual(DEFAULT_SETTINGS);
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
     }
@@ -222,6 +222,7 @@ Answer
       );
 
       expect(result.workspace.rootPath).toBe(workspacePath);
+      expect(result.ai).toEqual(DEFAULT_SETTINGS.ai);
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
     }

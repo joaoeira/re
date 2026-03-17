@@ -3,6 +3,10 @@ export {
   AnalyticsRepositoryServiceLive,
 } from "./services/AnalyticsRepositoryService";
 export {
+  AiModelCatalogService,
+  AiModelCatalogServiceLive,
+} from "./services/AiModelCatalogService";
+export {
   AiClientService,
   AiClientServiceFromSecretStoreLive,
   AiClientServiceLive,
@@ -53,6 +57,11 @@ export {
   type OpenEditorWindow,
 } from "./services/EditorWindowManagerService";
 export { SecretStoreService, SecretStoreServiceLive } from "./services/SecretStoreService";
+export {
+  PromptModelResolverService,
+  PromptModelResolverServiceLive,
+  type PromptModelResolverService as PromptModelResolver,
+} from "./services/PromptModelResolverService";
 export {
   SettingsRepositoryService,
   SettingsRepositoryServiceLive,

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 
 import { StoresProvider, createStores } from "@shared/state/stores-context";
+import { DEFAULT_SETTINGS } from "@shared/settings";
 import { routeTree } from "../../src/renderer/src/routeTree.gen";
 import { renderWithIpcProviders } from "./render-with-providers";
 import { createForgeTopicExtractionSnapshotSuccess } from "./forge-ipc-mocks";
@@ -32,16 +33,18 @@ const renderApp = async (stores: ReturnType<typeof createStores>) => {
   );
 };
 
+const defaultSettings = {
+  ...DEFAULT_SETTINGS,
+  workspace: { rootPath: "/workspace" },
+};
+
 describe("renderer integration", () => {
   it("loads workspace snapshot and renders deck list", async () => {
     const invoke = vi.fn().mockImplementation(async (method: string, payload?: unknown) => {
       if (method === "GetSettings") {
         return {
           type: "success",
-          data: {
-            settingsVersion: 1,
-            workspace: { rootPath: "/workspace" },
-          },
+          data: defaultSettings,
         };
       }
 
@@ -104,10 +107,7 @@ describe("renderer integration", () => {
       if (method === "GetSettings") {
         return {
           type: "success",
-          data: {
-            settingsVersion: 1,
-            workspace: { rootPath: "/workspace" },
-          },
+          data: defaultSettings,
         };
       }
 
@@ -219,10 +219,7 @@ describe("renderer integration", () => {
       if (method === "GetSettings") {
         return {
           type: "success",
-          data: {
-            settingsVersion: 1,
-            workspace: { rootPath: null },
-          },
+          data: { ...DEFAULT_SETTINGS, workspace: { rootPath: null } },
         };
       }
 
@@ -245,10 +242,7 @@ describe("renderer integration", () => {
       if (method === "GetSettings") {
         return {
           type: "success",
-          data: {
-            settingsVersion: 1,
-            workspace: { rootPath: "/workspace" },
-          },
+          data: defaultSettings,
         };
       }
 
@@ -280,10 +274,7 @@ describe("renderer integration", () => {
       if (method === "GetSettings") {
         return {
           type: "success",
-          data: {
-            settingsVersion: 1,
-            workspace: { rootPath: "/workspace" },
-          },
+          data: defaultSettings,
         };
       }
 
@@ -336,10 +327,7 @@ describe("renderer integration", () => {
       if (method === "GetSettings") {
         return {
           type: "success",
-          data: {
-            settingsVersion: 1,
-            workspace: { rootPath: "/workspace" },
-          },
+          data: defaultSettings,
         };
       }
 
@@ -382,10 +370,7 @@ describe("renderer integration", () => {
       if (method === "GetSettings") {
         return {
           type: "success",
-          data: {
-            settingsVersion: 1,
-            workspace: { rootPath: "/workspace" },
-          },
+          data: defaultSettings,
         };
       }
 
@@ -471,10 +456,7 @@ describe("renderer integration", () => {
       if (method === "GetSettings") {
         return {
           type: "success",
-          data: {
-            settingsVersion: 1,
-            workspace: { rootPath: "/workspace" },
-          },
+          data: defaultSettings,
         };
       }
 
@@ -533,7 +515,7 @@ describe("renderer integration", () => {
       if (method === "GetSettings") {
         return {
           type: "success",
-          data: { settingsVersion: 1, workspace: { rootPath: "/workspace" } },
+          data: defaultSettings,
         };
       }
 

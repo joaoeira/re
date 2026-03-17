@@ -14,27 +14,27 @@ Electron desktop app for **re**, a spaced repetition flashcard system backed by 
 
 ## Routes
 
-| Route | Purpose |
-|---|---|
-| `/` | Home — deck list and review entry |
-| `/review` | Active review session |
-| `/forge` | AI source-to-cards workflow |
-| `/editor` | Card editor (typically a separate window) |
-| `/settings` | Workspace and secrets settings |
+| Route       | Purpose                                   |
+| ----------- | ----------------------------------------- |
+| `/`         | Home — deck list and review entry         |
+| `/review`   | Active review session                     |
+| `/forge`    | AI source-to-cards workflow               |
+| `/editor`   | Card editor (typically a separate window) |
+| `/settings` | Workspace and secrets settings            |
 
 ## Tech stack
 
-| Area | Technology |
-|---|---|
-| Desktop shell | Electron 38, Electron Forge 7.8, Vite 7 |
-| Renderer | React 19, TanStack Router (hash history), TanStack Query |
-| UI state | `@xstate/store` via context-injected factories |
-| Styling | Tailwind CSS 4, Base UI, Lucide icons |
-| Editor | Tiptap 3, KaTeX, highlight.js |
-| Main process | Effect, `electron-effect-rpc` (typed IPC) |
-| AI | Vercel AI SDK (Anthropic, OpenAI, Google providers) |
-| Database | better-sqlite3 via `@effect/sql` |
-| Testing | Vitest 4 (jsdom + Playwright/Chromium browser mode) |
+| Area          | Technology                                               |
+| ------------- | -------------------------------------------------------- |
+| Desktop shell | Electron 38, Electron Forge 7.8, Vite 7                  |
+| Renderer      | React 19, TanStack Router (hash history), TanStack Query |
+| UI state      | `@xstate/store` via context-injected factories           |
+| Styling       | Tailwind CSS 4, Base UI, Lucide icons                    |
+| Editor        | Tiptap 3, KaTeX, highlight.js                            |
+| Main process  | Effect, `electron-effect-rpc` (typed IPC)                |
+| AI            | Vercel AI SDK (Anthropic, OpenAI, Google providers)      |
+| Database      | better-sqlite3 via `@effect/sql`                         |
+| Testing       | Vitest 4 (jsdom + Playwright/Chromium browser mode)      |
 
 ## Project structure
 
@@ -84,11 +84,11 @@ src/
 
 ## Getting started
 
-| Requirement | Notes |
-|---|---|
-| Node | `>=22.0.0 <25.0.0` |
-| Bun | Monorepo package manager |
-| Chromium | For browser tests: `npx playwright install chromium` |
+| Requirement | Notes                                                |
+| ----------- | ---------------------------------------------------- |
+| Node        | `>=22.0.0 <25.0.0`                                   |
+| Bun         | Monorepo package manager                             |
+| Chromium    | For browser tests: `npx playwright install chromium` |
 
 ```bash
 bun install                  # from monorepo root
@@ -115,9 +115,9 @@ bun run kill                 # Force-kill stale Electron processes
 
 Vitest 4 with two projects:
 
-| Project | Environment | File pattern | Purpose |
-|---|---|---|---|
-| `unit` | jsdom | `test/**/*.test.ts(x)` | Logic, stores, hooks, components |
+| Project   | Environment                    | File pattern                 | Purpose                           |
+| --------- | ------------------------------ | ---------------------------- | --------------------------------- |
+| `unit`    | jsdom                          | `test/**/*.test.ts(x)`       | Logic, stores, hooks, components  |
 | `browser` | Playwright (headless Chromium) | `test/**/*.browser.test.tsx` | Component tests in a real browser |
 
 ```bash

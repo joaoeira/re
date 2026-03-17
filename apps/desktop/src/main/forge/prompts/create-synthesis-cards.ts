@@ -9,12 +9,14 @@ export const CreateSynthesisCardsPromptInputSchema = Schema.Struct({
   topic: Schema.String.pipe(Schema.minLength(1)),
   instruction: Schema.optional(Schema.String),
 });
-export type CreateSynthesisCardsPromptInput = typeof CreateSynthesisCardsPromptInputSchema.Type;
+export type CreateSynthesisCardsPromptInput =
+  typeof CreateSynthesisCardsPromptInputSchema.Type;
 
 export const CreateSynthesisCardsPromptOutputSchema = Schema.Struct({
   cards: NormalizedCardArraySchema,
 });
-export type CreateSynthesisCardsPromptOutput = typeof CreateSynthesisCardsPromptOutputSchema.Type;
+export type CreateSynthesisCardsPromptOutput =
+  typeof CreateSynthesisCardsPromptOutputSchema.Type;
 
 const renderInstructionBlock = (instruction: string | undefined): string => {
   const trimmedInstruction = instruction?.trim();
@@ -111,7 +113,6 @@ export const CreateSynthesisCardsPromptSpec: PromptSpec<
   inputSchema: CreateSynthesisCardsPromptInputSchema,
   outputSchema: CreateSynthesisCardsPromptOutputSchema,
   defaults: {
-    model: "gemini:gemini-3-flash-preview",
     temperature: 1.0,
   },
   render: (input, context) => {

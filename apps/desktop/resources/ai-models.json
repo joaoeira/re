@@ -1,0 +1,18 @@
+{
+  "catalogVersion": 1,
+  "applicationDefaultModelKey": "gemini/gemini-3-flash-preview",
+  "models": [
+    {
+      "key": "gemini/gemini-3-flash-preview",
+      "providerId": "gemini",
+      "providerModelId": "gemini-3-flash-preview",
+      "displayName": "Gemini 3 Flash Preview"
+    },
+    {
+      "key": "openai/gpt-5.4",
+      "providerId": "openai",
+      "providerModelId": "gpt-5.4",
+      "displayName": "OpenAI GPT-5.4"
+    }
+  ]
+}

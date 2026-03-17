@@ -15,7 +15,7 @@ import {
 } from "@shared/rpc/schemas/workspace";
 import {
   SettingsErrorSchema,
-  SettingsSchemaV1,
+  SettingsSchemaV2,
   SetWorkspaceRootPathInputSchema,
 } from "@shared/settings";
 
@@ -101,14 +101,14 @@ export const RenameDeck = rpc(
 export const GetSettings = rpc(
   "GetSettings",
   Schema.Struct({}),
-  SettingsSchemaV1,
+  SettingsSchemaV2,
   SettingsErrorSchema,
 );
 
 export const SetWorkspaceRootPath = rpc(
   "SetWorkspaceRootPath",
   SetWorkspaceRootPathInputSchema,
-  SettingsSchemaV1,
+  SettingsSchemaV2,
   SettingsErrorSchema,
 );
 

@@ -11,7 +11,6 @@ export interface PromptRendered {
 }
 
 export interface PromptDefaults {
-  readonly model: string;
   readonly temperature?: number;
   readonly maxTokens?: number;
 }

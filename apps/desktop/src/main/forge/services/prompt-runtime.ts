@@ -4,7 +4,13 @@ import { Schema } from "@effect/schema";
 import { Context, Data, Effect, Schedule } from "effect";
 
 import type { AiClient } from "@main/ai/ai-client";
+import { resolveModelFromCatalog, type AiModelCatalog } from "@main/ai/model-catalog";
+import type { PromptModelResolver } from "@main/ai/prompt-model-resolver";
 import { toErrorMessage } from "@main/utils/format";
+import {
+  PromptModelResolutionFailed,
+  type ResolvedAiModel,
+} from "@shared/ai-models";
 
 import { decodeJsonToSchema } from "../prompts";
 import {
@@ -67,6 +73,8 @@ export const ForgePromptRuntime = Context.GenericTag<ForgePromptRuntime>(
 
 export interface MakeForgePromptRuntimeOptions {
   readonly aiClient: AiClient;
+  readonly aiModelCatalog: AiModelCatalog;
+  readonly promptModelResolver: PromptModelResolver;
 }
 
 type RetryablePromptOutputError = PromptOutputParseError | PromptOutputValidationError;
@@ -97,8 +105,70 @@ const toRetryContext = (
   previousRawExcerpt: error.rawExcerpt,
 });
 
+type RuntimeResolvedModel = { readonly model: ResolvedAiModel };
+
+const resolveLegacyRawModel = (input: {
+  readonly promptId: string;
+  readonly rawModel: string;
+  readonly aiModelCatalog: AiModelCatalog;
+}): Effect.Effect<ResolvedAiModel, PromptModelResolutionFailed> =>
+  Effect.gen(function* () {
+    const separatorIndex = input.rawModel.indexOf(":");
+
+    if (separatorIndex <= 0 || separatorIndex >= input.rawModel.length - 1) {
+      return yield* new PromptModelResolutionFailed({
+        promptId: input.promptId,
+        message: `Legacy model override must use provider:modelId format: ${input.rawModel}`,
+      });
+    }
+
+    const providerId = input.rawModel.slice(0, separatorIndex);
+    const providerModelId = input.rawModel.slice(separatorIndex + 1);
+    const matches = (yield* input.aiModelCatalog.listModels()).filter(
+      (model) => model.providerId === providerId && model.providerModelId === providerModelId,
+    );
+
+    if (matches.length === 0) {
+      return yield* new PromptModelResolutionFailed({
+        promptId: input.promptId,
+        message: `Legacy model override is not present in the AI model catalog: ${input.rawModel}`,
+      });
+    }
+
+    if (matches.length > 1) {
+      return yield* new PromptModelResolutionFailed({
+        promptId: input.promptId,
+        message: `Legacy model override is ambiguous in the AI model catalog: ${input.rawModel}`,
+      });
+    }
+
+    // Return resolved model directly — no second lookup needed.
+    return yield* resolveModelFromCatalog(input.aiModelCatalog, matches[0]!.key, (key) =>
+      new PromptModelResolutionFailed({
+        promptId: input.promptId,
+        message: `Model key is not present in the AI model catalog: ${key}`,
+      }),
+    );
+  });
+
+const resolveRuntimeModel = (input: {
+  readonly promptId: string;
+  readonly rawModelOverride: string | undefined;
+  readonly aiModelCatalog: AiModelCatalog;
+  readonly promptModelResolver: PromptModelResolver;
+}): Effect.Effect<RuntimeResolvedModel, PromptModelResolutionFailed> =>
+  input.rawModelOverride === undefined
+    ? input.promptModelResolver.resolve(input.promptId) as Effect.Effect<RuntimeResolvedModel, PromptModelResolutionFailed>
+    : resolveLegacyRawModel({
+        promptId: input.promptId,
+        rawModel: input.rawModelOverride!,
+        aiModelCatalog: input.aiModelCatalog,
+      }).pipe(Effect.map((model) => ({ model })));
+
 export const makeForgePromptRuntime = ({
   aiClient,
+  aiModelCatalog,
+  promptModelResolver,
 }: MakeForgePromptRuntimeOptions): ForgePromptRuntime => ({
   run: <Input, Output>(spec: PromptSpec<Input, Output>, input: Input, options?: PromptRunOptions) =>
     Effect.gen(function* () {
@@ -112,7 +182,12 @@ export const makeForgePromptRuntime = ({
         ),
       );
 
-      const model = options?.model ?? spec.defaults.model;
+      const resolvedModel = yield* resolveRuntimeModel({
+        promptId: spec.promptId,
+        rawModelOverride: options?.model,
+        aiModelCatalog,
+        promptModelResolver,
+      });
       const temperature = options?.temperature ?? spec.defaults.temperature;
       const maxTokens = options?.maxTokens ?? spec.defaults.maxTokens;
       const maxAttempts = Math.max(1, options?.maxAttempts ?? 2);
@@ -136,7 +211,7 @@ export const makeForgePromptRuntime = ({
 
           const completion = yield* aiClient
             .generateText({
-              model,
+              model: resolvedModel.model,
               messages: rendered.messages,
               systemPrompt: rendered.systemPrompt,
               temperature,
@@ -149,7 +224,7 @@ export const makeForgePromptRuntime = ({
                   new TerminalPromptAttemptFailure({
                     error: new PromptModelInvocationError({
                       promptId: spec.promptId,
-                      model,
+                      model: resolvedModel.model.key,
                       attempt: context.attempt,
                       cause,
                     }),
@@ -215,7 +290,7 @@ export const makeForgePromptRuntime = ({
             metadata: {
               promptId: spec.promptId,
               promptVersion: spec.version,
-              model,
+              model: resolvedModel.model.key,
               attemptCount: context.attempt,
               promptHash,
               outputChars,
@@ -264,7 +339,7 @@ export const makeForgePromptRuntime = ({
             console.log("[forge/prompt-runtime]", {
               promptId: spec.promptId,
               promptVersion: spec.version,
-              model,
+              model: resolvedModel.model.key,
               attempts: failure.attempt,
               promptHash: failure.promptHash,
               outputChars: failure.outputChars,
@@ -274,5 +349,28 @@ export const makeForgePromptRuntime = ({
           }).pipe(Effect.zipRight(Effect.fail(failure.error))),
         ),
       );
-    }),
+    }).pipe(
+      Effect.tapErrorTag("PromptModelResolutionFailed", (error) =>
+        Effect.sync(() => {
+          console.log("[forge/prompt-runtime]", {
+            promptId: spec.promptId,
+            promptVersion: spec.version,
+            outcome: "failure",
+            errorTag: error._tag,
+            message: error.message,
+          });
+        }),
+      ),
+      Effect.tapErrorTag("PromptInputValidationError", (error) =>
+        Effect.sync(() => {
+          console.log("[forge/prompt-runtime]", {
+            promptId: spec.promptId,
+            promptVersion: spec.version,
+            outcome: "failure",
+            errorTag: error._tag,
+            message: error.message,
+          });
+        }),
+      ),
+    ),
 });

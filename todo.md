@@ -1,0 +1,13 @@
+- wonder if i can do recursive permutations
+- need to store last topic looked at so that we can go back to it, maybe add completion for topics
+- cant edit generated clozes
+- images
+- move editing to be inline
+- flash lite can be used as an evaluator given a rubrick
+- cloze be more visible during review
+- create an action during review to reformulate the card
+- topics should come preselected? a pass through a larger model to select topics
+- experiment with either multi-agent topic review or card review with a cheap model
+- bug: in expansions, if there isnt instructions, the dialog to add one does not show up
+- need a playground to test out ideas, e.g. having a council of deepseeks review cards
+- handle generation failures better, with reasons (e.g. api key)

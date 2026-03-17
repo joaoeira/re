@@ -1,6 +1,9 @@
 import { Schema } from "@effect/schema";
 
-import type { PromptAttemptContext, PromptSpec } from "@main/forge/prompts/types";
+import type {
+  PromptAttemptContext,
+  PromptSpec,
+} from "@main/forge/prompts/types";
 import { CardQualityPrinciples } from "@main/forge/prompts/card-principles";
 import { ReviewAssistantQaSourceCardSchema } from "@shared/rpc/schemas/review";
 
@@ -33,7 +36,9 @@ const renderInstructionBlock = (instruction: string | undefined): string => {
   return `Additional instruction:\n${trimmedInstruction}`;
 };
 
-const renderBaseUserPrompt = (input: GenerateReviewPermutationsPromptInput): string => {
+const renderBaseUserPrompt = (
+  input: GenerateReviewPermutationsPromptInput,
+): string => {
   const { question, answer } = input.sourceCard.content;
 
   return `
@@ -189,7 +194,6 @@ export const GenerateReviewPermutationsPromptSpec: PromptSpec<
   inputSchema: GenerateReviewPermutationsPromptInputSchema,
   outputSchema: GenerateReviewPermutationsPromptOutputSchema,
   defaults: {
-    model: "gemini:gemini-3-flash-preview",
     temperature: 1.0,
   },
   render: (input, context) => {

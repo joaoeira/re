@@ -8,7 +8,7 @@ import { NoOpDeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import type { SecretStore } from "@main/secrets/secret-store";
 import type { SettingsRepository } from "@main/settings/repository";
 import type { WorkspaceWatcher } from "@main/watcher/workspace-watcher";
-import { DEFAULT_SETTINGS } from "@shared/settings";
+import { DEFAULT_SETTINGS, type Settings } from "@shared/settings";
 
 const mocks = vi.hoisted(() => ({
   generateText: vi.fn(),
@@ -81,16 +81,16 @@ vi.mock("@ai-sdk/provider", () => ({
   },
 }));
 
-const settingsRepository: SettingsRepository = {
-  getSettings: () => Effect.succeed(DEFAULT_SETTINGS),
+const makeSettingsRepository = (settings: Settings = DEFAULT_SETTINGS): SettingsRepository => ({
+  getSettings: () => Effect.succeed(settings),
   setWorkspaceRootPath: ({ rootPath }) =>
     Effect.succeed({
-      ...DEFAULT_SETTINGS,
+      ...settings,
       workspace: {
         rootPath,
       },
     }),
-};
+});
 
 const secretStore: SecretStore = {
   getSecret: () => Effect.succeed("sk-test"),
@@ -105,7 +105,7 @@ const watcher: WorkspaceWatcher = {
 };
 
 describe("ForgePromptRuntime DI", () => {
-  it("resolves from main layer and executes prompt runtime", async () => {
+  it("resolves from main layer through the prompt model resolver and executes prompt runtime", async () => {
     mocks.generateText.mockResolvedValue({
       text: '{"topics":["alpha","beta"]}',
       finishReason: "stop",
@@ -118,19 +118,22 @@ describe("ForgePromptRuntime DI", () => {
         totalTokens: 17,
       },
     });
+    const settingsRepository = makeSettingsRepository({
+      ...DEFAULT_SETTINGS,
+      ai: {
+        ...DEFAULT_SETTINGS.ai,
+        promptModelOverrides: {
+          "forge/get-topics": "openai/gpt-5.4",
+        },
+      },
+    });
 
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* ForgePromptRuntimeService;
-        return yield* runtime.run(
-          GetTopicsPromptSpec,
-          {
-            chunkText: "alpha beta gamma",
-          },
-          {
-            model: "openai:gpt-4o",
-          },
-        );
+        return yield* runtime.run(GetTopicsPromptSpec, {
+          chunkText: "alpha beta gamma",
+        });
       }).pipe(
         Effect.provide(
           MainAppDirectLive({
@@ -149,5 +152,14 @@ describe("ForgePromptRuntime DI", () => {
     expect(result.output).toEqual({ topics: ["alpha", "beta"] });
     expect(result.metadata.promptId).toBe("forge/get-topics");
     expect(result.metadata.attemptCount).toBe(1);
+    expect(mocks.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: {
+          provider: "openai",
+          model: "gpt-5.4",
+        },
+      }),
+    );
+    expect(mocks.createGoogleGenerativeAI).not.toHaveBeenCalled();
   });
 });

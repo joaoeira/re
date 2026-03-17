@@ -93,13 +93,15 @@ const renderRepairInstruction = (context: PromptAttemptContext): string => {
   ].join("\n");
 };
 
-export const CreateCardsPromptSpec: PromptSpec<CreateCardsPromptInput, CreateCardsPromptOutput> = {
+export const CreateCardsPromptSpec: PromptSpec<
+  CreateCardsPromptInput,
+  CreateCardsPromptOutput
+> = {
   promptId: "forge/create-cards",
   version: "1",
   inputSchema: CreateCardsPromptInputSchema,
   outputSchema: CreateCardsPromptOutputSchema,
   defaults: {
-    model: "gemini:gemini-3-flash-preview",
     temperature: 1.0,
   },
   render: (input, context) => {

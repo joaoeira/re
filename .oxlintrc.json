@@ -1,8 +1,11 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["unicorn", "typescript", "oxc"],
+  "jsPlugins": ["./lint-plugins/re-plugin.js"],
   "categories": {},
   "rules": {
+    "re/no-noop-catch": "error",
+    "re/no-rpc-defect-catch": "warn",
     "constructor-super": "warn",
     "for-direction": "warn",
     "no-async-promise-executor": "warn",
@@ -141,5 +144,5 @@
     "builtin": true
   },
   "globals": {},
-  "ignorePatterns": ["**/routeTree.gen.ts"]
+  "ignorePatterns": ["**/routeTree.gen.ts", "lint-plugins/**"]
 }

@@ -15,6 +15,7 @@ export {
   PromptOutputValidationError,
   type PromptRuntimeError,
 } from "./errors";
+export { PromptModelResolutionFailed } from "@shared/ai-models";
 export { decodeJsonToSchema } from "./json";
 export {
   GetTopicsPromptInputSchema,

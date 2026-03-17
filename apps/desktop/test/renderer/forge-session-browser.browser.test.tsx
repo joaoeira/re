@@ -2,6 +2,7 @@ import { userEvent } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 
 import { ForgePage } from "@/components/forge/forge-page";
+import { DEFAULT_SETTINGS } from "@shared/settings";
 import { createForgeInvoke, createForgeTopicExtractionSnapshotSuccess } from "./forge-ipc-mocks";
 import { renderWithIpcProviders } from "./render-with-providers";
 import { mockDesktopGlobals, waitForFileInput } from "./forge-test-helpers";
@@ -282,7 +283,7 @@ describe("ForgePage session browser", () => {
         return {
           type: "success",
           data: {
-            settingsVersion: 1,
+            ...DEFAULT_SETTINGS,
             workspace: { rootPath: "/workspace" },
           },
         };

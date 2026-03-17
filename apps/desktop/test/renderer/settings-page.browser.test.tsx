@@ -7,6 +7,7 @@ import { StoresProvider, createStores } from "@shared/state/stores-context";
 import { SettingsPageProvider } from "@/components/settings/settings-page-context";
 import { SettingsPage } from "@/components/settings/settings-page";
 import type { SettingsSection } from "@/components/settings/settings-section";
+import { DEFAULT_SETTINGS } from "@shared/settings";
 import { routeTree } from "../../src/renderer/src/routeTree.gen";
 import { renderWithIpcProviders } from "./render-with-providers";
 
@@ -25,7 +26,7 @@ const mockDesktopApi = (
 };
 
 const defaultSettings = {
-  settingsVersion: 1,
+  ...DEFAULT_SETTINGS,
   workspace: { rootPath: "/workspace" },
 };
 
@@ -179,7 +180,7 @@ describe("SettingsPage", () => {
 
     it("shows 'No folder selected' when rootPath is null", async () => {
       const invoke = defaultInvoke({
-        GetSettings: { settingsVersion: 1, workspace: { rootPath: null } },
+        GetSettings: { ...DEFAULT_SETTINGS, workspace: { rootPath: null } },
       });
 
       await renderSettingsPage(invoke);
@@ -205,7 +206,7 @@ describe("SettingsPage", () => {
           return {
             type: "success",
             data: {
-              settingsVersion: 1,
+              ...DEFAULT_SETTINGS,
               workspace: { rootPath: (payload as { rootPath: string }).rootPath },
             },
           };
@@ -317,7 +318,7 @@ describe("SettingsPage", () => {
           return {
             type: "success",
             data: {
-              settingsVersion: 1,
+              ...DEFAULT_SETTINGS,
               workspace: { rootPath: (payload as { rootPath: string | null }).rootPath },
             },
           };

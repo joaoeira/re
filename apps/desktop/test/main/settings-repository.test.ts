@@ -32,8 +32,14 @@ describe("settings repository", () => {
       const settings = await Effect.runPromise(repository.getSettings());
 
       expect(settings).toEqual({
-        settingsVersion: 1,
+        settingsVersion: 2,
         workspace: { rootPath: null },
+        ai: {
+          defaultModelKey: null,
+          promptModelOverrides: {
+            "forge/reformulate-card": "openai/gpt-5.4",
+          },
+        },
       });
 
       await expect(fs.access(settingsFilePath)).rejects.toThrow();
@@ -55,10 +61,96 @@ describe("settings repository", () => {
 
       const rawSettings = await fs.readFile(settingsFilePath, "utf8");
       const parsedSettings = JSON.parse(rawSettings) as {
+        settingsVersion: number;
         workspace: { rootPath: string };
+        ai: {
+          defaultModelKey: string | null;
+          promptModelOverrides: Record<string, string>;
+        };
       };
 
+      expect(parsedSettings.settingsVersion).toBe(2);
       expect(parsedSettings.workspace.rootPath).toBe(workspacePath);
+      expect(parsedSettings.ai.promptModelOverrides["forge/reformulate-card"]).toBe("openai/gpt-5.4");
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("migrates V1 settings to V2 on read", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-settings-repo-"));
+    const settingsFilePath = path.join(rootPath, "settings.json");
+
+    try {
+      await fs.writeFile(
+        settingsFilePath,
+        JSON.stringify(
+          {
+            settingsVersion: 1,
+            workspace: {
+              rootPath: "/workspace",
+            },
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const repository = await makeRepository(settingsFilePath);
+      const settings = await Effect.runPromise(repository.getSettings());
+
+      expect(settings).toEqual({
+        settingsVersion: 2,
+        workspace: { rootPath: "/workspace" },
+        ai: {
+          defaultModelKey: null,
+          promptModelOverrides: {
+            "forge/reformulate-card": "openai/gpt-5.4",
+          },
+        },
+      });
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("reports the V1 validation failure when a legacy settings file is malformed", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-settings-repo-"));
+    const settingsFilePath = path.join(rootPath, "settings.json");
+
+    try {
+      await fs.writeFile(
+        settingsFilePath,
+        JSON.stringify(
+          {
+            settingsVersion: 1,
+            workspace: {
+              rootPath: 42,
+            },
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const repository = await makeRepository(settingsFilePath);
+      const exit = await Effect.runPromiseExit(repository.getSettings());
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        throw new Error("Expected getSettings to fail.");
+      }
+
+      const failure = Cause.failureOption(exit.cause);
+      expect(failure._tag).toBe("Some");
+      if (failure._tag === "Some") {
+        expect(failure.value).toBeInstanceOf(SettingsDecodeFailed);
+        expect(failure.value.message).toContain('["workspace"]');
+        expect(failure.value.message).toContain('["rootPath"]');
+        expect(failure.value.message).not.toContain('["ai"]');
+      }
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
     }

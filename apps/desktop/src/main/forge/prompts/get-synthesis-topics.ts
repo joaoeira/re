@@ -6,9 +6,12 @@ import { collapseWhitespace } from "./normalize";
 export const GetSynthesisTopicsPromptInputSchema = Schema.Struct({
   sourceText: Schema.String.pipe(Schema.minLength(1)),
 });
-export type GetSynthesisTopicsPromptInput = typeof GetSynthesisTopicsPromptInputSchema.Type;
+export type GetSynthesisTopicsPromptInput =
+  typeof GetSynthesisTopicsPromptInputSchema.Type;
 
-const normalizeTopicList = (topics: ReadonlyArray<string>): ReadonlyArray<string> => {
+const normalizeTopicList = (
+  topics: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
   const normalizedTopics: string[] = [];
   const seen = new Set<string>();
 
@@ -38,9 +41,12 @@ const NormalizedTopicArraySchema = Schema.transform(
 export const GetSynthesisTopicsPromptOutputSchema = Schema.Struct({
   topics: NormalizedTopicArraySchema,
 });
-export type GetSynthesisTopicsPromptOutput = typeof GetSynthesisTopicsPromptOutputSchema.Type;
+export type GetSynthesisTopicsPromptOutput =
+  typeof GetSynthesisTopicsPromptOutputSchema.Type;
 
-const renderBaseUserPrompt = (_input: GetSynthesisTopicsPromptInput): string => {
+const renderBaseUserPrompt = (
+  _input: GetSynthesisTopicsPromptInput,
+): string => {
   return `
     Analyze the provided text and generate a series of integrative topic statements that capture its major thematic threads, structural arguments, and higher-order points. These should synthesize across multiple sections of the text while remaining firmly anchored to its specific subject matter.
 
@@ -112,7 +118,6 @@ export const GetSynthesisTopicsPromptSpec: PromptSpec<
   inputSchema: GetSynthesisTopicsPromptInputSchema,
   outputSchema: GetSynthesisTopicsPromptOutputSchema,
   defaults: {
-    model: "gemini:gemini-3-flash-preview",
     temperature: 1.0,
   },
   render: (input, context) => {

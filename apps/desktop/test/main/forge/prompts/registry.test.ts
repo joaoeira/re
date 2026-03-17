@@ -25,7 +25,6 @@ const makeSpec = (promptId: string, version: string): PromptSpec<TestInput, Test
   inputSchema: TestInputSchema,
   outputSchema: TestOutputSchema,
   defaults: {
-    model: "openai:gpt-4o",
   },
   render: (input) => ({
     messages: [

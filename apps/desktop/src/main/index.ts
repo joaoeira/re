@@ -24,6 +24,7 @@ import {
   AppRpcHandlersService,
   AppEventPublisherService,
   AnalyticsRepositoryServiceLive,
+  AiModelCatalogServiceLive,
   AiClientServiceFromSecretStoreLive,
   ChunkServiceLive,
   DeckWriteCoordinatorServiceLive,
@@ -33,6 +34,7 @@ import {
   ForgeSourceResolverServiceLive,
   ForgeSessionRepositoryServiceLive,
   PdfExtractorServiceLive,
+  PromptModelResolverServiceLive,
   SecretStoreServiceLive,
   SettingsRepositoryServiceLive,
   TopicGroundingTextResolverServiceLive,
@@ -43,6 +45,7 @@ import {
   makeWorkspaceWatcherControlBridgeService,
 } from "@main/di";
 import { NodeServicesLive } from "@main/effect/node-services";
+import { AiModelCatalogRepositoryLive } from "@main/ai/model-catalog-repository";
 import {
   createDeckWriteCoordinator,
   type DeckWriteCoordinator,
@@ -313,132 +316,161 @@ if (!gotSingleInstanceLock) {
     }
   });
 
-  app.whenReady().then(async () => {
-    log("app ready");
-    mainWindow = createMainWindow();
-    deckWriteCoordinator = createDeckWriteCoordinator();
+  app
+    .whenReady()
+    .then(async () => {
+      log("app ready");
+      deckWriteCoordinator = createDeckWriteCoordinator();
 
-    const userDataPath = app.getPath("userData");
-    const settingsFilePath = path.join(userDataPath, "settings.json");
-    const secretsFilePath = path.join(userDataPath, "secrets.json");
-    const dbPath = path.join(userDataPath, "re.db");
-    const settingsRepository = Effect.runSync(
-      makeSettingsRepository({ settingsFilePath }).pipe(Effect.provide(NodeServicesLive)),
-    );
-    registerDesktopAssetProtocol(settingsRepository);
-    const secretStore = Effect.runSync(
-      makeSecretStore({
-        encryptedFilePath: secretsFilePath,
-      }).pipe(Effect.provide(NodeServicesLive)),
-    );
+      const userDataPath = app.getPath("userData");
+      const settingsFilePath = path.join(userDataPath, "settings.json");
+      const aiModelCatalogFilePath = path.join(userDataPath, "ai-models.json");
+      const secretsFilePath = path.join(userDataPath, "secrets.json");
+      const dbPath = path.join(userDataPath, "re.db");
+      log("ai model catalog path", aiModelCatalogFilePath);
+      const settingsRepository = Effect.runSync(
+        makeSettingsRepository({ settingsFilePath }).pipe(Effect.provide(NodeServicesLive)),
+      );
+      registerDesktopAssetProtocol(settingsRepository);
+      const secretStore = Effect.runSync(
+        makeSecretStore({
+          encryptedFilePath: secretsFilePath,
+        }).pipe(Effect.provide(NodeServicesLive)),
+      );
 
-    const analyticsBundle = createSqliteReviewAnalyticsRuntimeBundle({
-      dbPath,
-      journalPath: path.join(userDataPath, "analytics-compensation-intents.json"),
-    });
-    const initializedAnalytics = await initializeAnalyticsRuntime(analyticsBundle);
-    analyticsRepository = initializedAnalytics.repository;
-    analyticsRuntime = initializedAnalytics.runtime;
-    if (initializedAnalytics.startupFailed) {
-      console.error("[desktop/main] analytics startup probe failed, falling back to no-op");
-    }
-
-    const appEventPublisher = makeAppEventPublisherBridgeService();
-    const workspaceWatcherControl = makeWorkspaceWatcherControlBridgeService();
-    const editorWindowManagerService = makeEditorWindowManagerBridgeService();
-    const duplicateIndexInvalidation = makeDuplicateIndexInvalidationBridgeService();
-    const forgeSessionRepository =
-      initializedAnalytics.runtime !== null
-        ? makeSqliteForgeSessionRepository({ runtime: initializedAnalytics.runtime })
-        : makeInMemoryForgeSessionRepository();
-    const pdfExtractor = makePdfExtractor();
-    const chunkService = makeChunkService();
-    const aiClientLayer = AiClientServiceFromSecretStoreLive(secretStore);
-    const pdfExtractorLayer = PdfExtractorServiceLive(pdfExtractor);
-    const forgeSessionRepositoryLayer = ForgeSessionRepositoryServiceLive(forgeSessionRepository);
-    const forgeSourceResolverLayer = ForgeSourceResolverServiceLive.pipe(
-      Layer.provide(pdfExtractorLayer),
-    );
-    const topicGroundingTextResolverLayer = TopicGroundingTextResolverServiceLive.pipe(
-      Layer.provide(forgeSessionRepositoryLayer),
-    );
-
-    const mainServicesLive = Layer.mergeAll(
-      SettingsRepositoryServiceLive(settingsRepository),
-      SecretStoreServiceLive(secretStore),
-      aiClientLayer,
-      AnalyticsRepositoryServiceLive(analyticsRepository),
-      DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
-      forgeSessionRepositoryLayer,
-      ForgePromptRuntimeServiceLive.pipe(Layer.provide(aiClientLayer)),
-      pdfExtractorLayer,
-      forgeSourceResolverLayer,
-      topicGroundingTextResolverLayer,
-      ChunkServiceLive(chunkService),
-      Layer.succeed(AppEventPublisherService, appEventPublisher),
-      Layer.succeed(WorkspaceWatcherControlService, workspaceWatcherControl),
-      Layer.succeed(EditorWindowManagerService, editorWindowManagerService),
-      Layer.succeed(DuplicateIndexInvalidationService, duplicateIndexInvalidation),
-    );
-
-    const rpc = Effect.runSync(
-      Effect.gen(function* () {
-        return yield* AppRpcHandlersService;
-      }).pipe(Effect.provide(Layer.provide(AppRpcHandlersServiceFromEffectLive, mainServicesLive))),
-    );
-
-    editorWindowManager = createEditorWindowManager({
-      preloadPath: path.join(__dirname, "preload.js"),
-      publish: appEventPublisher.publish,
-      log,
-    });
-    editorWindowManagerService.bindOpenEditorWindow((params) => editorWindowManager?.open(params));
-    setupApplicationMenu(() => editorWindowManager?.open({ mode: "create" }));
-
-    const runtime = Runtime.defaultRuntime;
-
-    ipcHandle = appIpc.main({
-      ipcMain,
-      handlers: rpc.handlers,
-      streamHandlers: rpc.streamHandlers,
-      runtime,
-      getWindows: () => BrowserWindow.getAllWindows(),
-    });
-    appEventPublisher.bind(ipcHandle.publish);
-
-    watcher = createWorkspaceWatcher({
-      publish: (snapshot) =>
-        Effect.gen(function* () {
-          duplicateIndexInvalidation.markDuplicateIndexDirty();
-          yield* appEventPublisher.publish(WorkspaceSnapshotChanged, snapshot);
-        }),
-      runtime,
-    });
-    workspaceWatcherControl.bind(watcher);
-
-    await replayPendingCompensations();
-    if (!ipcHandle) {
-      throw new Error("IPC handle is not initialized.");
-    }
-    ipcHandle.start();
-    startReplayTimer();
-
-    Effect.runPromise(settingsRepository.getSettings())
-      .then((settings) => {
-        if (settings.workspace.rootPath) {
-          watcher?.start(settings.workspace.rootPath);
-        }
-      })
-      .catch((error: unknown) => {
-        log("failed to read settings for initial watcher start", error);
+      const analyticsBundle = createSqliteReviewAnalyticsRuntimeBundle({
+        dbPath,
+        journalPath: path.join(userDataPath, "analytics-compensation-intents.json"),
       });
-
-    app.on("activate", () => {
-      if (!mainWindow || mainWindow.isDestroyed()) {
-        mainWindow = createMainWindow();
+      const initializedAnalytics = await initializeAnalyticsRuntime(analyticsBundle);
+      analyticsRepository = initializedAnalytics.repository;
+      analyticsRuntime = initializedAnalytics.runtime;
+      if (initializedAnalytics.startupFailed) {
+        console.error("[desktop/main] analytics startup probe failed, falling back to no-op");
       }
+
+      const appEventPublisher = makeAppEventPublisherBridgeService();
+      const workspaceWatcherControl = makeWorkspaceWatcherControlBridgeService();
+      const editorWindowManagerService = makeEditorWindowManagerBridgeService();
+      const duplicateIndexInvalidation = makeDuplicateIndexInvalidationBridgeService();
+      const forgeSessionRepository =
+        initializedAnalytics.runtime !== null
+          ? makeSqliteForgeSessionRepository({ runtime: initializedAnalytics.runtime })
+          : makeInMemoryForgeSessionRepository();
+      const pdfExtractor = makePdfExtractor();
+      const chunkService = makeChunkService();
+      const settingsRepositoryLayer = SettingsRepositoryServiceLive(settingsRepository);
+      const aiClientLayer = AiClientServiceFromSecretStoreLive(secretStore);
+      const aiModelCatalogRepositoryLayer = AiModelCatalogRepositoryLive({
+        aiModelCatalogFilePath,
+      }).pipe(Layer.provide(NodeServicesLive));
+      const aiModelCatalogLayer = AiModelCatalogServiceLive.pipe(
+        Layer.provide(aiModelCatalogRepositoryLayer),
+      );
+      const promptModelResolverLayer = PromptModelResolverServiceLive.pipe(
+        Layer.provideMerge(settingsRepositoryLayer),
+        Layer.provideMerge(aiModelCatalogLayer),
+      );
+      const pdfExtractorLayer = PdfExtractorServiceLive(pdfExtractor);
+      const forgeSessionRepositoryLayer = ForgeSessionRepositoryServiceLive(forgeSessionRepository);
+      const forgeSourceResolverLayer = ForgeSourceResolverServiceLive.pipe(
+        Layer.provide(pdfExtractorLayer),
+      );
+      const topicGroundingTextResolverLayer = TopicGroundingTextResolverServiceLive.pipe(
+        Layer.provide(forgeSessionRepositoryLayer),
+      );
+
+      const mainServicesLive = Layer.mergeAll(
+        settingsRepositoryLayer,
+        SecretStoreServiceLive(secretStore),
+        aiModelCatalogLayer,
+        aiClientLayer,
+        AnalyticsRepositoryServiceLive(analyticsRepository),
+        DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
+        forgeSessionRepositoryLayer,
+        promptModelResolverLayer,
+        ForgePromptRuntimeServiceLive.pipe(
+          Layer.provideMerge(aiClientLayer),
+          Layer.provideMerge(aiModelCatalogLayer),
+          Layer.provideMerge(promptModelResolverLayer),
+        ),
+        pdfExtractorLayer,
+        forgeSourceResolverLayer,
+        topicGroundingTextResolverLayer,
+        ChunkServiceLive(chunkService),
+        Layer.succeed(AppEventPublisherService, appEventPublisher),
+        Layer.succeed(WorkspaceWatcherControlService, workspaceWatcherControl),
+        Layer.succeed(EditorWindowManagerService, editorWindowManagerService),
+        Layer.succeed(DuplicateIndexInvalidationService, duplicateIndexInvalidation),
+      );
+
+      const rpc = await Effect.runPromise(
+        Effect.gen(function* () {
+          return yield* AppRpcHandlersService;
+        }).pipe(
+          Effect.provide(Layer.provide(AppRpcHandlersServiceFromEffectLive, mainServicesLive)),
+        ),
+      );
+
+      editorWindowManager = createEditorWindowManager({
+        preloadPath: path.join(__dirname, "preload.js"),
+        publish: appEventPublisher.publish,
+        log,
+      });
+      editorWindowManagerService.bindOpenEditorWindow(
+        (params) => editorWindowManager?.open(params),
+      );
+      setupApplicationMenu(() => editorWindowManager?.open({ mode: "create" }));
+
+      const runtime = Runtime.defaultRuntime;
+
+      ipcHandle = appIpc.main({
+        ipcMain,
+        handlers: rpc.handlers,
+        streamHandlers: rpc.streamHandlers,
+        runtime,
+        getWindows: () => BrowserWindow.getAllWindows(),
+      });
+      appEventPublisher.bind(ipcHandle.publish);
+
+      watcher = createWorkspaceWatcher({
+        publish: (snapshot) =>
+          Effect.gen(function* () {
+            duplicateIndexInvalidation.markDuplicateIndexDirty();
+            yield* appEventPublisher.publish(WorkspaceSnapshotChanged, snapshot);
+          }),
+        runtime,
+      });
+      workspaceWatcherControl.bind(watcher);
+
+      await replayPendingCompensations();
+      if (!ipcHandle) {
+        throw new Error("IPC handle is not initialized.");
+      }
+      ipcHandle.start();
+      startReplayTimer();
+      mainWindow = createMainWindow();
+
+      Effect.runPromise(settingsRepository.getSettings())
+        .then((settings) => {
+          if (settings.workspace.rootPath) {
+            watcher?.start(settings.workspace.rootPath);
+          }
+        })
+        .catch((error: unknown) => {
+          log("failed to read settings for initial watcher start", error);
+        });
+
+      app.on("activate", () => {
+        if (!mainWindow || mainWindow.isDestroyed()) {
+          mainWindow = createMainWindow();
+        }
+      });
+    })
+    .catch((error: unknown) => {
+      console.error("[desktop/main] startup failed", error);
+      app.quit();
     });
-  });
 }
 
 app.on("before-quit", (event) => {

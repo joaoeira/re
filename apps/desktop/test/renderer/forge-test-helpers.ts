@@ -1,3 +1,5 @@
+import { DEFAULT_SETTINGS } from "@shared/settings";
+
 export const defaultOnStreamFrame: NonNullable<Window["desktopApi"]["onStreamFrame"]> = () => {
   return () => undefined;
 };
@@ -26,7 +28,7 @@ export const DEFAULT_FORGE_DECKS: ReadonlyArray<ForgeDeckEntry> = [
 export const forgeSettingsSuccess = (rootPath: string | null = FORGE_WORKSPACE_ROOT_PATH) => ({
   type: "success" as const,
   data: {
-    settingsVersion: 1 as const,
+    ...DEFAULT_SETTINGS,
     workspace: { rootPath },
   },
 });

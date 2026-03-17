@@ -3,6 +3,8 @@ import { Cause, Effect, Exit, Schedule, Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AiClient } from "@main/ai/ai-client";
+import type { AiModelCatalog } from "@main/ai/model-catalog";
+import type { PromptModelResolver } from "@main/ai/prompt-model-resolver";
 import {
   PromptInputValidationError,
   PromptModelInvocationError,
@@ -13,6 +15,12 @@ import {
   type PromptSpec,
 } from "@main/forge/prompts";
 import { makeForgePromptRuntime } from "@main/forge/services/prompt-runtime";
+import {
+  AiModelNotFound,
+  PromptModelResolutionFailed,
+  type AiModelDefinition,
+  type ResolvedAiModel,
+} from "@shared/ai-models";
 import { AiRateLimitError, type AiGenerateTextResult } from "@shared/rpc/schemas/ai";
 
 type TestInput = {
@@ -33,6 +41,24 @@ const TestOutputSchema = Schema.Struct({
   topics: Schema.Array(Schema.String),
 });
 
+const ANTHROPIC_MODEL: ResolvedAiModel = {
+  key: "anthropic/claude-sonnet-4-20250514",
+  providerId: "anthropic",
+  providerModelId: "claude-sonnet-4-20250514",
+  displayName: "Claude Sonnet 4",
+};
+
+const OPENAI_GPT4O_MODEL: ResolvedAiModel = {
+  key: "openai/gpt-4o",
+  providerId: "openai",
+  providerModelId: "gpt-4o",
+  displayName: "OpenAI GPT-4o",
+};
+
+const toModelDefinition = (model: ResolvedAiModel): AiModelDefinition => ({
+  ...model,
+});
+
 const makeSpec = (
   options: {
     readonly normalize?: (output: TestOutput, input: TestInput) => TestOutput;
@@ -44,7 +70,6 @@ const makeSpec = (
   inputSchema: TestInputSchema,
   outputSchema: TestOutputSchema,
   defaults: {
-    model: "anthropic:claude-sonnet-4-20250514",
     temperature: 0.2,
     maxTokens: 500,
   },
@@ -82,6 +107,46 @@ const makeAiClient = (impl: AiClient["generateText"]): AiClient => ({
   streamText: () => Stream.empty,
 });
 
+const makeAiModelCatalog = (
+  models: ReadonlyArray<AiModelDefinition> = [
+    toModelDefinition(ANTHROPIC_MODEL),
+    toModelDefinition(OPENAI_GPT4O_MODEL),
+  ],
+  applicationDefaultModelKey: string = ANTHROPIC_MODEL.key,
+): AiModelCatalog => ({
+  getModel: (key) => {
+    const model = models.find((candidate) => candidate.key === key);
+    return model === undefined
+      ? Effect.fail(new AiModelNotFound({ modelKey: key }))
+      : Effect.succeed(model);
+  },
+  listModels: () => Effect.succeed(models),
+  getApplicationDefaultModelKey: () => Effect.succeed(applicationDefaultModelKey),
+});
+
+const makePromptModelResolver = (
+  resolvedModel: ResolvedAiModel = ANTHROPIC_MODEL,
+): PromptModelResolver => ({
+  resolve: () =>
+    Effect.succeed({
+      model: resolvedModel,
+      source: "catalog-default" as const,
+    }),
+});
+
+const makeRuntime = (
+  impl: AiClient["generateText"],
+  options: {
+    readonly aiModelCatalog?: AiModelCatalog;
+    readonly promptModelResolver?: PromptModelResolver;
+  } = {},
+) =>
+  makeForgePromptRuntime({
+    aiClient: makeAiClient(impl),
+    aiModelCatalog: options.aiModelCatalog ?? makeAiModelCatalog(),
+    promptModelResolver: options.promptModelResolver ?? makePromptModelResolver(),
+  });
+
 const getFailure = <A, E>(exit: Exit.Exit<A, E>): E => {
   if (Exit.isSuccess(exit)) {
     throw new Error("Expected failure exit.");
@@ -103,7 +168,7 @@ describe("ForgePromptRuntime", () => {
         Effect.succeed(makeGenerateResult('{"topics":["math","science"]}')),
       );
 
-    const runtime = makeForgePromptRuntime({ aiClient: makeAiClient(generateText) });
+    const runtime = makeRuntime(generateText);
 
     const result = await Effect.runPromise(
       runtime.run(
@@ -122,7 +187,7 @@ describe("ForgePromptRuntime", () => {
     expect(result.rawText).toBe('{"topics":["math","science"]}');
     expect(result.metadata.promptId).toBe("forge/test-prompt");
     expect(result.metadata.promptVersion).toBe("1");
-    expect(result.metadata.model).toBe("openai:gpt-4o");
+    expect(result.metadata.model).toBe("openai/gpt-4o");
     expect(result.metadata.attemptCount).toBe(1);
     expect(result.metadata.promptHash).toHaveLength(64);
     expect(result.metadata.outputChars).toBe(result.rawText.length);
@@ -138,8 +203,7 @@ describe("ForgePromptRuntime", () => {
     const seenContexts: Array<PromptAttemptContext | undefined> = [];
     let callCount = 0;
 
-    const runtime = makeForgePromptRuntime({
-      aiClient: makeAiClient(() => {
+    const runtime = makeRuntime(() => {
         callCount += 1;
 
         if (callCount === 1) {
@@ -147,8 +211,7 @@ describe("ForgePromptRuntime", () => {
         }
 
         return Effect.succeed(makeGenerateResult('{"topics":["biology"]}'));
-      }),
-    });
+      });
 
     await Effect.runPromise(
       runtime.run(
@@ -174,11 +237,41 @@ describe("ForgePromptRuntime", () => {
     });
   });
 
+  it("surfaces typed model resolution failures before invoking the AI client", async () => {
+    const generateText = vi
+      .fn<AiClient["generateText"]>()
+      .mockImplementation(() =>
+        Effect.succeed(makeGenerateResult('{"topics":["math","science"]}')),
+      );
+
+    const runtime = makeRuntime(generateText, {
+      promptModelResolver: {
+        resolve: () =>
+          Effect.fail(
+            new PromptModelResolutionFailed({
+              promptId: "forge/test-prompt",
+              message: "No model candidates are configured for this prompt.",
+            }),
+          ),
+      },
+    });
+
+    const exit = await Effect.runPromiseExit(
+      runtime.run(makeSpec(), {
+        chunkText: "math and science",
+        maxTopics: 3,
+      }),
+    );
+    const failure = getFailure(exit);
+
+    expect(failure).toBeInstanceOf(PromptModelResolutionFailed);
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
   it("retries once on parse failure then succeeds", async () => {
     let callCount = 0;
 
-    const runtime = makeForgePromptRuntime({
-      aiClient: makeAiClient(() => {
+    const runtime = makeRuntime(() => {
         callCount += 1;
 
         if (callCount === 1) {
@@ -186,8 +279,7 @@ describe("ForgePromptRuntime", () => {
         }
 
         return Effect.succeed(makeGenerateResult('{"topics":["biology"]}'));
-      }),
-    });
+      });
 
     const result = await Effect.runPromise(
       runtime.run(
@@ -210,8 +302,7 @@ describe("ForgePromptRuntime", () => {
   it("retries once on validation failure then succeeds", async () => {
     let callCount = 0;
 
-    const runtime = makeForgePromptRuntime({
-      aiClient: makeAiClient(() => {
+    const runtime = makeRuntime(() => {
         callCount += 1;
 
         if (callCount === 1) {
@@ -219,8 +310,7 @@ describe("ForgePromptRuntime", () => {
         }
 
         return Effect.succeed(makeGenerateResult('{"topics":["history"]}'));
-      }),
-    });
+      });
 
     const result = await Effect.runPromise(
       runtime.run(
@@ -243,12 +333,10 @@ describe("ForgePromptRuntime", () => {
   it("honors retrySchedule from options", async () => {
     let callCount = 0;
 
-    const runtime = makeForgePromptRuntime({
-      aiClient: makeAiClient(() => {
+    const runtime = makeRuntime(() => {
         callCount += 1;
         return Effect.succeed(makeGenerateResult("not-json"));
-      }),
-    });
+      });
 
     const exit = await Effect.runPromiseExit(
       runtime.run(
@@ -272,12 +360,10 @@ describe("ForgePromptRuntime", () => {
   it("wraps model invocation errors and does not retry them", async () => {
     let callCount = 0;
 
-    const runtime = makeForgePromptRuntime({
-      aiClient: makeAiClient(() => {
+    const runtime = makeRuntime(() => {
         callCount += 1;
         return Effect.fail(new AiRateLimitError({ message: "limited", retryAfterMs: 2000 }));
-      }),
-    });
+      });
 
     const exit = await Effect.runPromiseExit(
       runtime.run(makeSpec(), {
@@ -290,7 +376,7 @@ describe("ForgePromptRuntime", () => {
     expect(failure).toBeInstanceOf(PromptModelInvocationError);
     if (failure instanceof PromptModelInvocationError) {
       expect(failure.promptId).toBe("forge/test-prompt");
-      expect(failure.model).toBe("anthropic:claude-sonnet-4-20250514");
+      expect(failure.model).toBe("anthropic/claude-sonnet-4-20250514");
       expect(failure.attempt).toBe(1);
       expect(failure.cause).toBeInstanceOf(AiRateLimitError);
     }
@@ -302,7 +388,7 @@ describe("ForgePromptRuntime", () => {
       .fn<AiClient["generateText"]>()
       .mockImplementation(() => Effect.succeed(makeGenerateResult('{"topics":[]}')));
 
-    const runtime = makeForgePromptRuntime({ aiClient: makeAiClient(generateText) });
+    const runtime = makeRuntime(generateText);
 
     const exit = await Effect.runPromiseExit(
       runtime.run(makeSpec(), {
@@ -317,9 +403,9 @@ describe("ForgePromptRuntime", () => {
   });
 
   it("maps normalization defects", async () => {
-    const runtime = makeForgePromptRuntime({
-      aiClient: makeAiClient(() => Effect.succeed(makeGenerateResult('{"topics":["one"]}'))),
-    });
+    const runtime = makeRuntime(() =>
+      Effect.succeed(makeGenerateResult('{"topics":["one"]}')),
+    );
 
     const exit = await Effect.runPromiseExit(
       runtime.run(
@@ -340,9 +426,7 @@ describe("ForgePromptRuntime", () => {
   });
 
   it("computes stable prompt hash for same rendered payload", async () => {
-    const runtime = makeForgePromptRuntime({
-      aiClient: makeAiClient(() => Effect.succeed(makeGenerateResult('{"topics":["x"]}'))),
-    });
+    const runtime = makeRuntime(() => Effect.succeed(makeGenerateResult('{"topics":["x"]}')));
 
     const first = await Effect.runPromise(
       runtime.run(makeSpec(), {
@@ -363,12 +447,10 @@ describe("ForgePromptRuntime", () => {
 
   it("returns parse error after exhausting retries", async () => {
     let callCount = 0;
-    const runtime = makeForgePromptRuntime({
-      aiClient: makeAiClient(() => {
+    const runtime = makeRuntime(() => {
         callCount += 1;
         return Effect.succeed(makeGenerateResult("not json"));
-      }),
-    });
+      });
 
     const exit = await Effect.runPromiseExit(
       runtime.run(
@@ -390,12 +472,10 @@ describe("ForgePromptRuntime", () => {
 
   it("returns validation error after exhausting retries", async () => {
     let callCount = 0;
-    const runtime = makeForgePromptRuntime({
-      aiClient: makeAiClient(() => {
+    const runtime = makeRuntime(() => {
         callCount += 1;
         return Effect.succeed(makeGenerateResult('{"topics":[1]}'));
-      }),
-    });
+      });
 
     const exit = await Effect.runPromiseExit(
       runtime.run(
@@ -428,7 +508,6 @@ describe("ForgePromptRuntime", () => {
       inputSchema: TestInputSchema,
       outputSchema: transformedOutputSchema as unknown as Schema.Schema<TransformedOutput>,
       defaults: {
-        model: "anthropic:claude-sonnet-4-20250514",
         temperature: 0.2,
         maxTokens: 500,
       },
@@ -441,9 +520,7 @@ describe("ForgePromptRuntime", () => {
       }),
     };
 
-    const runtime = makeForgePromptRuntime({
-      aiClient: makeAiClient(() => Effect.succeed(makeGenerateResult('{"topics":["1","2"]}'))),
-    });
+    const runtime = makeRuntime(() => Effect.succeed(makeGenerateResult('{"topics":["1","2"]}')));
 
     const result = await Effect.runPromise(
       runtime.run(transformedSpec, {

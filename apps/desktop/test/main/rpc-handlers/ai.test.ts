@@ -1,10 +1,36 @@
-import { Cause, Effect, Exit, Stream } from "effect";
+import { Cause, Effect, Exit, Layer, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 
 import type { AiClient } from "@main/ai/ai-client";
-import { AiClientServiceLive } from "@main/di";
+import { makeAiModelCatalog } from "@main/ai/model-catalog";
+import { getBundledAiModelCatalogDocument } from "@main/ai/model-catalog-repository";
+import { AiClientServiceLive, AiModelCatalogService } from "@main/di";
 import { createAiHandlers, createAiStreamHandlers } from "@main/rpc/handlers/ai";
+import type { ResolvedAiModel } from "@shared/ai-models";
 import { AiProviderNotSupportedError, AiRateLimitError } from "@shared/rpc/schemas/ai";
+
+const OPENAI_MODEL: ResolvedAiModel = {
+  key: "openai/gpt-5.4",
+  providerId: "openai",
+  providerModelId: "gpt-5.4",
+  displayName: "OpenAI GPT-5.4",
+};
+
+const INVALID_MODEL = {
+  key: "constructor/gpt-4o",
+  providerId: "constructor",
+  providerModelId: "gpt-4o",
+  displayName: "Constructor GPT-4o",
+} as unknown as ResolvedAiModel;
+
+const aiHandlerServices = (mockAiClient: AiClient) =>
+  Layer.mergeAll(
+    AiClientServiceLive(mockAiClient),
+    Layer.succeed(
+      AiModelCatalogService,
+      makeAiModelCatalog(getBundledAiModelCatalogDocument()),
+    ),
+  );
 
 describe("AI handlers", () => {
   it("maps generateText result into structured response payload", async () => {
@@ -24,12 +50,12 @@ describe("AI handlers", () => {
     };
 
     const handlers = Effect.runSync(
-      createAiHandlers().pipe(Effect.provide(AiClientServiceLive(mockAiClient))),
+      createAiHandlers().pipe(Effect.provide(aiHandlerServices(mockAiClient))),
     );
 
     const result = await Effect.runPromise(
       handlers.AiGenerateText({
-        model: "anthropic:claude-sonnet-4-20250514",
+        model: OPENAI_MODEL,
         messages: [{ role: "user", content: "hello world" }],
       }),
     );
@@ -54,12 +80,12 @@ describe("AI handlers", () => {
     };
 
     const handlers = Effect.runSync(
-      createAiHandlers().pipe(Effect.provide(AiClientServiceLive(mockAiClient))),
+      createAiHandlers().pipe(Effect.provide(aiHandlerServices(mockAiClient))),
     );
 
     const exit = await Effect.runPromiseExit(
       handlers.AiGenerateText({
-        model: "anthropic:claude-sonnet-4-20250514",
+        model: OPENAI_MODEL,
         messages: [{ role: "user", content: "hello" }],
       }),
     );
@@ -73,6 +99,45 @@ describe("AI handlers", () => {
     if (failure._tag === "Some") {
       expect(failure.value).toBeInstanceOf(AiRateLimitError);
     }
+  });
+
+  it("canonicalizes the requested model through the catalog before invoking the AI client", async () => {
+    let receivedModel: ResolvedAiModel | null = null;
+    const mockAiClient: AiClient = {
+      generateText: ({ model }) => {
+        receivedModel = model;
+        return Effect.succeed({
+          text: "ok",
+          finishReason: "stop",
+          model: model.providerModelId,
+          usage: {},
+        });
+      },
+      streamText: () => Stream.empty,
+    };
+
+    const handlers = Effect.runSync(
+      createAiHandlers().pipe(Effect.provide(aiHandlerServices(mockAiClient))),
+    );
+
+    await Effect.runPromise(
+      handlers.AiGenerateText({
+        model: {
+          key: "openai/gpt-5.4",
+          providerId: "anthropic",
+          providerModelId: "claude-sonnet-4-20250514",
+          displayName: "Forged tuple",
+        } as unknown as ResolvedAiModel,
+        messages: [{ role: "user", content: "hello world" }],
+      }),
+    );
+
+    expect(receivedModel).toEqual({
+      key: "openai/gpt-5.4",
+      providerId: "openai",
+      providerModelId: "gpt-5.4",
+      displayName: "OpenAI GPT-5.4",
+    });
   });
 });
 
@@ -95,13 +160,13 @@ describe("AI stream handlers", () => {
     };
 
     const streamHandlers = Effect.runSync(
-      createAiStreamHandlers().pipe(Effect.provide(AiClientServiceLive(mockAiClient))),
+      createAiStreamHandlers().pipe(Effect.provide(aiHandlerServices(mockAiClient))),
     );
 
     const chunks = await Effect.runPromise(
       streamHandlers
         .AiStreamText({
-          model: "anthropic:claude-sonnet-4-20250514",
+          model: OPENAI_MODEL,
           messages: [{ role: "user", content: "hello world" }],
         })
         .pipe(Stream.runCollect),
@@ -124,13 +189,13 @@ describe("AI stream handlers", () => {
     };
 
     const streamHandlers = Effect.runSync(
-      createAiStreamHandlers().pipe(Effect.provide(AiClientServiceLive(mockAiClient))),
+      createAiStreamHandlers().pipe(Effect.provide(aiHandlerServices(mockAiClient))),
     );
 
     const exit = await Effect.runPromiseExit(
       streamHandlers
         .AiStreamText({
-          model: "anthropic:claude-sonnet-4-20250514",
+          model: OPENAI_MODEL,
           messages: [{ role: "user", content: "hello" }],
         })
         .pipe(Stream.runCollect),
@@ -147,7 +212,7 @@ describe("AI stream handlers", () => {
     }
   });
 
-  it("preserves ai_provider_not_supported stream errors", async () => {
+  it("rejects models that are not present in the catalog before streaming", async () => {
     const mockAiClient: AiClient = {
       generateText: () =>
         Effect.succeed({
@@ -156,18 +221,17 @@ describe("AI stream handlers", () => {
           model: "unused",
           usage: {},
         }),
-      streamText: () =>
-        Stream.fail(new AiProviderNotSupportedError({ model: "constructor:gpt-4o" })),
+      streamText: () => Stream.die("streamText should not be called for invalid catalog keys"),
     };
 
     const streamHandlers = Effect.runSync(
-      createAiStreamHandlers().pipe(Effect.provide(AiClientServiceLive(mockAiClient))),
+      createAiStreamHandlers().pipe(Effect.provide(aiHandlerServices(mockAiClient))),
     );
 
     const exit = await Effect.runPromiseExit(
       streamHandlers
         .AiStreamText({
-          model: "constructor:gpt-4o",
+          model: INVALID_MODEL,
           messages: [{ role: "user", content: "hello" }],
         })
         .pipe(Stream.runCollect),

@@ -1,7 +1,7 @@
 import { FileSystem, Path } from "@effect/platform";
 import type { PlatformError } from "@effect/platform/Error";
 import { Schema } from "@effect/schema";
-import { Effect, Option } from "effect";
+import { Effect, Either, Option } from "effect";
 
 import {
   DEFAULT_SETTINGS,
@@ -15,7 +15,7 @@ import {
   type Settings,
   type SettingsError,
 } from "@shared/settings";
-import { SettingsSchemaV1 } from "@shared/settings/schema";
+import { SettingsSchemaV1, SettingsSchemaV2, type SettingsV1 } from "@shared/settings/schema";
 
 export interface SettingsRepository {
   readonly getSettings: () => Effect.Effect<Settings, SettingsError>;
@@ -27,6 +27,11 @@ export interface SettingsRepository {
 export interface MakeSettingsRepositoryOptions {
   readonly settingsFilePath: string;
 }
+
+const migrateV1ToV2 = (settings: SettingsV1): Settings => ({
+  ...DEFAULT_SETTINGS,
+  workspace: settings.workspace,
+});
 
 const asMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
@@ -71,6 +76,28 @@ const mapWorkspaceRootReadError = (
   error: PlatformError,
 ): WorkspaceRootUnreadable => toWorkspaceUnreadable(rootPath, error.message);
 
+const selectDecodeFailureMessage = (
+  rawSettings: string,
+  v2Error: unknown,
+  v1Error: unknown,
+): string => {
+  try {
+    const parsed = JSON.parse(rawSettings) as { readonly settingsVersion?: unknown };
+
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      parsed.settingsVersion === 1
+    ) {
+      return asMessage(v1Error);
+    }
+  } catch {
+    // Ignore JSON parse failures here and fall through to the V2 parse error message.
+  }
+
+  return asMessage(v2Error);
+};
+
 export const makeSettingsRepository = ({
   settingsFilePath,
 }: MakeSettingsRepositoryOptions): Effect.Effect<
@@ -84,9 +111,9 @@ export const makeSettingsRepository = ({
     const semaphore = yield* Effect.makeSemaphore(1);
 
     const settingsDirectory = pathService.dirname(settingsFilePath);
-    const settingsCodec = Schema.parseJson(SettingsSchemaV1, { space: 2 });
-    const decodeSettings = Schema.decodeUnknown(settingsCodec);
-    const encodeSettings = Schema.encode(settingsCodec);
+    const decodeSettingsV2 = Schema.decodeUnknown(Schema.parseJson(SettingsSchemaV2));
+    const decodeSettingsV1 = Schema.decodeUnknown(Schema.parseJson(SettingsSchemaV1));
+    const encodeSettings = Schema.encode(Schema.parseJson(SettingsSchemaV2, { space: 2 }));
 
     const loadSettings = (): Effect.Effect<Settings, SettingsReadFailed | SettingsDecodeFailed> =>
       Effect.gen(function* () {
@@ -113,12 +140,33 @@ export const makeSettingsRepository = ({
           return DEFAULT_SETTINGS;
         }
 
-        return yield* decodeSettings(rawSettings.value).pipe(
-          Effect.mapError((error) =>
-            toDecodeFailed(
-              settingsFilePath,
-              `Settings file failed schema validation: ${asMessage(error)}`,
-            ),
+        const v2Attempt = yield* decodeSettingsV2(rawSettings.value).pipe(Effect.either);
+
+        if (Either.isRight(v2Attempt)) {
+          return v2Attempt.right;
+        }
+
+        const v1Attempt = yield* decodeSettingsV1(rawSettings.value).pipe(Effect.either);
+
+        if (Either.isRight(v1Attempt)) {
+          const migrated = migrateV1ToV2(v1Attempt.right);
+
+          // Persist the migrated V2 settings so subsequent reads don't
+          // re-decode V1 on every call. Fire-and-forget — a write failure
+          // here is not fatal since the in-memory migration is still valid.
+          yield* persistSettings(migrated).pipe(Effect.catchAll(() => Effect.void));
+
+          return migrated;
+        }
+
+        return yield* Effect.fail(
+          toDecodeFailed(
+            settingsFilePath,
+            `Settings file failed schema validation: ${selectDecodeFailureMessage(
+              rawSettings.value,
+              v2Attempt.left,
+              v1Attempt.left,
+            )}`,
           ),
         );
       });

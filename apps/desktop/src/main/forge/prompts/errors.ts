@@ -1,5 +1,6 @@
 import { Data } from "effect";
 
+import type { PromptModelResolutionFailed } from "@shared/ai-models";
 import type { AiGenerateTextError } from "@shared/rpc/schemas/ai";
 
 export class PromptInputValidationError extends Data.TaggedError("PromptInputValidationError")<{
@@ -36,4 +37,5 @@ export type PromptRuntimeError =
   | PromptOutputParseError
   | PromptOutputValidationError
   | PromptNormalizationError
-  | PromptModelInvocationError;
+  | PromptModelInvocationError
+  | PromptModelResolutionFailed;

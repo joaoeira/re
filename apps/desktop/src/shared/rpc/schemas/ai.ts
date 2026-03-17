@@ -1,5 +1,6 @@
 import { Schema } from "@effect/schema";
 
+import { ResolvedAiModelSchema } from "@shared/ai-models";
 import { SecretKeySchema } from "@shared/secrets";
 
 export class AiCompletionError extends Schema.TaggedError<AiCompletionError>(
@@ -85,7 +86,7 @@ export const AiTokenUsageSchema = Schema.Struct({
 export type AiTokenUsage = typeof AiTokenUsageSchema.Type;
 
 export const AiGenerateTextInputSchema = Schema.Struct({
-  model: ModelIdSchema,
+  model: ResolvedAiModelSchema,
   messages: AiMessagesSchema,
   systemPrompt: Schema.optional(Schema.String),
   temperature: Schema.optional(Schema.Number.pipe(Schema.nonNegative())),
