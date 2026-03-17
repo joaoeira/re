@@ -11,6 +11,7 @@ import {
   WorkspaceRootNotDirectory,
   WorkspaceRootNotFound,
   WorkspaceRootUnreadable,
+  type SetDefaultModelKeyInput,
   type SetWorkspaceRootPathInput,
   type Settings,
   type SettingsError,
@@ -21,6 +22,9 @@ export interface SettingsRepository {
   readonly getSettings: () => Effect.Effect<Settings, SettingsError>;
   readonly setWorkspaceRootPath: (
     input: SetWorkspaceRootPathInput,
+  ) => Effect.Effect<Settings, SettingsError>;
+  readonly setDefaultModelKey: (
+    input: SetDefaultModelKeyInput,
   ) => Effect.Effect<Settings, SettingsError>;
 }
 
@@ -268,6 +272,21 @@ export const makeSettingsRepository = ({
                 })),
               ),
             ),
+            Effect.flatMap((nextSettings) =>
+              persistSettings(nextSettings).pipe(Effect.as(nextSettings)),
+            ),
+          ),
+        ),
+      setDefaultModelKey: (input) =>
+        withLock(
+          loadSettings().pipe(
+            Effect.map((currentSettings) => ({
+              ...currentSettings,
+              ai: {
+                ...currentSettings.ai,
+                defaultModelKey: input.modelKey,
+              },
+            })),
             Effect.flatMap((nextSettings) =>
               persistSettings(nextSettings).pipe(Effect.as(nextSettings)),
             ),

@@ -30,6 +30,14 @@ export const stubSettingsRepository: SettingsRepository = {
         rootPath,
       },
     }),
+  setDefaultModelKey: ({ modelKey }) =>
+    Effect.succeed({
+      ...DEFAULT_SETTINGS,
+      ai: {
+        ...DEFAULT_SETTINGS.ai,
+        defaultModelKey: modelKey,
+      },
+    }),
 };
 
 export const stubWatcher: WorkspaceWatcher = {

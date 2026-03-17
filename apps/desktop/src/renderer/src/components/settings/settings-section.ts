@@ -1,4 +1,4 @@
-export const SETTINGS_SECTION_IDS = ["general", "secrets"] as const;
+export const SETTINGS_SECTION_IDS = ["general", "secrets", "models"] as const;
 
 export type SettingsSection = (typeof SETTINGS_SECTION_IDS)[number];
 

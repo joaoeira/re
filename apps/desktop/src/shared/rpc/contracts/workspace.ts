@@ -13,11 +13,6 @@ import {
   DeleteDeckErrorSchema,
   RenameDeckErrorSchema,
 } from "@shared/rpc/schemas/workspace";
-import {
-  SettingsErrorSchema,
-  SettingsSchemaV2,
-  SetWorkspaceRootPathInputSchema,
-} from "@shared/settings";
 
 export const GetBootstrapData = rpc(
   "GetBootstrapData",
@@ -96,28 +91,6 @@ export const RenameDeck = rpc(
     absolutePath: Schema.String,
   }),
   RenameDeckErrorSchema,
-);
-
-export const GetSettings = rpc(
-  "GetSettings",
-  Schema.Struct({}),
-  SettingsSchemaV2,
-  SettingsErrorSchema,
-);
-
-export const SetWorkspaceRootPath = rpc(
-  "SetWorkspaceRootPath",
-  SetWorkspaceRootPathInputSchema,
-  SettingsSchemaV2,
-  SettingsErrorSchema,
-);
-
-export const SelectDirectory = rpc(
-  "SelectDirectory",
-  Schema.Struct({}),
-  Schema.Struct({
-    path: Schema.Union(Schema.String, Schema.Null),
-  }),
 );
 
 export const WorkspaceSnapshotChanged = event(

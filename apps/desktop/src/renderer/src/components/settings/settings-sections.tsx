@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { KeyRound, Settings2 } from "lucide-react";
+import { KeyRound, Layers, Settings2 } from "lucide-react";
 
 import { GeneralSettingsSection } from "./general-settings-section";
+import { ModelsSettingsSection } from "./models-settings-section";
 import { SecretsSettingsSection } from "./secrets-settings-section";
 import type { SettingsSection } from "./settings-section";
 
@@ -24,6 +25,12 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDefinition[] = [
     label: "Secrets",
     icon: KeyRound,
     render: () => <SecretsSettingsSection />,
+  },
+  {
+    id: "models",
+    label: "Models",
+    icon: Layers,
+    render: () => <ModelsSettingsSection />,
   },
 ];
 

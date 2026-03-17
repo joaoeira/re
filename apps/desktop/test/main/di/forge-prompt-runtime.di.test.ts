@@ -90,6 +90,14 @@ const makeSettingsRepository = (settings: Settings = DEFAULT_SETTINGS): Settings
         rootPath,
       },
     }),
+  setDefaultModelKey: ({ modelKey }) =>
+    Effect.succeed({
+      ...settings,
+      ai: {
+        ...settings.ai,
+        defaultModelKey: modelKey,
+      },
+    }),
 });
 
 const secretStore: SecretStore = {

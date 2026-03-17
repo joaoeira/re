@@ -44,3 +44,9 @@ export const SetWorkspaceRootPathInputSchema = Schema.Struct({
 });
 
 export type SetWorkspaceRootPathInput = typeof SetWorkspaceRootPathInputSchema.Type;
+
+export const SetDefaultModelKeyInputSchema = Schema.Struct({
+  modelKey: Schema.Union(Schema.String.pipe(Schema.nonEmptyString()), Schema.Null),
+});
+
+export type SetDefaultModelKeyInput = typeof SetDefaultModelKeyInputSchema.Type;

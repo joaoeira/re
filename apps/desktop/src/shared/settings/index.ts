@@ -1,10 +1,12 @@
 export {
   AiSettingsSchema,
   DEFAULT_SETTINGS,
+  SetDefaultModelKeyInputSchema,
   SetWorkspaceRootPathInputSchema,
   SettingsSchemaV1,
   SettingsSchemaV2,
   WorkspaceSettingsSchema,
+  type SetDefaultModelKeyInput,
   type SetWorkspaceRootPathInput,
   type Settings,
   type SettingsV1,

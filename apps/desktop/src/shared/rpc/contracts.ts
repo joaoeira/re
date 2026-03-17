@@ -51,16 +51,20 @@ import {
 } from "./contracts/review";
 import { DeleteApiKey, HasApiKey, SetApiKey } from "./contracts/secret";
 import {
+  GetSettings,
+  ListAiModels,
+  SelectDirectory,
+  SetDefaultModelKey,
+  SetWorkspaceRootPath,
+} from "./contracts/settings";
+import {
   CreateDeck,
   DeleteDeck,
   GetBootstrapData,
-  GetSettings,
   GetWorkspaceSnapshot,
   ParseDeckPreview,
   RenameDeck,
   ScanDecks,
-  SelectDirectory,
-  SetWorkspaceRootPath,
   WorkspaceSnapshotChanged,
 } from "./contracts/workspace";
 
@@ -70,6 +74,7 @@ export * from "./contracts/forge";
 export * from "./contracts/git";
 export * from "./contracts/review";
 export * from "./contracts/secret";
+export * from "./contracts/settings";
 export * from "./contracts/workspace";
 
 export const appContract = defineContract({
@@ -84,6 +89,8 @@ export const appContract = defineContract({
     RenameDeck,
     GetSettings,
     SetWorkspaceRootPath,
+    ListAiModels,
+    SetDefaultModelKey,
     HasApiKey,
     SetApiKey,
     DeleteApiKey,

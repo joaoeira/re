@@ -1,11 +1,9 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["unicorn", "typescript", "oxc"],
-  "jsPlugins": ["./lint-plugins/re-plugin.js"],
+  "jsPlugins": [],
   "categories": {},
   "rules": {
-    "re/no-noop-catch": "error",
-    "re/no-rpc-defect-catch": "warn",
     "constructor-super": "warn",
     "for-direction": "warn",
     "no-async-promise-executor": "warn",

@@ -8,7 +8,6 @@ import {
   scanDecks,
   snapshotWorkspace,
 } from "@re/workspace";
-import { BrowserWindow, dialog } from "electron";
 import { Effect } from "effect";
 import type { FileSystem, Path } from "@effect/platform";
 import type { Implementations } from "electron-effect-rpc/types";
@@ -17,7 +16,6 @@ import {
   DeckWriteCoordinatorService,
   DuplicateIndexInvalidationService,
   SettingsRepositoryService,
-  WorkspaceWatcherControlService,
 } from "@main/di";
 import { toErrorMessage } from "@main/utils/format";
 import type { AppContract } from "@shared/rpc/contracts";
@@ -34,17 +32,13 @@ type WorkspaceHandlerKeys =
   | "GetWorkspaceSnapshot"
   | "CreateDeck"
   | "DeleteDeck"
-  | "RenameDeck"
-  | "GetSettings"
-  | "SetWorkspaceRootPath"
-  | "SelectDirectory";
+  | "RenameDeck";
 
 type WorkspaceHandlerRuntime = DeckManager | FileSystem.FileSystem | Path.Path;
 
 export const createWorkspaceHandlers = () =>
   Effect.gen(function* () {
     const settingsRepository = yield* SettingsRepositoryService;
-    const watcherControl = yield* WorkspaceWatcherControlService;
     const duplicateIndexInvalidation = yield* DuplicateIndexInvalidationService;
     const deckWriteCoordinator = yield* DeckWriteCoordinatorService;
 
@@ -222,29 +216,6 @@ export const createWorkspaceHandlers = () =>
           duplicateIndexInvalidation.markDuplicateIndexDirty();
 
           return { absolutePath: toAbsolutePath };
-        }),
-      GetSettings: () => settingsRepository.getSettings(),
-      SetWorkspaceRootPath: (input) =>
-        settingsRepository.setWorkspaceRootPath(input).pipe(
-          Effect.tap((settings) =>
-            Effect.sync(() => {
-              duplicateIndexInvalidation.markDuplicateIndexDirty();
-              if (settings.workspace.rootPath) {
-                watcherControl.start(settings.workspace.rootPath);
-              } else {
-                watcherControl.stop();
-              }
-            }),
-          ),
-        ),
-      SelectDirectory: () =>
-        Effect.promise(async () => {
-          const options: Electron.OpenDialogOptions = { properties: ["openDirectory"] };
-          const focusedWindow = BrowserWindow.getFocusedWindow();
-          const result = focusedWindow
-            ? await dialog.showOpenDialog(focusedWindow, options)
-            : await dialog.showOpenDialog(options);
-          return { path: result.canceled ? null : (result.filePaths[0] ?? null) };
         }),
     };
 

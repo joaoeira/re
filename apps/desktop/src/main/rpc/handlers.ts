@@ -11,11 +11,13 @@ import { createForgeHandlers } from "./handlers/forge";
 import { createGitHandlers } from "./handlers/git";
 import { createReviewHandlers } from "./handlers/review";
 import { createSecretHandlers } from "./handlers/secret";
+import { createSettingsHandlers } from "./handlers/settings";
 import { createWorkspaceHandlers } from "./handlers/workspace";
 
 export const makeAppRpcHandlersEffect = Effect.gen(function* () {
   const aiHandlers = yield* createAiHandlers();
   const gitHandlers = yield* createGitHandlers();
+  const settingsHandlers = yield* createSettingsHandlers();
   const workspaceHandlers = yield* createWorkspaceHandlers();
   const reviewHandlers = yield* createReviewHandlers();
   const editorHandlers = yield* createEditorHandlers();
@@ -26,6 +28,7 @@ export const makeAppRpcHandlersEffect = Effect.gen(function* () {
   const handlers: Implementations<AppContract, never> = {
     ...aiHandlers,
     ...gitHandlers,
+    ...settingsHandlers,
     ...workspaceHandlers,
     ...reviewHandlers,
     ...editorHandlers,
