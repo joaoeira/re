@@ -7,10 +7,7 @@ import type { AiClient } from "@main/ai/ai-client";
 import { resolveModelFromCatalog, type AiModelCatalog } from "@main/ai/model-catalog";
 import type { PromptModelResolver } from "@main/ai/prompt-model-resolver";
 import { toErrorMessage } from "@main/utils/format";
-import {
-  PromptModelResolutionFailed,
-  type ResolvedAiModel,
-} from "@shared/ai-models";
+import { PromptModelResolutionFailed, type ResolvedAiModel } from "@shared/ai-models";
 
 import { decodeJsonToSchema } from "../prompts";
 import {
@@ -143,11 +140,14 @@ const resolveLegacyRawModel = (input: {
     }
 
     // Return resolved model directly — no second lookup needed.
-    return yield* resolveModelFromCatalog(input.aiModelCatalog, matches[0]!.key, (key) =>
-      new PromptModelResolutionFailed({
-        promptId: input.promptId,
-        message: `Model key is not present in the AI model catalog: ${key}`,
-      }),
+    return yield* resolveModelFromCatalog(
+      input.aiModelCatalog,
+      matches[0]!.key,
+      (key) =>
+        new PromptModelResolutionFailed({
+          promptId: input.promptId,
+          message: `Model key is not present in the AI model catalog: ${key}`,
+        }),
     );
   });
 
@@ -158,7 +158,10 @@ const resolveRuntimeModel = (input: {
   readonly promptModelResolver: PromptModelResolver;
 }): Effect.Effect<RuntimeResolvedModel, PromptModelResolutionFailed> =>
   input.rawModelOverride === undefined
-    ? input.promptModelResolver.resolve(input.promptId) as Effect.Effect<RuntimeResolvedModel, PromptModelResolutionFailed>
+    ? (input.promptModelResolver.resolve(input.promptId) as Effect.Effect<
+        RuntimeResolvedModel,
+        PromptModelResolutionFailed
+      >)
     : resolveLegacyRawModel({
         promptId: input.promptId,
         rawModel: input.rawModelOverride!,

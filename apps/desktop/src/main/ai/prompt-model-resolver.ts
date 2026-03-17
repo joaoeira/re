@@ -1,10 +1,7 @@
 import { Context, Effect } from "effect";
 
 import type { SettingsRepository } from "@main/settings/repository";
-import {
-  PromptModelResolutionFailed,
-  type ResolvedAiModel,
-} from "@shared/ai-models";
+import { PromptModelResolutionFailed, type ResolvedAiModel } from "@shared/ai-models";
 import { toSettingsErrorMessage } from "@shared/settings";
 
 import { resolveModelFromCatalog, type AiModelCatalog } from "./model-catalog";
@@ -48,7 +45,8 @@ export const makePromptModelResolver = ({
       );
       const catalogDefaultKey = yield* aiModelCatalog.getApplicationDefaultModelKey();
 
-      const candidates: Array<{ readonly key: string; readonly source: ModelResolutionSource }> = [];
+      const candidates: Array<{ readonly key: string; readonly source: ModelResolutionSource }> =
+        [];
       const promptOverrideKey = settings.ai.promptModelOverrides[promptId];
 
       if (promptOverrideKey !== undefined) {
@@ -64,11 +62,9 @@ export const makePromptModelResolver = ({
       const skipped: Array<string> = [];
 
       for (const candidate of candidates) {
-        const result = yield* resolveModelFromCatalog(
-          aiModelCatalog,
-          candidate.key,
-          (key) => ({ key }),
-        ).pipe(
+        const result = yield* resolveModelFromCatalog(aiModelCatalog, candidate.key, (key) => ({
+          key,
+        })).pipe(
           Effect.map((model) => ({ _tag: "resolved" as const, model })),
           Effect.catchAll((rejection) =>
             Effect.succeed({ _tag: "skipped" as const, key: rejection.key }),

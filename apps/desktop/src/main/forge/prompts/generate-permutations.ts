@@ -14,14 +14,12 @@ export const GeneratePermutationsPromptInputSchema = Schema.Struct({
   source: SourceCardSchema,
   instruction: Schema.optional(Schema.String),
 });
-export type GeneratePermutationsPromptInput =
-  typeof GeneratePermutationsPromptInputSchema.Type;
+export type GeneratePermutationsPromptInput = typeof GeneratePermutationsPromptInputSchema.Type;
 
 export const GeneratePermutationsPromptOutputSchema = Schema.Struct({
   permutations: NormalizedCardArraySchema,
 });
-export type GeneratePermutationsPromptOutput =
-  typeof GeneratePermutationsPromptOutputSchema.Type;
+export type GeneratePermutationsPromptOutput = typeof GeneratePermutationsPromptOutputSchema.Type;
 
 const renderInstructionBlock = (instruction: string | undefined): string => {
   const trimmedInstruction = instruction?.trim();
@@ -32,9 +30,7 @@ const renderInstructionBlock = (instruction: string | undefined): string => {
   return `Additional instruction:\n${trimmedInstruction}`;
 };
 
-const renderBaseUserPrompt = (
-  input: GeneratePermutationsPromptInput,
-): string => {
+const renderBaseUserPrompt = (input: GeneratePermutationsPromptInput): string => {
   return `
 
   ---

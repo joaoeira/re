@@ -37,7 +37,8 @@ export const getBundledAiModelCatalogDocument = (): AiModelCatalogDocument => {
 
 const bundledAiModelCatalogJson = JSON.stringify(bundledAiModelsJson, null, 2);
 
-const toMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+const toMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 const toReadFailed = (path: string, message: string): AiModelCatalogReadFailed =>
   new AiModelCatalogReadFailed({
@@ -100,18 +101,20 @@ export const makeAiModelCatalogRepository = ({
                 );
 
               const content = new TextEncoder().encode(bundledAiModelCatalogJson);
-              yield* file.writeAll(content).pipe(
-                Effect.mapError((error) => mapWritePlatformError(aiModelCatalogFilePath, error)),
-              );
+              yield* file
+                .writeAll(content)
+                .pipe(
+                  Effect.mapError((error) => mapWritePlatformError(aiModelCatalogFilePath, error)),
+                );
               yield* file.sync.pipe(
                 Effect.mapError((error) => mapWritePlatformError(aiModelCatalogFilePath, error)),
               );
             }),
           );
 
-          yield* fileSystem.rename(tempFilePath, aiModelCatalogFilePath).pipe(
-            Effect.mapError((error) => mapWritePlatformError(aiModelCatalogFilePath, error)),
-          );
+          yield* fileSystem
+            .rename(tempFilePath, aiModelCatalogFilePath)
+            .pipe(Effect.mapError((error) => mapWritePlatformError(aiModelCatalogFilePath, error)));
         });
 
         yield* writeAndCommit.pipe(

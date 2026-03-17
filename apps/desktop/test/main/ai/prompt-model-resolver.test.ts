@@ -4,10 +4,7 @@ import { describe, expect, it } from "vitest";
 import { makeAiModelCatalog } from "@main/ai/model-catalog";
 import { makePromptModelResolver } from "@main/ai/prompt-model-resolver";
 import type { SettingsRepository } from "@main/settings/repository";
-import {
-  PromptModelResolutionFailed,
-  type AiModelCatalogDocument,
-} from "@shared/ai-models";
+import { PromptModelResolutionFailed, type AiModelCatalogDocument } from "@shared/ai-models";
 import type { Settings } from "@shared/settings";
 
 const getFailure = <A, E>(exit: Exit.Exit<A, E>): E => {

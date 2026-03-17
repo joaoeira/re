@@ -71,7 +71,9 @@ describe("settings repository", () => {
 
       expect(parsedSettings.settingsVersion).toBe(2);
       expect(parsedSettings.workspace.rootPath).toBe(workspacePath);
-      expect(parsedSettings.ai.promptModelOverrides["forge/reformulate-card"]).toBe("openai/gpt-5.4");
+      expect(parsedSettings.ai.promptModelOverrides["forge/reformulate-card"]).toBe(
+        "openai/gpt-5.4",
+      );
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
     }

@@ -88,11 +88,7 @@ const selectDecodeFailureMessage = (
   try {
     const parsed = JSON.parse(rawSettings) as { readonly settingsVersion?: unknown };
 
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      parsed.settingsVersion === 1
-    ) {
+    if (typeof parsed === "object" && parsed !== null && parsed.settingsVersion === 1) {
       return asMessage(v1Error);
     }
   } catch {

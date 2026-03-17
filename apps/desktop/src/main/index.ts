@@ -417,8 +417,8 @@ if (!gotSingleInstanceLock) {
         publish: appEventPublisher.publish,
         log,
       });
-      editorWindowManagerService.bindOpenEditorWindow(
-        (params) => editorWindowManager?.open(params),
+      editorWindowManagerService.bindOpenEditorWindow((params) =>
+        editorWindowManager?.open(params),
       );
       setupApplicationMenu(() => editorWindowManager?.open({ mode: "create" }));
 

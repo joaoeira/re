@@ -65,9 +65,7 @@ export function ModelsSettings({
 
   const effectiveModelKey = defaultModelKey ?? applicationDefaultModelKey;
   const selectedModel = models.find((m) => m.key === effectiveModelKey) ?? null;
-  const providerLabel = selectedModel
-    ? PROVIDER_DISPLAY_NAMES[selectedModel.providerId]
-    : null;
+  const providerLabel = selectedModel ? PROVIDER_DISPLAY_NAMES[selectedModel.providerId] : null;
 
   const handleValueChange = (value: string) => {
     if (value === applicationDefaultModelKey) {

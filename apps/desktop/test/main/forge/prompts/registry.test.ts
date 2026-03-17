@@ -24,8 +24,7 @@ const makeSpec = (promptId: string, version: string): PromptSpec<TestInput, Test
   version,
   inputSchema: TestInputSchema,
   outputSchema: TestOutputSchema,
-  defaults: {
-  },
+  defaults: {},
   render: (input) => ({
     messages: [
       {

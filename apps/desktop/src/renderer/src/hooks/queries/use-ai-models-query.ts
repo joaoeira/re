@@ -13,11 +13,13 @@ export function useAiModelsQuery() {
     staleTime: Infinity,
     queryFn: () =>
       runIpcEffect(
-        ipc.client.ListAiModels().pipe(
-          Effect.catchTag("RpcDefectError", (rpcDefect) =>
-            Effect.fail(toRpcDefectError(rpcDefect)),
+        ipc.client
+          .ListAiModels()
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
           ),
-        ),
       ),
   });
 }

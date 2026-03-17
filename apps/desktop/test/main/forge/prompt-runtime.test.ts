@@ -204,14 +204,14 @@ describe("ForgePromptRuntime", () => {
     let callCount = 0;
 
     const runtime = makeRuntime(() => {
-        callCount += 1;
+      callCount += 1;
 
-        if (callCount === 1) {
-          return Effect.succeed(makeGenerateResult("not-json"));
-        }
+      if (callCount === 1) {
+        return Effect.succeed(makeGenerateResult("not-json"));
+      }
 
-        return Effect.succeed(makeGenerateResult('{"topics":["biology"]}'));
-      });
+      return Effect.succeed(makeGenerateResult('{"topics":["biology"]}'));
+    });
 
     await Effect.runPromise(
       runtime.run(
@@ -272,14 +272,14 @@ describe("ForgePromptRuntime", () => {
     let callCount = 0;
 
     const runtime = makeRuntime(() => {
-        callCount += 1;
+      callCount += 1;
 
-        if (callCount === 1) {
-          return Effect.succeed(makeGenerateResult("this is not json"));
-        }
+      if (callCount === 1) {
+        return Effect.succeed(makeGenerateResult("this is not json"));
+      }
 
-        return Effect.succeed(makeGenerateResult('{"topics":["biology"]}'));
-      });
+      return Effect.succeed(makeGenerateResult('{"topics":["biology"]}'));
+    });
 
     const result = await Effect.runPromise(
       runtime.run(
@@ -303,14 +303,14 @@ describe("ForgePromptRuntime", () => {
     let callCount = 0;
 
     const runtime = makeRuntime(() => {
-        callCount += 1;
+      callCount += 1;
 
-        if (callCount === 1) {
-          return Effect.succeed(makeGenerateResult('{"topics":[1,2,3]}'));
-        }
+      if (callCount === 1) {
+        return Effect.succeed(makeGenerateResult('{"topics":[1,2,3]}'));
+      }
 
-        return Effect.succeed(makeGenerateResult('{"topics":["history"]}'));
-      });
+      return Effect.succeed(makeGenerateResult('{"topics":["history"]}'));
+    });
 
     const result = await Effect.runPromise(
       runtime.run(
@@ -334,9 +334,9 @@ describe("ForgePromptRuntime", () => {
     let callCount = 0;
 
     const runtime = makeRuntime(() => {
-        callCount += 1;
-        return Effect.succeed(makeGenerateResult("not-json"));
-      });
+      callCount += 1;
+      return Effect.succeed(makeGenerateResult("not-json"));
+    });
 
     const exit = await Effect.runPromiseExit(
       runtime.run(
@@ -361,9 +361,9 @@ describe("ForgePromptRuntime", () => {
     let callCount = 0;
 
     const runtime = makeRuntime(() => {
-        callCount += 1;
-        return Effect.fail(new AiRateLimitError({ message: "limited", retryAfterMs: 2000 }));
-      });
+      callCount += 1;
+      return Effect.fail(new AiRateLimitError({ message: "limited", retryAfterMs: 2000 }));
+    });
 
     const exit = await Effect.runPromiseExit(
       runtime.run(makeSpec(), {
@@ -403,9 +403,7 @@ describe("ForgePromptRuntime", () => {
   });
 
   it("maps normalization defects", async () => {
-    const runtime = makeRuntime(() =>
-      Effect.succeed(makeGenerateResult('{"topics":["one"]}')),
-    );
+    const runtime = makeRuntime(() => Effect.succeed(makeGenerateResult('{"topics":["one"]}')));
 
     const exit = await Effect.runPromiseExit(
       runtime.run(
@@ -448,9 +446,9 @@ describe("ForgePromptRuntime", () => {
   it("returns parse error after exhausting retries", async () => {
     let callCount = 0;
     const runtime = makeRuntime(() => {
-        callCount += 1;
-        return Effect.succeed(makeGenerateResult("not json"));
-      });
+      callCount += 1;
+      return Effect.succeed(makeGenerateResult("not json"));
+    });
 
     const exit = await Effect.runPromiseExit(
       runtime.run(
@@ -473,9 +471,9 @@ describe("ForgePromptRuntime", () => {
   it("returns validation error after exhausting retries", async () => {
     let callCount = 0;
     const runtime = makeRuntime(() => {
-        callCount += 1;
-        return Effect.succeed(makeGenerateResult('{"topics":[1]}'));
-      });
+      callCount += 1;
+      return Effect.succeed(makeGenerateResult('{"topics":[1]}'));
+    });
 
     const exit = await Effect.runPromiseExit(
       runtime.run(

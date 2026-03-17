@@ -9,9 +9,7 @@ import {
   type ForgeSessionRepository,
 } from "@main/forge/services/forge-session-repository";
 import { makeStubPdfExtractor, type PdfExtractor } from "@main/forge/services/pdf-extractor";
-import {
-  AiModelCatalogService,
-} from "../services/AiModelCatalogService";
+import { AiModelCatalogService } from "../services/AiModelCatalogService";
 import {
   type AppEventPublisher,
   AppEventPublisherBridgeLive,
@@ -41,9 +39,7 @@ import {
 import { SecretStoreServiceLive } from "../services/SecretStoreService";
 import { SettingsRepositoryServiceLive } from "../services/SettingsRepositoryService";
 import { PdfExtractorServiceLive } from "../services/PdfExtractorService";
-import {
-  PromptModelResolverServiceLive,
-} from "../services/PromptModelResolverService";
+import { PromptModelResolverServiceLive } from "../services/PromptModelResolverService";
 import {
   WorkspaceWatcherControlBridgeLive,
   WorkspaceWatcherControlServiceLive,
@@ -88,10 +84,7 @@ const MainStaticLive = ({
   const aiClientLayer = AiClientServiceFromSecretStoreLive(secretStore);
   const aiModelCatalogLayer = aiModelCatalog
     ? Layer.succeed(AiModelCatalogService, aiModelCatalog)
-    : Layer.succeed(
-        AiModelCatalogService,
-        makeAiModelCatalog(getBundledAiModelCatalogDocument()),
-      );
+    : Layer.succeed(AiModelCatalogService, makeAiModelCatalog(getBundledAiModelCatalogDocument()));
   const promptModelResolverLayer = PromptModelResolverServiceLive.pipe(
     Layer.provideMerge(settingsRepositoryLayer),
     Layer.provideMerge(aiModelCatalogLayer),

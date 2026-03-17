@@ -26,10 +26,7 @@ export const createSettingsHandlers = () =>
     const watcherControl = yield* WorkspaceWatcherControlService;
     const duplicateIndexInvalidation = yield* DuplicateIndexInvalidationService;
 
-    const handlers: Pick<
-      Implementations<AppContract, never>,
-      SettingsHandlerKeys
-    > = {
+    const handlers: Pick<Implementations<AppContract, never>, SettingsHandlerKeys> = {
       GetSettings: () => settingsRepository.getSettings(),
       SetWorkspaceRootPath: (input) =>
         settingsRepository.setWorkspaceRootPath(input).pipe(

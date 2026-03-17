@@ -2,10 +2,7 @@ export {
   AnalyticsRepositoryService,
   AnalyticsRepositoryServiceLive,
 } from "./services/AnalyticsRepositoryService";
-export {
-  AiModelCatalogService,
-  AiModelCatalogServiceLive,
-} from "./services/AiModelCatalogService";
+export { AiModelCatalogService, AiModelCatalogServiceLive } from "./services/AiModelCatalogService";
 export {
   AiClientService,
   AiClientServiceFromSecretStoreLive,

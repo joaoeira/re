@@ -13,8 +13,4 @@ export {
   type ResolvedAiModel,
 } from "./schema";
 
-export {
-  AiModelCatalogReadFailed,
-  AiModelNotFound,
-  PromptModelResolutionFailed,
-} from "./errors";
+export { AiModelCatalogReadFailed, AiModelNotFound, PromptModelResolutionFailed } from "./errors";

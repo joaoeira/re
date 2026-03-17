@@ -164,16 +164,13 @@ describe("AI model catalog", () => {
     }
   });
 
-
   it("returns a model definition for an existing key", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-ai-model-catalog-"));
     const aiModelCatalogFilePath = path.join(rootPath, "ai-models.json");
 
     try {
       const catalog = await makeCatalogService(aiModelCatalogFilePath);
-      const model = await Effect.runPromise(
-        catalog.getModel("gemini/gemini-3-flash-preview"),
-      );
+      const model = await Effect.runPromise(catalog.getModel("gemini/gemini-3-flash-preview"));
 
       expect(model.displayName).toBe("Gemini 3 Flash Preview");
       expect(model.providerId).toBe("gemini");

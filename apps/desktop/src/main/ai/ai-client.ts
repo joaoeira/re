@@ -102,7 +102,9 @@ const mapProviderInvocationError = (error: unknown): AiProviderInvocationError =
   return new AiCompletionError({ message: toMessage(sourceError) });
 };
 
-const resolveProvider = (model: ResolvedAiModel): Effect.Effect<ProviderConfig, AiProviderNotSupportedError> => {
+const resolveProvider = (
+  model: ResolvedAiModel,
+): Effect.Effect<ProviderConfig, AiProviderNotSupportedError> => {
   const providerId = model.providerId as string;
 
   return !hasProvider(providerId)

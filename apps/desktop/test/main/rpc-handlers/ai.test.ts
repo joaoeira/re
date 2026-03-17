@@ -26,10 +26,7 @@ const INVALID_MODEL = {
 const aiHandlerServices = (mockAiClient: AiClient) =>
   Layer.mergeAll(
     AiClientServiceLive(mockAiClient),
-    Layer.succeed(
-      AiModelCatalogService,
-      makeAiModelCatalog(getBundledAiModelCatalogDocument()),
-    ),
+    Layer.succeed(AiModelCatalogService, makeAiModelCatalog(getBundledAiModelCatalogDocument())),
   );
 
 describe("AI handlers", () => {

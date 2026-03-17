@@ -10,8 +10,7 @@ import type { AppContract } from "@shared/rpc/contracts";
 type AiHandlerKeys = "AiGenerateText";
 type AiStreamHandlerKeys = "AiStreamText";
 
-const toProviderNotSupported = (key: string) =>
-  new AiProviderNotSupportedError({ model: key });
+const toProviderNotSupported = (key: string) => new AiProviderNotSupportedError({ model: key });
 
 export const createAiHandlers = () =>
   Effect.gen(function* () {
