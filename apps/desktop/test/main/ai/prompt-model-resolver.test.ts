@@ -56,6 +56,7 @@ const makeSettingsRepository = (settings: Settings): SettingsRepository => ({
   getSettings: () => Effect.succeed(settings),
   setWorkspaceRootPath: () => Effect.succeed(settings),
   setDefaultModelKey: () => Effect.succeed(settings),
+  setPromptModelOverride: () => Effect.succeed(settings),
 });
 
 const resolve = (settings: Settings, catalog: AiModelCatalogDocument = BASE_CATALOG) =>

@@ -108,6 +108,7 @@ export const GetSynthesisTopicsPromptSpec: PromptSpec<
   GetSynthesisTopicsPromptOutput
 > = {
   promptId: "forge/get-synthesis-topics",
+  displayName: "Synthesis topics",
   version: "1",
   inputSchema: GetSynthesisTopicsPromptInputSchema,
   outputSchema: GetSynthesisTopicsPromptOutputSchema,

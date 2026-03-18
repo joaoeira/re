@@ -95,6 +95,7 @@ const renderRepairInstruction = (context: PromptAttemptContext): string => {
 
 export const CreateCardsPromptSpec: PromptSpec<CreateCardsPromptInput, CreateCardsPromptOutput> = {
   promptId: "forge/create-cards",
+  displayName: "Card generation",
   version: "1",
   inputSchema: CreateCardsPromptInputSchema,
   outputSchema: CreateCardsPromptOutputSchema,

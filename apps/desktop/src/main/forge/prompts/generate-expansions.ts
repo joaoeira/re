@@ -105,6 +105,7 @@ export const GenerateExpansionsPromptSpec: PromptSpec<
   GenerateExpansionsPromptOutput
 > = {
   promptId: "forge/generate-expansions",
+  displayName: "Expansions",
   version: "1",
   inputSchema: GenerateExpansionsPromptInputSchema,
   outputSchema: GenerateExpansionsPromptOutputSchema,

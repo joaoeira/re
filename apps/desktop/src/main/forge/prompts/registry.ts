@@ -9,6 +9,7 @@ import { ReformulateCardPromptSpec } from "./reformulate-card";
 
 export interface PromptSpecIdentity {
   readonly promptId: string;
+  readonly displayName: string;
   readonly version: string;
 }
 

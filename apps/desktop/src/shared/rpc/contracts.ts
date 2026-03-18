@@ -53,8 +53,10 @@ import { DeleteApiKey, HasApiKey, SetApiKey } from "./contracts/secret";
 import {
   GetSettings,
   ListAiModels,
+  ListPromptTasks,
   SelectDirectory,
   SetDefaultModelKey,
+  SetPromptModelOverride,
   SetWorkspaceRootPath,
 } from "./contracts/settings";
 import {
@@ -90,7 +92,9 @@ export const appContract = defineContract({
     GetSettings,
     SetWorkspaceRootPath,
     ListAiModels,
+    ListPromptTasks,
     SetDefaultModelKey,
+    SetPromptModelOverride,
     HasApiKey,
     SetApiKey,
     DeleteApiKey,

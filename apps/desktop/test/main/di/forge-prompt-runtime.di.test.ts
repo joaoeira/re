@@ -98,6 +98,19 @@ const makeSettingsRepository = (settings: Settings = DEFAULT_SETTINGS): Settings
         defaultModelKey: modelKey,
       },
     }),
+  setPromptModelOverride: ({ promptId, modelKey }) =>
+    Effect.succeed({
+      ...settings,
+      ai: {
+        ...settings.ai,
+        promptModelOverrides:
+          modelKey !== null
+            ? { ...settings.ai.promptModelOverrides, [promptId]: modelKey }
+            : Object.fromEntries(
+                Object.entries(settings.ai.promptModelOverrides).filter(([k]) => k !== promptId),
+              ),
+      },
+    }),
 });
 
 const secretStore: SecretStore = {

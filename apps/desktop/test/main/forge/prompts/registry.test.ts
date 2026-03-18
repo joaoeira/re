@@ -21,6 +21,7 @@ const TestOutputSchema = Schema.Struct({
 
 const makeSpec = (promptId: string, version: string): PromptSpec<TestInput, TestOutput> => ({
   promptId,
+  displayName: promptId,
   version,
   inputSchema: TestInputSchema,
   outputSchema: TestOutputSchema,

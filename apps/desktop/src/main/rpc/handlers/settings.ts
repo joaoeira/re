@@ -8,6 +8,8 @@ import {
   SettingsRepositoryService,
   WorkspaceWatcherControlService,
 } from "@main/di";
+import { ForgePromptRegistry } from "@main/forge/prompts/registry";
+import { GenerateReviewPermutationsPromptSpec } from "@main/review/prompts/generate-review-permutations";
 import type { AppContract } from "@shared/rpc/contracts";
 
 import { provideHandlerServices } from "./shared";
@@ -17,6 +19,8 @@ type SettingsHandlerKeys =
   | "SetWorkspaceRootPath"
   | "SetDefaultModelKey"
   | "ListAiModels"
+  | "ListPromptTasks"
+  | "SetPromptModelOverride"
   | "SelectDirectory";
 
 export const createSettingsHandlers = () =>
@@ -48,6 +52,20 @@ export const createSettingsHandlers = () =>
           return { models: [...models], applicationDefaultModelKey };
         }),
       SetDefaultModelKey: (input) => settingsRepository.setDefaultModelKey(input),
+      ListPromptTasks: () =>
+        Effect.succeed({
+          tasks: [
+            ...ForgePromptRegistry.all.map((spec) => ({
+              promptId: spec.promptId,
+              displayName: spec.displayName,
+            })),
+            {
+              promptId: GenerateReviewPermutationsPromptSpec.promptId,
+              displayName: GenerateReviewPermutationsPromptSpec.displayName,
+            },
+          ],
+        }),
+      SetPromptModelOverride: (input) => settingsRepository.setPromptModelOverride(input),
       SelectDirectory: () =>
         Effect.promise(async () => {
           const options: Electron.OpenDialogOptions = { properties: ["openDirectory"] };

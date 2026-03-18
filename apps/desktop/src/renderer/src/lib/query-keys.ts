@@ -31,6 +31,7 @@ export const forgeSourceCacheKey = (source: ForgeSourceInput | null): string | n
 export const queryKeys = {
   settings: ["settings"] as const,
   aiModels: ["aiModels"] as const,
+  promptTasks: ["promptTasks"] as const,
   gitSyncSnapshot: (rootPath: string | null) => ["gitSyncSnapshot", rootPath] as const,
   forgeSessionList: ["forgeSessionList"] as const,
   apiKeysConfigured: ["apiKeysConfigured"] as const,

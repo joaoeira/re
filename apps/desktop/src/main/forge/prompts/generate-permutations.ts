@@ -187,6 +187,7 @@ export const GeneratePermutationsPromptSpec: PromptSpec<
   GeneratePermutationsPromptOutput
 > = {
   promptId: "forge/generate-permutations",
+  displayName: "Permutations",
   version: "1",
   inputSchema: GeneratePermutationsPromptInputSchema,
   outputSchema: GeneratePermutationsPromptOutputSchema,

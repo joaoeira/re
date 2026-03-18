@@ -12,6 +12,7 @@ import {
   WorkspaceRootNotFound,
   WorkspaceRootUnreadable,
   type SetDefaultModelKeyInput,
+  type SetPromptModelOverrideInput,
   type SetWorkspaceRootPathInput,
   type Settings,
   type SettingsError,
@@ -25,6 +26,9 @@ export interface SettingsRepository {
   ) => Effect.Effect<Settings, SettingsError>;
   readonly setDefaultModelKey: (
     input: SetDefaultModelKeyInput,
+  ) => Effect.Effect<Settings, SettingsError>;
+  readonly setPromptModelOverride: (
+    input: SetPromptModelOverrideInput,
   ) => Effect.Effect<Settings, SettingsError>;
 }
 
@@ -283,6 +287,29 @@ export const makeSettingsRepository = ({
                 defaultModelKey: input.modelKey,
               },
             })),
+            Effect.flatMap((nextSettings) =>
+              persistSettings(nextSettings).pipe(Effect.as(nextSettings)),
+            ),
+          ),
+        ),
+      setPromptModelOverride: (input) =>
+        withLock(
+          loadSettings().pipe(
+            Effect.map((currentSettings) => {
+              const nextOverrides = { ...currentSettings.ai.promptModelOverrides };
+              if (input.modelKey === null) {
+                delete nextOverrides[input.promptId];
+              } else {
+                nextOverrides[input.promptId] = input.modelKey;
+              }
+              return {
+                ...currentSettings,
+                ai: {
+                  ...currentSettings.ai,
+                  promptModelOverrides: nextOverrides,
+                },
+              };
+            }),
             Effect.flatMap((nextSettings) =>
               persistSettings(nextSettings).pipe(Effect.as(nextSettings)),
             ),

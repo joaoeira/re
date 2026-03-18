@@ -38,6 +38,21 @@ export const stubSettingsRepository: SettingsRepository = {
         defaultModelKey: modelKey,
       },
     }),
+  setPromptModelOverride: ({ promptId, modelKey }) =>
+    Effect.succeed({
+      ...DEFAULT_SETTINGS,
+      ai: {
+        ...DEFAULT_SETTINGS.ai,
+        promptModelOverrides:
+          modelKey !== null
+            ? { ...DEFAULT_SETTINGS.ai.promptModelOverrides, [promptId]: modelKey }
+            : Object.fromEntries(
+                Object.entries(DEFAULT_SETTINGS.ai.promptModelOverrides).filter(
+                  ([k]) => k !== promptId,
+                ),
+              ),
+      },
+    }),
 };
 
 export const stubWatcher: WorkspaceWatcher = {

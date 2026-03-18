@@ -93,6 +93,7 @@ export const GenerateClozePromptSpec: PromptSpec<
   GenerateClozePromptOutput
 > = {
   promptId: "forge/generate-cloze",
+  displayName: "Cloze generation",
   version: "1",
   inputSchema: GenerateClozePromptInputSchema,
   outputSchema: GenerateClozePromptOutputSchema,

@@ -50,3 +50,10 @@ export const SetDefaultModelKeyInputSchema = Schema.Struct({
 });
 
 export type SetDefaultModelKeyInput = typeof SetDefaultModelKeyInputSchema.Type;
+
+export const SetPromptModelOverrideInputSchema = Schema.Struct({
+  promptId: Schema.String.pipe(Schema.nonEmptyString()),
+  modelKey: Schema.Union(Schema.String.pipe(Schema.nonEmptyString()), Schema.Null),
+});
+
+export type SetPromptModelOverrideInput = typeof SetPromptModelOverrideInputSchema.Type;

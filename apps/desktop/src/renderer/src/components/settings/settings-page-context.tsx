@@ -1,12 +1,9 @@
 import { createContext, useCallback, useContext, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import type { AiModelDefinition } from "@shared/ai-models";
 import { createSecretKeyRecord, type SecretKey } from "@shared/secrets";
 import { useApiKeyMutations } from "@/hooks/mutations/use-api-key-mutations";
-import { useDefaultModelMutation } from "@/hooks/mutations/use-default-model-mutation";
 import { useWorkspaceRootMutations } from "@/hooks/mutations/use-workspace-root-mutations";
-import { useAiModelsQuery } from "@/hooks/queries/use-ai-models-query";
 import { useApiKeysConfiguredQuery } from "@/hooks/queries/use-api-keys-configured-query";
 import { useSettingsQuery } from "@/hooks/queries/use-settings-query";
 import { queryKeys } from "@/lib/query-keys";
@@ -18,7 +15,6 @@ type SettingsPageActions = {
   readonly clearRootPath: () => void;
   readonly saveKey: (key: SecretKey, value: string) => void;
   readonly removeKey: (key: SecretKey) => void;
-  readonly setDefaultModelKey: (modelKey: string | null) => void;
 };
 
 type SettingsPageState = {
@@ -28,13 +24,6 @@ type SettingsPageState = {
   readonly rootPathSaving: boolean;
   readonly rootPathError: string | null;
   readonly apiKeys: Record<SecretKey, ApiKeyState>;
-  readonly defaultModelKey: string | null;
-  readonly defaultModelSaving: boolean;
-  readonly defaultModelError: string | null;
-  readonly aiModels: readonly AiModelDefinition[];
-  readonly applicationDefaultModelKey: string | null;
-  readonly modelsLoading: boolean;
-  readonly modelsLoadError: string | null;
 };
 
 type SettingsPageContextValue = {
@@ -77,22 +66,15 @@ export function SettingsPageProvider({ children }: { children: React.ReactNode }
     removeKey,
     clearErrors: clearApiKeyErrors,
   } = useApiKeyMutations();
-  const aiModelsQuery = useAiModelsQuery();
-  const {
-    saving: defaultModelSaving,
-    error: defaultModelError,
-    setDefaultModelKey,
-    clearError: clearDefaultModelError,
-  } = useDefaultModelMutation();
 
   const reload = useCallback(() => {
     clearRootPathError();
     clearApiKeyErrors();
-    clearDefaultModelError();
     void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
     void queryClient.invalidateQueries({ queryKey: queryKeys.apiKeysConfigured });
     void queryClient.invalidateQueries({ queryKey: queryKeys.aiModels });
-  }, [clearApiKeyErrors, clearDefaultModelError, clearRootPathError, queryClient]);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.promptTasks });
+  }, [clearApiKeyErrors, clearRootPathError, queryClient]);
 
   const loadError = (() => {
     if (settingsQuery.error) {
@@ -105,10 +87,6 @@ export function SettingsPageProvider({ children }: { children: React.ReactNode }
 
     return null;
   })();
-
-  const modelsLoadError = aiModelsQuery.error
-    ? `Failed to load models: ${aiModelsQuery.error.message}`
-    : null;
 
   const configuredByKey = apiKeysConfiguredQuery.data ?? createSecretKeyRecord(() => false);
 
@@ -124,13 +102,6 @@ export function SettingsPageProvider({ children }: { children: React.ReactNode }
         saving: apiKeySaving[key],
         error: apiKeyErrors[key],
       })),
-      defaultModelKey: settingsQuery.data?.ai.defaultModelKey ?? null,
-      defaultModelSaving,
-      defaultModelError,
-      aiModels: aiModelsQuery.data?.models ?? [],
-      applicationDefaultModelKey: aiModelsQuery.data?.applicationDefaultModelKey ?? null,
-      modelsLoading: aiModelsQuery.isPending,
-      modelsLoadError,
     }),
     [
       settingsQuery.isPending,
@@ -142,11 +113,6 @@ export function SettingsPageProvider({ children }: { children: React.ReactNode }
       configuredByKey,
       apiKeySaving,
       apiKeyErrors,
-      defaultModelSaving,
-      defaultModelError,
-      aiModelsQuery.data,
-      aiModelsQuery.isPending,
-      modelsLoadError,
     ],
   );
 
@@ -157,9 +123,8 @@ export function SettingsPageProvider({ children }: { children: React.ReactNode }
       clearRootPath,
       saveKey,
       removeKey,
-      setDefaultModelKey,
     }),
-    [reload, selectDirectory, clearRootPath, saveKey, removeKey, setDefaultModelKey],
+    [reload, selectDirectory, clearRootPath, saveKey, removeKey],
   );
 
   const value = useMemo(

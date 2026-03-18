@@ -25,6 +25,7 @@ export interface PromptAttemptContext {
 
 export interface PromptSpec<Input, Output> {
   readonly promptId: string;
+  readonly displayName: string;
   readonly version: string;
   readonly inputSchema: Schema.Schema<Input>;
   readonly outputSchema: Schema.Schema<Output>;

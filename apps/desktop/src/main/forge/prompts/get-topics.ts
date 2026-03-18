@@ -86,6 +86,7 @@ const renderRepairInstruction = (context: PromptAttemptContext): string => {
 
 export const GetTopicsPromptSpec: PromptSpec<GetTopicsPromptInput, GetTopicsPromptOutput> = {
   promptId: "forge/get-topics",
+  displayName: "Topic extraction",
   version: "1",
   inputSchema: GetTopicsPromptInputSchema,
   outputSchema: GetTopicsPromptOutputSchema,

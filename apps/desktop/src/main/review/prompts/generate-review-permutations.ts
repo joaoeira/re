@@ -185,6 +185,7 @@ export const GenerateReviewPermutationsPromptSpec: PromptSpec<
   GenerateReviewPermutationsPromptOutput
 > = {
   promptId: "review/generate-permutations",
+  displayName: "Review permutations",
   version: "1",
   inputSchema: GenerateReviewPermutationsPromptInputSchema,
   outputSchema: GenerateReviewPermutationsPromptOutputSchema,

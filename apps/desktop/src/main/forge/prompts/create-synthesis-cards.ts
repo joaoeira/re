@@ -107,6 +107,7 @@ export const CreateSynthesisCardsPromptSpec: PromptSpec<
   CreateSynthesisCardsPromptOutput
 > = {
   promptId: "forge/create-synthesis-cards",
+  displayName: "Synthesis cards",
   version: "1",
   inputSchema: CreateSynthesisCardsPromptInputSchema,
   outputSchema: CreateSynthesisCardsPromptOutputSchema,

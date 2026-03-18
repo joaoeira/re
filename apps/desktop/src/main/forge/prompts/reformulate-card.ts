@@ -69,6 +69,7 @@ export const ReformulateCardPromptSpec: PromptSpec<
   ReformulateCardPromptOutput
 > = {
   promptId: "forge/reformulate-card",
+  displayName: "Reformulation",
   version: "1",
   inputSchema: ReformulateCardPromptInputSchema,
   outputSchema: ReformulateCardPromptOutputSchema,

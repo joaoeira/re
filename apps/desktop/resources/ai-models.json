@@ -12,7 +12,7 @@
       "key": "openai/gpt-5.4",
       "providerId": "openai",
       "providerModelId": "gpt-5.4",
-      "displayName": "OpenAI GPT-5.4"
+      "displayName": "GPT-5.4"
     }
   ]
 }

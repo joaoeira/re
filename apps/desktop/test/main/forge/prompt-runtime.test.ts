@@ -66,6 +66,7 @@ const makeSpec = (
   } = {},
 ): PromptSpec<TestInput, TestOutput> => ({
   promptId: "forge/test-prompt",
+  displayName: "Test prompt",
   version: "1",
   inputSchema: TestInputSchema,
   outputSchema: TestOutputSchema,
@@ -502,6 +503,7 @@ describe("ForgePromptRuntime", () => {
 
     const transformedSpec: PromptSpec<TestInput, TransformedOutput> = {
       promptId: "forge/test-prompt",
+      displayName: "Test prompt",
       version: "1",
       inputSchema: TestInputSchema,
       outputSchema: transformedOutputSchema as unknown as Schema.Schema<TransformedOutput>,
