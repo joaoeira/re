@@ -324,10 +324,8 @@ if (!gotSingleInstanceLock) {
 
       const userDataPath = app.getPath("userData");
       const settingsFilePath = path.join(userDataPath, "settings.json");
-      const aiModelCatalogFilePath = path.join(userDataPath, "ai-models.json");
       const secretsFilePath = path.join(userDataPath, "secrets.json");
       const dbPath = path.join(userDataPath, "re.db");
-      log("ai model catalog path", aiModelCatalogFilePath);
       const settingsRepository = Effect.runSync(
         makeSettingsRepository({ settingsFilePath }).pipe(Effect.provide(NodeServicesLive)),
       );
@@ -361,9 +359,7 @@ if (!gotSingleInstanceLock) {
       const chunkService = makeChunkService();
       const settingsRepositoryLayer = SettingsRepositoryServiceLive(settingsRepository);
       const aiClientLayer = AiClientServiceFromSecretStoreLive(secretStore);
-      const aiModelCatalogRepositoryLayer = AiModelCatalogRepositoryLive({
-        aiModelCatalogFilePath,
-      }).pipe(Layer.provide(NodeServicesLive));
+      const aiModelCatalogRepositoryLayer = AiModelCatalogRepositoryLive;
       const aiModelCatalogLayer = AiModelCatalogServiceLive.pipe(
         Layer.provide(aiModelCatalogRepositoryLayer),
       );

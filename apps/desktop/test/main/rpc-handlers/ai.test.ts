@@ -9,12 +9,10 @@ import { createAiHandlers, createAiStreamHandlers } from "@main/rpc/handlers/ai"
 import type { ResolvedAiModel } from "@shared/ai-models";
 import { AiProviderNotSupportedError, AiRateLimitError } from "@shared/rpc/schemas/ai";
 
-const OPENAI_MODEL: ResolvedAiModel = {
-  key: "openai/gpt-5.4",
-  providerId: "openai",
-  providerModelId: "gpt-5.4",
-  displayName: "OpenAI GPT-5.4",
-};
+const bundledCatalog = getBundledAiModelCatalogDocument();
+const OPENAI_MODEL: ResolvedAiModel = bundledCatalog.models.find(
+  (m) => m.key === "openai/gpt-5.4",
+)!;
 
 const INVALID_MODEL = {
   key: "constructor/gpt-4o",
@@ -129,12 +127,7 @@ describe("AI handlers", () => {
       }),
     );
 
-    expect(receivedModel).toEqual({
-      key: "openai/gpt-5.4",
-      providerId: "openai",
-      providerModelId: "gpt-5.4",
-      displayName: "OpenAI GPT-5.4",
-    });
+    expect(receivedModel).toEqual(OPENAI_MODEL);
   });
 });
 

@@ -148,9 +148,6 @@ export function ModelsSettings({
     [promptTasks, promptModelOverrides],
   );
 
-  const overrideCount = overrideEntries.length;
-  const totalTasks = promptTasks.length;
-
   const handleDefaultModelChange = (value: string) => {
     if (value === applicationDefaultModelKey) {
       onDefaultModelChange(null);
@@ -166,7 +163,7 @@ export function ModelsSettings({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
           Default model
@@ -181,18 +178,31 @@ export function ModelsSettings({
             onModelChange={handleDefaultModelChange}
           />
         </div>
-
-        {totalTasks > 0 && (
-          <p className="mt-1 text-[10px] text-muted-foreground">
-            {overrideCount === 0
-              ? `Applies to all ${totalTasks} tasks`
-              : `Applies to ${totalTasks - overrideCount} of ${totalTasks} tasks`}
-          </p>
-        )}
       </div>
 
       {error && <p className="text-destructive text-xs">{error}</p>}
 
+      {availableTasks.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={anySaving}
+            className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground outline-none disabled:opacity-50"
+          >
+            <Plus className="size-3" />
+            Add task override
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" sideOffset={8} className="min-w-48">
+            {availableTasks.map((task) => (
+              <DropdownMenuItem
+                key={task.promptId}
+                onClick={() => handleAddOverride(task.promptId)}
+              >
+                {task.displayName}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
       {promptTasksLoading ? (
         <p className="text-[10px] text-muted-foreground">Loading tasks...</p>
       ) : (
@@ -219,28 +229,6 @@ export function ModelsSettings({
               </button>
             </div>
           ))}
-
-          {availableTasks.length > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                disabled={anySaving}
-                className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground outline-none disabled:opacity-50"
-              >
-                <Plus className="size-3" />
-                Add task override
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" sideOffset={8} className="min-w-48">
-                {availableTasks.map((task) => (
-                  <DropdownMenuItem
-                    key={task.promptId}
-                    onClick={() => handleAddOverride(task.promptId)}
-                  >
-                    {task.displayName}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
         </div>
       )}
 
