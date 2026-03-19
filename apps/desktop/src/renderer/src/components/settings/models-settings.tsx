@@ -70,9 +70,11 @@ function ModelSelector({
         render={
           <Button variant="outline" size="sm" className="flex items-center">
             {providerLabel && (
-              <span className="text-xs text-muted-foreground">{providerLabel}</span>
+              <>
+                <span className="text-xs text-muted-foreground">{providerLabel}</span>
+                <span className="mx-1 text-muted-foreground">&middot;</span>
+              </>
             )}
-            <span className="mx-1 text-muted-foreground">&middot;</span>
             <span className="text-xs font-medium text-foreground">
               {selectedModel?.displayName ?? "Select model"}
             </span>
@@ -186,7 +188,7 @@ export function ModelsSettings({
         <DropdownMenu>
           <DropdownMenuTrigger
             disabled={anySaving}
-            className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground outline-none disabled:opacity-50"
+            className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground outline-none disabled:opacity-50 transition-[color,transform] duration-150 ease-out active:scale-[0.97]"
           >
             <Plus className="size-3" />
             Add task override
@@ -222,7 +224,7 @@ export function ModelsSettings({
               <button
                 type="button"
                 disabled={anySaving}
-                className="text-muted-foreground/50 hover:text-foreground disabled:opacity-50"
+                className="text-muted-foreground/50 hover:text-foreground disabled:opacity-50 transition-[color,transform] duration-100 ease-out active:scale-[0.90]"
                 onClick={() => onOverrideChange(entry.promptId, null)}
               >
                 <X className="size-3" />
