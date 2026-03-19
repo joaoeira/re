@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 
 import {
   AlertDialog,
@@ -89,10 +89,16 @@ export function ProviderKeyRow({
   const [state, dispatch] = useReducer(rowReducer, initialRowState);
   const inputRef = useRef<HTMLInputElement>(null);
   const { isHovered, isEditing, inputValue, pendingSave, sawSaving } = state;
+  const [editorMounted, setEditorMounted] = useState(false);
 
   useEffect(() => {
     if (isEditing) {
-      inputRef.current?.focus();
+      requestAnimationFrame(() => {
+        setEditorMounted(true);
+        inputRef.current?.focus();
+      });
+    } else {
+      setEditorMounted(false);
     }
   }, [isEditing]);
 
@@ -133,7 +139,7 @@ export function ProviderKeyRow({
     <div
       role="group"
       aria-label={`${providerName} API key`}
-      className={`space-y-2 rounded-md px-2 py-2 transition-colors ${
+      className={`space-y-2 rounded-md px-2 py-2 transition-colors duration-150 ease-out ${
         isHovered ? "bg-muted/30" : "bg-transparent"
       }`}
       onMouseEnter={() => dispatch({ type: "hoverChanged", hovered: true })}
@@ -150,7 +156,7 @@ export function ProviderKeyRow({
           <button
             type="button"
             aria-label={`${providerName} key preview`}
-            className="text-muted-foreground hover:text-foreground font-mono text-xs tracking-wide transition-colors cursor-pointer ml-2"
+            className="text-muted-foreground hover:text-foreground font-mono text-xs tracking-wide transition-[color,transform] duration-150 ease-out active:scale-[0.97] cursor-pointer ml-2"
             onClick={openEditor}
             disabled={saving}
           >
@@ -161,14 +167,16 @@ export function ProviderKeyRow({
         <div className="ml-auto flex items-center gap-2">
           {configured && !isEditing ? (
             <div
-              className={`flex items-center gap-2 transition-opacity ${
-                showConfiguredActions ? "opacity-100" : "pointer-events-none opacity-0"
+              className={`flex items-center gap-2 transition-[opacity,transform] origin-right ${
+                showConfiguredActions
+                  ? "opacity-100 scale-100 duration-150 ease-out"
+                  : "pointer-events-none opacity-0 scale-[0.98] duration-100 ease-out"
               }`}
             >
               <button
                 type="button"
                 aria-label={`Replace ${providerName} key`}
-                className="text-muted-foreground text-xs underline underline-offset-2 hover:text-foreground"
+                className="text-muted-foreground text-xs underline underline-offset-2 hover:text-foreground transition-[color,transform] duration-150 ease-out active:scale-[0.97]"
                 onClick={openEditor}
                 disabled={saving}
               >
@@ -211,7 +219,7 @@ export function ProviderKeyRow({
             <button
               type="button"
               aria-label={`Add ${providerName} key`}
-              className="text-muted-foreground text-xs underline underline-offset-2 hover:text-foreground"
+              className="text-muted-foreground text-xs underline underline-offset-2 hover:text-foreground transition-[color,transform] duration-150 ease-out active:scale-[0.97]"
               onClick={openEditor}
               disabled={saving}
             >
@@ -222,7 +230,11 @@ export function ProviderKeyRow({
       </div>
 
       {isEditing ? (
-        <div className="flex items-center gap-2 pl-4">
+        <div
+          className={`flex items-center gap-2 pl-4 transition-[opacity,transform] duration-150 ease-out ${
+            editorMounted ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1"
+          }`}
+        >
           <input
             ref={inputRef}
             type="password"
