@@ -144,10 +144,7 @@ const createCardsDomainPromptRuntime = (options?: {
     runOptions?: PromptRunOptions,
   ) =>
     Effect.gen(function* () {
-      if (
-        spec.promptId === "forge/create-cards" ||
-        spec.promptId === "forge/create-synthesis-cards"
-      ) {
+      if (spec.promptId === "forge/create-cards") {
         if (options?.holdCreateCards) {
           yield* Effect.promise(() => options.holdCreateCards!);
         }
@@ -2468,7 +2465,7 @@ describe("forge handlers", () => {
     }
   });
 
-  it("returns mixed-family groups and outcomes from ForgeStartTopicExtraction", async () => {
+  it("returns detail-only groups and outcomes from ForgeStartTopicExtraction", async () => {
     const sourceFilePath = "/tmp/forge-v2-start.pdf";
     const extractor = createPdfExtractor({
       textByPath: {
@@ -2493,74 +2490,18 @@ describe("forge handlers", () => {
           status: "extracted",
           errorMessage: null,
         },
-        {
-          family: "synthesis",
-          status: "extracted",
-          errorMessage: null,
-        },
       ]);
-      expect(result.groups).toHaveLength(2);
+      expect(result.groups).toHaveLength(1);
       expect(result.groups[0]?.groupKind).toBe("chunk");
       expect(result.groups[0]?.family).toBe("detail");
       expect(result.groups[0]?.topics).toHaveLength(2);
       expect(result.groups[0]?.topics[0]?.sessionId).toBe(result.session.id);
-      expect(result.groups[1]?.groupKind).toBe("section");
-      expect(result.groups[1]?.family).toBe("synthesis");
-      expect(result.groups[1]?.topics).toHaveLength(2);
     } finally {
       await dispose();
     }
   });
 
-  it("keeps session usable when synthesis extraction fails but detail succeeds in V2", async () => {
-    const sourceFilePath = "/tmp/forge-v2-detail-success.pdf";
-    const extractor = createPdfExtractor({
-      textByPath: {
-        [sourceFilePath]: "Alpha topic text. Beta topic text.",
-      },
-    });
-    const promptRuntime = createPromptRuntime(({ chunkText, sourceText }) => {
-      if (sourceText) {
-        return Effect.fail(
-          new PromptOutputParseError({
-            promptId: "forge/get-synthesis-topics",
-            message: "synthesis parse failure",
-            rawExcerpt: "invalid",
-          }),
-        );
-      }
-
-      return Effect.succeed([(chunkText ?? "").slice(0, 5), "detail idea"]);
-    });
-    const { handlers, dispose } = await setupHandlers({
-      extractor,
-      promptRuntime,
-    });
-
-    try {
-      const result = await Effect.runPromise(startPdfTopicExtraction(handlers, { sourceFilePath }));
-
-      expect(result.session.status).toBe("topics_extracted");
-      expect(result.outcomes).toEqual([
-        {
-          family: "detail",
-          status: "extracted",
-          errorMessage: null,
-        },
-        {
-          family: "synthesis",
-          status: "error",
-          errorMessage: "synthesis parse failure",
-        },
-      ]);
-      expect(result.groups).toHaveLength(1);
-      expect(result.groups[0]?.family).toBe("detail");
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("fails V2 extraction when both detail and synthesis extraction fail", async () => {
+  it("fails extraction when detail extraction fails", async () => {
     const sourceFilePath = "/tmp/forge-v2-all-fail.pdf";
     const extractor = createPdfExtractor({
       textByPath: {
@@ -2642,62 +2583,6 @@ describe("forge handlers", () => {
     }
   });
 
-  it("generates synthesis cards through ForgeGenerateTopicCards", async () => {
-    const promptRuntime = createCardsDomainPromptRuntime();
-    const { handlers, repository, dispose } = await setupHandlers({
-      promptRuntime,
-    });
-
-    try {
-      const created = await Effect.runPromise(
-        createPdfSession(handlers, "/tmp/forge-v2-synthesis-cards.pdf"),
-      );
-
-      await Effect.runPromise(
-        repository.saveChunks(created.session.id, [
-          {
-            text: "chunk a ",
-            sequenceOrder: 0,
-            pageBoundaries: [{ offset: 0, page: 1 }],
-          },
-          {
-            text: "chunk b",
-            sequenceOrder: 1,
-            pageBoundaries: [{ offset: 0, page: 2 }],
-          },
-        ]),
-      );
-      await Effect.runPromise(
-        repository.replaceSynthesisTopicsForSessionAndSetExtractionOutcome({
-          sessionId: created.session.id,
-          topics: ["synthesis topic"],
-          status: "extracted",
-          errorMessage: null,
-        }),
-      );
-
-      const snapshot = await Effect.runPromise(
-        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
-      );
-      const topicId = snapshot.topics.find((topic) => topic.family === "synthesis")?.topicId;
-      if (!topicId) {
-        throw new Error("Expected synthesis topic id.");
-      }
-
-      const result = await Effect.runPromise(
-        handlers.ForgeGenerateTopicCards({
-          sessionId: created.session.id,
-          topicId,
-        }),
-      );
-
-      expect(result.topic.family).toBe("synthesis");
-      expect(result.cards.length).toBeGreaterThan(0);
-    } finally {
-      await dispose();
-    }
-  });
-
   it("rejects cross-session topicId access in ForgeGetTopicCards", async () => {
     const promptRuntime = createCardsDomainPromptRuntime();
     const { handlers, repository, dispose } = await setupHandlers({
@@ -2756,80 +2641,6 @@ describe("forge handlers", () => {
         }),
       );
       expect(Exit.isFailure(exit)).toBe(true);
-    } finally {
-      await dispose();
-    }
-  });
-
-  it("generates permutations and cloze for synthesis-derived cards", async () => {
-    const promptRuntime = createCardsDomainPromptRuntime();
-    const { handlers, repository, dispose } = await setupHandlers({
-      promptRuntime,
-    });
-
-    try {
-      const created = await Effect.runPromise(
-        createPdfSession(handlers, "/tmp/forge-v2-synthesis-variants.pdf"),
-      );
-
-      await Effect.runPromise(
-        repository.saveChunks(created.session.id, [
-          {
-            text: "chunk a ",
-            sequenceOrder: 0,
-            pageBoundaries: [{ offset: 0, page: 1 }],
-          },
-          {
-            text: "chunk b",
-            sequenceOrder: 1,
-            pageBoundaries: [{ offset: 0, page: 2 }],
-          },
-        ]),
-      );
-      await Effect.runPromise(
-        repository.replaceSynthesisTopicsForSessionAndSetExtractionOutcome({
-          sessionId: created.session.id,
-          topics: ["synthesis topic"],
-          status: "extracted",
-          errorMessage: null,
-        }),
-      );
-
-      const snapshot = await Effect.runPromise(
-        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
-      );
-      const topicId = snapshot.topics.find((topic) => topic.family === "synthesis")?.topicId;
-      if (!topicId) {
-        throw new Error("Expected synthesis topic id.");
-      }
-
-      const generated = await Effect.runPromise(
-        handlers.ForgeGenerateTopicCards({
-          sessionId: created.session.id,
-          topicId,
-        }),
-      );
-      const sourceCardId = generated.cards[0]?.id;
-      if (!sourceCardId) {
-        throw new Error("Expected synthesis source card.");
-      }
-
-      const permutations = unwrapDerivedCardsResult(
-        await Effect.runPromise(
-          handlers.ForgeGenerateDerivedCards({
-            parent: { cardId: sourceCardId },
-            kind: "permutation",
-          }),
-        ),
-      );
-      expect(permutations.derivations).toHaveLength(1);
-
-      const cloze = await Effect.runPromise(
-        handlers.ForgeGenerateCardCloze({
-          source: { cardId: sourceCardId },
-        }),
-      );
-      expect(cloze.cloze).toContain("{{c1::");
     } finally {
       await dispose();
     }

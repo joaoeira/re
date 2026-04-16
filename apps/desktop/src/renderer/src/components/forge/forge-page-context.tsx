@@ -11,7 +11,6 @@ import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { forgeSourceCacheKey, queryKeys } from "@/lib/query-keys";
 import {
   ForgeExtractionSessionCreated,
-  ForgeSynthesisTopicsExtracted,
   ForgeTopicChunkExtracted,
 } from "@shared/rpc/contracts";
 import type {
@@ -202,7 +201,7 @@ export function useForgeSelectedTopicCount(): number {
 
 export type SelectedTopic = {
   readonly topicId: number;
-  readonly family: "detail" | "synthesis";
+  readonly family: "detail";
   readonly chunkId: number | null;
   readonly topicIndex: number;
   readonly text: string;
@@ -333,7 +332,7 @@ export function topicSummariesToTopicGroups(
       readonly topics: Array<{
         readonly topicId: number;
         readonly sessionId: number;
-        readonly family: "detail" | "synthesis";
+        readonly family: "detail";
         readonly chunkId: number | null;
         readonly chunkSequenceOrder: number | null;
         readonly topicIndex: number;
@@ -342,18 +341,12 @@ export function topicSummariesToTopicGroups(
       }>;
     }
   >();
-  const synthesisTopics: Array<{
-    readonly topicId: number;
-    readonly sessionId: number;
-    readonly family: "detail" | "synthesis";
-    readonly chunkId: number | null;
-    readonly chunkSequenceOrder: number | null;
-    readonly topicIndex: number;
-    readonly topicText: string;
-    readonly selected: boolean;
-  }> = [];
 
   for (const topic of topics) {
+    if (topic.chunkId === null || topic.chunkSequenceOrder === null) {
+      continue;
+    }
+
     const summary = {
       topicId: topic.topicId,
       sessionId: topic.sessionId,
@@ -364,15 +357,6 @@ export function topicSummariesToTopicGroups(
       topicText: topic.topicText,
       selected: topic.selected,
     };
-
-    if (topic.family === "synthesis") {
-      synthesisTopics.push(summary);
-      continue;
-    }
-
-    if (topic.chunkId === null || topic.chunkSequenceOrder === null) {
-      continue;
-    }
 
     const existing = detailGroups.get(topic.chunkId);
     if (existing) {
@@ -387,7 +371,7 @@ export function topicSummariesToTopicGroups(
     });
   }
 
-  const groups: ForgeTopicGroup[] = Array.from(detailGroups.values())
+  return Array.from(detailGroups.values())
     .sort((left, right) => left.displayOrder - right.displayOrder || left.chunkId - right.chunkId)
     .map((group) => ({
       groupId: `chunk:${group.chunkId}`,
@@ -400,22 +384,6 @@ export function topicSummariesToTopicGroups(
         .slice()
         .sort((left, right) => left.topicIndex - right.topicIndex || left.topicId - right.topicId),
     }));
-
-  if (synthesisTopics.length > 0) {
-    groups.push({
-      groupId: "section:synthesis",
-      groupKind: "section",
-      family: "synthesis",
-      title: "Synthesis",
-      displayOrder: (groups[groups.length - 1]?.displayOrder ?? -1) + 1,
-      chunkId: null,
-      topics: synthesisTopics
-        .slice()
-        .sort((left, right) => left.topicIndex - right.topicIndex || left.topicId - right.topicId),
-    });
-  }
-
-  return groups;
 }
 
 type ForgePageProviderProps = {
@@ -497,7 +465,6 @@ export function ForgePageProvider({
     };
 
     const unsubChunk = ipc.events.subscribe(ForgeTopicChunkExtracted, handleTopicEvent);
-    const unsubSynthesis = ipc.events.subscribe(ForgeSynthesisTopicsExtracted, handleTopicEvent);
     const unsubSession = ipc.events.subscribe(ForgeExtractionSessionCreated, (event) => {
       store.send({ type: "extractionSessionCreated", sessionId: event.sessionId });
       void queryClient.invalidateQueries({ queryKey: queryKeys.forgeSessionList, exact: true });
@@ -505,7 +472,6 @@ export function ForgePageProvider({
 
     return () => {
       unsubChunk();
-      unsubSynthesis();
       unsubSession();
     };
   }, [ipc, queryClient, store]);

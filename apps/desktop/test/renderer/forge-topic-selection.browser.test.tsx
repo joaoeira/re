@@ -1,5 +1,5 @@
 import { userEvent } from "vitest/browser";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { ForgePage } from "@/components/forge/forge-page";
 import { renderWithIpcProviders } from "./render-with-providers";
@@ -14,155 +14,6 @@ const TOPICS_BY_CHUNK = DEFAULT_FORGE_TOPICS_BY_CHUNK.map((chunk, index) => ({
 const createSuccessInvoke = (topicsByChunk = TOPICS_BY_CHUNK) =>
   createForgeInvoke({
     topicsByChunk,
-  });
-
-const createSynthesisInvoke = () =>
-  vi.fn().mockImplementation(async (method: string) => {
-    if (method === "ForgeListSessions") {
-      return { type: "success", data: { sessions: [] } };
-    }
-    if (method === "ForgePreviewChunks") {
-      return { type: "success", data: { textLength: 230, totalPages: 4, chunkCount: 2 } };
-    }
-    if (method === "ForgeStartTopicExtraction") {
-      return {
-        type: "success",
-        data: {
-          session: {
-            id: 12,
-            sourceKind: "pdf",
-            sourceLabel: "source.pdf",
-            sourceFilePath: "/forge/source.pdf",
-            deckPath: null,
-            sourceFingerprint: "fp:start",
-            status: "topics_extracted",
-            errorMessage: null,
-            createdAt: "2025-01-10T00:00:00.000Z",
-            updatedAt: "2025-01-10T00:00:00.000Z",
-          },
-          duplicateOfSessionId: null,
-          extraction: {
-            sessionId: 12,
-            textLength: 230,
-            preview: "sample extracted preview",
-            totalPages: 4,
-            chunkCount: 2,
-          },
-          outcomes: [
-            { family: "detail", status: "extracted", errorMessage: null },
-            { family: "synthesis", status: "extracted", errorMessage: null },
-          ],
-          groups: [
-            {
-              groupId: "chunk:101",
-              groupKind: "chunk",
-              family: "detail",
-              title: "Chunk 1",
-              displayOrder: 0,
-              chunkId: 101,
-              topics: [
-                {
-                  topicId: 1001,
-                  sessionId: 12,
-                  family: "detail",
-                  chunkId: 101,
-                  chunkSequenceOrder: 0,
-                  topicIndex: 0,
-                  topicText: "biology",
-                  selected: false,
-                },
-              ],
-            },
-            {
-              groupId: "section:synthesis",
-              groupKind: "section",
-              family: "synthesis",
-              title: "Synthesis",
-              displayOrder: 1,
-              chunkId: null,
-              topics: [
-                {
-                  topicId: 2001,
-                  sessionId: 12,
-                  family: "synthesis",
-                  chunkId: null,
-                  chunkSequenceOrder: null,
-                  topicIndex: 0,
-                  topicText: "system-level theme",
-                  selected: false,
-                },
-              ],
-            },
-          ],
-        },
-      };
-    }
-    if (method === "ForgeGetTopicExtractionSnapshot") {
-      return {
-        type: "success",
-        data: {
-          session: {
-            id: 12,
-            sourceKind: "pdf",
-            sourceLabel: "source.pdf",
-            sourceFilePath: "/forge/source.pdf",
-            deckPath: null,
-            sourceFingerprint: "fp:start",
-            status: "topics_extracted",
-            errorMessage: null,
-            createdAt: "2025-01-10T00:00:00.000Z",
-            updatedAt: "2025-01-10T00:00:00.000Z",
-          },
-          outcomes: [
-            { family: "detail", status: "extracted", errorMessage: null },
-            { family: "synthesis", status: "extracted", errorMessage: null },
-          ],
-          groups: [
-            {
-              groupId: "chunk:101",
-              groupKind: "chunk",
-              family: "detail",
-              title: "Chunk 1",
-              displayOrder: 0,
-              chunkId: 101,
-              topics: [
-                {
-                  topicId: 1001,
-                  sessionId: 12,
-                  family: "detail",
-                  chunkId: 101,
-                  chunkSequenceOrder: 0,
-                  topicIndex: 0,
-                  topicText: "biology",
-                  selected: false,
-                },
-              ],
-            },
-            {
-              groupId: "section:synthesis",
-              groupKind: "section",
-              family: "synthesis",
-              title: "Synthesis",
-              displayOrder: 1,
-              chunkId: null,
-              topics: [
-                {
-                  topicId: 2001,
-                  sessionId: 12,
-                  family: "synthesis",
-                  chunkId: null,
-                  chunkSequenceOrder: null,
-                  topicIndex: 0,
-                  topicText: "system-level theme",
-                  selected: false,
-                },
-              ],
-            },
-          ],
-        },
-      };
-    }
-    return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
   });
 
 const renderForgePage = async () => renderWithIpcProviders(<ForgePage />);
@@ -213,16 +64,6 @@ describe("TopicSelection", () => {
       await expect.element(screen.getByText("biology")).toBeVisible();
       await expect.element(screen.getByText("cells")).toBeVisible();
       await expect.element(screen.getByText("membranes")).toBeVisible();
-    });
-
-    it("renders a synthesis section after detail chunks when synthesis topics exist", async () => {
-      mockDesktopGlobals(createSynthesisInvoke());
-      const screen = await renderForgePage();
-      await navigateToTopics(screen);
-
-      await expect.element(screen.getByText("Chunk 1")).toBeVisible();
-      await expect.element(screen.getByText("Synthesis", { exact: true })).toBeVisible();
-      await expect.element(screen.getByText("system-level theme")).toBeVisible();
     });
 
     it("shows Select all and Deselect all buttons", async () => {

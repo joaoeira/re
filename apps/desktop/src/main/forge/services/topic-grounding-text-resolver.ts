@@ -1,8 +1,7 @@
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect } from "effect";
 
 import {
   ForgeSessionRepositoryError,
-  type ForgeSessionRepository,
   type ForgeTopicRecord,
 } from "./forge-session-repository";
 
@@ -16,26 +15,14 @@ export const TopicGroundingTextResolver = Context.GenericTag<TopicGroundingTextR
   "@re/desktop/main/TopicGroundingTextResolver",
 );
 
-export const makeTopicGroundingTextResolver = ({
-  repository,
-}: {
-  readonly repository: ForgeSessionRepository;
-}): TopicGroundingTextResolver => ({
-  resolveForTopic: (topic) => {
-    if (topic.family === "detail") {
-      return topic.chunkText !== null
-        ? Effect.succeed(topic.chunkText)
-        : Effect.fail(
-            new ForgeSessionRepositoryError({
-              operation: "resolveForTopic.detail",
-              message: `Detail topic ${topic.topicId} is missing chunk grounding text.`,
-            }),
-          );
-    }
-
-    return repository.getFullSessionText(topic.sessionId);
-  },
+export const makeTopicGroundingTextResolver = (): TopicGroundingTextResolver => ({
+  resolveForTopic: (topic) =>
+    topic.chunkText !== null
+      ? Effect.succeed(topic.chunkText)
+      : Effect.fail(
+          new ForgeSessionRepositoryError({
+            operation: "resolveForTopic.detail",
+            message: `Topic ${topic.topicId} is missing chunk grounding text.`,
+          }),
+        ),
 });
-
-export const TopicGroundingTextResolverLive = (repository: ForgeSessionRepository) =>
-  Layer.succeed(TopicGroundingTextResolver, makeTopicGroundingTextResolver({ repository }));

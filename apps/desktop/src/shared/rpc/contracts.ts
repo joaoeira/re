@@ -30,7 +30,6 @@ import {
   ForgeListSessions,
   ForgePreviewChunks,
   ForgeSaveTopicSelections,
-  ForgeSynthesisTopicsExtracted,
   ForgeSetSessionDeckPath,
   ForgeStartTopicExtraction,
   ForgeTopicChunkExtracted,
@@ -144,7 +143,6 @@ export const appContract = defineContract({
     EditorNavigateRequest,
     ForgeTopicChunkExtracted,
     ForgeExtractionSessionCreated,
-    ForgeSynthesisTopicsExtracted,
   ] as const,
   streamMethods: [AiStreamText] as const,
 });

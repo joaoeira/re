@@ -22,15 +22,15 @@ export type ForgeTopicsByChunk = {
 
 type ForgeTopicGroup = {
   readonly groupId: string;
-  readonly groupKind: "chunk" | "section";
-  readonly family: "detail" | "synthesis";
+  readonly groupKind: "chunk";
+  readonly family: "detail";
   readonly title: string;
   readonly displayOrder: number;
   readonly chunkId: number | null;
   readonly topics: ReadonlyArray<{
     readonly topicId: number;
     readonly sessionId: number;
-    readonly family: "detail" | "synthesis";
+    readonly family: "detail";
     readonly chunkId: number | null;
     readonly chunkSequenceOrder: number | null;
     readonly topicIndex: number;
@@ -144,7 +144,7 @@ const normalizeCardsSnapshotTopics = (
     return {
       topicId: Number(entry.topicId ?? index + 1),
       sessionId: Number(entry.sessionId ?? sessionId),
-      family: (entry.family as "detail" | "synthesis" | undefined) ?? "detail",
+      family: "detail" as const,
       chunkId: (entry.chunkId as number | null | undefined) ?? 100 + index,
       chunkSequenceOrder: (entry.chunkSequenceOrder as number | null | undefined) ?? index,
       topicIndex: Number(entry.topicIndex ?? 0),

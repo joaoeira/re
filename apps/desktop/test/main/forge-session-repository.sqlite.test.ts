@@ -196,7 +196,7 @@ const setupSqliteRepository = async () => {
       }
     });
 
-    it("persists canonical detail and synthesis topic snapshots", async () => {
+    it("persists canonical detail topic snapshots", async () => {
       const { repository, dispose } = await setupSqliteRepository();
 
       try {
@@ -236,24 +236,13 @@ const setupSqliteRepository = async () => {
             errorMessage: null,
           }),
         );
-        await Effect.runPromise(
-          repository.replaceSynthesisTopicsForSessionAndSetExtractionOutcome({
-            sessionId: session.id,
-            topics: ["system theme"],
-            status: "extracted",
-            errorMessage: null,
-          }),
-        );
 
         const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
         const outcomes = await Effect.runPromise(repository.getTopicExtractionOutcomes(session.id));
 
-        expect(snapshot.map((topic) => topic.family)).toEqual(["detail", "detail", "synthesis"]);
-        expect(snapshot.at(-1)?.chunkId).toBeNull();
-        expect(snapshot.at(-1)?.sequenceOrder).toBeNull();
+        expect(snapshot.map((topic) => topic.family)).toEqual(["detail", "detail"]);
         expect(outcomes).toEqual([
           expect.objectContaining({ family: "detail", status: "extracted" }),
-          expect.objectContaining({ family: "synthesis", status: "extracted" }),
         ]);
       } finally {
         await dispose();

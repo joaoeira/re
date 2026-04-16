@@ -182,12 +182,6 @@ export interface ForgeSessionRepository {
     readonly status: "extracted" | "error";
     readonly errorMessage: string | null;
   }) => Effect.Effect<void, ForgeSessionRepositoryError>;
-  readonly replaceSynthesisTopicsForSessionAndSetExtractionOutcome: (input: {
-    readonly sessionId: number;
-    readonly topics: ReadonlyArray<string>;
-    readonly status: "extracted" | "error";
-    readonly errorMessage: string | null;
-  }) => Effect.Effect<void, ForgeSessionRepositoryError>;
   readonly clearTopicExtractionOutcomes: (
     sessionId: number,
   ) => Effect.Effect<void, ForgeSessionRepositoryError>;
@@ -283,9 +277,6 @@ export interface ForgeSessionRepository {
     readonly message: string;
   }) => Effect.Effect<number, ForgeSessionRepositoryError>;
   readonly getChunkCount: (sessionId: number) => Effect.Effect<number, ForgeSessionRepositoryError>;
-  readonly getFullSessionText: (
-    sessionId: number,
-  ) => Effect.Effect<string, ForgeSessionRepositoryError>;
   readonly listRecentSessions: () => Effect.Effect<
     ReadonlyArray<ForgeSessionSummary>,
     ForgeSessionRepositoryError
@@ -786,7 +777,6 @@ export const makeSqliteForgeSessionRepository = ({
             forge_topic_generation.generation_revision,
             forge_topics.selected
           ORDER BY
-            CASE WHEN forge_topics.family = 'detail' THEN 0 ELSE 1 END ASC,
             forge_chunks.sequence_order ASC,
             forge_topics.topic_order ASC,
             forge_topics.id ASC
@@ -893,7 +883,7 @@ export const makeSqliteForgeSessionRepository = ({
             updated_at
           FROM forge_topic_extraction_outcomes
           WHERE session_id = ${sessionId}
-          ORDER BY CASE family WHEN 'detail' THEN 0 ELSE 1 END ASC
+          ORDER BY family ASC
         `,
       );
 
@@ -951,13 +941,6 @@ export const makeSqliteForgeSessionRepository = ({
         topicText: row.topic_text,
       };
     });
-
-  const loadFullSessionTextSql = (
-    sessionId: number,
-  ): Effect.Effect<string, ForgeSessionRepositoryError, SqlClient.SqlClient> =>
-    loadChunksBySessionSql(sessionId).pipe(
-      Effect.map((chunks) => chunks.map((chunk) => chunk.text).join("")),
-    );
 
   const loadDerivationByIdSql = (
     derivationId: number,
@@ -1493,78 +1476,6 @@ export const makeSqliteForgeSessionRepository = ({
               (error) =>
                 new ForgeSessionRepositoryError({
                   operation: "replaceTopicsForSessionAndSetExtractionOutcome.transaction",
-                  message: toErrorMessage(error),
-                }),
-            ),
-          );
-        }),
-      ),
-    replaceSynthesisTopicsForSessionAndSetExtractionOutcome: ({
-      sessionId,
-      topics,
-      status,
-      errorMessage,
-    }) =>
-      runSql(
-        "replaceSynthesisTopicsForSessionAndSetExtractionOutcome.runtime",
-        Effect.gen(function* () {
-          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
-          const operation = Effect.gen(function* () {
-            yield* sql`
-              DELETE FROM forge_topics
-              WHERE session_id = ${sessionId}
-                AND family = 'synthesis'
-            `;
-
-            yield* Effect.forEach(
-              topics,
-              (topicText, topicOrder) =>
-                sql`
-                  INSERT INTO forge_topics (
-                    session_id,
-                    family,
-                    chunk_id,
-                    topic_order,
-                    topic_text,
-                    selected
-                  ) VALUES (
-                    ${sessionId},
-                    ${"synthesis"},
-                    ${null},
-                    ${topicOrder},
-                    ${topicText},
-                    0
-                  )
-                `,
-              { discard: true },
-            );
-
-            yield* sql`
-              INSERT INTO forge_topic_extraction_outcomes (
-                session_id,
-                family,
-                status,
-                error_message,
-                updated_at
-              ) VALUES (
-                ${sessionId},
-                ${"synthesis"},
-                ${status},
-                ${errorMessage},
-                (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-              )
-              ON CONFLICT(session_id, family) DO UPDATE SET
-                status = excluded.status,
-                error_message = excluded.error_message,
-                updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-            `;
-          });
-
-          yield* sql.withTransaction(operation).pipe(
-            Effect.mapError(
-              (error) =>
-                new ForgeSessionRepositoryError({
-                  operation: "replaceSynthesisTopicsForSessionAndSetExtractionOutcome.transaction",
                   message: toErrorMessage(error),
                 }),
             ),
@@ -2303,9 +2214,6 @@ export const makeSqliteForgeSessionRepository = ({
           return Number.isFinite(count) && count >= 0 ? count : 0;
         }),
       ),
-    getFullSessionText: (sessionId) =>
-      runSql("getFullSessionText.runtime", loadFullSessionTextSql(sessionId)),
-
     listRecentSessions: () =>
       runSql(
         "listRecentSessions.runtime",
@@ -2464,8 +2372,6 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
     return topics
       .filter((topic) => topic.sessionId === sessionId)
       .sort((left, right) => {
-        const leftOrder = left.family === "detail" ? 0 : 1;
-        const rightOrder = right.family === "detail" ? 0 : 1;
         const leftChunkOrder =
           left.chunkId === null
             ? Number.MAX_SAFE_INTEGER
@@ -2476,7 +2382,6 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
             : (chunkById.get(right.chunkId)?.sequenceOrder ?? Number.MAX_SAFE_INTEGER);
 
         return (
-          leftOrder - rightOrder ||
           leftChunkOrder - rightChunkOrder ||
           left.topicOrder - right.topicOrder ||
           left.id - right.id
@@ -2506,13 +2411,6 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
         };
       });
   };
-
-  const getFullSessionTextInternal = (sessionId: number): string =>
-    chunks
-      .filter((chunk) => chunk.sessionId === sessionId)
-      .sort((left, right) => left.sequenceOrder - right.sequenceOrder || left.id - right.id)
-      .map((chunk) => chunk.text)
-      .join("");
 
   const cloneDerivation = (derivation: InMemoryDerivation): ForgeCardDerivation => ({
     ...derivation,
@@ -2876,47 +2774,6 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           });
         }),
       ),
-    replaceSynthesisTopicsForSessionAndSetExtractionOutcome: ({
-      sessionId,
-      topics: topicTexts,
-      status,
-      errorMessage,
-    }) =>
-      Effect.sync(() => {
-        const stagedTopics = topicTexts.map((topicText, topicOrder) => ({
-          id: nextTopicId + topicOrder,
-          sessionId,
-          family: "synthesis" as const,
-          chunkId: null,
-          topicOrder,
-          topicText,
-          createdAt: nowIso(),
-          selected: false,
-        }));
-
-        const removedTopicIds = new Set(
-          topics
-            .filter((topic) => topic.sessionId === sessionId && topic.family === "synthesis")
-            .map((topic) => topic.id),
-        );
-        const retainedTopics = topics.filter(
-          (topic) => !(topic.sessionId === sessionId && topic.family === "synthesis"),
-        );
-
-        topics.length = 0;
-        topics.push(...retainedTopics, ...stagedTopics);
-        nextTopicId += stagedTopics.length;
-
-        removeTopicsAndDependentsInternal(removedTopicIds);
-
-        extractionOutcomes.set(outcomeKey(sessionId, "synthesis"), {
-          sessionId,
-          family: "synthesis",
-          status,
-          errorMessage,
-          updatedAt: nowIso(),
-        });
-      }),
     clearTopicExtractionOutcomes: (sessionId) =>
       Effect.sync(() => {
         for (const key of extractionOutcomes.keys()) {
@@ -2929,9 +2786,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
       Effect.sync(() =>
         Array.from(extractionOutcomes.values())
           .filter((outcome) => outcome.sessionId === sessionId)
-          .sort((left, right) =>
-            left.family === right.family ? 0 : left.family === "detail" ? -1 : 1,
-          )
+          .sort((left, right) => left.family.localeCompare(right.family))
           .map((outcome) => ({ ...outcome })),
       ),
     saveTopicSelectionsByTopicIds: ({ sessionId, topicIds }) =>
@@ -3330,7 +3185,6 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
       }),
     getChunkCount: (sessionId) =>
       Effect.sync(() => chunks.filter((entry) => entry.sessionId === sessionId).length),
-    getFullSessionText: (sessionId) => Effect.sync(() => getFullSessionTextInternal(sessionId)),
     listRecentSessions: () =>
       Effect.sync(() =>
         sessions

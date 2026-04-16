@@ -17,12 +17,10 @@ import {
 import { DeckManagerServicesLive, validateDeckAccessAs } from "./shared";
 import {
   CreateCardsPromptSpec,
-  CreateSynthesisCardsPromptSpec,
   GenerateClozePromptSpec,
   GenerateExpansionsPromptSpec,
   GeneratePermutationsPromptSpec,
   ReformulateCardPromptSpec,
-  GetSynthesisTopicsPromptSpec,
   GetTopicsPromptSpec,
 } from "@main/forge/prompts";
 import {
@@ -39,7 +37,6 @@ import type {
 } from "@main/forge/services/source-resolver";
 import { toErrorMessage } from "@main/utils/format";
 import {
-  ForgeSynthesisTopicsExtracted,
   ForgeTopicChunkExtracted,
   ForgeExtractionSessionCreated,
   type AppContract,
@@ -384,25 +381,6 @@ export const createForgeHandlers = () =>
                 sessionId: payload.sessionId,
                 chunkId: payload.chunkId,
                 sequenceOrder: payload.sequenceOrder,
-                error: toErrorMessage(error),
-              });
-            }),
-          ),
-          Effect.asVoid,
-        );
-
-    const publishSynthesisTopicsExtractedBestEffort = (payload: {
-      readonly sessionId: number;
-    }): Effect.Effect<void> =>
-      appEventPublisher
-        .publish(ForgeSynthesisTopicsExtracted, {
-          sessionId: payload.sessionId,
-        })
-        .pipe(
-          Effect.catchAll((error) =>
-            Effect.sync(() => {
-              console.error("[forge/topics] failed to publish synthesis event", {
-                sessionId: payload.sessionId,
                 error: toErrorMessage(error),
               });
             }),
@@ -755,7 +733,7 @@ export const createForgeHandlers = () =>
     const toTopicSummary = (input: {
       readonly sessionId: number;
       readonly topicId: number;
-      readonly family: "detail" | "synthesis";
+      readonly family: "detail";
       readonly chunkId: number | null;
       readonly sequenceOrder: number | null;
       readonly topicIndex: number;
@@ -775,7 +753,7 @@ export const createForgeHandlers = () =>
     const toTopicCardsSummary = (input: {
       readonly sessionId: number;
       readonly topicId: number;
-      readonly family: "detail" | "synthesis";
+      readonly family: "detail";
       readonly chunkId: number | null;
       readonly sequenceOrder: number | null;
       readonly topicIndex: number;
@@ -808,8 +786,8 @@ export const createForgeHandlers = () =>
       >,
     ): ReadonlyArray<{
       readonly groupId: string;
-      readonly groupKind: "chunk" | "section";
-      readonly family: "detail" | "synthesis";
+      readonly groupKind: "chunk";
+      readonly family: "detail";
       readonly title: string;
       readonly displayOrder: number;
       readonly chunkId: number | null;
@@ -827,15 +805,8 @@ export const createForgeHandlers = () =>
           >;
         }
       >();
-      const synthesisTopics: Array<
-        ReturnType<typeof toTopicSummary> | ReturnType<typeof toTopicCardsSummary>
-      > = [];
 
       for (const topic of topics) {
-        if (topic.family === "synthesis") {
-          synthesisTopics.push(topic);
-          continue;
-        }
         if (topic.chunkId === null || topic.chunkSequenceOrder === null) continue;
 
         const existing = detailGroups.get(topic.chunkId);
@@ -851,17 +822,7 @@ export const createForgeHandlers = () =>
         });
       }
 
-      const groups: Array<{
-        readonly groupId: string;
-        readonly groupKind: "chunk" | "section";
-        readonly family: "detail" | "synthesis";
-        readonly title: string;
-        readonly displayOrder: number;
-        readonly chunkId: number | null;
-        readonly topics: ReadonlyArray<
-          ReturnType<typeof toTopicSummary> | ReturnType<typeof toTopicCardsSummary>
-        >;
-      }> = Array.from(detailGroups.values())
+      return Array.from(detailGroups.values())
         .sort(
           (left, right) => left.displayOrder - right.displayOrder || left.chunkId - right.chunkId,
         )
@@ -878,24 +839,6 @@ export const createForgeHandlers = () =>
               (left, right) => left.topicIndex - right.topicIndex || left.topicId - right.topicId,
             ),
         }));
-
-      if (synthesisTopics.length > 0) {
-        groups.push({
-          groupId: "section:synthesis",
-          groupKind: "section" as const,
-          family: "synthesis" as const,
-          title: "Synthesis",
-          displayOrder: (groups[groups.length - 1]?.displayOrder ?? -1) + 1,
-          chunkId: null,
-          topics: synthesisTopics
-            .slice()
-            .sort(
-              (left, right) => left.topicIndex - right.topicIndex || left.topicId - right.topicId,
-            ),
-        });
-      }
-
-      return groups;
     };
 
     const loadCardsSnapshotRowsForSession = (sessionId: number, recoverStale = true) =>
@@ -1032,71 +975,6 @@ export const createForgeHandlers = () =>
         }),
       );
 
-    const runSynthesisExtractionBranch = (input: {
-      readonly sessionId: number;
-      readonly sourceText: string;
-      readonly model: string | undefined;
-    }) =>
-      forgePromptRuntime
-        .run(
-          GetSynthesisTopicsPromptSpec,
-          {
-            sourceText: input.sourceText,
-          },
-          input.model ? { model: input.model } : undefined,
-        )
-        .pipe(
-          Effect.mapError(
-            (error) =>
-              new ForgeTopicExtractionError({
-                sessionId: input.sessionId,
-                message:
-                  error._tag === "PromptModelInvocationError"
-                    ? `Model invocation failed for ${error.model}: ${toErrorMessage(error.cause)}`
-                    : toErrorMessage(error),
-              }),
-          ),
-          Effect.flatMap((result) =>
-            mapSessionRepositoryError(
-              input.sessionId,
-              forgeSessionRepository.replaceSynthesisTopicsForSessionAndSetExtractionOutcome({
-                sessionId: input.sessionId,
-                topics: result.output.topics,
-                status: "extracted",
-                errorMessage: null,
-              }),
-            ).pipe(
-              Effect.zipRight(
-                publishSynthesisTopicsExtractedBestEffort({
-                  sessionId: input.sessionId,
-                }),
-              ),
-            ),
-          ),
-          Effect.as({
-            family: "synthesis" as const,
-            status: "extracted" as const,
-            errorMessage: null,
-          }),
-          Effect.catchTag("topic_extraction_error", (error) =>
-            mapSessionRepositoryError(
-              input.sessionId,
-              forgeSessionRepository.replaceSynthesisTopicsForSessionAndSetExtractionOutcome({
-                sessionId: input.sessionId,
-                topics: [],
-                status: "error",
-                errorMessage: error.message,
-              }),
-            ).pipe(
-              Effect.as({
-                family: "synthesis" as const,
-                status: "error" as const,
-                errorMessage: error.message,
-              }),
-            ),
-          ),
-        );
-
     const startTopicExtractionCanonical = (input: {
       readonly source: ForgeSourceInput;
       readonly model: string | undefined;
@@ -1165,36 +1043,21 @@ export const createForgeHandlers = () =>
               forgeSessionRepository.getChunks(session.id),
             );
 
-            const outcomes = yield* Effect.all(
-              [
-                runDetailExtractionBranch({
-                  sessionId: session.id,
-                  chunks: chunks.map((chunk) => ({
-                    id: chunk.id,
-                    text: chunk.text,
-                    sequenceOrder: chunk.sequenceOrder,
-                  })),
-                  model: input.model,
-                }),
-                runSynthesisExtractionBranch({
-                  sessionId: session.id,
-                  sourceText: extractedAndChunked.resolvedSource.text,
-                  model: input.model,
-                }),
-              ],
-              { concurrency: "unbounded" },
-            );
+            const detailOutcome = yield* runDetailExtractionBranch({
+              sessionId: session.id,
+              chunks: chunks.map((chunk) => ({
+                id: chunk.id,
+                text: chunk.text,
+                sequenceOrder: chunk.sequenceOrder,
+              })),
+              model: input.model,
+            });
 
-            const successCount = outcomes.filter(
-              (outcome) => outcome.status === "extracted",
-            ).length;
-            const finalStatus = successCount > 0 ? "topics_extracted" : "error";
+            const finalStatus =
+              detailOutcome.status === "extracted" ? "topics_extracted" : "error";
             const finalErrorMessage =
               finalStatus === "error"
-                ? outcomes
-                    .filter((outcome) => outcome.errorMessage !== null)
-                    .map((outcome) => outcome.errorMessage)
-                    .join(" | ") || "Topic extraction failed."
+                ? (detailOutcome.errorMessage ?? "Topic extraction failed.")
                 : null;
 
             yield* mapSessionRepositoryStatusUpdateError(
@@ -1291,48 +1154,26 @@ export const createForgeHandlers = () =>
               ),
             );
 
-          const promptResult =
-            topic.family === "detail"
-              ? yield* forgePromptRuntime
-                  .run(
-                    CreateCardsPromptSpec,
-                    {
-                      contextText,
-                      topic: topic.topicText,
-                      ...(input.instruction ? { instruction: input.instruction } : {}),
-                    },
-                    input.model ? { model: input.model } : undefined,
-                  )
-                  .pipe(
-                    Effect.mapError(
-                      (error) =>
-                        new ForgeCardGenerationError({
-                          sessionId: input.sessionId,
-                          topicId: input.topicId,
-                          message: toErrorMessage(error),
-                        }),
-                    ),
-                  )
-              : yield* forgePromptRuntime
-                  .run(
-                    CreateSynthesisCardsPromptSpec,
-                    {
-                      contextText,
-                      topic: topic.topicText,
-                      ...(input.instruction ? { instruction: input.instruction } : {}),
-                    },
-                    input.model ? { model: input.model } : undefined,
-                  )
-                  .pipe(
-                    Effect.mapError(
-                      (error) =>
-                        new ForgeCardGenerationError({
-                          sessionId: input.sessionId,
-                          topicId: input.topicId,
-                          message: toErrorMessage(error),
-                        }),
-                    ),
-                  );
+          const promptResult = yield* forgePromptRuntime
+            .run(
+              CreateCardsPromptSpec,
+              {
+                contextText,
+                topic: topic.topicText,
+                ...(input.instruction ? { instruction: input.instruction } : {}),
+              },
+              input.model ? { model: input.model } : undefined,
+            )
+            .pipe(
+              Effect.mapError(
+                (error) =>
+                  new ForgeCardGenerationError({
+                    sessionId: input.sessionId,
+                    topicId: input.topicId,
+                    message: toErrorMessage(error),
+                  }),
+              ),
+            );
 
           yield* mapSessionRepositoryError(
             input.sessionId,

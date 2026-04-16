@@ -1166,6 +1166,81 @@ const REVIEW_HISTORY_MIGRATIONS = {
     }
     yield* sql`DROP TABLE forge_card_cloze_backup_v3`;
   }),
+  "0015_drop_synthesis_topics": Effect.gen(function* () {
+    const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+    yield* sql`
+      DELETE FROM forge_card_cloze
+      WHERE source_derivation_id IN (
+        SELECT fcd.id
+        FROM forge_card_derivations fcd
+        JOIN forge_cards fc ON fc.id = fcd.root_card_id
+        JOIN forge_topics ft ON ft.id = fc.topic_id
+        WHERE ft.family = 'synthesis'
+      )
+    `;
+    yield* sql`
+      DELETE FROM forge_card_cloze
+      WHERE source_card_id IN (
+        SELECT fc.id
+        FROM forge_cards fc
+        JOIN forge_topics ft ON ft.id = fc.topic_id
+        WHERE ft.family = 'synthesis'
+      )
+    `;
+    yield* sql`
+      DELETE FROM forge_card_derivations
+      WHERE root_card_id IN (
+        SELECT fc.id
+        FROM forge_cards fc
+        JOIN forge_topics ft ON ft.id = fc.topic_id
+        WHERE ft.family = 'synthesis'
+      )
+    `;
+    yield* sql`
+      DELETE FROM forge_cards
+      WHERE topic_id IN (
+        SELECT id FROM forge_topics WHERE family = 'synthesis'
+      )
+    `;
+    yield* sql`
+      DELETE FROM forge_topic_generation
+      WHERE topic_id IN (
+        SELECT id FROM forge_topics WHERE family = 'synthesis'
+      )
+    `;
+    yield* sql`DELETE FROM forge_topic_extraction_outcomes WHERE family = 'synthesis'`;
+    yield* sql`DELETE FROM forge_topics WHERE family = 'synthesis'`;
+
+    yield* sql`
+      UPDATE forge_sessions
+      SET status = 'error',
+          error_message = 'Session was created from synthesis topics, which are no longer supported. Start a new session.',
+          updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      WHERE id IN (
+        SELECT fs.id
+        FROM forge_sessions fs
+        WHERE fs.status IN ('topics_extracted', 'generating', 'ready')
+          AND NOT EXISTS (
+            SELECT 1 FROM forge_topics ft WHERE ft.session_id = fs.id
+          )
+      )
+    `;
+
+    const foreignKeyViolations = yield* sql<{
+      table: string;
+      rowid: number;
+      parent: string;
+      fkid: number;
+    }>`PRAGMA foreign_key_check`;
+    if (foreignKeyViolations.length > 0) {
+      return yield* Effect.fail(
+        toMigrationError(
+          `Migration 0015 detected foreign key violations: ${JSON.stringify(foreignKeyViolations)}`,
+        ),
+      );
+    }
+  }),
 } satisfies Record<string, Effect.Effect<void, unknown, SqlClient.SqlClient>>;
 
 const toMigrationError = (message: string): Migrator.MigrationError =>

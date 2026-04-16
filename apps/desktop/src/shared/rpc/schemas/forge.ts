@@ -56,7 +56,7 @@ export const ForgeSessionSchema = Schema.Struct({
 });
 export type ForgeSession = typeof ForgeSessionSchema.Type;
 
-export const ForgeTopicFamilySchema = Schema.Literal("detail", "synthesis");
+export const ForgeTopicFamilySchema = Schema.Literal("detail");
 export type ForgeTopicFamily = typeof ForgeTopicFamilySchema.Type;
 
 export const ForgeCreateSessionInputSchema = Schema.Struct({
@@ -149,7 +149,7 @@ export type ForgeTopicSummary = typeof ForgeTopicSummarySchema.Type;
 
 export const ForgeTopicGroupSchema = Schema.Struct({
   groupId: Schema.String,
-  groupKind: Schema.Literal("chunk", "section"),
+  groupKind: Schema.Literal("chunk"),
   family: ForgeTopicFamilySchema,
   title: Schema.String,
   displayOrder: NonNegativeIntSchema,
@@ -440,14 +440,9 @@ export const ForgeTopicChunkExtractedEventSchema = Schema.Struct({
 export const ForgeExtractionSessionCreatedEventSchema = Schema.Struct({
   sessionId: PositiveIntSchema,
 });
-export const ForgeSynthesisTopicsExtractedEventSchema = Schema.Struct({
-  sessionId: PositiveIntSchema,
-});
 export type ForgeTopicChunkExtractedEvent = typeof ForgeTopicChunkExtractedEventSchema.Type;
 export type ForgeExtractionSessionCreatedEvent =
   typeof ForgeExtractionSessionCreatedEventSchema.Type;
-export type ForgeSynthesisTopicsExtractedEvent =
-  typeof ForgeSynthesisTopicsExtractedEventSchema.Type;
 
 export class ForgeOperationError extends Schema.TaggedError<ForgeOperationError>(
   "@re/desktop/rpc/ForgeOperationError",

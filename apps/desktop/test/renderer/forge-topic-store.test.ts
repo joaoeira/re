@@ -56,32 +56,12 @@ const TOPIC_SUMMARIES: ReadonlyArray<ForgeTopicCardsSummary> = [
     generationRevision: 0,
     selected: false,
   },
-  {
-    topicId: 201,
-    sessionId: 1,
-    family: "synthesis",
-    chunkId: null,
-    chunkSequenceOrder: null,
-    topicIndex: 0,
-    topicText: "cross-cutting idea",
-    status: "idle",
-    errorMessage: null,
-    cardCount: 0,
-    addedCount: 0,
-    generationRevision: 0,
-    selected: false,
-  },
 ];
 
 const TOPIC_GROUPS: ReadonlyArray<ForgeTopicGroup> = topicSummariesToTopicGroups(TOPIC_SUMMARIES);
 const EXTRACTION_OUTCOMES: ReadonlyArray<ForgeTopicExtractionOutcome> = [
   {
     family: "detail",
-    status: "extracted",
-    errorMessage: null,
-  },
-  {
-    family: "synthesis",
     status: "extracted",
     errorMessage: null,
   },
@@ -141,7 +121,6 @@ describe("forge-page-store", () => {
     store.send({ type: "toggleGroup", groupId: detailGroupId, select: true });
     expect(ctx(store).selectedTopicKeys.has(topicKey(101))).toBe(true);
     expect(ctx(store).selectedTopicKeys.has(topicKey(102))).toBe(true);
-    expect(ctx(store).selectedTopicKeys.has(topicKey(201))).toBe(false);
 
     store.send({ type: "toggleGroup", groupId: detailGroupId, select: false });
     expect(ctx(store).selectedTopicKeys.has(topicKey(101))).toBe(false);
@@ -152,7 +131,7 @@ describe("forge-page-store", () => {
     const store = storeWithTopics();
 
     store.send({ type: "selectAllTopics" });
-    expect(ctx(store).selectedTopicKeys.size).toBe(3);
+    expect(ctx(store).selectedTopicKeys.size).toBe(2);
 
     store.send({ type: "deselectAllTopics" });
     expect(ctx(store).selectedTopicKeys.size).toBe(0);
@@ -160,11 +139,11 @@ describe("forge-page-store", () => {
 
   it("prunes invalid selected topics when a snapshot removes them", () => {
     const store = storeWithTopics();
-    store.send({ type: "toggleTopic", topicId: 201 });
-    expect(ctx(store).selectedTopicKeys.has(topicKey(201))).toBe(true);
+    store.send({ type: "toggleTopic", topicId: 102 });
+    expect(ctx(store).selectedTopicKeys.has(topicKey(102))).toBe(true);
 
     const reducedGroups = topicSummariesToTopicGroups(
-      TOPIC_SUMMARIES.filter((topic) => topic.topicId !== 201),
+      TOPIC_SUMMARIES.filter((topic) => topic.topicId !== 102),
     );
     store.send({
       type: "topicSnapshotSynced",
@@ -176,7 +155,7 @@ describe("forge-page-store", () => {
       outcomes: [{ family: "detail", status: "extracted", errorMessage: null }],
     });
 
-    expect(ctx(store).selectedTopicKeys.has(topicKey(201))).toBe(false);
+    expect(ctx(store).selectedTopicKeys.has(topicKey(102))).toBe(false);
   });
 
   it("resumes a session with grouped topics and selections", () => {
@@ -185,7 +164,7 @@ describe("forge-page-store", () => {
       sourceLabel: "source.pdf",
       sourceFilePath: "/tmp/source.pdf",
     });
-    const selectedTopicKeys = new Set([topicKey(101), topicKey(201)]);
+    const selectedTopicKeys = new Set([topicKey(101), topicKey(102)]);
 
     store.send({
       type: "resumeSession",
@@ -266,7 +245,7 @@ describe("forge-page-store", () => {
       sourceLabel: "source.pdf",
       sourceFilePath: "/tmp/source.pdf",
     });
-    const selectedTopicKeys = new Set([topicKey(101), topicKey(201)]);
+    const selectedTopicKeys = new Set([topicKey(101), topicKey(102)]);
 
     store.send({
       type: "resumeSession",
@@ -315,10 +294,10 @@ describe("forge-page-store", () => {
 });
 
 describe("topicSummariesToTopicGroups", () => {
-  it("groups detail topics by chunk and synthesis topics into one section", () => {
+  it("groups detail topics by chunk", () => {
     const groups = topicSummariesToTopicGroups(TOPIC_SUMMARIES);
 
-    expect(groups).toHaveLength(2);
+    expect(groups).toHaveLength(1);
     expect(groups[0]).toEqual({
       groupId: "chunk:10",
       groupKind: "chunk",
@@ -349,9 +328,6 @@ describe("topicSummariesToTopicGroups", () => {
         },
       ],
     });
-    expect(groups[1]?.groupKind).toBe("section");
-    expect(groups[1]?.family).toBe("synthesis");
-    expect(groups[1]?.title).toBe("Synthesis");
   });
 });
 

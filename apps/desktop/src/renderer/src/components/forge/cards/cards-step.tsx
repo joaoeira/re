@@ -49,7 +49,6 @@ import { CardsSidebar } from "./cards-sidebar";
 type CardsTopic = {
   readonly topicKey: string;
   readonly topicId: number;
-  readonly family: "detail" | "synthesis";
   readonly text: string;
 };
 
@@ -304,7 +303,6 @@ export function CardsStep() {
       selectedTopics.map((topic) => ({
         topicKey: topicKey(topic.topicId),
         topicId: topic.topicId,
-        family: topic.family,
         text: topic.text,
       })),
     [selectedTopics],
@@ -694,7 +692,6 @@ export function CardsStep() {
 
       return {
         topicKey: topic.topicKey,
-        family: topic.family,
         text: summary?.topicText ?? topic.text,
         status: summary?.status ?? "idle",
         cardCount,

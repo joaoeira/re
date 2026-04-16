@@ -101,9 +101,7 @@ const MainStaticLive = ({
   const forgeSourceResolverLayer = ForgeSourceResolverServiceLive.pipe(
     Layer.provide(pdfExtractorLayer),
   );
-  const topicGroundingTextResolverLayer = TopicGroundingTextResolverServiceLive.pipe(
-    Layer.provide(forgeSessionRepositoryLayer),
-  );
+  const topicGroundingTextResolverLayer = TopicGroundingTextResolverServiceLive;
 
   return Layer.mergeAll(
     NodeServicesLive,

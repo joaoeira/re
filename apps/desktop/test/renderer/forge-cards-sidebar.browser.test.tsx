@@ -12,7 +12,7 @@ import {
 } from "./forge-test-helpers";
 
 type TopicDef = {
-  readonly family: "detail" | "synthesis";
+  readonly family: "detail";
   readonly chunkId: number | null;
   readonly sequenceOrder: number | null;
   readonly topicIndex: number;
@@ -55,17 +55,6 @@ const DETAIL_TOPICS: ReadonlyArray<TopicDef> = [
   },
 ];
 
-const SYNTHESIS_TOPICS: ReadonlyArray<TopicDef> = [
-  {
-    family: "synthesis",
-    chunkId: null,
-    sequenceOrder: null,
-    topicIndex: 0,
-    topicText: "cross-cutting theme",
-    topicId: 2001,
-  },
-];
-
 const typedFailure = <T extends { readonly _tag: string }>(data: T) => ({
   type: "failure" as const,
   error: {
@@ -92,10 +81,9 @@ const createCardsInvoke = (allTopics: ReadonlyArray<TopicDef> = DETAIL_TOPICS) =
     generationRevision: 1,
     selected: true,
   });
-  const detailTopics = allTopics.filter((t) => t.family === "detail");
-  const synthesisTopics = allTopics.filter((t) => t.family === "synthesis");
-  const topicGroups = [
-    ...Array.from(new Set(detailTopics.map((t) => t.chunkId))).map((chunkId, i) => ({
+  const detailTopics = allTopics;
+  const topicGroups = Array.from(new Set(detailTopics.map((t) => t.chunkId))).map(
+    (chunkId, i) => ({
       groupId: `chunk:${chunkId}`,
       groupKind: "chunk" as const,
       family: "detail" as const,
@@ -114,35 +102,10 @@ const createCardsInvoke = (allTopics: ReadonlyArray<TopicDef> = DETAIL_TOPICS) =
           topicText: topic.topicText,
           selected: false,
         })),
-    })),
-    ...(synthesisTopics.length > 0
-      ? [
-          {
-            groupId: "section:synthesis",
-            groupKind: "section" as const,
-            family: "synthesis" as const,
-            title: "Synthesis",
-            displayOrder: 100,
-            chunkId: null,
-            topics: synthesisTopics.map((topic) => ({
-              topicId: topic.topicId,
-              sessionId,
-              family: "synthesis" as const,
-              chunkId: null,
-              chunkSequenceOrder: null,
-              topicIndex: topic.topicIndex,
-              topicText: topic.topicText,
-              selected: false,
-            })),
-          },
-        ]
-      : []),
-  ];
+    }),
+  );
   const outcomes = [
     { family: "detail" as const, status: "extracted" as const, errorMessage: null },
-    ...(synthesisTopics.length > 0
-      ? [{ family: "synthesis" as const, status: "extracted" as const, errorMessage: null }]
-      : []),
   ];
   const findTopic = (topicId: number) =>
     allTopics.find((topic) => topic.topicId === topicId) ?? null;
@@ -458,18 +421,7 @@ describe("Forge cards sidebar multi-select", () => {
     expect(screen.getByText("selected", { exact: false }).query()).toBeNull();
   });
 
-  it("shows Details and Synthesis section headers when both families are present", async () => {
-    const invoke = createCardsInvoke([...DETAIL_TOPICS, ...SYNTHESIS_TOPICS]);
-    mockDesktopGlobals(invoke);
-    const screen = await renderWithIpcProviders(<ForgePage />);
-    await navigateToCards(screen, 5);
-
-    await expect.element(screen.getByText("Details", { exact: true })).toBeVisible();
-    await expect.element(screen.getByText("Synthesis", { exact: true })).toBeVisible();
-    await expect.element(screen.getByText("cross-cutting theme", { exact: true })).toBeVisible();
-  });
-
-  it("omits section headers when only detail topics are present", async () => {
+  it("renders the sidebar as a flat topic list without section headers", async () => {
     const invoke = createCardsInvoke();
     mockDesktopGlobals(invoke);
     const screen = await renderWithIpcProviders(<ForgePage />);

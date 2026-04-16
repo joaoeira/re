@@ -46,7 +46,6 @@ import {
   ForgeStartTopicExtractionErrorSchema,
   ForgeStartTopicExtractionInputSchema,
   ForgeStartTopicExtractionResultSchema,
-  ForgeSynthesisTopicsExtractedEventSchema,
   ForgeTopicChunkExtractedEventSchema,
   ForgeExtractionSessionCreatedEventSchema,
   ForgeUpdateCardErrorSchema,
@@ -214,9 +213,4 @@ export const ForgeTopicChunkExtracted = event(
 export const ForgeExtractionSessionCreated = event(
   "ForgeExtractionSessionCreated",
   ForgeExtractionSessionCreatedEventSchema,
-);
-
-export const ForgeSynthesisTopicsExtracted = event(
-  "ForgeSynthesisTopicsExtracted",
-  ForgeSynthesisTopicsExtractedEventSchema,
 );

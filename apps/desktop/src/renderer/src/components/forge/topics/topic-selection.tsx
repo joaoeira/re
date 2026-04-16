@@ -6,7 +6,6 @@ import {
   useForgePreviewState,
   useForgeSelectedTopicCount,
   useForgeSelectedTopicKeys,
-  useForgeTopicExtractionOutcomes,
   useForgeTopicSyncErrorMessage,
   useForgeTopicActions,
   useForgeTopicGroups,
@@ -24,27 +23,19 @@ export function TopicSelection() {
   const extractState = useForgeExtractState();
   const previewState = useForgePreviewState();
   const topicSyncErrorMessage = useForgeTopicSyncErrorMessage();
-  const extractionOutcomes = useForgeTopicExtractionOutcomes();
   const actions = useForgeTopicActions();
   const selectedCount = useForgeSelectedTopicCount();
 
   const counts = useMemo(() => {
     let total = 0;
-    let detail = 0;
-    let synthesis = 0;
     let detailGroups = 0;
 
     for (const group of topicGroups) {
       total += group.topics.length;
-      if (group.family === "detail") {
-        detail += group.topics.length;
-        detailGroups += 1;
-      } else {
-        synthesis += group.topics.length;
-      }
+      detailGroups += 1;
     }
 
-    return { total, detail, synthesis, detailGroups };
+    return { total, detailGroups };
   }, [topicGroups]);
 
   const chunkCount =
@@ -54,7 +45,6 @@ export function TopicSelection() {
   const extractPct =
     chunkCount && chunkCount > 0 ? Math.min((extractedChunks / chunkCount) * 100, 100) : null;
   const shouldShowSummary = counts.total > 0 || populatedGroups.length > 0;
-  const synthesisOutcome = extractionOutcomes.find((outcome) => outcome.family === "synthesis");
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
@@ -67,25 +57,9 @@ export function TopicSelection() {
 
       {shouldShowSummary && (
         <p className="text-xs text-muted-foreground">
-          {counts.detail > 0 ? (
-            <>
-              Extracted <span className="font-mono text-foreground/70">{counts.detail}</span> topics
-              from <span className="font-mono text-foreground/70">{counts.detailGroups}</span> chunk
-              {counts.detailGroups === 1 ? "" : "s"}
-              {counts.synthesis > 0 ? (
-                <>
-                  {" "}
-                  + <span className="font-mono text-foreground/70">{counts.synthesis}</span>{" "}
-                  synthesis topic{counts.synthesis === 1 ? "" : "s"}
-                </>
-              ) : null}
-            </>
-          ) : (
-            <>
-              Extracted <span className="font-mono text-foreground/70">{counts.synthesis}</span>{" "}
-              synthesis topic{counts.synthesis === 1 ? "" : "s"}
-            </>
-          )}
+          Extracted <span className="font-mono text-foreground/70">{counts.total}</span> topics
+          from <span className="font-mono text-foreground/70">{counts.detailGroups}</span> chunk
+          {counts.detailGroups === 1 ? "" : "s"}
         </p>
       )}
 
@@ -128,12 +102,6 @@ export function TopicSelection() {
           Sync warning: {topicSyncErrorMessage}
         </p>
       )}
-
-      {synthesisOutcome?.status === "error" ? (
-        <p role="alert" className="text-xs text-destructive/90">
-          Synthesis failed: {synthesisOutcome.errorMessage ?? "Unknown error"}
-        </p>
-      ) : null}
 
       <div className="flex items-center gap-1 border-b border-border/30 pb-3.5">
         <button

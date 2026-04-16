@@ -27,10 +27,7 @@ export function TopicGroupSection({
   ).length;
   const allSelected = selectedCount === group.topics.length && group.topics.length > 0;
   const someSelected = selectedCount > 0 && !allSelected;
-  const selectionLabel =
-    group.groupKind === "chunk"
-      ? `Select all topics in ${group.title.toLowerCase()}`
-      : `Select all topics in ${group.title}`;
+  const selectionLabel = `Select all topics in ${group.title.toLowerCase()}`;
 
   return (
     <div className="mb-1">
