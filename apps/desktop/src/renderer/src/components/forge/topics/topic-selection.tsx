@@ -126,12 +126,8 @@ export function TopicSelection() {
       </div>
 
       <div>
-        {populatedGroups.map((group, i) => (
-          <div
-            key={group.groupId}
-            className="animate-in fade-in-0 slide-in-from-bottom-1"
-            style={{ animationDelay: `${i * 80}ms`, animationFillMode: "backwards" }}
-          >
+        {populatedGroups.map((group) => (
+          <div key={group.groupId} className="animate-in fade-in-0 slide-in-from-bottom-1">
             <TopicGroupSection
               group={group}
               selectedKeys={selectedKeys}

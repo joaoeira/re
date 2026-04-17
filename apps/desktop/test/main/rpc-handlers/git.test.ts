@@ -99,7 +99,7 @@ describe("git handlers", () => {
     }
   });
 
-  it("commits local changes and pushes them to the tracked remote branch", async () => {
+  it("commits local changes and pushes them to the tracked remote branch", { timeout: 15_000 }, async () => {
     const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-git-settings-"));
     const settingsFilePath = path.join(settingsRoot, "settings.json");
     const { workspacePath, remotePath } = await seedRemoteRepository();

@@ -510,6 +510,14 @@ export const createForgePageStore = () =>
           return context;
         }
 
+        if (
+          context.extractSummary !== null &&
+          context.extractState.status !== "extracting" &&
+          event.sessionStatus === "topics_extracting"
+        ) {
+          return context;
+        }
+
         const nextTopicGroups = sortGroups(event.groups);
         const nextSelectedTopicKeys = pruneSelectedTopicKeys(
           context.selectedTopicKeys,

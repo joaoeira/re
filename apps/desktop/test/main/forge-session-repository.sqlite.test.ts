@@ -6,7 +6,37 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { createSqliteReviewAnalyticsRuntimeBundle } from "@main/analytics";
-import { makeSqliteForgeSessionRepository } from "@main/forge/services/forge-session-repository";
+import {
+  makeSqliteForgeSessionRepository,
+  type ForgeSessionRepository,
+} from "@main/forge/services/forge-session-repository";
+
+const extractTopics = async (
+  repository: ForgeSessionRepository,
+  sessionId: number,
+  writes: ReadonlyArray<{ readonly sequenceOrder: number; readonly topics: ReadonlyArray<string> }>,
+  outcome: { readonly status: "extracted" | "error"; readonly errorMessage: string | null } = {
+    status: "extracted",
+    errorMessage: null,
+  },
+) => {
+  for (const write of writes) {
+    await Effect.runPromise(
+      repository.appendTopicsForChunk({
+        sessionId,
+        sequenceOrder: write.sequenceOrder,
+        topics: write.topics,
+      }),
+    );
+  }
+  await Effect.runPromise(
+    repository.setTopicExtractionOutcome({
+      sessionId,
+      status: outcome.status,
+      errorMessage: outcome.errorMessage,
+    }),
+  );
+};
 
 const sqliteBindingAvailable = await (async () => {
   let tempRoot: string | null = null;
@@ -225,17 +255,10 @@ const setupSqliteRepository = async () => {
           ]),
         );
 
-        await Effect.runPromise(
-          repository.replaceTopicsForSessionAndSetExtractionOutcome({
-            sessionId: session.id,
-            writes: [
-              { sequenceOrder: 0, topics: ["alpha"] },
-              { sequenceOrder: 1, topics: ["beta"] },
-            ],
-            status: "extracted",
-            errorMessage: null,
-          }),
-        );
+        await extractTopics(repository, session.id, [
+          { sequenceOrder: 0, topics: ["alpha"] },
+          { sequenceOrder: 1, topics: ["beta"] },
+        ]);
 
         const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
         const outcomes = await Effect.runPromise(repository.getTopicExtractionOutcomes(session.id));
@@ -272,14 +295,9 @@ const setupSqliteRepository = async () => {
             },
           ]),
         );
-        await Effect.runPromise(
-          repository.replaceTopicsForSessionAndSetExtractionOutcome({
-            sessionId: session.id,
-            writes: [{ sequenceOrder: 0, topics: ["alpha"] }],
-            status: "extracted",
-            errorMessage: null,
-          }),
-        );
+        await extractTopics(repository, session.id, [
+          { sequenceOrder: 0, topics: ["alpha"] },
+        ]);
 
         const topicId = (
           await Effect.runPromise(repository.getCardsSnapshotBySession(session.id))
@@ -336,14 +354,9 @@ const setupSqliteRepository = async () => {
             },
           ]),
         );
-        await Effect.runPromise(
-          repository.replaceTopicsForSessionAndSetExtractionOutcome({
-            sessionId: session.id,
-            writes: [{ sequenceOrder: 0, topics: ["original"] }],
-            status: "extracted",
-            errorMessage: null,
-          }),
-        );
+        await extractTopics(repository, session.id, [
+          { sequenceOrder: 0, topics: ["original"] },
+        ]);
 
         const originalTopicId = (
           await Effect.runPromise(repository.getCardsSnapshotBySession(session.id))
@@ -362,14 +375,9 @@ const setupSqliteRepository = async () => {
         );
         expect(beforeReExtraction).toEqual(["first", "second"]);
 
-        await Effect.runPromise(
-          repository.replaceTopicsForSessionAndSetExtractionOutcome({
-            sessionId: session.id,
-            writes: [{ sequenceOrder: 0, topics: ["replacement"] }],
-            status: "extracted",
-            errorMessage: null,
-          }),
-        );
+        await extractTopics(repository, session.id, [
+          { sequenceOrder: 0, topics: ["replacement"] },
+        ]);
 
         const afterReExtraction = await Effect.runPromise(
           repository.getAnglesForTopicId(originalTopicId),
@@ -385,6 +393,219 @@ const setupSqliteRepository = async () => {
           repository.getAnglesForTopicId(replacementTopicId),
         );
         expect(replacementAngles).toEqual([]);
+      } finally {
+        await dispose();
+      }
+    });
+
+    it("appendTopicsForChunk accumulates topics across different chunks", async () => {
+      const { repository, dispose } = await setupSqliteRepository();
+
+      try {
+        const session = await Effect.runPromise(
+          repository.createSession({
+            sourceKind: "pdf",
+            sourceLabel: "source.pdf",
+            sourceFilePath: "/tmp/source.pdf",
+            deckPath: null,
+            sourceFingerprint: "fp:sqlite-append-multi",
+          }),
+        );
+
+        await Effect.runPromise(
+          repository.saveChunks(session.id, [
+            { text: "c0", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
+            { text: "c1", sequenceOrder: 1, pageBoundaries: [{ offset: 0, page: 2 }] },
+          ]),
+        );
+
+        await Effect.runPromise(
+          repository.appendTopicsForChunk({
+            sessionId: session.id,
+            sequenceOrder: 0,
+            topics: ["alpha", "beta"],
+          }),
+        );
+
+        const midSnapshot = await Effect.runPromise(
+          repository.getCardsSnapshotBySession(session.id),
+        );
+        expect(midSnapshot.map((topic) => topic.topicText)).toEqual(["alpha", "beta"]);
+
+        await Effect.runPromise(
+          repository.appendTopicsForChunk({
+            sessionId: session.id,
+            sequenceOrder: 1,
+            topics: ["gamma"],
+          }),
+        );
+
+        const finalSnapshot = await Effect.runPromise(
+          repository.getCardsSnapshotBySession(session.id),
+        );
+        expect(finalSnapshot.map((topic) => topic.topicText)).toEqual(["alpha", "beta", "gamma"]);
+      } finally {
+        await dispose();
+      }
+    });
+
+    it("appendTopicsForChunk replaces only the targeted chunk on a repeat call", async () => {
+      const { repository, dispose } = await setupSqliteRepository();
+
+      try {
+        const session = await Effect.runPromise(
+          repository.createSession({
+            sourceKind: "pdf",
+            sourceLabel: "source.pdf",
+            sourceFilePath: "/tmp/source.pdf",
+            deckPath: null,
+            sourceFingerprint: "fp:sqlite-append-retry",
+          }),
+        );
+
+        await Effect.runPromise(
+          repository.saveChunks(session.id, [
+            { text: "c0", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
+            { text: "c1", sequenceOrder: 1, pageBoundaries: [{ offset: 0, page: 2 }] },
+          ]),
+        );
+
+        await Effect.runPromise(
+          repository.appendTopicsForChunk({
+            sessionId: session.id,
+            sequenceOrder: 0,
+            topics: ["original"],
+          }),
+        );
+        await Effect.runPromise(
+          repository.appendTopicsForChunk({
+            sessionId: session.id,
+            sequenceOrder: 1,
+            topics: ["other-chunk"],
+          }),
+        );
+
+        const firstChunkTopicId = (
+          await Effect.runPromise(repository.getCardsSnapshotBySession(session.id))
+        )[0]?.topicId;
+        if (!firstChunkTopicId) throw new Error("Expected first-chunk topic id.");
+
+        await Effect.runPromise(
+          repository.replaceAnglesForTopic({
+            topicId: firstChunkTopicId,
+            angles: ["to-be-wiped"],
+          }),
+        );
+
+        await Effect.runPromise(
+          repository.appendTopicsForChunk({
+            sessionId: session.id,
+            sequenceOrder: 0,
+            topics: ["retry-a", "retry-b"],
+          }),
+        );
+
+        const snapshot = await Effect.runPromise(
+          repository.getCardsSnapshotBySession(session.id),
+        );
+        expect(snapshot.map((topic) => topic.topicText)).toEqual([
+          "retry-a",
+          "retry-b",
+          "other-chunk",
+        ]);
+
+        const wipedAngles = await Effect.runPromise(
+          repository.getAnglesForTopicId(firstChunkTopicId),
+        );
+        expect(wipedAngles).toEqual([]);
+      } finally {
+        await dispose();
+      }
+    });
+
+    it("appendTopicsForChunk fails for an unknown sequence order", async () => {
+      const { repository, dispose } = await setupSqliteRepository();
+
+      try {
+        const session = await Effect.runPromise(
+          repository.createSession({
+            sourceKind: "pdf",
+            sourceLabel: "source.pdf",
+            sourceFilePath: "/tmp/source.pdf",
+            deckPath: null,
+            sourceFingerprint: "fp:sqlite-append-unknown",
+          }),
+        );
+
+        await Effect.runPromise(
+          repository.saveChunks(session.id, [
+            { text: "c0", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
+          ]),
+        );
+
+        const result = await Effect.runPromise(
+          repository
+            .appendTopicsForChunk({
+              sessionId: session.id,
+              sequenceOrder: 42,
+              topics: ["ghost"],
+            })
+            .pipe(Effect.either),
+        );
+
+        expect(result._tag).toBe("Left");
+      } finally {
+        await dispose();
+      }
+    });
+
+    it("setTopicExtractionOutcome writes an error outcome without touching topics", async () => {
+      const { repository, dispose } = await setupSqliteRepository();
+
+      try {
+        const session = await Effect.runPromise(
+          repository.createSession({
+            sourceKind: "pdf",
+            sourceLabel: "source.pdf",
+            sourceFilePath: "/tmp/source.pdf",
+            deckPath: null,
+            sourceFingerprint: "fp:sqlite-outcome",
+          }),
+        );
+
+        await Effect.runPromise(
+          repository.saveChunks(session.id, [
+            { text: "c0", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
+          ]),
+        );
+
+        await extractTopics(repository, session.id, [
+          { sequenceOrder: 0, topics: ["partial"] },
+        ]);
+
+        await Effect.runPromise(
+          repository.setTopicExtractionOutcome({
+            sessionId: session.id,
+            status: "error",
+            errorMessage: "chunk failed",
+          }),
+        );
+
+        const outcomes = await Effect.runPromise(
+          repository.getTopicExtractionOutcomes(session.id),
+        );
+        expect(outcomes).toEqual([
+          expect.objectContaining({
+            family: "detail",
+            status: "error",
+            errorMessage: "chunk failed",
+          }),
+        ]);
+
+        const snapshot = await Effect.runPromise(
+          repository.getCardsSnapshotBySession(session.id),
+        );
+        expect(snapshot.map((topic) => topic.topicText)).toEqual(["partial"]);
       } finally {
         await dispose();
       }

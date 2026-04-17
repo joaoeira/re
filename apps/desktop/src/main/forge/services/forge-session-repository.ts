@@ -176,9 +176,13 @@ export interface ForgeSessionRepository {
   readonly getChunks: (
     sessionId: number,
   ) => Effect.Effect<ReadonlyArray<ForgeChunk>, ForgeSessionRepositoryError>;
-  readonly replaceTopicsForSessionAndSetExtractionOutcome: (input: {
+  readonly appendTopicsForChunk: (input: {
     readonly sessionId: number;
-    readonly writes: ReadonlyArray<ForgeTopicWrite>;
+    readonly sequenceOrder: number;
+    readonly topics: ReadonlyArray<string>;
+  }) => Effect.Effect<void, ForgeSessionRepositoryError>;
+  readonly setTopicExtractionOutcome: (input: {
+    readonly sessionId: number;
     readonly status: "extracted" | "error";
     readonly errorMessage: string | null;
   }) => Effect.Effect<void, ForgeSessionRepositoryError>;
@@ -528,7 +532,7 @@ const toCardCloze = (
 
 const ALLOWED_TRANSITIONS: Record<ForgeSessionStatus, ReadonlySet<ForgeSessionStatus>> = {
   created: new Set(["extracting", "error"]),
-  extracting: new Set(["extracted", "error"]),
+  extracting: new Set(["extracted", "topics_extracting", "error"]),
   extracted: new Set(["topics_extracting", "error"]),
   topics_extracting: new Set(["topics_extracted", "error"]),
   topics_extracted: new Set(["generating", "error"]),
@@ -1370,63 +1374,33 @@ export const makeSqliteForgeSessionRepository = ({
           );
         }),
       ),
-    replaceTopicsForSessionAndSetExtractionOutcome: ({ sessionId, writes, status, errorMessage }) =>
+    appendTopicsForChunk: ({ sessionId, sequenceOrder, topics }) =>
       runSql(
-        "replaceTopicsForSessionAndSetExtractionOutcome.runtime",
+        "appendTopicsForChunk.runtime",
         Effect.gen(function* () {
           const sql = (yield* SqlClient.SqlClient).withoutTransforms();
           const operation = Effect.gen(function* () {
             const chunkRows = yield* withSqlError(
-              "replaceTopicsForSessionAndSetExtractionOutcome.selectChunks",
+              "appendTopicsForChunk.selectChunk",
               sql<ForgeChunkReferenceRow>`
                 SELECT id, sequence_order
                 FROM forge_chunks
                 WHERE session_id = ${sessionId}
+                  AND sequence_order = ${sequenceOrder}
               `,
             );
 
-            const chunkIdBySequence = new Map<number, number>();
-            for (const row of chunkRows) {
-              chunkIdBySequence.set(Number(row.sequence_order), Number(row.id));
+            const chunkRow = chunkRows[0];
+            if (!chunkRow) {
+              return yield* Effect.fail(
+                new ForgeSessionRepositoryError({
+                  operation: "appendTopicsForChunk.validateChunk",
+                  message: `Chunk sequence order ${sequenceOrder} was not found for session ${sessionId}.`,
+                }),
+              );
             }
 
-            const seenWriteSequences = new Set<number>();
-            const stagedTopicRows: Array<{
-              readonly chunkId: number;
-              readonly topicOrder: number;
-              readonly topicText: string;
-            }> = [];
-
-            for (const write of writes) {
-              if (seenWriteSequences.has(write.sequenceOrder)) {
-                return yield* Effect.fail(
-                  new ForgeSessionRepositoryError({
-                    operation: "replaceTopicsForSessionAndSetExtractionOutcome.validateWrites",
-                    message: `Duplicate topic write for sequence order ${write.sequenceOrder} in session ${sessionId}.`,
-                  }),
-                );
-              }
-
-              seenWriteSequences.add(write.sequenceOrder);
-
-              const chunkId = chunkIdBySequence.get(write.sequenceOrder);
-              if (chunkId === undefined) {
-                return yield* Effect.fail(
-                  new ForgeSessionRepositoryError({
-                    operation: "replaceTopicsForSessionAndSetExtractionOutcome.validateWrites",
-                    message: `Chunk sequence order ${write.sequenceOrder} was not found for session ${sessionId}.`,
-                  }),
-                );
-              }
-
-              for (let index = 0; index < write.topics.length; index += 1) {
-                stagedTopicRows.push({
-                  chunkId,
-                  topicOrder: index,
-                  topicText: write.topics[index]!,
-                });
-              }
-            }
+            const chunkId = Number(chunkRow.id);
 
             yield* sql`
               DELETE FROM forge_topic_angles
@@ -1434,6 +1408,7 @@ export const makeSqliteForgeSessionRepository = ({
                 SELECT id FROM forge_topics
                 WHERE session_id = ${sessionId}
                   AND family = 'detail'
+                  AND chunk_id = ${chunkId}
               )
             `;
 
@@ -1441,11 +1416,12 @@ export const makeSqliteForgeSessionRepository = ({
               DELETE FROM forge_topics
               WHERE session_id = ${sessionId}
                 AND family = 'detail'
+                AND chunk_id = ${chunkId}
             `;
 
             yield* Effect.forEach(
-              stagedTopicRows,
-              (row) =>
+              topics,
+              (topicText, index) =>
                 sql`
                   INSERT INTO forge_topics (
                     session_id,
@@ -1457,16 +1433,35 @@ export const makeSqliteForgeSessionRepository = ({
                   ) VALUES (
                     ${sessionId},
                     ${"detail"},
-                    ${row.chunkId},
-                    ${row.topicOrder},
-                    ${row.topicText},
+                    ${chunkId},
+                    ${index},
+                    ${topicText},
                     0
                   )
                 `,
               { discard: true },
             );
+          });
 
-            yield* sql`
+          yield* sql.withTransaction(operation).pipe(
+            Effect.mapError(
+              (error) =>
+                new ForgeSessionRepositoryError({
+                  operation: "appendTopicsForChunk.transaction",
+                  message: toErrorMessage(error),
+                }),
+            ),
+          );
+        }),
+      ),
+    setTopicExtractionOutcome: ({ sessionId, status, errorMessage }) =>
+      runSql(
+        "setTopicExtractionOutcome.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          yield* withSqlError(
+            "setTopicExtractionOutcome.upsert",
+            sql`
               INSERT INTO forge_topic_extraction_outcomes (
                 session_id,
                 family,
@@ -1484,17 +1479,7 @@ export const makeSqliteForgeSessionRepository = ({
                 status = excluded.status,
                 error_message = excluded.error_message,
                 updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-            `;
-          });
-
-          yield* sql.withTransaction(operation).pipe(
-            Effect.mapError(
-              (error) =>
-                new ForgeSessionRepositoryError({
-                  operation: "replaceTopicsForSessionAndSetExtractionOutcome.transaction",
-                  message: toErrorMessage(error),
-                }),
-            ),
+            `,
           );
         }),
       ),
@@ -2770,80 +2755,68 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
 
         return Effect.void;
       }),
-    replaceTopicsForSessionAndSetExtractionOutcome: ({ sessionId, writes, status, errorMessage }) =>
-      Effect.suspend(() =>
-        Effect.gen(function* () {
-          yield* Effect.suspend(() => {
-            const chunkRows = chunks.filter((entry) => entry.sessionId === sessionId);
-            const chunkIdBySequence = new Map<number, number>();
-            for (const row of chunkRows) {
-              chunkIdBySequence.set(row.sequenceOrder, row.id);
-            }
+    appendTopicsForChunk: ({ sessionId, sequenceOrder, topics: topicTexts }) =>
+      Effect.suspend(() => {
+        const chunk = chunks.find(
+          (entry) => entry.sessionId === sessionId && entry.sequenceOrder === sequenceOrder,
+        );
+        if (!chunk) {
+          return Effect.fail(
+            new ForgeSessionRepositoryError({
+              operation: "appendTopicsForChunk.validateChunk",
+              message: `Chunk sequence order ${sequenceOrder} was not found for session ${sessionId}.`,
+            }),
+          );
+        }
 
-            const seenWriteSequences = new Set<number>();
-            const stagedTopics: InMemoryTopic[] = [];
+        const chunkId = chunk.id;
+        const removedTopicIds = new Set(
+          topics
+            .filter(
+              (topic) =>
+                topic.sessionId === sessionId &&
+                topic.family === "detail" &&
+                topic.chunkId === chunkId,
+            )
+            .map((topic) => topic.id),
+        );
+        const retainedTopics = topics.filter(
+          (topic) =>
+            !(
+              topic.sessionId === sessionId &&
+              topic.family === "detail" &&
+              topic.chunkId === chunkId
+            ),
+        );
 
-            for (const write of writes) {
-              if (seenWriteSequences.has(write.sequenceOrder)) {
-                return Effect.fail(
-                  new ForgeSessionRepositoryError({
-                    operation: "replaceTopicsForSessionAndSetExtractionOutcome.validateWrites",
-                    message: `Duplicate topic write for sequence order ${write.sequenceOrder} in session ${sessionId}.`,
-                  }),
-                );
-              }
-              seenWriteSequences.add(write.sequenceOrder);
+        const stagedTopics: InMemoryTopic[] = topicTexts.map((topicText, index) => ({
+          id: nextTopicId + index,
+          sessionId,
+          family: "detail" as const,
+          chunkId,
+          topicOrder: index,
+          topicText,
+          createdAt: nowIso(),
+          selected: false,
+        }));
 
-              const chunkId = chunkIdBySequence.get(write.sequenceOrder);
-              if (chunkId === undefined) {
-                return Effect.fail(
-                  new ForgeSessionRepositoryError({
-                    operation: "replaceTopicsForSessionAndSetExtractionOutcome.validateWrites",
-                    message: `Chunk sequence order ${write.sequenceOrder} was not found for session ${sessionId}.`,
-                  }),
-                );
-              }
+        topics.length = 0;
+        topics.push(...retainedTopics, ...stagedTopics);
+        nextTopicId += stagedTopics.length;
 
-              for (let index = 0; index < write.topics.length; index += 1) {
-                stagedTopics.push({
-                  id: nextTopicId + stagedTopics.length,
-                  sessionId,
-                  family: "detail",
-                  chunkId,
-                  topicOrder: index,
-                  topicText: write.topics[index]!,
-                  createdAt: nowIso(),
-                  selected: false,
-                });
-              }
-            }
-
-            const removedTopicIds = new Set(
-              topics
-                .filter((topic) => topic.sessionId === sessionId && topic.family === "detail")
-                .map((topic) => topic.id),
-            );
-            const retainedTopics = topics.filter(
-              (topic) => !(topic.sessionId === sessionId && topic.family === "detail"),
-            );
-
-            topics.length = 0;
-            topics.push(...retainedTopics, ...stagedTopics);
-            nextTopicId += stagedTopics.length;
-
-            removeTopicsAndDependentsInternal(removedTopicIds);
-            return Effect.void;
-          });
-
-          extractionOutcomes.set(outcomeKey(sessionId, "detail"), {
-            sessionId,
-            family: "detail",
-            status,
-            errorMessage,
-            updatedAt: nowIso(),
-          });
-        }),
-      ),
+        removeTopicsAndDependentsInternal(removedTopicIds);
+        return Effect.void;
+      }),
+    setTopicExtractionOutcome: ({ sessionId, status, errorMessage }) =>
+      Effect.sync(() => {
+        extractionOutcomes.set(outcomeKey(sessionId, "detail"), {
+          sessionId,
+          family: "detail",
+          status,
+          errorMessage,
+          updatedAt: nowIso(),
+        });
+      }),
     clearTopicExtractionOutcomes: (sessionId) =>
       Effect.sync(() => {
         for (const key of extractionOutcomes.keys()) {

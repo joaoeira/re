@@ -893,7 +893,7 @@ export const createForgeHandlers = () =>
       readonly model: string | undefined;
     }) =>
       Effect.gen(function* () {
-        const writes = yield* Effect.forEach(
+        yield* Effect.forEach(
           input.chunks,
           (chunk) =>
             forgePromptRuntime
@@ -905,11 +905,25 @@ export const createForgeHandlers = () =>
                 input.model ? { model: input.model } : undefined,
               )
               .pipe(
-                Effect.map((result) => ({
-                  chunkId: chunk.id,
-                  sequenceOrder: chunk.sequenceOrder,
-                  topics: result.output.topics,
-                })),
+                Effect.flatMap((result) =>
+                  mapSessionRepositoryError(
+                    input.sessionId,
+                    forgeSessionRepository.appendTopicsForChunk({
+                      sessionId: input.sessionId,
+                      sequenceOrder: chunk.sequenceOrder,
+                      topics: result.output.topics,
+                    }),
+                  ).pipe(
+                    Effect.flatMap(() =>
+                      publishChunkExtractedBestEffort({
+                        sessionId: input.sessionId,
+                        chunkId: chunk.id,
+                        sequenceOrder: chunk.sequenceOrder,
+                        topics: result.output.topics,
+                      }),
+                    ),
+                  ),
+                ),
                 Effect.mapError(
                   (error) =>
                     new ForgeTopicExtractionError({
@@ -923,32 +937,16 @@ export const createForgeHandlers = () =>
                     }),
                 ),
               ),
-          { concurrency: MAX_REQUEST_CONCURRENCY },
+          { concurrency: MAX_REQUEST_CONCURRENCY, discard: true },
         );
 
         yield* mapSessionRepositoryError(
           input.sessionId,
-          forgeSessionRepository.replaceTopicsForSessionAndSetExtractionOutcome({
+          forgeSessionRepository.setTopicExtractionOutcome({
             sessionId: input.sessionId,
-            writes: writes.map((write) => ({
-              sequenceOrder: write.sequenceOrder,
-              topics: write.topics,
-            })),
             status: "extracted",
             errorMessage: null,
           }),
-        );
-
-        yield* Effect.forEach(
-          writes,
-          (write) =>
-            publishChunkExtractedBestEffort({
-              sessionId: input.sessionId,
-              chunkId: write.chunkId,
-              sequenceOrder: write.sequenceOrder,
-              topics: write.topics,
-            }),
-          { discard: true },
         );
 
         return {
@@ -961,9 +959,8 @@ export const createForgeHandlers = () =>
           topic_extraction_error: (error) =>
             mapSessionRepositoryError(
               input.sessionId,
-              forgeSessionRepository.replaceTopicsForSessionAndSetExtractionOutcome({
+              forgeSessionRepository.setTopicExtractionOutcome({
                 sessionId: input.sessionId,
-                writes: [],
                 status: "error",
                 errorMessage: error.message,
               }),
@@ -1021,15 +1018,6 @@ export const createForgeHandlers = () =>
               session.id,
               forgeSessionRepository.clearTopicExtractionOutcomes(session.id),
             );
-
-            yield* mapSessionRepositoryStatusUpdateError(
-              session.id,
-              forgeSessionRepository.setSessionStatus({
-                sessionId: session.id,
-                status: "extracted",
-                errorMessage: null,
-              }),
-            ).pipe(Effect.flatMap((current) => ensureSessionExistsForStart(current, session.id)));
 
             yield* mapSessionRepositoryStatusUpdateError(
               session.id,

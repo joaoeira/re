@@ -34,6 +34,9 @@ import type {
   ForgeGenerateDerivedCardsResult,
   ForgeGetDerivedCardsResult,
 } from "@shared/rpc/schemas/forge";
+import { ForgeTopicChunkExtracted } from "@shared/rpc/contracts";
+import type { IpcMainHandle } from "electron-effect-rpc/types";
+import type { AppContract } from "@shared/rpc/contracts";
 import { createHandlersWithOverrides } from "./helpers";
 
 const createPdfExtractor = (options?: {
@@ -496,10 +499,18 @@ describe("forge handlers", () => {
       readonly topics: ReadonlyArray<string>;
     }>,
   ): Promise<void> => {
+    for (const write of writes) {
+      await Effect.runPromise(
+        repository.appendTopicsForChunk({
+          sessionId,
+          sequenceOrder: write.sequenceOrder,
+          topics: write.topics,
+        }),
+      );
+    }
     await Effect.runPromise(
-      repository.replaceTopicsForSessionAndSetExtractionOutcome({
+      repository.setTopicExtractionOutcome({
         sessionId,
-        writes,
         status: "extracted",
         errorMessage: null,
       }),
@@ -2589,6 +2600,190 @@ describe("forge handlers", () => {
 
       const sessions = await Effect.runPromise(repository.listRecentSessions());
       expect(sessions[0]?.status).toBe("error");
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("persists chunk 1 and fires its event before chunk 2 finishes", async () => {
+    const sourceFilePath = "/tmp/forge-stream-incremental.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: { [sourceFilePath]: "irrelevant — chunking is stubbed" },
+    });
+
+    const chunkService: ChunkService = {
+      chunkText: () =>
+        Effect.succeed({
+          chunks: [
+            {
+              text: "chunk-a-text",
+              sequenceOrder: 0,
+              pageBoundaries: [{ offset: 0, page: 1 }],
+            },
+            {
+              text: "chunk-b-text",
+              sequenceOrder: 1,
+              pageBoundaries: [{ offset: 0, page: 2 }],
+            },
+          ],
+          chunkCount: 2,
+        }),
+    };
+
+    let releaseChunkB: () => void = () => undefined;
+    const chunkBHeld = new Promise<void>((resolve) => {
+      releaseChunkB = resolve;
+    });
+
+    const promptRuntime = createPromptRuntime(({ chunkText }) =>
+      Effect.gen(function* () {
+        if (chunkText === "chunk-b-text") {
+          yield* Effect.promise(() => chunkBHeld);
+        }
+        return [`topic-for-${chunkText}`];
+      }),
+    );
+
+    const capturedEvents: Array<{ readonly eventName: string; readonly payload: unknown }> = [];
+    const publish = ((event: { readonly name: string }, payload: unknown) => {
+      capturedEvents.push({ eventName: event.name, payload });
+      return Effect.void;
+    }) as IpcMainHandle<AppContract>["publish"];
+
+    const { handlers, repository, dispose } = await setupHandlers({
+      extractor,
+      chunkService,
+      promptRuntime,
+      publish,
+    });
+
+    try {
+      const extractionPromise = Effect.runPromise(
+        startPdfTopicExtraction(handlers, { sourceFilePath }),
+      );
+
+      const waitForFirstChunkPersisted = async () => {
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+          const sessions = await Effect.runPromise(repository.listRecentSessions());
+          const sessionId = sessions[0]?.id;
+          if (sessionId) {
+            const snapshot = await Effect.runPromise(
+              repository.getCardsSnapshotBySession(sessionId),
+            );
+            if (snapshot.length > 0) {
+              return { sessionId, snapshot };
+            }
+          }
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        throw new Error("Chunk 1's topics were never persisted before chunk 2 completed.");
+      };
+
+      const { sessionId, snapshot: partialSnapshot } = await waitForFirstChunkPersisted();
+
+      expect(partialSnapshot.map((topic) => topic.topicText)).toEqual(["topic-for-chunk-a-text"]);
+
+      const chunkEventsBeforeRelease = capturedEvents.filter(
+        (entry) => entry.eventName === ForgeTopicChunkExtracted.name,
+      );
+      expect(chunkEventsBeforeRelease).toHaveLength(1);
+      expect(chunkEventsBeforeRelease[0]?.payload).toEqual({
+        sessionId,
+        chunk: {
+          chunkId: expect.any(Number),
+          sequenceOrder: 0,
+          topics: ["topic-for-chunk-a-text"],
+        },
+      });
+
+      releaseChunkB();
+
+      const result = await extractionPromise;
+
+      expect(result.session.status).toBe("topics_extracted");
+
+      const finalSnapshot = await Effect.runPromise(
+        repository.getCardsSnapshotBySession(sessionId),
+      );
+      expect(finalSnapshot.map((topic) => topic.topicText)).toEqual([
+        "topic-for-chunk-a-text",
+        "topic-for-chunk-b-text",
+      ]);
+
+      const chunkEventsAfter = capturedEvents.filter(
+        (entry) => entry.eventName === ForgeTopicChunkExtracted.name,
+      );
+      expect(chunkEventsAfter).toHaveLength(2);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("preserves partial topics when a later chunk fails", async () => {
+    const sourceFilePath = "/tmp/forge-stream-partial-error.pdf";
+    const extractor = createPdfExtractor({
+      textByPath: { [sourceFilePath]: "irrelevant — chunking is stubbed" },
+    });
+
+    const chunkService: ChunkService = {
+      chunkText: () =>
+        Effect.succeed({
+          chunks: [
+            {
+              text: "chunk-ok",
+              sequenceOrder: 0,
+              pageBoundaries: [{ offset: 0, page: 1 }],
+            },
+            {
+              text: "chunk-fail",
+              sequenceOrder: 1,
+              pageBoundaries: [{ offset: 0, page: 2 }],
+            },
+          ],
+          chunkCount: 2,
+        }),
+    };
+
+    const promptRuntime = createPromptRuntime(({ chunkText }) =>
+      chunkText === "chunk-fail"
+        ? Effect.fail(
+            new PromptOutputParseError({
+              promptId: "forge/get-topics",
+              message: "chunk 2 parse failure",
+              rawExcerpt: "invalid",
+            }),
+          )
+        : Effect.succeed([`topic-for-${chunkText}`]),
+    );
+
+    const { handlers, repository, dispose } = await setupHandlers({
+      extractor,
+      chunkService,
+      promptRuntime,
+    });
+
+    try {
+      const exit = await Effect.runPromiseExit(
+        startPdfTopicExtraction(handlers, { sourceFilePath }),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+
+      const sessions = await Effect.runPromise(repository.listRecentSessions());
+      const sessionId = sessions[0]?.id;
+      if (!sessionId) throw new Error("Expected a persisted session.");
+
+      expect(sessions[0]?.status).toBe("error");
+
+      const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(sessionId));
+      expect(snapshot.map((topic) => topic.topicText)).toEqual(["topic-for-chunk-ok"]);
+
+      const outcomes = await Effect.runPromise(repository.getTopicExtractionOutcomes(sessionId));
+      expect(outcomes).toEqual([
+        expect.objectContaining({
+          family: "detail",
+          status: "error",
+        }),
+      ]);
     } finally {
       await dispose();
     }

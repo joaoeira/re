@@ -1,7 +1,10 @@
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
-import { makeInMemoryForgeSessionRepository } from "@main/forge/services/forge-session-repository";
+import {
+  makeInMemoryForgeSessionRepository,
+  type ForgeSessionRepository,
+} from "@main/forge/services/forge-session-repository";
 
 const createSessionWithChunks = async () => {
   const repository = makeInMemoryForgeSessionRepository();
@@ -33,21 +36,41 @@ const createSessionWithChunks = async () => {
   return { repository, session };
 };
 
+const extractTopics = async (
+  repository: ForgeSessionRepository,
+  sessionId: number,
+  writes: ReadonlyArray<{ readonly sequenceOrder: number; readonly topics: ReadonlyArray<string> }>,
+  outcome: { readonly status: "extracted" | "error"; readonly errorMessage: string | null } = {
+    status: "extracted",
+    errorMessage: null,
+  },
+) => {
+  for (const write of writes) {
+    await Effect.runPromise(
+      repository.appendTopicsForChunk({
+        sessionId,
+        sequenceOrder: write.sequenceOrder,
+        topics: write.topics,
+      }),
+    );
+  }
+  await Effect.runPromise(
+    repository.setTopicExtractionOutcome({
+      sessionId,
+      status: outcome.status,
+      errorMessage: outcome.errorMessage,
+    }),
+  );
+};
+
 describe("forge session repository (canonical)", () => {
   it("stores detail topics and returns canonical cards snapshot rows", async () => {
     const { repository, session } = await createSessionWithChunks();
 
-    await Effect.runPromise(
-      repository.replaceTopicsForSessionAndSetExtractionOutcome({
-        sessionId: session.id,
-        writes: [
-          { sequenceOrder: 0, topics: ["alpha", "beta"] },
-          { sequenceOrder: 1, topics: ["gamma"] },
-        ],
-        status: "extracted",
-        errorMessage: null,
-      }),
-    );
+    await extractTopics(repository, session.id, [
+      { sequenceOrder: 0, topics: ["alpha", "beta"] },
+      { sequenceOrder: 1, topics: ["gamma"] },
+    ]);
 
     const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
     const outcomes = await Effect.runPromise(repository.getTopicExtractionOutcomes(session.id));
@@ -62,14 +85,9 @@ describe("forge session repository (canonical)", () => {
   it("persists topic-id selections across detail topics", async () => {
     const { repository, session } = await createSessionWithChunks();
 
-    await Effect.runPromise(
-      repository.replaceTopicsForSessionAndSetExtractionOutcome({
-        sessionId: session.id,
-        writes: [{ sequenceOrder: 0, topics: ["alpha", "beta"] }],
-        status: "extracted",
-        errorMessage: null,
-      }),
-    );
+    await extractTopics(repository, session.id, [
+      { sequenceOrder: 0, topics: ["alpha", "beta"] },
+    ]);
 
     const before = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
     const [first, second] = before;
@@ -92,14 +110,7 @@ describe("forge session repository (canonical)", () => {
   it("returns card/topic metadata without repository-side grounding text", async () => {
     const { repository, session } = await createSessionWithChunks();
 
-    await Effect.runPromise(
-      repository.replaceTopicsForSessionAndSetExtractionOutcome({
-        sessionId: session.id,
-        writes: [{ sequenceOrder: 0, topics: ["alpha"] }],
-        status: "extracted",
-        errorMessage: null,
-      }),
-    );
+    await extractTopics(repository, session.id, [{ sequenceOrder: 0, topics: ["alpha"] }]);
 
     const topicId = (await Effect.runPromise(repository.getCardsSnapshotBySession(session.id)))[0]
       ?.topicId;
@@ -132,14 +143,7 @@ describe("forge session repository (canonical)", () => {
   describe("topic angles", () => {
     const createSessionWithTopic = async () => {
       const { repository, session } = await createSessionWithChunks();
-      await Effect.runPromise(
-        repository.replaceTopicsForSessionAndSetExtractionOutcome({
-          sessionId: session.id,
-          writes: [{ sequenceOrder: 0, topics: ["alpha"] }],
-          status: "extracted",
-          errorMessage: null,
-        }),
-      );
+      await extractTopics(repository, session.id, [{ sequenceOrder: 0, topics: ["alpha"] }]);
       const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
       const topicId = snapshot[0]?.topicId;
       if (!topicId) throw new Error("Expected topic id.");
@@ -220,14 +224,9 @@ describe("forge session repository (canonical)", () => {
         }),
       );
 
-      await Effect.runPromise(
-        repository.replaceTopicsForSessionAndSetExtractionOutcome({
-          sessionId: session.id,
-          writes: [{ sequenceOrder: 0, topics: ["renamed"] }],
-          status: "extracted",
-          errorMessage: null,
-        }),
-      );
+      await extractTopics(repository, session.id, [
+        { sequenceOrder: 0, topics: ["renamed"] },
+      ]);
 
       const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
       const newTopicId = snapshot[0]?.topicId;
@@ -238,6 +237,150 @@ describe("forge session repository (canonical)", () => {
 
       const newAngles = await Effect.runPromise(repository.getAnglesForTopicId(newTopicId));
       expect(newAngles).toEqual([]);
+    });
+  });
+
+  describe("appendTopicsForChunk", () => {
+    it("inserts topics scoped to one chunk without touching other chunks", async () => {
+      const { repository, session } = await createSessionWithChunks();
+
+      await Effect.runPromise(
+        repository.appendTopicsForChunk({
+          sessionId: session.id,
+          sequenceOrder: 0,
+          topics: ["alpha", "beta"],
+        }),
+      );
+
+      let snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+      expect(snapshot.map((topic) => topic.topicText)).toEqual(["alpha", "beta"]);
+
+      await Effect.runPromise(
+        repository.appendTopicsForChunk({
+          sessionId: session.id,
+          sequenceOrder: 1,
+          topics: ["gamma"],
+        }),
+      );
+
+      snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+      expect(snapshot.map((topic) => topic.topicText)).toEqual(["alpha", "beta", "gamma"]);
+    });
+
+    it("replaces only the targeted chunk's topics on a repeat call", async () => {
+      const { repository, session } = await createSessionWithChunks();
+
+      await Effect.runPromise(
+        repository.appendTopicsForChunk({
+          sessionId: session.id,
+          sequenceOrder: 0,
+          topics: ["original"],
+        }),
+      );
+      await Effect.runPromise(
+        repository.appendTopicsForChunk({
+          sessionId: session.id,
+          sequenceOrder: 1,
+          topics: ["other-chunk"],
+        }),
+      );
+      await Effect.runPromise(
+        repository.appendTopicsForChunk({
+          sessionId: session.id,
+          sequenceOrder: 0,
+          topics: ["retry-a", "retry-b"],
+        }),
+      );
+
+      const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+      expect(snapshot.map((topic) => topic.topicText)).toEqual([
+        "retry-a",
+        "retry-b",
+        "other-chunk",
+      ]);
+    });
+
+    it("fails when the chunk sequence order does not exist for the session", async () => {
+      const { repository, session } = await createSessionWithChunks();
+
+      const result = await Effect.runPromise(
+        repository
+          .appendTopicsForChunk({
+            sessionId: session.id,
+            sequenceOrder: 42,
+            topics: ["ghost"],
+          })
+          .pipe(Effect.either),
+      );
+
+      expect(result._tag).toBe("Left");
+    });
+
+    it("cascades angles removal when topics are re-appended for a chunk", async () => {
+      const { repository, session } = await createSessionWithChunks();
+      await Effect.runPromise(
+        repository.appendTopicsForChunk({
+          sessionId: session.id,
+          sequenceOrder: 0,
+          topics: ["alpha"],
+        }),
+      );
+
+      const firstSnapshot = await Effect.runPromise(
+        repository.getCardsSnapshotBySession(session.id),
+      );
+      const firstTopicId = firstSnapshot[0]?.topicId;
+      if (!firstTopicId) throw new Error("Expected topic id.");
+
+      await Effect.runPromise(
+        repository.replaceAnglesForTopic({ topicId: firstTopicId, angles: ["to-wipe"] }),
+      );
+
+      await Effect.runPromise(
+        repository.appendTopicsForChunk({
+          sessionId: session.id,
+          sequenceOrder: 0,
+          topics: ["replaced"],
+        }),
+      );
+
+      const oldAngles = await Effect.runPromise(repository.getAnglesForTopicId(firstTopicId));
+      expect(oldAngles).toEqual([]);
+    });
+  });
+
+  describe("setTopicExtractionOutcome", () => {
+    it("writes and updates the outcome row without touching topics", async () => {
+      const { repository, session } = await createSessionWithChunks();
+      await extractTopics(repository, session.id, [{ sequenceOrder: 0, topics: ["alpha"] }]);
+
+      const topicsBefore = await Effect.runPromise(
+        repository.getCardsSnapshotBySession(session.id),
+      );
+
+      await Effect.runPromise(
+        repository.setTopicExtractionOutcome({
+          sessionId: session.id,
+          status: "error",
+          errorMessage: "chunk 2 failed",
+        }),
+      );
+
+      const outcomes = await Effect.runPromise(repository.getTopicExtractionOutcomes(session.id));
+      expect(outcomes).toEqual([
+        expect.objectContaining({
+          family: "detail",
+          status: "error",
+          errorMessage: "chunk 2 failed",
+        }),
+      ]);
+
+      const topicsAfter = await Effect.runPromise(
+        repository.getCardsSnapshotBySession(session.id),
+      );
+      expect(topicsAfter.map((topic) => topic.topicText)).toEqual(
+        topicsBefore.map((topic) => topic.topicText),
+      );
     });
   });
 });
