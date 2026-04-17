@@ -2,6 +2,7 @@ import { CreateCardsPromptSpec } from "./create-cards";
 import { GenerateClozePromptSpec } from "./generate-cloze";
 import { GenerateExpansionsPromptSpec } from "./generate-expansions";
 import { GeneratePermutationsPromptSpec } from "./generate-permutations";
+import { GetAnglesPromptSpec } from "./get-angles";
 import { GetTopicsPromptSpec } from "./get-topics";
 import { ReformulateCardPromptSpec } from "./reformulate-card";
 
@@ -49,6 +50,7 @@ export const createForgePromptRegistry = <Spec extends PromptSpecIdentity>(
 
 export const ForgePromptRegistry = createForgePromptRegistry([
   GetTopicsPromptSpec,
+  GetAnglesPromptSpec,
   CreateCardsPromptSpec,
   GenerateExpansionsPromptSpec,
   GeneratePermutationsPromptSpec,

@@ -20,6 +20,7 @@ import {
   GenerateClozePromptSpec,
   GenerateExpansionsPromptSpec,
   GeneratePermutationsPromptSpec,
+  GetAnglesPromptSpec,
   ReformulateCardPromptSpec,
   GetTopicsPromptSpec,
 } from "@main/forge/prompts";
@@ -53,6 +54,7 @@ import {
   ForgeSessionBusyError,
   ForgeSessionNotFoundError,
   ForgeSessionOperationError,
+  ForgeAngleGenerationError,
   ForgeCardGenerationError,
   ForgeCardNotFoundError,
   ForgeCardReformulationError,
@@ -1126,6 +1128,7 @@ export const createForgeHandlers = () =>
       readonly topicId: number;
       readonly instruction: string | undefined;
       readonly model: string | undefined;
+      readonly angleModel: string | undefined;
     }) =>
       Effect.gen(function* () {
         const topic = yield* loadTopicById(input.sessionId, input.topicId);
@@ -1154,6 +1157,46 @@ export const createForgeHandlers = () =>
               ),
             );
 
+          const existingAngles = yield* mapSessionRepositoryError(
+            input.sessionId,
+            forgeSessionRepository.getAnglesForTopicId(topic.topicId),
+          );
+
+          const angles =
+            existingAngles.length > 0
+              ? existingAngles
+              : yield* Effect.gen(function* () {
+                  const angleResult = yield* forgePromptRuntime
+                    .run(
+                      GetAnglesPromptSpec,
+                      {
+                        topic: topic.topicText,
+                        contextText,
+                      },
+                      input.angleModel ? { model: input.angleModel } : undefined,
+                    )
+                    .pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new ForgeAngleGenerationError({
+                            sessionId: input.sessionId,
+                            topicId: input.topicId,
+                            message: toErrorMessage(error),
+                          }),
+                      ),
+                    );
+
+                  yield* mapSessionRepositoryError(
+                    input.sessionId,
+                    forgeSessionRepository.replaceAnglesForTopic({
+                      topicId: topic.topicId,
+                      angles: angleResult.output.angles,
+                    }),
+                  );
+
+                  return angleResult.output.angles;
+                });
+
           const promptResult = yield* forgePromptRuntime
             .run(
               CreateCardsPromptSpec,
@@ -1161,6 +1204,7 @@ export const createForgeHandlers = () =>
                 contextText,
                 topic: topic.topicText,
                 ...(input.instruction ? { instruction: input.instruction } : {}),
+                ...(angles.length > 0 ? { angles } : {}),
               },
               input.model ? { model: input.model } : undefined,
             )
@@ -1219,6 +1263,7 @@ export const createForgeHandlers = () =>
               answer: card.answer,
               addedToDeck: card.addedToDeck,
             })),
+            angles,
           };
         });
 
@@ -1419,6 +1464,11 @@ export const createForgeHandlers = () =>
             return yield* Effect.fail(new ForgeTopicNotFoundError({ sessionId, topicId }));
           }
 
+          const angles = yield* mapSessionRepositoryError(
+            sessionId,
+            forgeSessionRepository.getAnglesForTopicId(topicId),
+          );
+
           return {
             topic: toTopicCardsSummary({
               sessionId: result.topic.sessionId,
@@ -1441,20 +1491,23 @@ export const createForgeHandlers = () =>
               answer: card.answer,
               addedToDeck: card.addedToDeck,
             })),
+            angles,
           };
         }),
-      ForgeGenerateTopicCards: ({ sessionId, topicId, instruction, model }) =>
+      ForgeGenerateTopicCards: ({ sessionId, topicId, instruction, model, angleModel }) =>
         generateTopicCardsForTopicId({
           sessionId,
           topicId,
           instruction,
           model,
+          angleModel,
         }),
       ForgeGenerateSelectedTopicCards: ({
         sessionId,
         topicIds,
         instruction,
         model,
+        angleModel,
         concurrencyLimit,
       }) =>
         Effect.gen(function* () {
@@ -1482,6 +1535,7 @@ export const createForgeHandlers = () =>
                 topicId,
                 instruction,
                 model,
+                angleModel,
               }).pipe(
                 Effect.map(() => ({
                   topicId,
@@ -1500,6 +1554,12 @@ export const createForgeHandlers = () =>
                       topicId,
                       status: "topic_not_found" as const,
                       message: null,
+                    }),
+                  angle_generation_error: (error) =>
+                    Effect.succeed({
+                      topicId,
+                      status: "error" as const,
+                      message: error.message,
                     }),
                   card_generation_error: (error) =>
                     Effect.succeed({

@@ -120,7 +120,21 @@ const createPromptRuntime = (
 const createCardsDomainPromptRuntime = (options?: {
   readonly holdCreateCards?: Promise<void>;
   readonly failCreateCards?: boolean;
+  readonly failGetAngles?: boolean;
   readonly failReformulateCard?: boolean;
+  readonly angles?: ReadonlyArray<string>;
+  readonly onGetAnglesInput?: (input: {
+    readonly topic: string;
+    readonly contextText: string;
+  }) => void;
+  readonly onGetAnglesOptions?: (options: PromptRunOptions | undefined) => void;
+  readonly onCreateCardsInput?: (input: {
+    readonly contextText: string;
+    readonly topic: string;
+    readonly instruction?: string;
+    readonly angles?: ReadonlyArray<string>;
+  }) => void;
+  readonly onCreateCardsOptions?: (options: PromptRunOptions | undefined) => void;
   readonly onGenerateExpansionsInput?: (input: {
     readonly topic: string;
     readonly ancestryChain: ReadonlyArray<{
@@ -144,7 +158,49 @@ const createCardsDomainPromptRuntime = (options?: {
     runOptions?: PromptRunOptions,
   ) =>
     Effect.gen(function* () {
+      if (spec.promptId === "forge/get-angles") {
+        const anglesInput = input as {
+          readonly topic: string;
+          readonly contextText: string;
+        };
+        options?.onGetAnglesInput?.(anglesInput);
+        options?.onGetAnglesOptions?.(runOptions);
+
+        if (options?.failGetAngles) {
+          return yield* Effect.fail(
+            new PromptOutputParseError({
+              promptId: spec.promptId,
+              message: "get-angles parse failure",
+              rawExcerpt: "invalid",
+            }),
+          );
+        }
+
+        const angles = options?.angles ?? ["angle-one", "angle-two", "angle-three"];
+        return {
+          output: { angles } as unknown as Output,
+          rawText: JSON.stringify({ angles }),
+          metadata: {
+            promptId: spec.promptId,
+            promptVersion: "1",
+            model: runOptions?.model ?? "mock:model",
+            attemptCount: 1,
+            promptHash: "x".repeat(64),
+            outputChars: angles.join(",").length,
+          },
+        };
+      }
+
       if (spec.promptId === "forge/create-cards") {
+        const cardsInput = input as {
+          readonly contextText: string;
+          readonly topic: string;
+          readonly instruction?: string;
+          readonly angles?: ReadonlyArray<string>;
+        };
+        options?.onCreateCardsInput?.(cardsInput);
+        options?.onCreateCardsOptions?.(runOptions);
+
         if (options?.holdCreateCards) {
           yield* Effect.promise(() => options.holdCreateCards!);
         }
@@ -2720,6 +2776,205 @@ describe("forge handlers", () => {
       );
       expect(reread.topic.topicId).toBe(secondTopicId);
       expect(reread.cards.length).toBeGreaterThan(0);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("generates angles on first card generation and passes them into the cards prompt", async () => {
+    let seenAnglesInput: { topic: string; contextText: string } | undefined;
+    let seenCardsInput:
+      | {
+          readonly contextText: string;
+          readonly topic: string;
+          readonly instruction?: string;
+          readonly angles?: ReadonlyArray<string>;
+        }
+      | undefined;
+    const promptRuntime = createCardsDomainPromptRuntime({
+      angles: ["lens-a", "lens-b"],
+      onGetAnglesInput: (input) => {
+        seenAnglesInput = input;
+      },
+      onCreateCardsInput: (input) => {
+        seenCardsInput = input;
+      },
+    });
+    const { handlers, repository, dispose } = await setupHandlers({ promptRuntime });
+
+    try {
+      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-angles.pdf"));
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          { text: "ground truth", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
+        ]),
+      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["alpha"] },
+      ]);
+      const topicId = await getOnlyTopicId(repository, created.session.id);
+
+      const generated = await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({ sessionId: created.session.id, topicId }),
+      );
+
+      expect(seenAnglesInput).toEqual({
+        topic: "alpha",
+        contextText: "ground truth",
+      });
+      expect(seenCardsInput?.angles).toEqual(["lens-a", "lens-b"]);
+      expect(generated.angles).toEqual(["lens-a", "lens-b"]);
+
+      const persisted = await Effect.runPromise(repository.getAnglesForTopicId(topicId));
+      expect(persisted).toEqual(["lens-a", "lens-b"]);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("reuses persisted angles on a second card generation and skips the angles prompt", async () => {
+    let anglesPromptCalls = 0;
+    const promptRuntime = createCardsDomainPromptRuntime({
+      angles: ["first-pass-angle"],
+      onGetAnglesInput: () => {
+        anglesPromptCalls += 1;
+      },
+    });
+    const { handlers, repository, dispose } = await setupHandlers({ promptRuntime });
+
+    try {
+      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-angles-cache.pdf"));
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          { text: "ground truth", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
+        ]),
+      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["alpha"] },
+      ]);
+      const topicId = await getOnlyTopicId(repository, created.session.id);
+
+      await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({ sessionId: created.session.id, topicId }),
+      );
+      const second = await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({ sessionId: created.session.id, topicId }),
+      );
+
+      expect(anglesPromptCalls).toBe(1);
+      expect(second.angles).toEqual(["first-pass-angle"]);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("routes angleModel only to the angle prompt, not the cards prompt", async () => {
+    let angleModelSeen: string | undefined;
+    let cardModelSeen: string | undefined;
+    const promptRuntime = createCardsDomainPromptRuntime({
+      onGetAnglesOptions: (options) => {
+        angleModelSeen = options?.model;
+      },
+      onCreateCardsOptions: (options) => {
+        cardModelSeen = options?.model;
+      },
+    });
+    const { handlers, repository, dispose } = await setupHandlers({ promptRuntime });
+
+    try {
+      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-angles-models.pdf"));
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          { text: "ground truth", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
+        ]),
+      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["alpha"] },
+      ]);
+      const topicId = await getOnlyTopicId(repository, created.session.id);
+
+      await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({
+          sessionId: created.session.id,
+          topicId,
+          model: "prov:card-model",
+          angleModel: "prov:angle-model",
+        }),
+      );
+
+      expect(angleModelSeen).toBe("prov:angle-model");
+      expect(cardModelSeen).toBe("prov:card-model");
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("surfaces angle generation failure as ForgeAngleGenerationError and leaves cards unchanged", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime({ failGetAngles: true });
+    const { handlers, repository, dispose } = await setupHandlers({ promptRuntime });
+
+    try {
+      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-angles-fail.pdf"));
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          { text: "ground truth", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
+        ]),
+      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["alpha"] },
+      ]);
+      const topicId = await getOnlyTopicId(repository, created.session.id);
+
+      const exit = await Effect.runPromiseExit(
+        handlers.ForgeGenerateTopicCards({ sessionId: created.session.id, topicId }),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failureOption = Cause.failureOption(exit.cause);
+        expect(failureOption._tag).toBe("Some");
+        if (failureOption._tag === "Some") {
+          expect(failureOption.value._tag).toBe("angle_generation_error");
+        }
+      }
+
+      const cardsSnapshot = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
+      );
+      const topic = cardsSnapshot.topics.find((t) => t.topicId === topicId);
+      expect(topic?.status).toBe("error");
+      expect(topic?.cardCount).toBe(0);
+
+      const persistedAngles = await Effect.runPromise(repository.getAnglesForTopicId(topicId));
+      expect(persistedAngles).toEqual([]);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("returns persisted angles from ForgeGetTopicCards after generation", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime({ angles: ["x", "y", "z"] });
+    const { handlers, repository, dispose } = await setupHandlers({ promptRuntime });
+
+    try {
+      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-angles-get.pdf"));
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          { text: "ground truth", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
+        ]),
+      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["alpha"] },
+      ]);
+      const topicId = await getOnlyTopicId(repository, created.session.id);
+
+      await Effect.runPromise(
+        handlers.ForgeGenerateTopicCards({ sessionId: created.session.id, topicId }),
+      );
+      const reread = await Effect.runPromise(
+        handlers.ForgeGetTopicCards({ sessionId: created.session.id, topicId }),
+      );
+
+      expect(reread.angles).toEqual(["x", "y", "z"]);
     } finally {
       await dispose();
     }

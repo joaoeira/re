@@ -195,6 +195,13 @@ export interface ForgeSessionRepository {
   readonly getTopicById: (
     topicId: number,
   ) => Effect.Effect<ForgeTopicRecord | null, ForgeSessionRepositoryError>;
+  readonly getAnglesForTopicId: (
+    topicId: number,
+  ) => Effect.Effect<ReadonlyArray<string>, ForgeSessionRepositoryError>;
+  readonly replaceAnglesForTopic: (input: {
+    readonly topicId: number;
+    readonly angles: ReadonlyArray<string>;
+  }) => Effect.Effect<void, ForgeSessionRepositoryError>;
   readonly getCardsSnapshotBySession: (
     sessionId: number,
   ) => Effect.Effect<ReadonlyArray<ForgeTopicCardsSnapshotRow>, ForgeSessionRepositoryError>;
@@ -1422,6 +1429,15 @@ export const makeSqliteForgeSessionRepository = ({
             }
 
             yield* sql`
+              DELETE FROM forge_topic_angles
+              WHERE topic_id IN (
+                SELECT id FROM forge_topics
+                WHERE session_id = ${sessionId}
+                  AND family = 'detail'
+              )
+            `;
+
+            yield* sql`
               DELETE FROM forge_topics
               WHERE session_id = ${sessionId}
                 AND family = 'detail'
@@ -1548,6 +1564,58 @@ export const makeSqliteForgeSessionRepository = ({
         }),
       ),
     getTopicById: (topicId) => runSql("getTopicById.runtime", loadTopicByIdSql(topicId)),
+    getAnglesForTopicId: (topicId) =>
+      runSql(
+        "getAnglesForTopicId.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const rows = yield* withSqlError(
+            "getAnglesForTopicId.select",
+            sql<{ angle_text: string }>`
+              SELECT angle_text
+              FROM forge_topic_angles
+              WHERE topic_id = ${topicId}
+              ORDER BY angle_order ASC
+            `,
+          );
+          return rows.map((row) => row.angle_text);
+        }),
+      ),
+    replaceAnglesForTopic: ({ topicId, angles }) =>
+      runSql(
+        "replaceAnglesForTopic.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          yield* withSqlError(
+            "replaceAnglesForTopic.transaction",
+            sql.withTransaction(
+              Effect.gen(function* () {
+                yield* sql`
+                  DELETE FROM forge_topic_angles
+                  WHERE topic_id = ${topicId}
+                `;
+
+                yield* Effect.forEach(
+                  angles,
+                  (angle, angleOrder) =>
+                    sql`
+                      INSERT INTO forge_topic_angles (
+                        topic_id,
+                        angle_order,
+                        angle_text
+                      ) VALUES (
+                        ${topicId},
+                        ${angleOrder},
+                        ${angle}
+                      )
+                    `,
+                  { discard: true },
+                );
+              }),
+            ),
+          );
+        }),
+      ),
     getCardsSnapshotBySession: (sessionId) =>
       runSql("getCardsSnapshotBySession.runtime", loadCardsSnapshotBySessionSql(sessionId)),
     getCardsForTopicId: (topicId) =>
@@ -2310,6 +2378,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
   const topics: InMemoryTopic[] = [];
   const topicGeneration = new Map<number, InMemoryTopicGeneration>();
   const extractionOutcomes = new Map<string, InMemoryTopicExtractionOutcome>();
+  const anglesByTopicId = new Map<number, string[]>();
   const cards: InMemoryCard[] = [];
   const derivations: InMemoryDerivation[] = [];
   const clozeBySourceKey = new Map<string, InMemoryCardCloze>();
@@ -2495,6 +2564,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
 
     for (const topicId of removedTopicIds) {
       topicGeneration.delete(topicId);
+      anglesByTopicId.delete(topicId);
     }
 
     const removedCardIds = new Set(
@@ -2801,6 +2871,19 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
     getTopicById: (topicId) =>
       Effect.sync(() => {
         return getTopicByIdInternal(topicId);
+      }),
+    getAnglesForTopicId: (topicId) =>
+      Effect.sync(() => {
+        const stored = anglesByTopicId.get(topicId);
+        return stored ? [...stored] : [];
+      }),
+    replaceAnglesForTopic: ({ topicId, angles }) =>
+      Effect.sync(() => {
+        if (angles.length === 0) {
+          anglesByTopicId.delete(topicId);
+          return;
+        }
+        anglesByTopicId.set(topicId, [...angles]);
       }),
     getCardsSnapshotBySession: (sessionId) =>
       Effect.sync(() => {

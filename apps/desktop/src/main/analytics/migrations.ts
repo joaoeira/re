@@ -1241,6 +1241,25 @@ const REVIEW_HISTORY_MIGRATIONS = {
       );
     }
   }),
+  "0016_add_forge_topic_angles": Effect.gen(function* () {
+    const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+    yield* sql`
+      CREATE TABLE IF NOT EXISTS forge_topic_angles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topic_id INTEGER NOT NULL REFERENCES forge_topics(id) ON DELETE CASCADE,
+        angle_order INTEGER NOT NULL,
+        angle_text TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        UNIQUE (topic_id, angle_order)
+      )
+    `;
+
+    yield* sql`
+      CREATE INDEX IF NOT EXISTS forge_topic_angles_topic_idx
+      ON forge_topic_angles(topic_id)
+    `;
+  }),
 } satisfies Record<string, Effect.Effect<void, unknown, SqlClient.SqlClient>>;
 
 const toMigrationError = (message: string): Migrator.MigrationError =>

@@ -575,6 +575,7 @@ export function CardsStep() {
             errorMessage: null,
           },
           cards: [],
+          angles: [],
         };
       });
       if (existing) {

@@ -1,40 +1,15 @@
 import { Schema } from "@effect/schema";
 
 import type { PromptAttemptContext, PromptSpec } from "./types";
-import { collapseWhitespace } from "./normalize";
+import { NormalizedStringArraySchema } from "./normalize";
 
 export const GetTopicsPromptInputSchema = Schema.Struct({
   chunkText: Schema.String.pipe(Schema.minLength(1)),
 });
 export type GetTopicsPromptInput = typeof GetTopicsPromptInputSchema.Type;
 
-const normalizeTopicList = (topics: ReadonlyArray<string>): ReadonlyArray<string> => {
-  const normalizedTopics: string[] = [];
-
-  for (const topic of topics) {
-    const normalizedTopic = collapseWhitespace(topic);
-    if (normalizedTopic.length === 0) {
-      continue;
-    }
-
-    normalizedTopics.push(normalizedTopic);
-  }
-
-  return normalizedTopics;
-};
-
-const NormalizedTopicArraySchema = Schema.transform(
-  Schema.Array(Schema.String),
-  Schema.Array(Schema.String),
-  {
-    strict: true,
-    decode: (topics) => normalizeTopicList(topics),
-    encode: (topics) => topics,
-  },
-);
-
 export const GetTopicsPromptOutputSchema = Schema.Struct({
-  topics: NormalizedTopicArraySchema,
+  topics: NormalizedStringArraySchema,
 });
 export type GetTopicsPromptOutput = typeof GetTopicsPromptOutputSchema.Type;
 

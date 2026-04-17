@@ -415,6 +415,7 @@ const createCardsInvoke = (options?: {
             answer: card.answer,
             addedToDeck: card.addedToDeck,
           })),
+          angles: [],
         },
       };
     }
@@ -484,6 +485,7 @@ const createCardsInvoke = (options?: {
             answer: card.answer,
             addedToDeck: card.addedToDeck,
           })),
+          angles: [],
         },
       };
     }

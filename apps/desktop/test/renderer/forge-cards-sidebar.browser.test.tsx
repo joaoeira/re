@@ -211,6 +211,7 @@ const createCardsInvoke = (allTopics: ReadonlyArray<TopicDef> = DETAIL_TOPICS) =
             { id: 9001, question: "Q1", answer: "A1", addedToDeck: false },
             { id: 9002, question: "Q2", answer: "A2", addedToDeck: false },
           ],
+          angles: [],
         },
       };
     }
@@ -235,6 +236,7 @@ const createCardsInvoke = (allTopics: ReadonlyArray<TopicDef> = DETAIL_TOPICS) =
             { id: 9001, question: "Q1", answer: "A1", addedToDeck: false },
             { id: 9002, question: "Q2", answer: "A2", addedToDeck: false },
           ],
+          angles: [],
         },
       };
     }

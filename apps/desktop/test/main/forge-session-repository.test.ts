@@ -129,4 +129,115 @@ describe("forge session repository (canonical)", () => {
     expect("contextText" in (sourceCard ?? {})).toBe(false);
   });
 
+  describe("topic angles", () => {
+    const createSessionWithTopic = async () => {
+      const { repository, session } = await createSessionWithChunks();
+      await Effect.runPromise(
+        repository.replaceTopicsForSessionAndSetExtractionOutcome({
+          sessionId: session.id,
+          writes: [{ sequenceOrder: 0, topics: ["alpha"] }],
+          status: "extracted",
+          errorMessage: null,
+        }),
+      );
+      const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+      const topicId = snapshot[0]?.topicId;
+      if (!topicId) throw new Error("Expected topic id.");
+      return { repository, session, topicId };
+    };
+
+    it("returns an empty array when no angles are persisted for a topic", async () => {
+      const { repository, topicId } = await createSessionWithTopic();
+      const angles = await Effect.runPromise(repository.getAnglesForTopicId(topicId));
+      expect(angles).toEqual([]);
+    });
+
+    it("persists angles in order and reads them back by angle_order", async () => {
+      const { repository, topicId } = await createSessionWithTopic();
+
+      await Effect.runPromise(
+        repository.replaceAnglesForTopic({
+          topicId,
+          angles: ["historical context", "mechanism of action", "clinical implications"],
+        }),
+      );
+
+      const angles = await Effect.runPromise(repository.getAnglesForTopicId(topicId));
+      expect(angles).toEqual([
+        "historical context",
+        "mechanism of action",
+        "clinical implications",
+      ]);
+    });
+
+    it("replaces all angles on a second call", async () => {
+      const { repository, topicId } = await createSessionWithTopic();
+
+      await Effect.runPromise(
+        repository.replaceAnglesForTopic({
+          topicId,
+          angles: ["first", "second", "third"],
+        }),
+      );
+      await Effect.runPromise(
+        repository.replaceAnglesForTopic({
+          topicId,
+          angles: ["brand", "new"],
+        }),
+      );
+
+      const angles = await Effect.runPromise(repository.getAnglesForTopicId(topicId));
+      expect(angles).toEqual(["brand", "new"]);
+    });
+
+    it("clears angles when the replacement set is empty", async () => {
+      const { repository, topicId } = await createSessionWithTopic();
+
+      await Effect.runPromise(
+        repository.replaceAnglesForTopic({
+          topicId,
+          angles: ["anything"],
+        }),
+      );
+      await Effect.runPromise(
+        repository.replaceAnglesForTopic({
+          topicId,
+          angles: [],
+        }),
+      );
+
+      const angles = await Effect.runPromise(repository.getAnglesForTopicId(topicId));
+      expect(angles).toEqual([]);
+    });
+
+    it("cascades angles removal when topics are re-extracted (in-memory model)", async () => {
+      const { repository, session, topicId } = await createSessionWithTopic();
+
+      await Effect.runPromise(
+        repository.replaceAnglesForTopic({
+          topicId,
+          angles: ["will-be-wiped"],
+        }),
+      );
+
+      await Effect.runPromise(
+        repository.replaceTopicsForSessionAndSetExtractionOutcome({
+          sessionId: session.id,
+          writes: [{ sequenceOrder: 0, topics: ["renamed"] }],
+          status: "extracted",
+          errorMessage: null,
+        }),
+      );
+
+      const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+      const newTopicId = snapshot[0]?.topicId;
+      if (!newTopicId) throw new Error("Expected replacement topic id.");
+
+      const oldAngles = await Effect.runPromise(repository.getAnglesForTopicId(topicId));
+      expect(oldAngles).toEqual([]);
+
+      const newAngles = await Effect.runPromise(repository.getAnglesForTopicId(newTopicId));
+      expect(newAngles).toEqual([]);
+    });
+  });
 });

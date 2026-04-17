@@ -2,6 +2,31 @@ import { Schema } from "@effect/schema";
 
 export const collapseWhitespace = (value: string): string => value.replace(/\s+/g, " ").trim();
 
+export const normalizeStringList = (values: ReadonlyArray<string>): ReadonlyArray<string> => {
+  const normalized: string[] = [];
+
+  for (const value of values) {
+    const collapsed = collapseWhitespace(value);
+    if (collapsed.length === 0) {
+      continue;
+    }
+
+    normalized.push(collapsed);
+  }
+
+  return normalized;
+};
+
+export const NormalizedStringArraySchema = Schema.transform(
+  Schema.Array(Schema.String),
+  Schema.Array(Schema.String),
+  {
+    strict: true,
+    decode: (values) => normalizeStringList(values),
+    encode: (values) => values,
+  },
+);
+
 const RawCardSchema = Schema.Struct({
   question: Schema.String,
   answer: Schema.String,

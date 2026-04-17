@@ -25,6 +25,13 @@ export {
   type GetTopicsPromptOutput,
 } from "./get-topics";
 export {
+  GetAnglesPromptInputSchema,
+  GetAnglesPromptOutputSchema,
+  GetAnglesPromptSpec,
+  type GetAnglesPromptInput,
+  type GetAnglesPromptOutput,
+} from "./get-angles";
+export {
   CreateCardsPromptInputSchema,
   CreateCardsPromptOutputSchema,
   CreateCardsPromptSpec,

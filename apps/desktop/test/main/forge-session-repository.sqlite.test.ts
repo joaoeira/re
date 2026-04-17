@@ -312,5 +312,82 @@ const setupSqliteRepository = async () => {
         await dispose();
       }
     });
+
+    it("persists angles per topic and wipes them when topics are re-extracted", async () => {
+      const { repository, dispose } = await setupSqliteRepository();
+
+      try {
+        const session = await Effect.runPromise(
+          repository.createSession({
+            sourceKind: "pdf",
+            sourceLabel: "source.pdf",
+            sourceFilePath: "/tmp/source.pdf",
+            deckPath: null,
+            sourceFingerprint: "fp:sqlite-angles",
+          }),
+        );
+
+        await Effect.runPromise(
+          repository.saveChunks(session.id, [
+            {
+              text: "chunk-a",
+              sequenceOrder: 0,
+              pageBoundaries: [{ offset: 0, page: 1 }],
+            },
+          ]),
+        );
+        await Effect.runPromise(
+          repository.replaceTopicsForSessionAndSetExtractionOutcome({
+            sessionId: session.id,
+            writes: [{ sequenceOrder: 0, topics: ["original"] }],
+            status: "extracted",
+            errorMessage: null,
+          }),
+        );
+
+        const originalTopicId = (
+          await Effect.runPromise(repository.getCardsSnapshotBySession(session.id))
+        )[0]?.topicId;
+        if (!originalTopicId) throw new Error("Expected original topic id.");
+
+        await Effect.runPromise(
+          repository.replaceAnglesForTopic({
+            topicId: originalTopicId,
+            angles: ["first", "second"],
+          }),
+        );
+
+        const beforeReExtraction = await Effect.runPromise(
+          repository.getAnglesForTopicId(originalTopicId),
+        );
+        expect(beforeReExtraction).toEqual(["first", "second"]);
+
+        await Effect.runPromise(
+          repository.replaceTopicsForSessionAndSetExtractionOutcome({
+            sessionId: session.id,
+            writes: [{ sequenceOrder: 0, topics: ["replacement"] }],
+            status: "extracted",
+            errorMessage: null,
+          }),
+        );
+
+        const afterReExtraction = await Effect.runPromise(
+          repository.getAnglesForTopicId(originalTopicId),
+        );
+        expect(afterReExtraction).toEqual([]);
+
+        const replacementTopicId = (
+          await Effect.runPromise(repository.getCardsSnapshotBySession(session.id))
+        )[0]?.topicId;
+        if (!replacementTopicId) throw new Error("Expected replacement topic id.");
+
+        const replacementAngles = await Effect.runPromise(
+          repository.getAnglesForTopicId(replacementTopicId),
+        );
+        expect(replacementAngles).toEqual([]);
+      } finally {
+        await dispose();
+      }
+    });
   },
 );

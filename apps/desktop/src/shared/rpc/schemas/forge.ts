@@ -237,6 +237,7 @@ export type ForgeGetTopicCardsInput = typeof ForgeGetTopicCardsInputSchema.Type;
 export const ForgeGetTopicCardsResultSchema = Schema.Struct({
   topic: ForgeTopicCardsSummarySchema,
   cards: Schema.Array(ForgeGeneratedCardSchema),
+  angles: Schema.Array(Schema.String),
 });
 export type ForgeGetTopicCardsResult = typeof ForgeGetTopicCardsResultSchema.Type;
 
@@ -245,6 +246,7 @@ export const ForgeGenerateTopicCardsInputSchema = Schema.Struct({
   topicId: PositiveIntSchema,
   instruction: Schema.optional(Schema.String),
   model: Schema.optional(ModelIdSchema),
+  angleModel: Schema.optional(ModelIdSchema),
 });
 export type ForgeGenerateTopicCardsInput = typeof ForgeGenerateTopicCardsInputSchema.Type;
 
@@ -256,6 +258,7 @@ export const ForgeGenerateSelectedTopicCardsInputSchema = Schema.Struct({
   topicIds: Schema.Array(PositiveIntSchema),
   instruction: Schema.optional(Schema.String),
   model: Schema.optional(ModelIdSchema),
+  angleModel: Schema.optional(ModelIdSchema),
   concurrencyLimit: Schema.optional(
     Schema.Number.pipe(Schema.int(), Schema.positive(), Schema.lessThanOrEqualTo(8)),
   ),
@@ -558,6 +561,14 @@ export class ForgeCardGenerationError extends Schema.TaggedError<ForgeCardGenera
   message: Schema.String,
 }) {}
 
+export class ForgeAngleGenerationError extends Schema.TaggedError<ForgeAngleGenerationError>(
+  "@re/desktop/rpc/ForgeAngleGenerationError",
+)("angle_generation_error", {
+  sessionId: PositiveIntSchema,
+  topicId: PositiveIntSchema,
+  message: Schema.String,
+}) {}
+
 export class ForgeTopicAlreadyGeneratingError extends Schema.TaggedError<ForgeTopicAlreadyGeneratingError>(
   "@re/desktop/rpc/ForgeTopicAlreadyGeneratingError",
 )("topic_already_generating", {
@@ -682,6 +693,7 @@ export const ForgeGenerateTopicCardsErrorSchema = Schema.Union(
   ForgeSessionNotFoundError,
   ForgeTopicNotFoundError,
   ForgeTopicAlreadyGeneratingError,
+  ForgeAngleGenerationError,
   ForgeCardGenerationError,
   ForgeSessionOperationError,
   ForgeOperationError,
