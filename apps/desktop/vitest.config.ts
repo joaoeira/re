@@ -41,9 +41,15 @@ export default defineConfig({
           alias: sharedAliases,
         },
         optimizeDeps: {
+          entries: [
+            "test/**/*.browser.test.tsx",
+            "src/renderer/src/**/*.{ts,tsx}",
+          ],
           include: [
             "@tanstack/react-query",
             "@base-ui/react/dialog",
+            "@base-ui/react/context-menu",
+            "@base-ui/react/menu",
             "@benrbray/prosemirror-math",
             "@tiptap/pm/inputrules",
             "@tiptap/pm/state",
