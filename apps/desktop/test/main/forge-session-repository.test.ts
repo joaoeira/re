@@ -383,4 +383,47 @@ describe("forge session repository (canonical)", () => {
       );
     });
   });
+
+  describe("setTopicMarkedDone", () => {
+    it("flips markedDone for a topic and reverts on second call", async () => {
+      const { repository, session } = await createSessionWithChunks();
+      await extractTopics(repository, session.id, [{ sequenceOrder: 0, topics: ["alpha"] }]);
+      const topicId = (await Effect.runPromise(repository.getCardsSnapshotBySession(session.id)))[0]
+        ?.topicId;
+      if (!topicId) throw new Error("Expected topic id.");
+
+      const initial = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+      expect(initial[0]?.markedDone).toBe(false);
+
+      const markResult = await Effect.runPromise(
+        repository.setTopicMarkedDone({ sessionId: session.id, topicId, markedDone: true }),
+      );
+      expect(markResult).toBe(true);
+
+      const afterMark = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
+      expect(afterMark[0]?.markedDone).toBe(true);
+
+      const unmarkResult = await Effect.runPromise(
+        repository.setTopicMarkedDone({ sessionId: session.id, topicId, markedDone: false }),
+      );
+      expect(unmarkResult).toBe(true);
+
+      const afterUnmark = await Effect.runPromise(
+        repository.getCardsSnapshotBySession(session.id),
+      );
+      expect(afterUnmark[0]?.markedDone).toBe(false);
+    });
+
+    it("returns false when the topic does not belong to the session", async () => {
+      const { repository, session } = await createSessionWithChunks();
+      const result = await Effect.runPromise(
+        repository.setTopicMarkedDone({
+          sessionId: session.id,
+          topicId: 9999,
+          markedDone: true,
+        }),
+      );
+      expect(result).toBe(false);
+    });
+  });
 });

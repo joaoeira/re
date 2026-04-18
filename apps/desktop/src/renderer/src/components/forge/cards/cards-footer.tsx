@@ -3,7 +3,6 @@ import { DeckCombobox } from "@/components/editor/deck-combobox";
 
 type CardsFooterProps = {
   readonly addedCount: number;
-  readonly totalCount: number;
   readonly deckPath: string | null;
   readonly decks: ReadonlyArray<DeckEntry>;
   readonly disabled?: boolean;
@@ -14,7 +13,6 @@ type CardsFooterProps = {
 
 export function CardsFooter({
   addedCount,
-  totalCount,
   deckPath,
   decks,
   disabled = false,
@@ -26,9 +24,8 @@ export function CardsFooter({
     <div className="shrink-0 border-t border-border bg-muted/30 px-6 py-2.5">
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          <span className="font-mono font-medium text-primary">{addedCount}</span>
-          <span className="text-muted-foreground/30"> / </span>
-          <span className="font-mono">{totalCount}</span> cards added
+          <span className="font-mono font-medium text-primary">{addedCount}</span>{" "}
+          {addedCount === 1 ? "card" : "cards"} added to deck
         </p>
         <div className="flex items-center gap-3">
           {deckErrorMessage ? (

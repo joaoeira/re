@@ -21,6 +21,7 @@ import {
   forgeCardsMutationKeys,
   useForgeAddCardToDeckMutation,
   useForgeReformulateCardMutation,
+  useForgeSetTopicMarkedDoneMutation,
   useForgeUpdateCardMutation,
 } from "@/hooks/mutations/use-forge-cards-mutations";
 import { useForgeCardsSnapshotQuery } from "@/hooks/queries/use-forge-cards-snapshot-query";
@@ -487,6 +488,7 @@ export function CardsStep() {
   const { mutate: updateCard } = useForgeUpdateCardMutation();
   const { mutate: reformulateCard } = useForgeReformulateCardMutation();
   const { mutate: addCardToDeck } = useForgeAddCardToDeckMutation();
+  const { mutate: setTopicMarkedDone } = useForgeSetTopicMarkedDoneMutation();
   const [addingCardIds, setAddingCardIds] = useState<ReadonlySet<number>>(new Set());
   const [addCardError, setAddCardError] = useState<string | null>(null);
   const [reformulateErrorsByCardId, setReformulateErrorsByCardId] = useState<
@@ -629,6 +631,25 @@ export function CardsStep() {
     ],
   );
 
+  const handleGenerateTopicByKey = useCallback(
+    (topicKey: string) => {
+      const topic = topics.find((entry) => entry.topicKey === topicKey);
+      if (!topic) return;
+      requestTopicGeneration(topic);
+    },
+    [requestTopicGeneration, topics],
+  );
+
+  const handleToggleTopicMarkedDone = useCallback(
+    (topicKey: string, markedDone: boolean) => {
+      if (sessionId === null) return;
+      const topic = topics.find((entry) => entry.topicKey === topicKey);
+      if (!topic) return;
+      setTopicMarkedDone({ sessionId, topicId: topic.topicId, markedDone });
+    },
+    [sessionId, setTopicMarkedDone, topics],
+  );
+
   const activeAddedCardIds = useMemo(() => {
     const next = new Set<number>();
     for (const card of activeTopicCardsQuery.data?.cards ?? []) {
@@ -697,19 +718,56 @@ export function CardsStep() {
         status: summary?.status ?? "idle",
         cardCount,
         addedCount: Math.min(addedCount, cardCount),
+        markedDone: summary?.markedDone ?? false,
       };
     });
   }, [deletedByTopicKey, summaryByTopicKey, topics]);
 
-  const { totalCards, totalAdded } = useMemo(() => {
-    return sidebarTopics.reduce(
-      (acc, topic) => ({
-        totalCards: acc.totalCards + topic.cardCount,
-        totalAdded: acc.totalAdded + topic.addedCount,
-      }),
-      { totalCards: 0, totalAdded: 0 },
-    );
-  }, [sidebarTopics]);
+  const resumePositionedSessionRef = useRef<number | null>(null);
+  const resumeBaselineRef = useRef<{ sessionId: number; baselineKey: string | null } | null>(null);
+  useEffect(() => {
+    if (sessionId === null) return;
+    if (resumeBaselineRef.current?.sessionId === sessionId) return;
+    resumeBaselineRef.current = { sessionId, baselineKey: activeTopicKey };
+  }, [sessionId, activeTopicKey]);
+  useEffect(() => {
+    if (sessionId === null) return;
+    if (resumePositionedSessionRef.current === sessionId) return;
+    if (sidebarTopics.length === 0) return;
+    if (!cardsSnapshotQuery.data) return;
+
+    const baseline = resumeBaselineRef.current;
+    if (!baseline || baseline.sessionId !== sessionId) return;
+    if (activeTopicKey !== baseline.baselineKey) {
+      resumePositionedSessionRef.current = sessionId;
+      return;
+    }
+
+    let lastDoneIndex = -1;
+    for (let i = 0; i < sidebarTopics.length; i += 1) {
+      if (sidebarTopics[i]!.markedDone) lastDoneIndex = i;
+    }
+    if (lastDoneIndex < 0) {
+      resumePositionedSessionRef.current = sessionId;
+      return;
+    }
+
+    const resumeIndex = Math.min(lastDoneIndex + 1, sidebarTopics.length - 1);
+    const resumeKey = sidebarTopics[resumeIndex]!.topicKey;
+    if (resumeKey !== activeTopicKey) {
+      curationActions.setActiveTopic(resumeKey);
+    }
+    resumePositionedSessionRef.current = sessionId;
+  }, [sessionId, sidebarTopics, cardsSnapshotQuery.data, activeTopicKey, curationActions]);
+
+  const totalDeckCardsAdded = useMemo(() => {
+    let total = 0;
+    for (const topic of topics) {
+      const summary = summaryByTopicKey.get(topic.topicKey);
+      if (summary) total += summary.totalDeckCardsAdded;
+    }
+    return total;
+  }, [summaryByTopicKey, topics]);
 
   const activeSummary = activeTopic ? (summaryByTopicKey.get(activeTopic.topicKey) ?? null) : null;
   const activeTopicResult = activeTopicCardsQuery.data;
@@ -988,6 +1046,8 @@ export function CardsStep() {
           onCheckTopic={handleCheckTopic}
           onClearChecked={handleClearChecked}
           onGenerateChecked={handleGenerateChecked}
+          onGenerateTopic={handleGenerateTopicByKey}
+          onToggleMarkedDone={handleToggleTopicMarkedDone}
         />
         <CardsCanvas
           topicKey={activeTopicKey}
@@ -1045,6 +1105,7 @@ export function CardsStep() {
                           return {
                             ...topic,
                             addedCount: Math.min(topic.cardCount, topic.addedCount + 1),
+                            totalDeckCardsAdded: topic.totalDeckCardsAdded + 1,
                           };
                         }),
                       };
@@ -1088,8 +1149,7 @@ export function CardsStep() {
         />
       </div>
       <CardsFooter
-        addedCount={totalAdded}
-        totalCount={totalCards}
+        addedCount={totalDeckCardsAdded}
         deckPath={targetDeckPath}
         decks={deckOptions}
         disabled={deckSelectionDisabled}

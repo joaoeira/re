@@ -71,8 +71,10 @@ export const DEFAULT_FORGE_CARDS_SNAPSHOT_TOPICS = [
     errorMessage: null,
     cardCount: 5,
     addedCount: 0,
+    totalDeckCardsAdded: 0,
     generationRevision: 1,
     selected: true,
+    markedDone: false,
   },
 ] as const;
 
@@ -153,8 +155,10 @@ const normalizeCardsSnapshotTopics = (
       errorMessage: (entry.errorMessage as string | null | undefined) ?? null,
       cardCount: Number(entry.cardCount ?? 0),
       addedCount: Number(entry.addedCount ?? 0),
+      totalDeckCardsAdded: Number(entry.totalDeckCardsAdded ?? entry.addedCount ?? 0),
       generationRevision: Number(entry.generationRevision ?? 0),
       selected: Boolean(entry.selected ?? false),
+      markedDone: Boolean(entry.markedDone ?? false),
     };
   });
 

@@ -2976,6 +2976,83 @@ describe("forge handlers", () => {
     }
   });
 
+  it("toggles markedDone via ForgeSetTopicMarkedDone and surfaces it in the snapshot", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime();
+    const { handlers, repository, dispose } = await setupHandlers({ promptRuntime });
+
+    try {
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-marked-done.pdf"),
+      );
+
+      await Effect.runPromise(
+        repository.saveChunks(created.session.id, [
+          { text: "chunk-a", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
+        ]),
+      );
+      await seedDetailTopics(repository, created.session.id, [
+        { sequenceOrder: 0, topics: ["only topic"] },
+      ]);
+
+      const initial = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
+      );
+      const topicId = initial.topics[0]?.topicId;
+      if (!topicId) throw new Error("Expected a topic id.");
+      expect(initial.topics[0]?.markedDone).toBe(false);
+
+      await Effect.runPromise(
+        handlers.ForgeSetTopicMarkedDone({
+          sessionId: created.session.id,
+          topicId,
+          markedDone: true,
+        }),
+      );
+
+      const afterMark = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
+      );
+      expect(afterMark.topics[0]?.markedDone).toBe(true);
+
+      await Effect.runPromise(
+        handlers.ForgeSetTopicMarkedDone({
+          sessionId: created.session.id,
+          topicId,
+          markedDone: false,
+        }),
+      );
+
+      const afterUnmark = await Effect.runPromise(
+        handlers.ForgeGetCardsSnapshot({ sessionId: created.session.id }),
+      );
+      expect(afterUnmark.topics[0]?.markedDone).toBe(false);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it("ForgeSetTopicMarkedDone fails when the topic does not exist for the session", async () => {
+    const promptRuntime = createCardsDomainPromptRuntime();
+    const { handlers, dispose } = await setupHandlers({ promptRuntime });
+
+    try {
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-marked-done-missing.pdf"),
+      );
+
+      const exit = await Effect.runPromiseExit(
+        handlers.ForgeSetTopicMarkedDone({
+          sessionId: created.session.id,
+          topicId: 999_999,
+          markedDone: true,
+        }),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+    } finally {
+      await dispose();
+    }
+  });
+
   it("generates angles on first card generation and passes them into the cards prompt", async () => {
     let seenAnglesInput: { topic: string; contextText: string } | undefined;
     let seenCardsInput:

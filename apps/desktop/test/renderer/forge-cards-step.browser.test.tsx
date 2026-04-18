@@ -46,6 +46,7 @@ type TopicState = {
   errorMessage: string | null;
   generationRevision: number;
   cards: Array<Card>;
+  markedDone?: boolean;
 };
 
 type InitialTopicState = {
@@ -65,7 +66,9 @@ type SnapshotSummaryOverride = {
   readonly errorMessage?: string | null;
   readonly cardCount?: number;
   readonly addedCount?: number;
+  readonly totalDeckCardsAdded?: number;
   readonly generationRevision?: number;
+  readonly markedDone?: boolean;
 };
 
 const TOPICS: ReadonlyArray<TopicDef> = [
@@ -205,21 +208,26 @@ const createCardsInvoke = (options?: {
   const resolveCardById = (cardId: number): Card | null =>
     findTopicStateByCardId(cardId)?.cards.find((card) => card.id === cardId) ?? null;
 
-  const toSummary = (state: TopicState) => ({
-    topicId: state.topic.topicId,
-    sessionId,
-    family: "detail" as const,
-    chunkId: state.topic.chunkId,
-    chunkSequenceOrder: state.topic.sequenceOrder,
-    topicIndex: state.topic.topicIndex,
-    topicText: state.topic.topicText,
-    status: state.status,
-    errorMessage: state.errorMessage,
-    cardCount: state.cards.length,
-    addedCount: state.cards.filter((card) => card.addedToDeck).length,
-    generationRevision: state.generationRevision,
-    selected: true,
-  });
+  const toSummary = (state: TopicState) => {
+    const addedCount = state.cards.filter((card) => card.addedToDeck).length;
+    return {
+      topicId: state.topic.topicId,
+      sessionId,
+      family: "detail" as const,
+      chunkId: state.topic.chunkId,
+      chunkSequenceOrder: state.topic.sequenceOrder,
+      topicIndex: state.topic.topicIndex,
+      topicText: state.topic.topicText,
+      status: state.status,
+      errorMessage: state.errorMessage,
+      cardCount: state.cards.length,
+      addedCount,
+      totalDeckCardsAdded: addedCount,
+      generationRevision: state.generationRevision,
+      selected: true,
+      markedDone: state.markedDone ?? false,
+    };
+  };
   const topicGroups = [
     {
       groupId: "chunk:101",
@@ -272,7 +280,11 @@ const createCardsInvoke = (options?: {
         override.errorMessage !== undefined ? override.errorMessage : summary.errorMessage,
       cardCount: override.cardCount ?? summary.cardCount,
       addedCount: override.addedCount ?? summary.addedCount,
+      totalDeckCardsAdded:
+        override.totalDeckCardsAdded ??
+        (override.addedCount !== undefined ? override.addedCount : summary.totalDeckCardsAdded),
       generationRevision: override.generationRevision ?? summary.generationRevision,
+      markedDone: override.markedDone ?? summary.markedDone,
     };
   };
 

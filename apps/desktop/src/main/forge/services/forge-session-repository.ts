@@ -100,8 +100,10 @@ export type ForgeTopicCardsSnapshotRow = {
   readonly errorMessage: string | null;
   readonly cardCount: number;
   readonly addedCount: number;
+  readonly totalDeckCardsAdded: number;
   readonly generationRevision: number;
   readonly selected: boolean;
+  readonly markedDone: boolean;
 };
 
 export type ForgeTopicCardsResultRow = {
@@ -196,6 +198,11 @@ export interface ForgeSessionRepository {
     readonly sessionId: number;
     readonly topicIds: ReadonlyArray<number>;
   }) => Effect.Effect<void, ForgeSessionRepositoryError>;
+  readonly setTopicMarkedDone: (input: {
+    readonly sessionId: number;
+    readonly topicId: number;
+    readonly markedDone: boolean;
+  }) => Effect.Effect<boolean, ForgeSessionRepositoryError>;
   readonly getTopicById: (
     topicId: number,
   ) => Effect.Effect<ForgeTopicRecord | null, ForgeSessionRepositoryError>;
@@ -361,8 +368,10 @@ type ForgeTopicCardsSnapshotRowDb = {
   error_message: string | null;
   card_count: number;
   added_count: number;
+  total_deck_cards_added: number;
   generation_revision: number;
   selected: number;
+  marked_done_at: string | null;
 };
 
 type ForgeCardRow = {
@@ -474,8 +483,10 @@ const toTopicCardsSnapshotRow = (
   errorMessage: row.error_message,
   cardCount: Number(row.card_count),
   addedCount: Number(row.added_count),
+  totalDeckCardsAdded: Number(row.total_deck_cards_added),
   generationRevision: Number(row.generation_revision),
   selected: row.selected === 1,
+  markedDone: row.marked_done_at !== null,
 });
 
 const toGeneratedCard = (row: ForgeCardRow): ForgeGeneratedCard => ({
@@ -767,8 +778,39 @@ export const makeSqliteForgeSessionRepository = ({
               SUM(CASE WHEN forge_cards.added_to_deck_at IS NOT NULL THEN 1 ELSE 0 END),
               0
             ) AS added_count,
+            (
+              COALESCE(
+                SUM(CASE WHEN forge_cards.added_to_deck_at IS NOT NULL THEN 1 ELSE 0 END),
+                0
+              ) + COALESCE(
+                (
+                  SELECT SUM(d.added_count)
+                  FROM forge_card_derivations d
+                  WHERE d.root_card_id IN (
+                    SELECT id FROM forge_cards WHERE topic_id = forge_topics.id
+                  )
+                ),
+                0
+              ) + COALESCE(
+                (
+                  SELECT SUM(c.added_count)
+                  FROM forge_card_cloze c
+                  WHERE c.source_card_id IN (
+                    SELECT id FROM forge_cards WHERE topic_id = forge_topics.id
+                  )
+                    OR c.source_derivation_id IN (
+                      SELECT id FROM forge_card_derivations
+                      WHERE root_card_id IN (
+                        SELECT id FROM forge_cards WHERE topic_id = forge_topics.id
+                      )
+                    )
+                ),
+                0
+              )
+            ) AS total_deck_cards_added,
             COALESCE(forge_topic_generation.generation_revision, 0) AS generation_revision,
-            forge_topics.selected AS selected
+            forge_topics.selected AS selected,
+            forge_topics.marked_done_at AS marked_done_at
           FROM forge_topics
           LEFT JOIN forge_chunks ON forge_chunks.id = forge_topics.chunk_id
           LEFT JOIN forge_topic_generation ON forge_topic_generation.topic_id = forge_topics.id
@@ -786,7 +828,8 @@ export const makeSqliteForgeSessionRepository = ({
             forge_topic_generation.status,
             forge_topic_generation.error_message,
             forge_topic_generation.generation_revision,
-            forge_topics.selected
+            forge_topics.selected,
+            forge_topics.marked_done_at
           ORDER BY
             forge_chunks.sequence_order ASC,
             forge_topics.topic_order ASC,
@@ -1546,6 +1589,26 @@ export const makeSqliteForgeSessionRepository = ({
                   }),
               ),
             );
+        }),
+      ),
+    setTopicMarkedDone: ({ sessionId, topicId, markedDone }) =>
+      runSql(
+        "setTopicMarkedDone.runtime",
+        Effect.gen(function* () {
+          const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+          const rows = yield* withSqlError(
+            "setTopicMarkedDone.update",
+            sql<{ id: number }>`
+              UPDATE forge_topics
+              SET marked_done_at = ${
+                markedDone ? sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))` : null
+              }
+              WHERE id = ${topicId}
+                AND session_id = ${sessionId}
+              RETURNING id
+            `,
+          );
+          return rows.length > 0;
         }),
       ),
     getTopicById: (topicId) => runSql("getTopicById.runtime", loadTopicByIdSql(topicId)),
@@ -2334,6 +2397,7 @@ type InMemoryTopic = {
   readonly topicText: string;
   readonly createdAt: string;
   selected: boolean;
+  markedDoneAt: string | null;
 };
 
 type InMemoryTopicGeneration = ForgeTopicGenerationRow;
@@ -2448,6 +2512,27 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
         const cardCount = cardsForTopic.length;
         const addedCount = cardsForTopic.filter((card) => card.addedToDeckAt !== null).length;
 
+        const rootCardIds = new Set(cardsForTopic.map((card) => card.id));
+        const derivationsForTopic = derivations.filter((derivation) =>
+          rootCardIds.has(derivation.rootCardId),
+        );
+        const derivationIds = new Set(derivationsForTopic.map((derivation) => derivation.id));
+        const derivationAdded = derivationsForTopic.reduce(
+          (sum, derivation) => sum + derivation.addedCount,
+          0,
+        );
+        const clozeAdded = Array.from(clozeBySourceKey.values()).reduce((sum, cloze) => {
+          const source = cloze.source;
+          if ("cardId" in source && rootCardIds.has(source.cardId)) {
+            return sum + cloze.addedCount;
+          }
+          if ("derivationId" in source && derivationIds.has(source.derivationId)) {
+            return sum + cloze.addedCount;
+          }
+          return sum;
+        }, 0);
+        const totalDeckCardsAdded = addedCount + derivationAdded + clozeAdded;
+
         return {
           topicId: topic.id,
           sessionId: topic.sessionId,
@@ -2460,8 +2545,10 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           errorMessage: generation?.errorMessage ?? null,
           cardCount,
           addedCount,
+          totalDeckCardsAdded,
           generationRevision: generation?.generationRevision ?? 0,
           selected: topic.selected,
+          markedDone: topic.markedDoneAt !== null,
         };
       });
   };
@@ -2798,6 +2885,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           topicText,
           createdAt: nowIso(),
           selected: false,
+          markedDoneAt: null,
         }));
 
         topics.length = 0;
@@ -2840,6 +2928,15 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
           if (topic.sessionId !== sessionId) continue;
           topic.selected = selectedTopicIds.has(topic.id);
         }
+      }),
+    setTopicMarkedDone: ({ sessionId, topicId, markedDone }) =>
+      Effect.sync(() => {
+        const topic = topics.find(
+          (entry) => entry.id === topicId && entry.sessionId === sessionId,
+        );
+        if (!topic) return false;
+        topic.markedDoneAt = markedDone ? nowIso() : null;
+        return true;
       }),
     getTopicById: (topicId) =>
       Effect.sync(() => {

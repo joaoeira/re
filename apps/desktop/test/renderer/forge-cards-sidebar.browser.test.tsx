@@ -78,8 +78,10 @@ const createCardsInvoke = (allTopics: ReadonlyArray<TopicDef> = DETAIL_TOPICS) =
     errorMessage: null,
     cardCount: 2,
     addedCount: 0,
+    totalDeckCardsAdded: 0,
     generationRevision: 1,
     selected: true,
+    markedDone: false,
   });
   const detailTopics = allTopics;
   const topicGroups = Array.from(new Set(detailTopics.map((t) => t.chunkId))).map(

@@ -57,6 +57,9 @@ import {
   ForgeSaveTopicSelectionsErrorSchema,
   ForgeSaveTopicSelectionsInputSchema,
   ForgeSaveTopicSelectionsResultSchema,
+  ForgeSetTopicMarkedDoneErrorSchema,
+  ForgeSetTopicMarkedDoneInputSchema,
+  ForgeSetTopicMarkedDoneResultSchema,
   ForgeSetSessionDeckPathErrorSchema,
   ForgeSetSessionDeckPathInputSchema,
   ForgeSetSessionDeckPathResultSchema,
@@ -182,6 +185,13 @@ export const ForgeSaveTopicSelections = rpc(
   ForgeSaveTopicSelectionsInputSchema,
   ForgeSaveTopicSelectionsResultSchema,
   ForgeSaveTopicSelectionsErrorSchema,
+);
+
+export const ForgeSetTopicMarkedDone = rpc(
+  "ForgeSetTopicMarkedDone",
+  ForgeSetTopicMarkedDoneInputSchema,
+  ForgeSetTopicMarkedDoneResultSchema,
+  ForgeSetTopicMarkedDoneErrorSchema,
 );
 
 export const ForgeSetSessionDeckPath = rpc(

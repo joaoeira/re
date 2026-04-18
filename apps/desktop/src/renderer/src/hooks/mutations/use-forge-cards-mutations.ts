@@ -18,6 +18,9 @@ import {
   type ForgeGenerateDerivedCardsResult,
   type ForgeReformulateCardInput,
   type ForgeReformulateCardResult,
+  type ForgeSetTopicMarkedDoneInput,
+  type ForgeSetTopicMarkedDoneResult,
+  type ForgeTopicCardsSummary,
   type ForgeUpdateCardInput,
   type ForgeUpdateCardResult,
   type ForgeUpdateDerivationInput,
@@ -34,6 +37,7 @@ export const forgeCardsMutationKeys = {
   updateCard: ["forgeUpdateCard"] as const,
   updateDerivation: ["forgeUpdateDerivation"] as const,
   addCardToDeck: ["forgeAddCardToDeck"] as const,
+  setTopicMarkedDone: ["forgeSetTopicMarkedDone"] as const,
 };
 
 export type ForgeGenerateDerivedCardsMutationInput = ForgeGenerateDerivedCardsInput & {
@@ -172,6 +176,7 @@ export function useForgeUpdateDerivationMutation() {
 
 export function useForgeAddCardToDeckMutation() {
   const ipc = useIpc();
+  const queryClient = useQueryClient();
 
   return useMutation<ForgeAddCardToDeckResult, Error, ForgeAddCardToDeckInput>({
     mutationKey: forgeCardsMutationKeys.addCardToDeck,
@@ -185,5 +190,66 @@ export function useForgeAddCardToDeckMutation() {
             ),
           ),
       ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["forgeCardsSnapshot"] });
+    },
+  });
+}
+
+type SetTopicMarkedDoneContext = {
+  readonly previous?: { readonly topics: ReadonlyArray<ForgeTopicCardsSummary> };
+  readonly queryKey: ReturnType<typeof queryKeys.forgeCardsSnapshot>;
+};
+
+export function useForgeSetTopicMarkedDoneMutation() {
+  const ipc = useIpc();
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    ForgeSetTopicMarkedDoneResult,
+    Error,
+    ForgeSetTopicMarkedDoneInput,
+    SetTopicMarkedDoneContext
+  >({
+    mutationKey: forgeCardsMutationKeys.setTopicMarkedDone,
+    mutationFn: (input) =>
+      runIpcEffect(
+        ipc.client
+          .ForgeSetTopicMarkedDone(input)
+          .pipe(
+            Effect.catchTag("RpcDefectError", (rpcDefect) =>
+              Effect.fail(toRpcDefectError(rpcDefect)),
+            ),
+          ),
+      ),
+    onMutate: async ({ sessionId, topicId, markedDone }) => {
+      const queryKey = queryKeys.forgeCardsSnapshot(sessionId);
+      await queryClient.cancelQueries({ queryKey, exact: true });
+      const previous = queryClient.getQueryData<{
+        topics: ReadonlyArray<ForgeTopicCardsSummary>;
+      }>(queryKey);
+      if (previous) {
+        queryClient.setQueryData<{ topics: ReadonlyArray<ForgeTopicCardsSummary> }>(
+          queryKey,
+          {
+            topics: previous.topics.map((topic) =>
+              topic.topicId === topicId ? { ...topic, markedDone } : topic,
+            ),
+          },
+        );
+      }
+      return previous ? { previous, queryKey } : { queryKey };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(context.queryKey, context.previous);
+      }
+    },
+    onSettled: (_data, _error, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.forgeCardsSnapshot(variables.sessionId),
+        exact: true,
+      });
+    },
   });
 }

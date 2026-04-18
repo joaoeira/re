@@ -610,5 +610,90 @@ const setupSqliteRepository = async () => {
         await dispose();
       }
     });
+
+    it("setTopicMarkedDone toggles the marked_done flag exposed via the snapshot", async () => {
+      const { repository, dispose } = await setupSqliteRepository();
+
+      try {
+        const session = await Effect.runPromise(
+          repository.createSession({
+            sourceKind: "pdf",
+            sourceLabel: "source.pdf",
+            sourceFilePath: "/tmp/source.pdf",
+            deckPath: null,
+            sourceFingerprint: "fp:sqlite-marked-done",
+          }),
+        );
+
+        await Effect.runPromise(
+          repository.saveChunks(session.id, [
+            { text: "c0", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
+          ]),
+        );
+
+        await extractTopics(repository, session.id, [
+          { sequenceOrder: 0, topics: ["alpha"] },
+        ]);
+
+        const topicId = (
+          await Effect.runPromise(repository.getCardsSnapshotBySession(session.id))
+        )[0]?.topicId;
+        if (!topicId) throw new Error("Expected topic id.");
+
+        const initial = await Effect.runPromise(
+          repository.getCardsSnapshotBySession(session.id),
+        );
+        expect(initial[0]?.markedDone).toBe(false);
+
+        const marked = await Effect.runPromise(
+          repository.setTopicMarkedDone({ sessionId: session.id, topicId, markedDone: true }),
+        );
+        expect(marked).toBe(true);
+
+        const afterMark = await Effect.runPromise(
+          repository.getCardsSnapshotBySession(session.id),
+        );
+        expect(afterMark[0]?.markedDone).toBe(true);
+
+        const unmarked = await Effect.runPromise(
+          repository.setTopicMarkedDone({ sessionId: session.id, topicId, markedDone: false }),
+        );
+        expect(unmarked).toBe(true);
+
+        const afterUnmark = await Effect.runPromise(
+          repository.getCardsSnapshotBySession(session.id),
+        );
+        expect(afterUnmark[0]?.markedDone).toBe(false);
+      } finally {
+        await dispose();
+      }
+    });
+
+    it("setTopicMarkedDone returns false for an unknown topic", async () => {
+      const { repository, dispose } = await setupSqliteRepository();
+
+      try {
+        const session = await Effect.runPromise(
+          repository.createSession({
+            sourceKind: "pdf",
+            sourceLabel: "source.pdf",
+            sourceFilePath: "/tmp/source.pdf",
+            deckPath: null,
+            sourceFingerprint: "fp:sqlite-marked-done-missing",
+          }),
+        );
+
+        const result = await Effect.runPromise(
+          repository.setTopicMarkedDone({
+            sessionId: session.id,
+            topicId: 9999,
+            markedDone: true,
+          }),
+        );
+        expect(result).toBe(false);
+      } finally {
+        await dispose();
+      }
+    });
   },
 );

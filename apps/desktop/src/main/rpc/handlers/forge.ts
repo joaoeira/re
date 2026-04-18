@@ -91,6 +91,7 @@ type ForgeHandlerKeys =
   | "ForgeUpdateDerivation"
   | "ForgeSaveTopicSelections"
   | "ForgeSetSessionDeckPath"
+  | "ForgeSetTopicMarkedDone"
   | "ForgeAddCardToDeck";
 
 const PREVIEW_LENGTH = 500;
@@ -764,8 +765,10 @@ export const createForgeHandlers = () =>
       readonly errorMessage: string | null;
       readonly cardCount: number;
       readonly addedCount: number;
+      readonly totalDeckCardsAdded: number;
       readonly generationRevision: number;
       readonly selected: boolean;
+      readonly markedDone: boolean;
     }) => ({
       topicId: input.topicId,
       sessionId: input.sessionId,
@@ -778,8 +781,10 @@ export const createForgeHandlers = () =>
       errorMessage: input.errorMessage,
       cardCount: input.cardCount,
       addedCount: input.addedCount,
+      totalDeckCardsAdded: input.totalDeckCardsAdded,
       generationRevision: input.generationRevision,
       selected: input.selected,
+      markedDone: input.markedDone,
     });
 
     const toTopicGroups = (
@@ -1242,8 +1247,10 @@ export const createForgeHandlers = () =>
               errorMessage: result.topic.errorMessage,
               cardCount: result.topic.cardCount,
               addedCount: result.topic.addedCount,
+              totalDeckCardsAdded: result.topic.totalDeckCardsAdded,
               generationRevision: result.topic.generationRevision,
               selected: result.topic.selected,
+              markedDone: result.topic.markedDone,
             }),
             cards: result.cards.map((card) => ({
               id: card.id,
@@ -1434,8 +1441,10 @@ export const createForgeHandlers = () =>
                 errorMessage: row.errorMessage,
                 cardCount: row.cardCount,
                 addedCount: row.addedCount,
+                totalDeckCardsAdded: row.totalDeckCardsAdded,
                 generationRevision: row.generationRevision,
                 selected: row.selected,
+                markedDone: row.markedDone,
               }),
             ),
           };
@@ -1470,8 +1479,10 @@ export const createForgeHandlers = () =>
               errorMessage: result.topic.errorMessage,
               cardCount: result.topic.cardCount,
               addedCount: result.topic.addedCount,
+              totalDeckCardsAdded: result.topic.totalDeckCardsAdded,
               generationRevision: result.topic.generationRevision,
               selected: result.topic.selected,
+              markedDone: result.topic.markedDone,
             }),
             cards: result.cards.map((card) => ({
               id: card.id,
@@ -1962,6 +1973,24 @@ export const createForgeHandlers = () =>
               topicIds,
             }),
           );
+
+          return {};
+        }),
+      ForgeSetTopicMarkedDone: ({ sessionId, topicId, markedDone }) =>
+        Effect.gen(function* () {
+          yield* mapSessionRepositoryError(
+            sessionId,
+            forgeSessionRepository.getSession(sessionId),
+          ).pipe(Effect.flatMap((session) => ensureSessionExists(session, sessionId)));
+
+          const updated = yield* mapSessionRepositoryError(
+            sessionId,
+            forgeSessionRepository.setTopicMarkedDone({ sessionId, topicId, markedDone }),
+          );
+
+          if (!updated) {
+            return yield* Effect.fail(new ForgeTopicNotFoundError({ sessionId, topicId }));
+          }
 
           return {};
         }),

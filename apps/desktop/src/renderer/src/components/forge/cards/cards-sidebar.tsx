@@ -9,6 +9,7 @@ type CardsTopic = {
   readonly status: ForgeTopicCardsStatus;
   readonly cardCount: number;
   readonly addedCount: number;
+  readonly markedDone: boolean;
 };
 
 type CardsSidebarProps = {
@@ -20,6 +21,8 @@ type CardsSidebarProps = {
   readonly onCheckTopic: (topicKey: string) => void;
   readonly onClearChecked: () => void;
   readonly onGenerateChecked: () => void;
+  readonly onGenerateTopic: (topicKey: string) => void;
+  readonly onToggleMarkedDone: (topicKey: string, markedDone: boolean) => void;
 };
 
 export function CardsSidebar({
@@ -31,6 +34,8 @@ export function CardsSidebar({
   onCheckTopic,
   onClearChecked,
   onGenerateChecked,
+  onGenerateTopic,
+  onToggleMarkedDone,
 }: CardsSidebarProps) {
   const selectionMode = checkedTopicKeys.size > 0;
 
@@ -48,8 +53,11 @@ export function CardsSidebar({
             status={topic.status}
             cardCount={topic.cardCount}
             addedCount={topic.addedCount}
+            markedDone={topic.markedDone}
             onSelect={onSelectTopic}
             onCheck={onCheckTopic}
+            onGenerate={onGenerateTopic}
+            onToggleMarkedDone={onToggleMarkedDone}
           />
         ))}
       </div>

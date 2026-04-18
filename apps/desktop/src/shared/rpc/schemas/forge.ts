@@ -216,8 +216,10 @@ export const ForgeTopicCardsSummarySchema = Schema.Struct({
   errorMessage: NullableStringSchema,
   cardCount: NonNegativeIntSchema,
   addedCount: NonNegativeIntSchema,
+  totalDeckCardsAdded: NonNegativeIntSchema,
   generationRevision: NonNegativeIntSchema,
   selected: Schema.Boolean,
+  markedDone: Schema.Boolean,
 });
 export type ForgeTopicCardsSummary = typeof ForgeTopicCardsSummarySchema.Type;
 
@@ -425,6 +427,16 @@ export type ForgeSaveTopicSelectionsInput = typeof ForgeSaveTopicSelectionsInput
 
 export const ForgeSaveTopicSelectionsResultSchema = Schema.Struct({});
 export type ForgeSaveTopicSelectionsResult = typeof ForgeSaveTopicSelectionsResultSchema.Type;
+
+export const ForgeSetTopicMarkedDoneInputSchema = Schema.Struct({
+  sessionId: PositiveIntSchema,
+  topicId: PositiveIntSchema,
+  markedDone: Schema.Boolean,
+});
+export type ForgeSetTopicMarkedDoneInput = typeof ForgeSetTopicMarkedDoneInputSchema.Type;
+
+export const ForgeSetTopicMarkedDoneResultSchema = Schema.Struct({});
+export type ForgeSetTopicMarkedDoneResult = typeof ForgeSetTopicMarkedDoneResultSchema.Type;
 
 export const ForgeSetSessionDeckPathInputSchema = Schema.Struct({
   sessionId: PositiveIntSchema,
@@ -763,6 +775,14 @@ export const ForgeSaveTopicSelectionsErrorSchema = Schema.Union(
   ForgeOperationError,
 );
 export type ForgeSaveTopicSelectionsError = typeof ForgeSaveTopicSelectionsErrorSchema.Type;
+
+export const ForgeSetTopicMarkedDoneErrorSchema = Schema.Union(
+  ForgeSessionNotFoundError,
+  ForgeTopicNotFoundError,
+  ForgeSessionOperationError,
+  ForgeOperationError,
+);
+export type ForgeSetTopicMarkedDoneError = typeof ForgeSetTopicMarkedDoneErrorSchema.Type;
 
 export const ForgeSetSessionDeckPathErrorSchema = Schema.Union(
   ForgeSessionNotFoundError,

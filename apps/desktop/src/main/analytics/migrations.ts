@@ -1260,6 +1260,13 @@ const REVIEW_HISTORY_MIGRATIONS = {
       ON forge_topic_angles(topic_id)
     `;
   }),
+  "0017_add_forge_topics_marked_done_at": Effect.gen(function* () {
+    const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+
+    yield* sql`
+      ALTER TABLE forge_topics ADD COLUMN marked_done_at TEXT
+    `;
+  }),
 } satisfies Record<string, Effect.Effect<void, unknown, SqlClient.SqlClient>>;
 
 const toMigrationError = (message: string): Migrator.MigrationError =>

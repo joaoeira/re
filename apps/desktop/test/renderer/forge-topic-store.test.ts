@@ -38,8 +38,10 @@ const TOPIC_SUMMARIES: ReadonlyArray<ForgeTopicCardsSummary> = [
     errorMessage: null,
     cardCount: 0,
     addedCount: 0,
+    totalDeckCardsAdded: 0,
     generationRevision: 0,
     selected: false,
+    markedDone: false,
   },
   {
     topicId: 102,
@@ -53,8 +55,10 @@ const TOPIC_SUMMARIES: ReadonlyArray<ForgeTopicCardsSummary> = [
     errorMessage: null,
     cardCount: 0,
     addedCount: 0,
+    totalDeckCardsAdded: 0,
     generationRevision: 0,
     selected: false,
+    markedDone: false,
   },
 ];
 
