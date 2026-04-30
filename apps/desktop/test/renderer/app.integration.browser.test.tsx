@@ -492,7 +492,7 @@ describe("renderer integration", () => {
 
     await expect.element(screen.getByText("deck", { exact: true })).toBeVisible();
     await expect.element(screen.getByText("nothing due")).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: /Review/ })).toBeDisabled();
+    await expect.element(screen.getByRole("button", { name: /Review all/ })).toBeDisabled();
   });
 
   it("resets forge to source step when clicking sidebar Forge icon while on topics step", async () => {

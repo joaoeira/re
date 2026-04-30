@@ -641,6 +641,53 @@ The capital of France is {{c1::Paris}}.
     }
   });
 
+  it("builds review queues with session options", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-"));
+    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));
+    const settingsFilePath = path.join(settingsRoot, "settings.json");
+    const deckPath = path.join(rootPath, "mixed.md");
+
+    try {
+      await fs.writeFile(
+        deckPath,
+        `<!--@ new-card 0 0 0 0-->
+New question
+---
+New answer
+
+<!--@ due-card 3 4.5 2 0 2025-01-01T00:00:00Z-->
+Due question
+---
+Due answer
+`,
+        "utf8",
+      );
+
+      const handlers = await createHandlersWithOverrides(settingsFilePath);
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+
+      const queue = await Effect.runPromise(
+        handlers.BuildReviewQueue({
+          deckPaths: [deckPath],
+          rootPath,
+          options: {
+            includeNew: false,
+            includeDue: true,
+            cardLimit: null,
+            order: "default",
+          },
+        }),
+      );
+
+      expect(queue.items.map((item) => item.cardId)).toEqual(["due-card"]);
+      expect(queue.totalNew).toBe(0);
+      expect(queue.totalDue).toBe(1);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+      await fs.rm(settingsRoot, { recursive: true, force: true });
+    }
+  });
+
   it("rejects deck paths outside workspace root", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-"));
     const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));

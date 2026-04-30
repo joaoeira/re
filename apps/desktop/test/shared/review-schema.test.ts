@@ -2,7 +2,15 @@ import { Schema } from "@effect/schema";
 import { Cause, Effect, Exit } from "effect";
 import { describe, expect, it } from "vitest";
 
-import { SerializedItemMetadataSchema } from "@shared/rpc/schemas/review";
+import {
+  DEFAULT_REVIEW_SESSION_OPTIONS,
+  ReviewSessionOptionsSchema,
+  decodeReviewSessionOptionsFromSearch,
+  encodeReviewSessionOptionsForSearch,
+  isDefaultReviewSessionOptions,
+  reviewSessionOptionsCacheKey,
+  SerializedItemMetadataSchema,
+} from "@shared/rpc/schemas/review";
 
 const baseWireMetadata = {
   id: "card-id",
@@ -76,5 +84,59 @@ describe("SerializedItemMetadataSchema", () => {
 
     const failure = Cause.failureOption(exit.cause);
     expect(failure._tag).toBe("Some");
+  });
+});
+
+describe("ReviewSessionOptions", () => {
+  it("round-trips the review session option schema", async () => {
+    const decoded = await Effect.runPromise(
+      Schema.decodeUnknown(ReviewSessionOptionsSchema)({
+        includeNew: false,
+        includeDue: true,
+        cardLimit: 100,
+        order: "due-first",
+      }),
+    );
+
+    const encoded = await Effect.runPromise(Schema.encode(ReviewSessionOptionsSchema)(decoded));
+
+    expect(encoded).toEqual({
+      includeNew: false,
+      includeDue: true,
+      cardLimit: 100,
+      order: "due-first",
+    });
+  });
+
+  it("omits defaults when encoding review session options for the URL", () => {
+    expect(encodeReviewSessionOptionsForSearch(DEFAULT_REVIEW_SESSION_OPTIONS)).toEqual({});
+    expect(isDefaultReviewSessionOptions(DEFAULT_REVIEW_SESSION_OPTIONS)).toBe(true);
+    expect(reviewSessionOptionsCacheKey(DEFAULT_REVIEW_SESSION_OPTIONS)).toBe("default");
+  });
+
+  it("decodes partial search params into canonical options", () => {
+    expect(
+      decodeReviewSessionOptionsFromSearch({
+        includeNew: "false",
+        limit: "50",
+        order: "new-first",
+      }),
+    ).toEqual({
+      includeNew: false,
+      includeDue: true,
+      cardLimit: 50,
+      order: "new-first",
+    });
+  });
+
+  it("normalizes invalid empty include search params back to defaults", () => {
+    expect(
+      decodeReviewSessionOptionsFromSearch({
+        includeNew: false,
+        includeDue: false,
+        limit: "-1",
+        order: "unsupported",
+      }),
+    ).toEqual(DEFAULT_REVIEW_SESSION_OPTIONS);
   });
 });

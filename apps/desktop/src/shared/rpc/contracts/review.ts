@@ -14,6 +14,7 @@ import {
   ReviewGeneratePermutationsResultSchema,
   ReviewHistoryEntrySchema,
   ReviewOperationError,
+  ReviewSessionOptionsSchema,
   ReviewStatsSchema,
   SerializedItemMetadataSchema,
   UndoReviewErrorSchema,
@@ -24,6 +25,7 @@ export const BuildReviewQueue = rpc(
   Schema.Struct({
     deckPaths: Schema.Array(Schema.String),
     rootPath: Schema.String,
+    options: Schema.optional(ReviewSessionOptionsSchema),
   }),
   BuildReviewQueueResultSchema,
   ReviewOperationError,

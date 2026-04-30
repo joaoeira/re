@@ -7,6 +7,11 @@ import { mapSettingsErrorToError } from "@shared/settings";
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
+import {
+  isDefaultReviewSessionOptions,
+  reviewSessionOptionsCacheKey,
+  type ReviewSessionOptions,
+} from "@shared/rpc/schemas/review";
 
 export type ReviewDeckSelection = "all" | string[];
 
@@ -23,12 +28,13 @@ const resolveDeckPathFromRoot = (rootPath: string, relativePath: string): string
   return `${normalizedRoot}${separator}${normalizedRelative}`;
 };
 
-export function useReviewBootstrapQuery(decks: ReviewDeckSelection) {
+export function useReviewBootstrapQuery(decks: ReviewDeckSelection, options: ReviewSessionOptions) {
   const ipc = useIpc();
   const deckSelectionKey = useMemo(() => (decks === "all" ? "all" : decks.join("\u0000")), [decks]);
+  const optionsKey = useMemo(() => reviewSessionOptionsCacheKey(options), [options]);
 
   const query = useQuery({
-    queryKey: queryKeys.reviewBootstrap(deckSelectionKey),
+    queryKey: queryKeys.reviewBootstrap(deckSelectionKey, optionsKey),
     queryFn: async () => {
       const settings = await runIpcEffect(
         ipc.client.GetSettings().pipe(
@@ -79,6 +85,7 @@ export function useReviewBootstrapQuery(decks: ReviewDeckSelection) {
           .BuildReviewQueue({
             deckPaths,
             rootPath,
+            ...(isDefaultReviewSessionOptions(options) ? {} : { options }),
           })
           .pipe(
             Effect.catchTag("RpcDefectError", (rpcDefect) =>
@@ -91,6 +98,7 @@ export function useReviewBootstrapQuery(decks: ReviewDeckSelection) {
 
   return {
     deckSelectionKey,
+    optionsKey,
     query,
   };
 }

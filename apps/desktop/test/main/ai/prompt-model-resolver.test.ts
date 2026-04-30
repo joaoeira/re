@@ -32,10 +32,10 @@ const BASE_CATALOG: AiModelCatalogDocument = {
       displayName: "Gemini 3 Flash Preview",
     },
     {
-      key: "openai/gpt-5.4",
+      key: "openai/gpt-5.5",
       providerId: "openai",
-      providerModelId: "gpt-5.4",
-      displayName: "OpenAI GPT-5.4",
+      providerModelId: "gpt-5.5",
+      displayName: "OpenAI GPT-5.5",
     },
   ],
 };
@@ -73,23 +73,23 @@ describe("PromptModelResolver", () => {
       makeSettings({
         defaultModelKey: "gemini/gemini-3-flash-preview",
         promptModelOverrides: {
-          "forge/test-prompt": "openai/gpt-5.4",
+          "forge/test-prompt": "openai/gpt-5.5",
         },
       }),
     );
 
-    expect(result.model.key).toBe("openai/gpt-5.4");
+    expect(result.model.key).toBe("openai/gpt-5.5");
     expect(result.source).toBe("prompt-override");
   });
 
   it("prefers the user default over the catalog default", async () => {
     const result = await resolve(
       makeSettings({
-        defaultModelKey: "openai/gpt-5.4",
+        defaultModelKey: "openai/gpt-5.5",
       }),
     );
 
-    expect(result.model.key).toBe("openai/gpt-5.4");
+    expect(result.model.key).toBe("openai/gpt-5.5");
     expect(result.source).toBe("user-default");
   });
 
@@ -103,28 +103,28 @@ describe("PromptModelResolver", () => {
   it("falls through to the user default when the prompt override is missing", async () => {
     const result = await resolve(
       makeSettings({
-        defaultModelKey: "openai/gpt-5.4",
+        defaultModelKey: "openai/gpt-5.5",
         promptModelOverrides: {
           "forge/another-prompt": "gemini/gemini-3-flash-preview",
         },
       }),
     );
 
-    expect(result.model.key).toBe("openai/gpt-5.4");
+    expect(result.model.key).toBe("openai/gpt-5.5");
     expect(result.source).toBe("user-default");
   });
 
   it("skips stale prompt overrides and falls through to the user default", async () => {
     const result = await resolve(
       makeSettings({
-        defaultModelKey: "openai/gpt-5.4",
+        defaultModelKey: "openai/gpt-5.5",
         promptModelOverrides: {
           "forge/test-prompt": "openai/does-not-exist",
         },
       }),
     );
 
-    expect(result.model.key).toBe("openai/gpt-5.4");
+    expect(result.model.key).toBe("openai/gpt-5.5");
     expect(result.source).toBe("user-default");
   });
 

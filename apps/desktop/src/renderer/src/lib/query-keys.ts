@@ -49,7 +49,8 @@ export const queryKeys = {
     ["forgeDerivedCards", rootCardId, parent, kind] as const,
   forgeCardClozePrefix: ["forgeCardCloze"] as const,
   forgeCardCloze: (source: DerivationParentRef) => ["forgeCardCloze", source] as const,
-  reviewBootstrap: (deckSelectionKey: string) => ["reviewBootstrap", deckSelectionKey] as const,
+  reviewBootstrap: (deckSelectionKey: string, optionsKey: string) =>
+    ["reviewBootstrap", deckSelectionKey, optionsKey] as const,
   reviewAssistantSourceCard: (cardKey: string | null) =>
     ["reviewAssistantSourceCard", cardKey] as const,
 };

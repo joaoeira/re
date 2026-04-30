@@ -11,7 +11,7 @@ import { AiProviderNotSupportedError, AiRateLimitError } from "@shared/rpc/schem
 
 const bundledCatalog = getBundledAiModelCatalogDocument();
 const OPENAI_MODEL: ResolvedAiModel = bundledCatalog.models.find(
-  (m) => m.key === "openai/gpt-5.4",
+  (m) => m.key === "openai/gpt-5.5",
 )!;
 
 const INVALID_MODEL = {
@@ -118,7 +118,7 @@ describe("AI handlers", () => {
     await Effect.runPromise(
       handlers.AiGenerateText({
         model: {
-          key: "openai/gpt-5.4",
+          key: "openai/gpt-5.5",
           providerId: "anthropic",
           providerModelId: "claude-sonnet-4-20250514",
           displayName: "Forged tuple",

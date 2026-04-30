@@ -33,6 +33,7 @@ import {
   CardContentNotFoundError,
   CardContentParseError,
   CardContentReadError,
+  DEFAULT_REVIEW_SESSION_OPTIONS,
   ReviewAssistantUnsupportedCardTypeError,
   ReviewPermutationGenerationError,
   ReviewOperationError,
@@ -360,7 +361,7 @@ export const createReviewHandlers = () =>
     const forgePromptRuntime = yield* ForgePromptRuntimeService;
 
     return provideHandlerServices({
-      BuildReviewQueue: ({ deckPaths, rootPath }) =>
+      BuildReviewQueue: ({ deckPaths, rootPath, options = DEFAULT_REVIEW_SESSION_OPTIONS }) =>
         Effect.gen(function* () {
           const configuredRootPath = yield* validateRequestedRootPathAs(
             settingsRepository,
@@ -383,6 +384,7 @@ export const createReviewHandlers = () =>
             deckPaths,
             rootPath: configuredRootPath,
             now: new Date(),
+            options,
           });
 
           return {

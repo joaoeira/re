@@ -37,7 +37,7 @@ describe("settings repository", () => {
         ai: {
           defaultModelKey: null,
           promptModelOverrides: {
-            "forge/reformulate-card": "openai/gpt-5.4",
+            "forge/reformulate-card": "openai/gpt-5.5",
           },
         },
       });
@@ -72,7 +72,7 @@ describe("settings repository", () => {
       expect(parsedSettings.settingsVersion).toBe(2);
       expect(parsedSettings.workspace.rootPath).toBe(workspacePath);
       expect(parsedSettings.ai.promptModelOverrides["forge/reformulate-card"]).toBe(
-        "openai/gpt-5.4",
+        "openai/gpt-5.5",
       );
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
@@ -108,10 +108,48 @@ describe("settings repository", () => {
         ai: {
           defaultModelKey: null,
           promptModelOverrides: {
-            "forge/reformulate-card": "openai/gpt-5.4",
+            "forge/reformulate-card": "openai/gpt-5.5",
           },
         },
       });
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("normalizes legacy GPT-5.4 model keys on read", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-settings-repo-"));
+    const settingsFilePath = path.join(rootPath, "settings.json");
+
+    try {
+      await fs.writeFile(
+        settingsFilePath,
+        JSON.stringify(
+          {
+            settingsVersion: 2,
+            workspace: {
+              rootPath: null,
+            },
+            ai: {
+              defaultModelKey: "openai/gpt-5.4",
+              promptModelOverrides: {
+                "forge/reformulate-card": "openai/gpt-5.4",
+              },
+            },
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const repository = await makeRepository(settingsFilePath);
+      const settings = await Effect.runPromise(repository.getSettings());
+
+      expect(settings.ai.defaultModelKey).toBe("openai/gpt-5.5");
+      expect(settings.ai.promptModelOverrides["forge/reformulate-card"]).toBe(
+        "openai/gpt-5.5",
+      );
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
     }

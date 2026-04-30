@@ -1,9 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { ReviewSession } from "@/components/review-session/review-session";
+import {
+  decodeReviewSessionOptionsFromSearch,
+  encodeReviewSessionOptionsForSearch,
+  type ReviewSessionOrder,
+} from "@shared/rpc/schemas/review";
 
 type ReviewSearchParams = {
   decks: "all" | string[];
+  includeNew?: boolean;
+  includeDue?: boolean;
+  limit?: number;
+  order?: ReviewSessionOrder;
 };
 
 const normalizeDeckSelection = (value: unknown): ReviewSearchParams["decks"] => {
@@ -33,13 +42,18 @@ const normalizeDeckSelection = (value: unknown): ReviewSearchParams["decks"] => 
 };
 
 export const Route = createFileRoute("/review")({
-  validateSearch: (search): ReviewSearchParams => ({
-    decks: normalizeDeckSelection((search as Record<string, unknown>).decks),
-  }),
+  validateSearch: (search): ReviewSearchParams => {
+    const rawSearch = search as Record<string, unknown>;
+    return {
+      decks: normalizeDeckSelection(rawSearch.decks),
+      ...encodeReviewSessionOptionsForSearch(decodeReviewSessionOptionsFromSearch(rawSearch)),
+    };
+  },
   component: ReviewRoute,
 });
 
 function ReviewRoute() {
-  const { decks } = Route.useSearch();
-  return <ReviewSession decks={decks} />;
+  const search = Route.useSearch();
+  const options = decodeReviewSessionOptionsFromSearch(search as Record<string, unknown>);
+  return <ReviewSession decks={search.decks} options={options} />;
 }

@@ -100,6 +100,7 @@ export {
   ReviewQueueService,
   ReviewQueueServiceLive,
   ReviewQueueLive,
+  DEFAULT_REVIEW_QUEUE_OPTIONS,
   QueueOrderSpec,
   QueueOrderingStrategy,
   QueueOrderingStrategyFromSpec,
@@ -119,6 +120,8 @@ export {
   collectDeckPathsFromSelection,
   type QueueItem,
   type ReviewQueue,
+  type ReviewQueueOptions,
+  type ReviewQueueOrder,
   type ReviewQueueSelection,
   type WithinGroupOrder,
 } from "./reviewQueue";

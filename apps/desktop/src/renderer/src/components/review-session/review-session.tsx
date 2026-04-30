@@ -21,10 +21,11 @@ import {
   type ReviewAssistantCardRef,
 } from "@/lib/review-assistant";
 import type { DesktopReviewSessionSnapshot } from "@/machines/desktopReviewSession";
-import type { LightQueueItem } from "@shared/rpc/schemas/review";
+import type { LightQueueItem, ReviewSessionOptions } from "@shared/rpc/schemas/review";
 
 type ReviewSessionProps = {
   readonly decks: "all" | string[];
+  readonly options: ReviewSessionOptions;
 };
 
 type AssistantPanelState = {
@@ -33,9 +34,9 @@ type AssistantPanelState = {
   readonly deckName: string;
 };
 
-export function ReviewSession({ decks }: ReviewSessionProps) {
+export function ReviewSession({ decks, options }: ReviewSessionProps) {
   const navigate = useNavigate();
-  const session = useReviewSession(decks);
+  const session = useReviewSession(decks, options);
   const ipc = useIpc();
   const queryClient = useQueryClient();
   const { mutate: openEditorWindow } = useOpenEditorWindowMutation();

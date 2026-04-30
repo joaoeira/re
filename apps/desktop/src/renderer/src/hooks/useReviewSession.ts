@@ -18,6 +18,7 @@ import {
   type DesktopReviewSessionSend,
   type DesktopReviewSessionSnapshot,
 } from "@/machines/desktopReviewSession";
+import type { ReviewSessionOptions } from "@shared/rpc/schemas/review";
 
 type UseReviewSessionResult =
   | { status: "loading"; send: DesktopReviewSessionSend }
@@ -41,7 +42,10 @@ type ReadyReviewSessionState = {
   readonly loadCycle: number;
 };
 
-export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionResult {
+export function useReviewSession(
+  decks: ReviewDeckSelection,
+  options: ReviewSessionOptions,
+): UseReviewSessionResult {
   const actorRef = useRef<ActorRefFrom<typeof desktopReviewSessionMachine> | null>(null);
   const actorTeardownRef = useRef<(() => void) | null>(null);
   const refreshReasonRef = useRef<string | null>(null);
@@ -59,7 +63,11 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
     actorTeardownRef.current = null;
   }, []);
 
-  const { deckSelectionKey, query: bootstrapQuery } = useReviewBootstrapQuery(decks);
+  const {
+    deckSelectionKey,
+    optionsKey,
+    query: bootstrapQuery,
+  } = useReviewBootstrapQuery(decks, options);
 
   useEffect(() => {
     if (bootstrapQuery.isError || !bootstrapQuery.data || bootstrapQuery.data.items.length === 0) {
@@ -143,7 +151,7 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
           setReadyState(null);
           void queryClient
             .invalidateQueries({
-              queryKey: queryKeys.reviewBootstrap(deckSelectionKey),
+              queryKey: queryKeys.reviewBootstrap(deckSelectionKey, optionsKey),
             })
             .finally(() => {
               refreshInFlightRef.current = false;
@@ -229,6 +237,7 @@ export function useReviewSession(decks: ReviewDeckSelection): UseReviewSessionRe
     bootstrapQuery.errorUpdatedAt,
     bootstrapQuery.isError,
     deckSelectionKey,
+    optionsKey,
     ipc,
     queryClient,
     teardownActor,

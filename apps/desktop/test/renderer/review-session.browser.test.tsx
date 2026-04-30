@@ -11,6 +11,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 
 import { ReviewSession } from "@/components/review-session/review-session";
+import { DEFAULT_REVIEW_SESSION_OPTIONS } from "@shared/rpc/schemas/review";
 import { DEFAULT_SETTINGS } from "@shared/settings";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { IpcProvider } from "@/lib/ipc-context";
@@ -160,7 +161,7 @@ const renderReviewSession = async (options?: {
   const reviewRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/review",
-    component: () => <ReviewSession decks="all" />,
+    component: () => <ReviewSession decks="all" options={DEFAULT_REVIEW_SESSION_OPTIONS} />,
   });
   const routeTree = rootRoute.addChildren([homeRoute, reviewRoute]);
   const router = createRouter({ routeTree, history: createHashHistory() });

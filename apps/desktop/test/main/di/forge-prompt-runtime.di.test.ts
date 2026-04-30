@@ -144,7 +144,7 @@ describe("ForgePromptRuntime DI", () => {
       ai: {
         ...DEFAULT_SETTINGS.ai,
         promptModelOverrides: {
-          "forge/get-topics": "openai/gpt-5.4",
+          "forge/get-topics": "openai/gpt-5.5",
         },
       },
     });
@@ -177,7 +177,7 @@ describe("ForgePromptRuntime DI", () => {
       expect.objectContaining({
         model: {
           provider: "openai",
-          model: "gpt-5.4",
+          model: "gpt-5.5",
         },
       }),
     );

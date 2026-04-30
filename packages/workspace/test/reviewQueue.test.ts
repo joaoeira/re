@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DeckManagerLive,
+  DEFAULT_REVIEW_QUEUE_OPTIONS,
   DueFirstByDueDateSpec,
   NewFirstByDueDateSpec,
   NewFirstFileOrderSpec,
@@ -22,6 +23,7 @@ import {
   shuffle,
   sortBy,
   type QueueItem,
+  type ReviewQueueOptions,
 } from "../src";
 
 const NOW = new Date("2025-01-10T00:00:00Z");
@@ -148,6 +150,7 @@ const runQueue = (input: {
   readonly deckPaths: readonly string[];
   readonly rootPath?: string;
   readonly now?: Date;
+  readonly options?: ReviewQueueOptions;
   readonly layer: Layer.Layer<ReviewQueueBuilder>;
 }) =>
   Effect.gen(function* () {
@@ -156,6 +159,7 @@ const runQueue = (input: {
       deckPaths: input.deckPaths,
       rootPath: input.rootPath ?? "/decks",
       now: input.now ?? NOW,
+      options: input.options,
     });
   }).pipe(Effect.provide(input.layer), Effect.runPromise);
 
@@ -194,6 +198,63 @@ describe("ReviewQueueBuilder", () => {
 
     expect(result.items.map((item) => item.card.id)).toEqual(["a-new", "a-due", "b-new", "b-due"]);
     expect(result.items.map((item) => item.filePosition)).toEqual([0, 2, 4, 5]);
+  });
+
+  it("filters queue items by requested card categories", async () => {
+    const dueOnly = await runQueue({
+      deckPaths: ["/decks/mixed.md"],
+      layer: BuilderLayer(IdentityOrderingStrategy),
+      options: {
+        ...DEFAULT_REVIEW_QUEUE_OPTIONS,
+        includeNew: false,
+      },
+    });
+
+    expect(dueOnly.items.map((item) => item.category)).toEqual(["due", "due"]);
+    expect(dueOnly.totalNew).toBe(0);
+    expect(dueOnly.totalDue).toBe(2);
+
+    const newOnly = await runQueue({
+      deckPaths: ["/decks/mixed.md"],
+      layer: BuilderLayer(IdentityOrderingStrategy),
+      options: {
+        ...DEFAULT_REVIEW_QUEUE_OPTIONS,
+        includeDue: false,
+      },
+    });
+
+    expect(newOnly.items.map((item) => item.category)).toEqual(["new", "new"]);
+    expect(newOnly.totalNew).toBe(2);
+    expect(newOnly.totalDue).toBe(0);
+  });
+
+  it("applies explicit ordering before truncating to the session limit", async () => {
+    const result = await runQueue({
+      deckPaths: ["/decks/mixed.md"],
+      layer: BuilderLayer(IdentityOrderingStrategy),
+      options: {
+        ...DEFAULT_REVIEW_QUEUE_OPTIONS,
+        cardLimit: 1,
+        order: "due-first",
+      },
+    });
+
+    expect(result.items.map((item) => item.card.id)).toEqual(["card4"]);
+    expect(result.totalNew).toBe(0);
+    expect(result.totalDue).toBe(1);
+  });
+
+  it("orders new cards first when requested", async () => {
+    const result = await runQueue({
+      deckPaths: ["/decks/mixed.md"],
+      layer: BuilderLayer(IdentityOrderingStrategy),
+      options: {
+        ...DEFAULT_REVIEW_QUEUE_OPTIONS,
+        order: "new-first",
+      },
+    });
+
+    expect(result.items.map((item) => item.card.id)).toEqual(["card1", "card2", "card4", "card3"]);
   });
 });
 

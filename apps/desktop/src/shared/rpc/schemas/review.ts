@@ -5,6 +5,7 @@ import type { QAContent as QaContent } from "@re/types";
 import { ModelIdSchema } from "./ai";
 
 const NonNegativeIntSchema = Schema.Number.pipe(Schema.int(), Schema.nonNegative());
+const PositiveIntSchema = Schema.Number.pipe(Schema.int(), Schema.positive());
 const ItemIdSchema = Schema.String.pipe(
   Schema.nonEmptyString(),
   Schema.brand("ItemId"),
@@ -249,6 +250,128 @@ export const ReviewGeneratePermutationsErrorSchema = Schema.Union(
 );
 
 export type ReviewGeneratePermutationsError = typeof ReviewGeneratePermutationsErrorSchema.Type;
+
+export const ReviewSessionOrderSchema = Schema.Literal("default", "due-first", "new-first");
+
+export type ReviewSessionOrder = typeof ReviewSessionOrderSchema.Type;
+
+export const ReviewSessionOptionsSchema = Schema.Struct({
+  includeNew: Schema.Boolean,
+  includeDue: Schema.Boolean,
+  cardLimit: Schema.Union(PositiveIntSchema, Schema.Null),
+  order: ReviewSessionOrderSchema,
+});
+
+export type ReviewSessionOptions = typeof ReviewSessionOptionsSchema.Type;
+
+export const DEFAULT_REVIEW_SESSION_OPTIONS: ReviewSessionOptions = {
+  includeNew: true,
+  includeDue: true,
+  cardLimit: null,
+  order: "default",
+};
+
+export type ReviewSessionOptionsSearch = {
+  includeNew?: boolean;
+  includeDue?: boolean;
+  limit?: number;
+  order?: ReviewSessionOrder;
+};
+
+const parseBooleanSearchValue = (value: unknown): boolean | undefined => {
+  if (value === true || value === "true") return true;
+  if (value === false || value === "false") return false;
+  return undefined;
+};
+
+const parsePositiveIntSearchValue = (value: unknown): number | undefined => {
+  const numericValue =
+    typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+
+  if (!Number.isInteger(numericValue) || numericValue <= 0) return undefined;
+  return numericValue;
+};
+
+const parseReviewSessionOrderSearchValue = (value: unknown): ReviewSessionOrder | undefined => {
+  if (value === "default" || value === "due-first" || value === "new-first") {
+    return value;
+  }
+  return undefined;
+};
+
+export const isDefaultReviewSessionOptions = (options: ReviewSessionOptions): boolean =>
+  options.includeNew === DEFAULT_REVIEW_SESSION_OPTIONS.includeNew &&
+  options.includeDue === DEFAULT_REVIEW_SESSION_OPTIONS.includeDue &&
+  options.cardLimit === DEFAULT_REVIEW_SESSION_OPTIONS.cardLimit &&
+  options.order === DEFAULT_REVIEW_SESSION_OPTIONS.order;
+
+export const decodeReviewSessionOptionsFromSearch = (
+  search: Record<string, unknown>,
+): ReviewSessionOptions => {
+  const parsedIncludeNew = parseBooleanSearchValue(search.includeNew);
+  const parsedIncludeDue = parseBooleanSearchValue(search.includeDue);
+  let includeNew = parsedIncludeNew ?? DEFAULT_REVIEW_SESSION_OPTIONS.includeNew;
+  let includeDue = parsedIncludeDue ?? DEFAULT_REVIEW_SESSION_OPTIONS.includeDue;
+
+  if (!includeNew && !includeDue) {
+    includeNew = DEFAULT_REVIEW_SESSION_OPTIONS.includeNew;
+    includeDue = DEFAULT_REVIEW_SESSION_OPTIONS.includeDue;
+  }
+
+  return {
+    includeNew,
+    includeDue,
+    cardLimit:
+      parsePositiveIntSearchValue(search.limit) ?? DEFAULT_REVIEW_SESSION_OPTIONS.cardLimit,
+    order: parseReviewSessionOrderSearchValue(search.order) ?? DEFAULT_REVIEW_SESSION_OPTIONS.order,
+  };
+};
+
+export const encodeReviewSessionOptionsForSearch = (
+  options: ReviewSessionOptions,
+): ReviewSessionOptionsSearch => {
+  const search: ReviewSessionOptionsSearch = {};
+
+  if (options.includeNew !== DEFAULT_REVIEW_SESSION_OPTIONS.includeNew) {
+    search.includeNew = options.includeNew;
+  }
+
+  if (options.includeDue !== DEFAULT_REVIEW_SESSION_OPTIONS.includeDue) {
+    search.includeDue = options.includeDue;
+  }
+
+  if (
+    options.cardLimit !== DEFAULT_REVIEW_SESSION_OPTIONS.cardLimit &&
+    options.cardLimit !== null
+  ) {
+    search.limit = options.cardLimit;
+  }
+
+  if (options.order !== DEFAULT_REVIEW_SESSION_OPTIONS.order) {
+    search.order = options.order;
+  }
+
+  return search;
+};
+
+export const reviewSessionOptionsCacheKey = (options: ReviewSessionOptions): string =>
+  isDefaultReviewSessionOptions(options)
+    ? "default"
+    : [
+        `new:${options.includeNew ? "1" : "0"}`,
+        `due:${options.includeDue ? "1" : "0"}`,
+        `limit:${options.cardLimit ?? "none"}`,
+        `order:${options.order}`,
+      ].join("|");
+
+export const getReviewSessionCardCount = (
+  metrics: { readonly newCount: number; readonly dueCount: number },
+  options: ReviewSessionOptions,
+): number => {
+  const includedCount =
+    (options.includeNew ? metrics.newCount : 0) + (options.includeDue ? metrics.dueCount : 0);
+  return options.cardLimit === null ? includedCount : Math.min(options.cardLimit, includedCount);
+};
 
 export const BuildReviewQueueResultSchema = Schema.Struct({
   items: Schema.Array(LightQueueItemSchema),

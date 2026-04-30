@@ -1,6 +1,12 @@
+import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@xstate/store-react";
 import { useDeckSelectionStore } from "@shared/state/stores-context";
+import {
+  DEFAULT_REVIEW_SESSION_OPTIONS,
+  encodeReviewSessionOptionsForSearch,
+  getReviewSessionCardCount,
+} from "@shared/rpc/schemas/review";
 
 import { DeckList } from "./deck-list";
 import { ReviewFooter } from "./review-footer";
@@ -10,6 +16,7 @@ import { useWorkspaceSnapshotQuery } from "@/hooks/queries/use-workspace-snapsho
 export function HomeScreen() {
   const navigate = useNavigate();
   const deckSelectionStore = useDeckSelectionStore();
+  const [reviewOptions, setReviewOptions] = useState(DEFAULT_REVIEW_SESSION_OPTIONS);
 
   const selectedDecks = useSelector(deckSelectionStore, (s) => s.context.selected);
   const settingsQuery = useSettingsQuery();
@@ -84,7 +91,7 @@ export function HomeScreen() {
 
   const hasSelectedDecks = validSelectedDeckPaths.length > 0;
   const metrics = hasSelectedDecks ? selectedMetrics : allMetrics;
-  const totalReviewableCards = metrics.newCount + metrics.dueCount;
+  const totalReviewableCards = getReviewSessionCardCount(metrics, reviewOptions);
   const reviewEnabled = totalReviewableCards > 0;
 
   const selectedDeckNames = validSelectedDeckPaths.map((path) => {
@@ -103,7 +110,9 @@ export function HomeScreen() {
         selectedDeckNames={selectedDeckNames}
         metrics={metrics}
         totalReviewableCards={totalReviewableCards}
+        reviewOptions={reviewOptions}
         reviewDisabled={!reviewEnabled}
+        onReviewOptionsChange={setReviewOptions}
         onReview={() => {
           if (!reviewEnabled) return;
 
@@ -111,6 +120,7 @@ export function HomeScreen() {
             to: "/review",
             search: {
               decks: hasSelectedDecks ? validSelectedDeckPaths : "all",
+              ...encodeReviewSessionOptionsForSearch(reviewOptions),
             },
           });
         }}

@@ -24,6 +24,22 @@ export interface ReviewQueue {
   readonly totalDue: number;
 }
 
+export type ReviewQueueOrder = "default" | "due-first" | "new-first";
+
+export interface ReviewQueueOptions {
+  readonly includeNew: boolean;
+  readonly includeDue: boolean;
+  readonly cardLimit: number | null;
+  readonly order: ReviewQueueOrder;
+}
+
+export const DEFAULT_REVIEW_QUEUE_OPTIONS: ReviewQueueOptions = {
+  includeNew: true,
+  includeDue: true,
+  cardLimit: null,
+  order: "default",
+};
+
 export type ReviewQueueSelection =
   | { readonly type: "all" }
   | { readonly type: "folder"; readonly path: string }
@@ -189,6 +205,37 @@ export const ShuffledOrderingStrategy = Layer.succeed(QueueOrderingStrategy, {
   order: shuffle<QueueItem>(),
 });
 
+const normalizeReviewQueueOptions = (options: ReviewQueueOptions | undefined): ReviewQueueOptions =>
+  options ?? DEFAULT_REVIEW_QUEUE_OPTIONS;
+
+const applyCategoryFilters = (
+  items: readonly QueueItem[],
+  options: ReviewQueueOptions,
+): readonly QueueItem[] =>
+  items.filter((item) => (item.category === "new" ? options.includeNew : options.includeDue));
+
+const applyCardLimit = (
+  items: readonly QueueItem[],
+  options: ReviewQueueOptions,
+): readonly QueueItem[] => (options.cardLimit === null ? items : items.slice(0, options.cardLimit));
+
+const countCategory = (items: readonly QueueItem[], category: QueueItem["category"]): number =>
+  items.filter((item) => item.category === category).length;
+
+const orderNewFirst = (items: readonly QueueItem[]): Effect.Effect<readonly QueueItem[]> =>
+  Effect.gen(function* () {
+    const [dueItems, newItems] = Arr.partition(items, (i) => i.category === "new");
+    const orderedDue = yield* sortBy(byDueDate)(dueItems);
+    return [...newItems, ...orderedDue];
+  });
+
+const orderDueFirst = (items: readonly QueueItem[]): Effect.Effect<readonly QueueItem[]> =>
+  Effect.gen(function* () {
+    const [dueItems, newItems] = Arr.partition(items, (i) => i.category === "new");
+    const orderedDue = yield* sortBy(byDueDate)(dueItems);
+    return [...orderedDue, ...newItems];
+  });
+
 export interface ReviewQueueBuilder {
   /**
    * Contract for `deckPaths`:
@@ -199,6 +246,7 @@ export interface ReviewQueueBuilder {
     readonly deckPaths: readonly string[];
     readonly rootPath: string;
     readonly now: Date;
+    readonly options?: ReviewQueueOptions;
   }) => Effect.Effect<ReviewQueue>;
 }
 
@@ -214,8 +262,9 @@ export const ReviewQueueBuilderLive = Layer.effect(
     const pathService = yield* Path.Path;
 
     return {
-      buildQueue: ({ deckPaths, rootPath, now }) =>
+      buildQueue: ({ deckPaths, rootPath, now, options: rawOptions }) =>
         Effect.gen(function* () {
+          const options = normalizeReviewQueueOptions(rawOptions);
           const results = yield* Effect.all(
             deckPaths.map((p) => deckManager.readDeck(p).pipe(Effect.either)),
             { concurrency: "unbounded" },
@@ -269,12 +318,23 @@ export const ReviewQueueBuilderLive = Layer.effect(
             }
           }
 
-          const orderedItems = yield* orderingStrategy.order(allItems);
+          const filteredItems = applyCategoryFilters(allItems, options);
+          const orderedItems = yield* (() => {
+            switch (options.order) {
+              case "default":
+                return orderingStrategy.order(filteredItems);
+              case "due-first":
+                return orderDueFirst(filteredItems);
+              case "new-first":
+                return orderNewFirst(filteredItems);
+            }
+          })();
+          const limitedItems = applyCardLimit(orderedItems, options);
 
           return {
-            items: orderedItems,
-            totalNew: orderedItems.filter((i) => i.category === "new").length,
-            totalDue: orderedItems.filter((i) => i.category === "due").length,
+            items: limitedItems,
+            totalNew: countCategory(limitedItems, "new"),
+            totalDue: countCategory(limitedItems, "due"),
           };
         }),
     };

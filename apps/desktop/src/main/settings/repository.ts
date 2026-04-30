@@ -41,6 +41,39 @@ const migrateV1ToV2 = (settings: SettingsV1): Settings => ({
   workspace: settings.workspace,
 });
 
+const LEGACY_MODEL_KEY_RENAMES: Readonly<Record<string, string>> = {
+  "openai/gpt-5.4": "openai/gpt-5.5",
+};
+
+const normalizeRequiredModelKey = (modelKey: string): string =>
+  LEGACY_MODEL_KEY_RENAMES[modelKey] ?? modelKey;
+
+const normalizeOptionalModelKey = (modelKey: string | null): string | null =>
+  modelKey === null ? null : normalizeRequiredModelKey(modelKey);
+
+const normalizeSettingsModelKeys = (settings: Settings): Settings => {
+  const defaultModelKey = normalizeOptionalModelKey(settings.ai.defaultModelKey);
+  const promptModelOverrides: Record<string, string> = {};
+  let changed = defaultModelKey !== settings.ai.defaultModelKey;
+
+  for (const [promptId, modelKey] of Object.entries(settings.ai.promptModelOverrides)) {
+    const normalizedModelKey = normalizeRequiredModelKey(modelKey);
+    promptModelOverrides[promptId] = normalizedModelKey;
+    changed = changed || normalizedModelKey !== modelKey;
+  }
+
+  return changed
+    ? {
+        ...settings,
+        ai: {
+          ...settings.ai,
+          defaultModelKey,
+          promptModelOverrides,
+        },
+      }
+    : settings;
+};
+
 const asMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
@@ -147,7 +180,7 @@ export const makeSettingsRepository = ({
         const v2Attempt = yield* decodeSettingsV2(rawSettings.value).pipe(Effect.either);
 
         if (Either.isRight(v2Attempt)) {
-          return v2Attempt.right;
+          return normalizeSettingsModelKeys(v2Attempt.right);
         }
 
         const v1Attempt = yield* decodeSettingsV1(rawSettings.value).pipe(Effect.either);
