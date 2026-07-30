@@ -15,9 +15,11 @@
     "pretest:e2e": "node ./scripts/ensure-local-electron.mjs",
     "test:e2e": "playwright test",
     "prebuild": "node ./scripts/ensure-local-electron.mjs",
-    "build": "electron-forge package",
+    "build": "node ./scripts/run-forge.mjs package",
     "prepackage": "node ./scripts/ensure-local-electron.mjs",
-    "package": "electron-forge make",
+    "package": "node ./scripts/run-forge.mjs make",
+    "install:local": "node ./scripts/install-local.mjs",
+    "test:install-local": "node --test ./scripts/install-local.test.mjs",
     "kill": "pkill -9 -f 're/node_modules/electron' || true"
   },
   "dependencies": {

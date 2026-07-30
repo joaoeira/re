@@ -16,6 +16,7 @@
     "desktop:test": "bun run --filter @re/desktop test",
     "desktop:build": "bun run --filter @re/desktop build",
     "desktop:package": "bun run --filter @re/desktop package",
+    "desktop:install": "bun run --filter @re/desktop install:local",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt --write .",

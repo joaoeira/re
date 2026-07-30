@@ -174,12 +174,30 @@ const ensureNonEmptyMessages = (
     ? Effect.fail(new AiCompletionError({ message: "messages must contain at least one entry." }))
     : Effect.void;
 
+const PROVIDER_MANAGED_SAMPLING_MODEL_IDS = new Set([
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+  "claude-fable-5",
+  "claude-opus-5",
+  "claude-sonnet-5",
+]);
+
+const resolveTemperature = (
+  model: ResolvedAiModel,
+  temperature: number | undefined,
+): number | undefined =>
+  PROVIDER_MANAGED_SAMPLING_MODEL_IDS.has(model.providerModelId) ? undefined : temperature;
+
 export const makeAiClient = ({ secretStore }: MakeAiClientOptions): AiClient => ({
   generateText: ({ model, messages, systemPrompt, temperature, maxTokens, maxRetries }) =>
     Effect.gen(function* () {
       yield* ensureNonEmptyMessages(messages);
       const languageModel = yield* resolveLanguageModel(secretStore, model);
       const modelMessages = mapMessagesToAiSdk(messages);
+      const resolvedTemperature = resolveTemperature(model, temperature);
       const resolvedMaxRetries = maxRetries ?? 0;
 
       const result = yield* Effect.tryPromise({
@@ -188,7 +206,7 @@ export const makeAiClient = ({ secretStore }: MakeAiClientOptions): AiClient => 
             model: languageModel,
             messages: modelMessages,
             ...(systemPrompt !== undefined ? { system: systemPrompt } : {}),
-            ...(temperature !== undefined ? { temperature } : {}),
+            ...(resolvedTemperature !== undefined ? { temperature: resolvedTemperature } : {}),
             ...(maxTokens !== undefined ? { maxOutputTokens: maxTokens } : {}),
             maxRetries: resolvedMaxRetries,
             abortSignal,
@@ -216,6 +234,7 @@ export const makeAiClient = ({ secretStore }: MakeAiClientOptions): AiClient => 
         const controller = new AbortController();
         const languageModel = yield* resolveLanguageModel(secretStore, model);
         const modelMessages = mapMessagesToAiSdk(messages);
+        const resolvedTemperature = resolveTemperature(model, temperature);
         const resolvedMaxRetries = maxRetries ?? 0;
 
         return Stream.asyncPush<string, AiProviderInvocationError>((emit) =>
@@ -228,7 +247,9 @@ export const makeAiClient = ({ secretStore }: MakeAiClientOptions): AiClient => 
                   model: languageModel,
                   messages: modelMessages,
                   ...(systemPrompt !== undefined ? { system: systemPrompt } : {}),
-                  ...(temperature !== undefined ? { temperature } : {}),
+                  ...(resolvedTemperature !== undefined
+                    ? { temperature: resolvedTemperature }
+                    : {}),
                   ...(maxTokens !== undefined ? { maxOutputTokens: maxTokens } : {}),
                   maxRetries: resolvedMaxRetries,
                   abortSignal: controller.signal,

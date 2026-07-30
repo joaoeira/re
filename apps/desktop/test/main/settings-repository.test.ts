@@ -37,7 +37,7 @@ describe("settings repository", () => {
         ai: {
           defaultModelKey: null,
           promptModelOverrides: {
-            "forge/reformulate-card": "openai/gpt-5.5",
+            "forge/reformulate-card": "openai/gpt-5.6-sol",
           },
         },
       });
@@ -72,7 +72,7 @@ describe("settings repository", () => {
       expect(parsedSettings.settingsVersion).toBe(2);
       expect(parsedSettings.workspace.rootPath).toBe(workspacePath);
       expect(parsedSettings.ai.promptModelOverrides["forge/reformulate-card"]).toBe(
-        "openai/gpt-5.5",
+        "openai/gpt-5.6-sol",
       );
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
@@ -108,7 +108,7 @@ describe("settings repository", () => {
         ai: {
           defaultModelKey: null,
           promptModelOverrides: {
-            "forge/reformulate-card": "openai/gpt-5.5",
+            "forge/reformulate-card": "openai/gpt-5.6-sol",
           },
         },
       });
@@ -117,7 +117,7 @@ describe("settings repository", () => {
     }
   });
 
-  it("normalizes legacy GPT-5.4 model keys on read", async () => {
+  it("normalizes outgoing model keys on read", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-settings-repo-"));
     const settingsFilePath = path.join(rootPath, "settings.json");
 
@@ -131,9 +131,14 @@ describe("settings repository", () => {
               rootPath: null,
             },
             ai: {
-              defaultModelKey: "openai/gpt-5.4",
+              defaultModelKey: "openai/gpt-5.5",
               promptModelOverrides: {
                 "forge/reformulate-card": "openai/gpt-5.4",
+                "forge/generate-cloze": "openai/gpt-5.4-mini",
+                "forge/create-cards": "anthropic/claude-opus-4-6",
+                "forge/get-topics": "anthropic/claude-sonnet-4-6",
+                "forge/get-angles": "gemini/gemini-3-flash-preview",
+                "forge/generate-expansions": "gemini/gemini-3.1-flash-lite-preview",
               },
             },
           },
@@ -146,9 +151,24 @@ describe("settings repository", () => {
       const repository = await makeRepository(settingsFilePath);
       const settings = await Effect.runPromise(repository.getSettings());
 
-      expect(settings.ai.defaultModelKey).toBe("openai/gpt-5.5");
+      expect(settings.ai.defaultModelKey).toBe("openai/gpt-5.6-sol");
       expect(settings.ai.promptModelOverrides["forge/reformulate-card"]).toBe(
-        "openai/gpt-5.5",
+        "openai/gpt-5.6-sol",
+      );
+      expect(settings.ai.promptModelOverrides["forge/generate-cloze"]).toBe(
+        "openai/gpt-5.6-terra",
+      );
+      expect(settings.ai.promptModelOverrides["forge/create-cards"]).toBe(
+        "anthropic/claude-opus-5",
+      );
+      expect(settings.ai.promptModelOverrides["forge/get-topics"]).toBe(
+        "anthropic/claude-sonnet-5",
+      );
+      expect(settings.ai.promptModelOverrides["forge/get-angles"]).toBe(
+        "gemini/gemini-3.6-flash",
+      );
+      expect(settings.ai.promptModelOverrides["forge/generate-expansions"]).toBe(
+        "gemini/gemini-3.5-flash-lite",
       );
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });

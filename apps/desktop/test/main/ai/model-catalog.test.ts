@@ -46,10 +46,34 @@ describe("AI model catalog", () => {
 
   it("returns a model definition for an existing key", async () => {
     const catalog = await makeCatalogService();
-    const model = await Effect.runPromise(catalog.getModel("gemini/gemini-3-flash-preview"));
+    const model = await Effect.runPromise(catalog.getModel("gemini/gemini-3.6-flash"));
 
-    expect(model.displayName).toBe("Gemini 3 Flash Preview");
+    expect(model.displayName).toBe("Gemini 3.6 Flash");
     expect(model.providerId).toBe("gemini");
+  });
+
+  it("exposes the current provider model lineups", () => {
+    const providerModels = (providerId: "gemini" | "openai" | "anthropic") =>
+      bundledAiModelCatalogDocument.models
+        .filter((model) => model.providerId === providerId)
+        .map(({ providerModelId }) => providerModelId);
+
+    expect(providerModels("gemini")).toEqual([
+      "gemini-3.6-flash",
+      "gemini-3.1-pro-preview",
+      "gemini-3.5-flash-lite",
+    ]);
+    expect(providerModels("openai")).toEqual([
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+    ]);
+    expect(providerModels("anthropic")).toEqual([
+      "claude-fable-5",
+      "claude-opus-5",
+      "claude-sonnet-5",
+      "claude-haiku-4-5",
+    ]);
   });
 
   it("fails with AiModelNotFound for an unknown key", async () => {

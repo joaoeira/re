@@ -42,7 +42,13 @@ const migrateV1ToV2 = (settings: SettingsV1): Settings => ({
 });
 
 const LEGACY_MODEL_KEY_RENAMES: Readonly<Record<string, string>> = {
-  "openai/gpt-5.4": "openai/gpt-5.5",
+  "gemini/gemini-3-flash-preview": "gemini/gemini-3.6-flash",
+  "gemini/gemini-3.1-flash-lite-preview": "gemini/gemini-3.5-flash-lite",
+  "openai/gpt-5.4": "openai/gpt-5.6-sol",
+  "openai/gpt-5.4-mini": "openai/gpt-5.6-terra",
+  "openai/gpt-5.5": "openai/gpt-5.6-sol",
+  "anthropic/claude-opus-4-6": "anthropic/claude-opus-5",
+  "anthropic/claude-sonnet-4-6": "anthropic/claude-sonnet-5",
 };
 
 const normalizeRequiredModelKey = (modelKey: string): string =>

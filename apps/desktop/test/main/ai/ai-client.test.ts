@@ -38,6 +38,24 @@ const GEMINI_MODEL = makeModel(
   "Gemini 2.5 Flash",
 );
 const OPENAI_MODEL = makeModel("openai/gpt-4o", "openai", "gpt-4o", "OpenAI GPT-4o");
+const GPT_5_6_MODEL = makeModel(
+  "openai/gpt-5.6-sol",
+  "openai",
+  "gpt-5.6-sol",
+  "GPT-5.6 Sol",
+);
+const CLAUDE_5_MODEL = makeModel(
+  "anthropic/claude-sonnet-5",
+  "anthropic",
+  "claude-sonnet-5",
+  "Claude Sonnet 5",
+);
+const GEMINI_3_6_MODEL = makeModel(
+  "gemini/gemini-3.6-flash",
+  "gemini",
+  "gemini-3.6-flash",
+  "Gemini 3.6 Flash",
+);
 const OPENROUTER_MODEL = makeModel(
   "openrouter/gpt-4o",
   "openrouter",
@@ -549,6 +567,47 @@ describe("makeAiClient", () => {
     expect(call).not.toHaveProperty("system");
     expect(call).not.toHaveProperty("temperature");
     expect(call).not.toHaveProperty("maxOutputTokens");
+  });
+
+  it.each([GPT_5_6_MODEL, CLAUDE_5_MODEL, GEMINI_3_6_MODEL])(
+    "omits deprecated temperature for $providerModelId",
+    async (model) => {
+      const service = makeServiceWithKey();
+      mocks.generateText.mockResolvedValue(makeGenerateResult());
+
+      await Effect.runPromise(
+        service.generateText({
+          model,
+          messages: DEFAULT_MESSAGES,
+          temperature: 0.7,
+        }),
+      );
+
+      expect(mocks.generateText.mock.calls[0]?.[0]).not.toHaveProperty("temperature");
+    },
+  );
+
+  it("omits deprecated temperature from streams for current provider-managed models", async () => {
+    const service = makeServiceWithKey();
+    mocks.streamText.mockReturnValue({
+      textStream: {
+        async *[Symbol.asyncIterator]() {
+          yield "ok";
+        },
+      },
+    });
+
+    await Effect.runPromise(
+      service
+        .streamText({
+          model: GEMINI_3_6_MODEL,
+          messages: DEFAULT_MESSAGES,
+          temperature: 0.7,
+        })
+        .pipe(Stream.runDrain),
+    );
+
+    expect(mocks.streamText.mock.calls[0]?.[0]).not.toHaveProperty("temperature");
   });
 
   it("forwards text-part arrays in messages", async () => {

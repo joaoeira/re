@@ -23,19 +23,19 @@ const getFailure = <A, E>(exit: Exit.Exit<A, E>): E => {
 
 const BASE_CATALOG: AiModelCatalogDocument = {
   catalogVersion: 1,
-  applicationDefaultModelKey: "gemini/gemini-3-flash-preview",
+  applicationDefaultModelKey: "gemini/gemini-3.6-flash",
   models: [
     {
-      key: "gemini/gemini-3-flash-preview",
+      key: "gemini/gemini-3.6-flash",
       providerId: "gemini",
-      providerModelId: "gemini-3-flash-preview",
-      displayName: "Gemini 3 Flash Preview",
+      providerModelId: "gemini-3.6-flash",
+      displayName: "Gemini 3.6 Flash",
     },
     {
-      key: "openai/gpt-5.5",
+      key: "openai/gpt-5.6-sol",
       providerId: "openai",
-      providerModelId: "gpt-5.5",
-      displayName: "OpenAI GPT-5.5",
+      providerModelId: "gpt-5.6-sol",
+      displayName: "GPT-5.6 Sol",
     },
   ],
 };
@@ -71,60 +71,60 @@ describe("PromptModelResolver", () => {
   it("prefers a prompt override over the user default", async () => {
     const result = await resolve(
       makeSettings({
-        defaultModelKey: "gemini/gemini-3-flash-preview",
+        defaultModelKey: "gemini/gemini-3.6-flash",
         promptModelOverrides: {
-          "forge/test-prompt": "openai/gpt-5.5",
+          "forge/test-prompt": "openai/gpt-5.6-sol",
         },
       }),
     );
 
-    expect(result.model.key).toBe("openai/gpt-5.5");
+    expect(result.model.key).toBe("openai/gpt-5.6-sol");
     expect(result.source).toBe("prompt-override");
   });
 
   it("prefers the user default over the catalog default", async () => {
     const result = await resolve(
       makeSettings({
-        defaultModelKey: "openai/gpt-5.5",
+        defaultModelKey: "openai/gpt-5.6-sol",
       }),
     );
 
-    expect(result.model.key).toBe("openai/gpt-5.5");
+    expect(result.model.key).toBe("openai/gpt-5.6-sol");
     expect(result.source).toBe("user-default");
   });
 
   it("falls through to the catalog default when the user default is null", async () => {
     const result = await resolve(makeSettings());
 
-    expect(result.model.key).toBe("gemini/gemini-3-flash-preview");
+    expect(result.model.key).toBe("gemini/gemini-3.6-flash");
     expect(result.source).toBe("catalog-default");
   });
 
   it("falls through to the user default when the prompt override is missing", async () => {
     const result = await resolve(
       makeSettings({
-        defaultModelKey: "openai/gpt-5.5",
+        defaultModelKey: "openai/gpt-5.6-sol",
         promptModelOverrides: {
-          "forge/another-prompt": "gemini/gemini-3-flash-preview",
+          "forge/another-prompt": "gemini/gemini-3.6-flash",
         },
       }),
     );
 
-    expect(result.model.key).toBe("openai/gpt-5.5");
+    expect(result.model.key).toBe("openai/gpt-5.6-sol");
     expect(result.source).toBe("user-default");
   });
 
   it("skips stale prompt overrides and falls through to the user default", async () => {
     const result = await resolve(
       makeSettings({
-        defaultModelKey: "openai/gpt-5.5",
+        defaultModelKey: "openai/gpt-5.6-sol",
         promptModelOverrides: {
           "forge/test-prompt": "openai/does-not-exist",
         },
       }),
     );
 
-    expect(result.model.key).toBe("openai/gpt-5.5");
+    expect(result.model.key).toBe("openai/gpt-5.6-sol");
     expect(result.source).toBe("user-default");
   });
 

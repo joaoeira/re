@@ -34,7 +34,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ai: {
     defaultModelKey: null,
     promptModelOverrides: {
-      "forge/reformulate-card": "openai/gpt-5.5",
+      "forge/reformulate-card": "openai/gpt-5.6-sol",
     },
   },
 };

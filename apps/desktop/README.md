@@ -103,6 +103,23 @@ bun run build                # electron-forge package (unpackaged app bundle)
 bun run package              # electron-forge make (platform installers: ZIP, DEB, RPM, Squirrel)
 ```
 
+### Install the latest local build on macOS
+
+From the monorepo root, one command builds, verifies, installs, relaunches, and
+health-checks the desktop app:
+
+```bash
+bun run desktop:install
+```
+
+The build, package, and install commands automatically select an installed Node
+version compatible with the desktop package and work around Electron Forge
+misdetecting the desktop-local `pnpm-lock.yaml`. The install command validates
+code signing and Electron ASAR integrity, then checks that the installed payload
+is byte-for-byte identical to the fresh build. The previous app is retained
+under `apps/desktop/out/install-backups/`. If the new app does not survive its
+launch check, the installer restores and relaunches the previous version.
+
 ### Other scripts
 
 ```bash
