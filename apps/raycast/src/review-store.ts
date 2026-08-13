@@ -1,0 +1,377 @@
+import { FileSystem, Path } from "@effect/platform";
+import { inferType, type Item } from "@re/core";
+import { ClozeType, QAType } from "@re/types";
+import {
+  DeckManager,
+  ReviewQueueBuilder,
+  Scheduler,
+  resolveDeckImagePath,
+  snapshotWorkspace,
+  toScanDecksErrorMessage,
+  type FSRSGrade,
+} from "@re/workspace";
+import { Context, Data, Effect, Layer } from "effect";
+
+export interface ReviewCardReference {
+  readonly deckPath: string;
+  readonly deckName: string;
+  readonly relativePath: string;
+  readonly cardId: string;
+  readonly cardIndex: number;
+}
+
+export interface ReviewDeckIssue {
+  readonly deckPath: string;
+  readonly relativePath: string;
+  readonly kind: "read_error" | "parse_error";
+  readonly message: string;
+}
+
+export interface ReviewSession {
+  readonly rootPath: string;
+  readonly cards: readonly ReviewCardReference[];
+  readonly totalNew: number;
+  readonly totalDue: number;
+  readonly issues: readonly ReviewDeckIssue[];
+}
+
+export interface ReviewCardContent {
+  readonly prompt: string;
+  readonly reveal: string;
+  readonly cardType: "qa" | "cloze";
+}
+
+export class ReviewWorkspaceError extends Data.TaggedError("ReviewWorkspaceError")<{
+  readonly message: string;
+}> {}
+
+export class ReviewCardLoadError extends Data.TaggedError("ReviewCardLoadError")<{
+  readonly deckPath: string;
+  readonly cardId: string;
+  readonly message: string;
+}> {}
+
+export class ReviewGradeError extends Data.TaggedError("ReviewGradeError")<{
+  readonly deckPath: string;
+  readonly cardId: string;
+  readonly message: string;
+}> {}
+
+export interface ReviewStore {
+  readonly startSession: (
+    workspacePath: string,
+    now: Date,
+  ) => Effect.Effect<ReviewSession, ReviewWorkspaceError>;
+  readonly loadCard: (
+    rootPath: string,
+    card: ReviewCardReference,
+  ) => Effect.Effect<ReviewCardContent, ReviewCardLoadError>;
+  readonly gradeCard: (
+    card: ReviewCardReference,
+    grade: FSRSGrade,
+    now: Date,
+  ) => Effect.Effect<void, ReviewGradeError>;
+}
+
+export const ReviewStore = Context.GenericTag<ReviewStore>("@re/raycast/ReviewStore");
+
+const itemTypes = [QAType, ClozeType] as const;
+const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
+const URI_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+
+export const rewriteDeckImageUrlsForRaycast = (options: {
+  readonly rootPath: string;
+  readonly deckPath: string;
+  readonly markdown: string;
+}): Effect.Effect<string, never, Path.Path> =>
+  Effect.gen(function* () {
+    let cursor = 0;
+    let output = "";
+
+    for (const match of options.markdown.matchAll(MARKDOWN_IMAGE_PATTERN)) {
+      const index = match.index ?? 0;
+      const fullMatch = match[0] ?? "";
+      const altText = match[1] ?? "";
+      const rawUrl = (match[2] ?? "").trim();
+
+      output += options.markdown.slice(cursor, index);
+
+      if (URI_SCHEME_PATTERN.test(rawUrl) || rawUrl.startsWith("//")) {
+        output += fullMatch;
+      } else {
+        const resolved = yield* resolveDeckImagePath({
+          rootPath: options.rootPath,
+          deckPath: options.deckPath,
+          imagePath: rawUrl,
+        }).pipe(Effect.either);
+
+        output +=
+          resolved._tag === "Left"
+            ? `![${altText}]()`
+            : `![${altText}](${encodeURI(resolved.right.absolutePath)})`;
+      }
+
+      cursor = index + fullMatch.length;
+    }
+
+    output += options.markdown.slice(cursor);
+    return output;
+  });
+
+const findItemByCardId = (items: readonly Item[], cardId: string) => {
+  for (const item of items) {
+    const cardIndex = item.cards.findIndex((card) => card.id === cardId);
+    if (cardIndex !== -1) return { item, card: item.cards[cardIndex]!, cardIndex };
+  }
+  return null;
+};
+
+export const ReviewStoreLive: Layer.Layer<
+  ReviewStore,
+  never,
+  ReviewQueueBuilder | DeckManager | Scheduler | FileSystem.FileSystem | Path.Path
+> = Layer.effect(
+  ReviewStore,
+  Effect.gen(function* () {
+    const queueBuilder = yield* ReviewQueueBuilder;
+    const deckManager = yield* DeckManager;
+    const scheduler = yield* Scheduler;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const pathService = yield* Path.Path;
+
+    const startSession = Effect.fn("ReviewStore.startSession")(function* (
+      workspacePath: string,
+      now: Date,
+    ) {
+      const snapshot = yield* snapshotWorkspace(workspacePath, { asOf: now }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fileSystem),
+        Effect.provideService(Path.Path, pathService),
+        Effect.mapError(
+          (error) => new ReviewWorkspaceError({ message: toScanDecksErrorMessage(error) }),
+        ),
+      );
+
+      const validDeckPaths = snapshot.decks
+        .filter((deck) => deck.status === "ok")
+        .map((deck) => deck.absolutePath);
+      const issues: ReviewDeckIssue[] = snapshot.decks.flatMap((deck) =>
+        deck.status === "ok"
+          ? []
+          : [
+              {
+                deckPath: deck.absolutePath,
+                relativePath: deck.relativePath,
+                kind: deck.status,
+                message: deck.message,
+              },
+            ],
+      );
+
+      const queue = yield* queueBuilder.buildQueue({
+        deckPaths: validDeckPaths,
+        rootPath: snapshot.rootPath,
+        now,
+      });
+
+      return {
+        rootPath: snapshot.rootPath,
+        cards: queue.items.map(
+          (item): ReviewCardReference => ({
+            deckPath: item.deckPath,
+            deckName: item.deckName,
+            relativePath: item.relativePath,
+            cardId: item.card.id,
+            cardIndex: item.cardIndex,
+          }),
+        ),
+        totalNew: queue.totalNew,
+        totalDue: queue.totalDue,
+        issues,
+      } satisfies ReviewSession;
+    });
+
+    const loadCard = Effect.fn("ReviewStore.loadCard")(function* (
+      rootPath: string,
+      reference: ReviewCardReference,
+    ) {
+      const parsed = yield* deckManager.readDeck(reference.deckPath).pipe(
+        Effect.catchTags({
+          DeckNotFound: () =>
+            Effect.fail(
+              new ReviewCardLoadError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: "The deck no longer exists.",
+              }),
+            ),
+          DeckReadError: (error) =>
+            Effect.fail(
+              new ReviewCardLoadError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: `Could not read the deck: ${error.message}`,
+              }),
+            ),
+          DeckParseError: (error) =>
+            Effect.fail(
+              new ReviewCardLoadError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: `The deck metadata is invalid: ${error.message}`,
+              }),
+            ),
+        }),
+      );
+      const found = findItemByCardId(parsed.items, reference.cardId);
+
+      if (found === null) {
+        return yield* new ReviewCardLoadError({
+          deckPath: reference.deckPath,
+          cardId: reference.cardId,
+          message: "The card no longer exists in its deck.",
+        });
+      }
+
+      const inferred = yield* inferType(itemTypes, found.item.content).pipe(
+        Effect.mapError(
+          () =>
+            new ReviewCardLoadError({
+              deckPath: reference.deckPath,
+              cardId: reference.cardId,
+              message: "The card content is not valid Q&A or cloze content.",
+            }),
+        ),
+      );
+      const cardSpec = inferred.type.cards(inferred.content)[found.cardIndex];
+
+      if (cardSpec === undefined || (cardSpec.cardType !== "qa" && cardSpec.cardType !== "cloze")) {
+        return yield* new ReviewCardLoadError({
+          deckPath: reference.deckPath,
+          cardId: reference.cardId,
+          message: "The card content no longer matches its scheduling metadata.",
+        });
+      }
+
+      const prompt = yield* rewriteDeckImageUrlsForRaycast({
+        rootPath,
+        deckPath: reference.deckPath,
+        markdown: cardSpec.prompt,
+      }).pipe(Effect.provideService(Path.Path, pathService));
+      const reveal = yield* rewriteDeckImageUrlsForRaycast({
+        rootPath,
+        deckPath: reference.deckPath,
+        markdown: cardSpec.reveal,
+      }).pipe(Effect.provideService(Path.Path, pathService));
+
+      return {
+        prompt,
+        reveal,
+        cardType: cardSpec.cardType,
+      } satisfies ReviewCardContent;
+    });
+
+    const gradeCard = Effect.fn("ReviewStore.gradeCard")(function* (
+      reference: ReviewCardReference,
+      grade: FSRSGrade,
+      now: Date,
+    ) {
+      const parsed = yield* deckManager.readDeck(reference.deckPath).pipe(
+        Effect.catchTags({
+          DeckNotFound: () =>
+            Effect.fail(
+              new ReviewGradeError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: "The deck no longer exists.",
+              }),
+            ),
+          DeckReadError: (error) =>
+            Effect.fail(
+              new ReviewGradeError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: `Could not read the deck: ${error.message}`,
+              }),
+            ),
+          DeckParseError: (error) =>
+            Effect.fail(
+              new ReviewGradeError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: `The deck metadata is invalid: ${error.message}`,
+              }),
+            ),
+        }),
+      );
+      const found = findItemByCardId(parsed.items, reference.cardId);
+
+      if (found === null) {
+        return yield* new ReviewGradeError({
+          deckPath: reference.deckPath,
+          cardId: reference.cardId,
+          message: "The card no longer exists in its deck.",
+        });
+      }
+
+      const scheduled = yield* scheduler.scheduleReview(found.card, grade, now).pipe(
+        Effect.mapError(
+          (error) =>
+            new ReviewGradeError({
+              deckPath: reference.deckPath,
+              cardId: reference.cardId,
+              message: error.message,
+            }),
+        ),
+      );
+
+      yield* deckManager
+        .updateCardMetadata(reference.deckPath, reference.cardId, scheduled.updatedCard)
+        .pipe(
+          Effect.catchTags({
+            DeckNotFound: () =>
+              Effect.fail(
+                new ReviewGradeError({
+                  deckPath: reference.deckPath,
+                  cardId: reference.cardId,
+                  message: "The deck no longer exists.",
+                }),
+              ),
+            DeckReadError: (error) =>
+              Effect.fail(
+                new ReviewGradeError({
+                  deckPath: reference.deckPath,
+                  cardId: reference.cardId,
+                  message: `Could not read the deck: ${error.message}`,
+                }),
+              ),
+            DeckParseError: (error) =>
+              Effect.fail(
+                new ReviewGradeError({
+                  deckPath: reference.deckPath,
+                  cardId: reference.cardId,
+                  message: `The deck metadata is invalid: ${error.message}`,
+                }),
+              ),
+            DeckWriteError: (error) =>
+              Effect.fail(
+                new ReviewGradeError({
+                  deckPath: reference.deckPath,
+                  cardId: reference.cardId,
+                  message: `Could not write the review: ${error.message}`,
+                }),
+              ),
+            CardNotFound: () =>
+              Effect.fail(
+                new ReviewGradeError({
+                  deckPath: reference.deckPath,
+                  cardId: reference.cardId,
+                  message: "The card no longer exists in its deck.",
+                }),
+              ),
+          }),
+        );
+    });
+
+    return ReviewStore.of({ startSession, loadCard, gradeCard });
+  }),
+);

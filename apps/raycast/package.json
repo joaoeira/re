@@ -2,7 +2,7 @@
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "re-cards",
   "icon": "icon.png",
-  "description": "Create cards directly in re decks",
+  "description": "Create and review cards directly in re decks",
   "platforms": [
     "macOS"
   ],
@@ -39,6 +39,12 @@
       "name": "create-card",
       "title": "Create Card",
       "description": "Create a Q&A or cloze card in a re deck",
+      "mode": "view"
+    },
+    {
+      "name": "review-cards",
+      "title": "Review Cards",
+      "description": "Review new and due cards across all re decks",
       "mode": "view"
     }
   ],

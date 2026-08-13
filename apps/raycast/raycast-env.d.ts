@@ -20,10 +20,14 @@ declare type Preferences = ExtensionPreferences
 declare namespace Preferences {
   /** Preferences accessible in the `create-card` command */
   export type CreateCard = ExtensionPreferences & {}
+  /** Preferences accessible in the `review-cards` command */
+  export type ReviewCards = ExtensionPreferences & {}
 }
 
 declare namespace Arguments {
   /** Arguments passed to the `create-card` command */
   export type CreateCard = {}
+  /** Arguments passed to the `review-cards` command */
+  export type ReviewCards = {}
 }
 
