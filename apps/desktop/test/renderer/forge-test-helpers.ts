@@ -80,11 +80,18 @@ export const waitForFileInput = async (): Promise<HTMLInputElement> => {
   throw new Error("Timed out waiting for file input to appear.");
 };
 
-export const uploadPdf = async (name = "source.pdf") => {
+export const uploadPdf = async (
+  name = "source.pdf",
+  options: { readonly sizeBytes?: number } = {},
+) => {
   const input = await waitForFileInput();
 
   const transfer = new DataTransfer();
-  transfer.items.add(new File(["%PDF"], name, { type: "application/pdf" }));
+  const file = new File(["%PDF"], name, { type: "application/pdf" });
+  if (typeof options.sizeBytes === "number") {
+    Object.defineProperty(file, "size", { configurable: true, value: options.sizeBytes });
+  }
+  transfer.items.add(file);
   Object.defineProperty(input, "files", { configurable: true, value: transfer.files });
   input.dispatchEvent(new Event("change", { bubbles: true }));
 };

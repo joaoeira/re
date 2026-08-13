@@ -104,6 +104,7 @@ let analyticsRepository: ReviewAnalyticsRepository = createNoopReviewAnalyticsRe
 let deckWriteCoordinator: DeckWriteCoordinator = createDeckWriteCoordinator();
 
 let replayTimer: ReturnType<typeof setInterval> | null = null;
+let startupComplete = false;
 
 const log = (...args: Array<unknown>): void => {
   console.log("[desktop/main]", ...args);
@@ -308,11 +309,16 @@ if (!gotSingleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
+    log("second-instance");
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) {
         mainWindow.restore();
       }
       mainWindow.focus();
+      return;
+    }
+    if (startupComplete) {
+      mainWindow = createMainWindow();
     }
   });
 
@@ -460,6 +466,7 @@ if (!gotSingleInstanceLock) {
           mainWindow = createMainWindow();
         }
       });
+      startupComplete = true;
     })
     .catch((error: unknown) => {
       console.error("[desktop/main] startup failed", error);

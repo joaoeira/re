@@ -696,6 +696,27 @@ describe("ForgePage", () => {
     expect(previewCalls).toEqual(["ForgePreviewChunks"]);
   });
 
+  it("accepts PDFs larger than the former 50 MB cap", async () => {
+    const invoke = createSuccessInvoke();
+    mockDesktopGlobals(invoke);
+
+    const screen = await renderForgePage();
+    await uploadPdf("large-source.pdf", { sizeBytes: 51 * 1024 * 1024 });
+
+    await expect
+      .element(screen.getByText("Estimated 2 chunk(s) across 4 page(s) and 230 character(s)."))
+      .toBeVisible();
+    await expect.element(screen.getByText("Begin Extraction")).toBeVisible();
+    expect(screen.getByText("PDF must be smaller than 50 MB.").query()).toBeNull();
+
+    const previewCall = invoke.mock.calls.find(
+      ([method]: unknown[]) => method === "ForgePreviewChunks",
+    );
+    expect(previewCall?.[1]).toMatchObject({
+      source: { kind: "pdf", sourceFilePath: "/forge/large-source.pdf" },
+    });
+  });
+
   it("clears a previously selected PDF when an invalid file is dropped", async () => {
     const invoke = createSuccessInvoke();
     mockDesktopGlobals(invoke);

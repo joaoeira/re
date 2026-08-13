@@ -3,17 +3,10 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const forgePdfFileSizeLimitMb = 50;
-const forgePdfFileSizeLimitBytes = forgePdfFileSizeLimitMb * 1024 * 1024;
-
 const validateForgePdfFile = (file: File): string | null => {
   const isPdfFile = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
   if (!isPdfFile) {
     return "Only PDF files are supported right now.";
-  }
-
-  if (file.size > forgePdfFileSizeLimitBytes) {
-    return `PDF must be smaller than ${forgePdfFileSizeLimitMb} MB.`;
   }
 
   return null;

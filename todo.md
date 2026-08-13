@@ -11,3 +11,4 @@
 - bug: in expansions, if there isnt instructions, the dialog to add one does not show up
 - need a playground to test out ideas, e.g. having a council of deepseeks review cards
 - handle generation failures better, with reasons (e.g. api key)
+- i think when i added the synthesis topics i stopped getting the chunks of topics as they finish
