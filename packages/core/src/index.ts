@@ -5,10 +5,14 @@ export {
   hasClozeDeletion,
   nextClozeDeletionIndex,
   parseClozeDeletions,
+  parseClozeDeletionsStrict,
   replaceClozeDeletions,
   replaceClozeDeletionsWithContext,
+  ClozeSyntaxReasonSchema,
+  ClozeSyntaxIssue,
+  ClozeSyntaxError,
 } from "./cloze";
-export type { ClozeSyntaxMatch, ClozeReplacerContext } from "./cloze";
+export type { ClozeSyntaxMatch, ClozeReplacerContext, ClozeSyntaxReason } from "./cloze";
 
 export type { Item, ItemMetadata, ParsedFile, NumericField, ItemId } from "./types";
 export { State } from "./types";
@@ -34,6 +38,7 @@ export type {
   UntypedItemType,
   Grade,
   InferredType,
+  ContentParseDiagnostic,
 } from "./item-type";
 export {
   GradeSchema,

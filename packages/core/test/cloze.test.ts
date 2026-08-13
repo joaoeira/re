@@ -1,11 +1,19 @@
+import { Effect } from "effect";
 import { describe, it, assert } from "vitest";
 import {
+  ClozeSyntaxError,
   hasClozeDeletion,
   nextClozeDeletionIndex,
   parseClozeDeletions,
+  parseClozeDeletionsStrict,
   replaceClozeDeletions,
   replaceClozeDeletionsWithContext,
 } from "../src/cloze.ts";
+
+const runStrict = (content: string) => Effect.runSync(parseClozeDeletionsStrict(content));
+
+const runStrictError = (content: string) =>
+  Effect.runSync(parseClozeDeletionsStrict(content).pipe(Effect.flip));
 
 describe("cloze helpers", () => {
   it("detects cloze syntax", () => {
@@ -172,6 +180,131 @@ describe("brace-balanced cloze parsing", () => {
     assert.strictEqual(parsed.length, 1);
     assert.strictEqual(parsed[0]!.hidden, "\\text{a::b}");
     assert.strictEqual(parsed[0]!.hint, null);
+  });
+});
+
+describe("strict cloze parsing", () => {
+  it("preserves valid syntax including hints, nested braces, escapes, and math", () => {
+    const parsed = runStrict(
+      "The {{c1::Paris::capital}} of ${{c2::\\frac{x^{2}}{y}}}$ is {{c3::\\{ok\\}}}.",
+    );
+
+    assert.strictEqual(parsed.length, 3);
+    assert.strictEqual(parsed[0]!.hidden, "Paris");
+    assert.strictEqual(parsed[0]!.hint, "capital");
+    assert.strictEqual(parsed[1]!.hidden, "\\frac{x^{2}}{y}");
+    assert.strictEqual(parsed[2]!.hidden, "\\{ok\\}");
+  });
+
+  it("allows index zero and empty hidden text", () => {
+    const parsed = runStrict("{{c0::}} and {{c1::}}");
+
+    assert.strictEqual(parsed.length, 2);
+    assert.strictEqual(parsed[0]!.index, 0);
+    assert.strictEqual(parsed[0]!.hidden, "");
+    assert.strictEqual(parsed[1]!.hidden, "");
+  });
+
+  it("does not treat arbitrary double-brace text as a cloze error", () => {
+    const parsed = runStrict("See {{capital}} and {{not a cloze}}.");
+    assert.strictEqual(parsed.length, 0);
+  });
+
+  it("reports an unclosed cloze with start, end, and fragment", () => {
+    const content = "start {{c3::unfinished";
+    const error = runStrictError(content);
+
+    assert.ok(error instanceof ClozeSyntaxError);
+    assert.strictEqual(error.issues.length, 1);
+    assert.strictEqual(error.issues[0]!.reason, "unclosed");
+    assert.strictEqual(error.issues[0]!.start, content.indexOf("{{c3::"));
+    assert.strictEqual(error.issues[0]!.end, content.length);
+    assert.strictEqual(error.issues[0]!.fragment, "{{c3::unfinished");
+  });
+
+  it("reports incomplete closers after nested braces as unclosed", () => {
+    const content = "{{c1::x^{2}}";
+    const error = runStrictError(content);
+
+    assert.strictEqual(error.issues[0]!.reason, "unclosed");
+    assert.strictEqual(error.issues[0]!.start, 0);
+    assert.strictEqual(error.issues[0]!.end, content.length);
+  });
+
+  it("reports a stray closing brace as unbalanced_braces", () => {
+    const content = "{{c1::a}b}}";
+    const error = runStrictError(content);
+
+    assert.strictEqual(error.issues[0]!.reason, "unbalanced_braces");
+    assert.strictEqual(error.issues[0]!.start, 0);
+    assert.strictEqual(error.issues[0]!.end, content.indexOf("}") + 1);
+    assert.strictEqual(error.issues[0]!.fragment, "{{c1::a}");
+  });
+
+  it("reports a missing cloze index", () => {
+    const content = "Note {{c::answer}} here";
+    const error = runStrictError(content);
+
+    assert.strictEqual(error.issues[0]!.reason, "missing_index");
+    assert.strictEqual(error.issues[0]!.start, content.indexOf("{{c::"));
+    assert.strictEqual(error.issues[0]!.fragment, "{{c::");
+  });
+
+  it("reports a malformed cloze index", () => {
+    const content = "{{c1a::answer}}";
+    const error = runStrictError(content);
+
+    assert.strictEqual(error.issues[0]!.reason, "malformed_index");
+    assert.strictEqual(error.issues[0]!.start, 0);
+    assert.strictEqual(error.issues[0]!.fragment, "{{c1a::");
+  });
+
+  it("reports a missing :: separator", () => {
+    const content = "{{c1:answer}}";
+    const error = runStrictError(content);
+
+    assert.strictEqual(error.issues[0]!.reason, "missing_separator");
+    assert.strictEqual(error.issues[0]!.start, 0);
+    assert.strictEqual(error.issues[0]!.fragment, "{{c1:");
+  });
+
+  it("reports a missing separator when the index is not followed by a colon", () => {
+    const content = "{{c1}}";
+    const error = runStrictError(content);
+
+    assert.strictEqual(error.issues[0]!.reason, "missing_separator");
+    assert.strictEqual(error.issues[0]!.start, 0);
+    assert.strictEqual(error.issues[0]!.fragment, "{{c1");
+  });
+
+  it("does not ignore a malformed cloze when another valid cloze exists", () => {
+    const content = "The {{c1::Paris}} is {{c2::unfinished";
+    const error = runStrictError(content);
+
+    assert.ok(error instanceof ClozeSyntaxError);
+    assert.strictEqual(error.issues.length, 1);
+    assert.strictEqual(error.issues[0]!.reason, "unclosed");
+    assert.strictEqual(error.issues[0]!.start, content.indexOf("{{c2::"));
+    assert.ok(parseClozeDeletions(content).length === 1);
+  });
+
+  it("reports every malformed cloze in the same content", () => {
+    const content = "{{c::one}} and {{c2:two}}";
+    const error = runStrictError(content);
+
+    assert.strictEqual(error.issues.length, 2);
+    assert.strictEqual(error.issues[0]!.reason, "missing_index");
+    assert.strictEqual(error.issues[0]!.start, 0);
+    assert.strictEqual(error.issues[1]!.reason, "missing_separator");
+    assert.strictEqual(error.issues[1]!.start, content.indexOf("{{c2:"));
+  });
+
+  it("includes a stable reason in the human-readable message without requiring message parsing", () => {
+    const error = runStrictError("{{c1::unfinished");
+
+    assert.strictEqual(error.issues[0]!.reason, "unclosed");
+    assert.ok(error.issues[0]!.message.includes("Unclosed cloze deletion"));
+    assert.ok(error.issues[0]!.message.includes("starting at character 0"));
   });
 });
 
