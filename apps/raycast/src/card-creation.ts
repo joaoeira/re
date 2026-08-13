@@ -79,8 +79,14 @@ const formatContentParseError = (error: ContentParseError): string => {
   return `${error.message}${fragment}`;
 };
 
-export const prepareCard = Effect.fn("Raycast.prepareCard")(function* (input: CreateCardInput) {
-  const deckPath = (yield* requireText(input.deckPath, "deckPath", "Choose a deck.")).trim();
+export const prepareCard = Effect.fn("Raycast.prepareCard")(function* (
+  input: CreateCardInput,
+) {
+  const deckPath = (yield* requireText(
+    input.deckPath,
+    "deckPath",
+    "Choose a deck.",
+  )).trim();
 
   const parsed =
     input.cardType === "qa"
@@ -90,11 +96,16 @@ export const prepareCard = Effect.fn("Raycast.prepareCard")(function* (input: Cr
             "question",
             "Enter a question.",
           )).trim();
-          const answer = (yield* requireText(input.answer, "answer", "Enter an answer.")).trim();
+          const answer = (yield* requireText(
+            input.answer,
+            "answer",
+            "Enter an answer.",
+          )).trim();
           if (question.includes(QA_SEPARATOR)) {
             return yield* new CardFieldError({
               field: "question",
-              message: "A question cannot contain a line consisting only of ---.",
+              message:
+                "A question cannot contain a line consisting only of ---.",
             });
           }
           const content = `${question}${QA_SEPARATOR}${answer}`;
@@ -106,7 +117,11 @@ export const prepareCard = Effect.fn("Raycast.prepareCard")(function* (input: Cr
           };
         })
       : yield* Effect.gen(function* () {
-          const content = yield* requireText(input.content, "content", "Enter cloze content.");
+          const content = yield* requireText(
+            input.content,
+            "content",
+            "Enter cloze content.",
+          );
           const parsedContent = yield* ClozeType.parse(content);
           return {
             content,
@@ -115,7 +130,9 @@ export const prepareCard = Effect.fn("Raycast.prepareCard")(function* (input: Cr
           };
         });
 
-  const cards = Array.from({ length: parsed.cardCount }, () => createMetadata());
+  const cards = Array.from({ length: parsed.cardCount }, () =>
+    createMetadata(),
+  );
 
   return {
     deckPath,
@@ -129,7 +146,9 @@ export const prepareCard = Effect.fn("Raycast.prepareCard")(function* (input: Cr
   } satisfies PreparedCard;
 });
 
-export const createCard = Effect.fn("Raycast.createCard")(function* (input: CreateCardInput) {
+export const createCard = Effect.fn("Raycast.createCard")(function* (
+  input: CreateCardInput,
+) {
   const prepared = yield* prepareCard(input);
   const store = yield* DeckStore;
   yield* store.appendItem(prepared.deckPath, prepared.item, prepared.itemType);
@@ -177,10 +196,15 @@ export const createCardForUi = (
           message: `The selected deck is invalid: ${error.message}`,
         }),
       DeckReadError: (error) =>
-        Effect.succeed(operationError(`Could not read the selected deck: ${error.message}`)),
+        Effect.succeed(
+          operationError(`Could not read the selected deck: ${error.message}`),
+        ),
       DeckWriteError: (error) =>
-        Effect.succeed(operationError(`Could not write the selected deck: ${error.message}`)),
-      ItemValidationError: (error) => Effect.succeed(operationError(error.message)),
+        Effect.succeed(
+          operationError(`Could not write the selected deck: ${error.message}`),
+        ),
+      ItemValidationError: (error) =>
+        Effect.succeed(operationError(error.message)),
     }),
   );
 

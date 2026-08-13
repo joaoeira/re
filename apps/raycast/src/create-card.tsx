@@ -12,7 +12,12 @@ import {
 } from "@raycast/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { createCardForUi, loadDecksForUi, type CardField, type CardType } from "./card-creation";
+import {
+  createCardForUi,
+  loadDecksForUi,
+  type CardField,
+  type CardType,
+} from "./card-creation";
 import { runRaycastEffect } from "./runtime";
 
 type FormErrors = Partial<Record<CardField, string>>;
@@ -70,7 +75,8 @@ export default function CreateCardCommand() {
 
     setDecks(result.decks);
     setSelectedDeckPath((current) => {
-      if (result.decks.some((deck) => deck.absolutePath === current)) return current;
+      if (result.decks.some((deck) => deck.absolutePath === current))
+        return current;
       if (
         lastDeckPath !== undefined &&
         result.decks.some((deck) => deck.absolutePath === lastDeckPath)
@@ -156,7 +162,14 @@ export default function CreateCardCommand() {
       submitInFlight.current = false;
       setIsSubmitting(false);
     }
-  }, [answer, cardType, content, preferences.closeAfterSubmit, question, selectedDeckPath]);
+  }, [
+    answer,
+    cardType,
+    content,
+    preferences.closeAfterSubmit,
+    question,
+    selectedDeckPath,
+  ]);
 
   const deckError = errors.deckPath ?? deckLoadError;
 
@@ -227,7 +240,9 @@ export default function CreateCardCommand() {
             enableMarkdown
             autoFocus
             value={question}
-            {...(errors.question === undefined ? {} : { error: errors.question })}
+            {...(errors.question === undefined
+              ? {}
+              : { error: errors.question })}
             onChange={(value) => {
               setQuestion(value);
               clearError("question");
@@ -263,7 +278,10 @@ export default function CreateCardCommand() {
         />
       )}
 
-      <Form.Description title="Create" text="Press ⌘ ↵ to write the card to the selected deck." />
+      <Form.Description
+        title="Create"
+        text="Press ⌘ ↵ to write the card to the selected deck."
+      />
     </Form>
   );
 }

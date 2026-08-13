@@ -1,8 +1,11 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "re",
-  "version": "0.0.1",
+  "name": "re-cards",
+  "icon": "icon.png",
   "description": "Create cards directly in re decks",
+  "platforms": [
+    "macOS"
+  ],
   "categories": [
     "Productivity"
   ],
@@ -52,9 +55,10 @@
       "title": "Close Raycast After Creating a Card",
       "description": "Close Raycast after a card is created successfully",
       "type": "checkbox",
+      "label": "Close after creating a card",
       "required": false,
       "default": false
     }
   ],
-  "title": "re"
+  "title": "Re Cards"
 }

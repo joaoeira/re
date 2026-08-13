@@ -44,7 +44,8 @@ export const DeckStoreLive: Layer.Layer<
           Effect.provideService(Path.Path, path),
           Effect.map((result) => result.decks),
         ),
-      appendItem: (deckPath, item, itemType) => deckManager.appendItem(deckPath, item, itemType),
+      appendItem: (deckPath, item, itemType) =>
+        deckManager.appendItem(deckPath, item, itemType),
     });
   }),
 );
