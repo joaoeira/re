@@ -20,6 +20,37 @@ export type GradeReviewCardUiResult =
   | { readonly _tag: "ReviewCardGraded" }
   | { readonly _tag: "ReviewGradeError"; readonly message: string };
 
+export type ReviewStatusUiResult =
+  | {
+      readonly _tag: "ReviewStatusLoaded";
+      readonly due: number;
+      readonly new: number;
+      readonly unavailableDecks: number;
+    }
+  | { readonly _tag: "ReviewStatusError"; readonly message: string };
+
+export const getReviewStatusForUi = (
+  workspacePath: string,
+  now = new Date(),
+): Effect.Effect<ReviewStatusUiResult, never, ReviewStore> =>
+  ReviewStore.pipe(
+    Effect.flatMap((reviews) => reviews.startSession(workspacePath, now)),
+    Effect.map(
+      (session): ReviewStatusUiResult => ({
+        _tag: "ReviewStatusLoaded",
+        due: session.totalDue,
+        new: session.totalNew,
+        unavailableDecks: session.issues.length,
+      }),
+    ),
+    Effect.catchTag("ReviewWorkspaceError", (error) =>
+      Effect.succeed<ReviewStatusUiResult>({
+        _tag: "ReviewStatusError",
+        message: error.message,
+      }),
+    ),
+  );
+
 export const startReviewForUi = (
   workspacePath: string,
   now = new Date(),

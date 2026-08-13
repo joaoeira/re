@@ -46,6 +46,13 @@
       "title": "Review Cards",
       "description": "Review new and due cards across all re decks",
       "mode": "view"
+    },
+    {
+      "name": "review-status",
+      "title": "Review Status",
+      "description": "Show the number of cards due now in the menu bar",
+      "mode": "menu-bar",
+      "interval": "15m"
     }
   ],
   "preferences": [

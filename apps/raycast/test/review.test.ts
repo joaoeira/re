@@ -1,7 +1,12 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 
-import { gradeReviewCardForUi, loadReviewCardForUi, startReviewForUi } from "../src/review";
+import {
+  getReviewStatusForUi,
+  gradeReviewCardForUi,
+  loadReviewCardForUi,
+  startReviewForUi,
+} from "../src/review";
 import {
   ReviewCardLoadError,
   ReviewGradeError,
@@ -43,6 +48,39 @@ const makeLayer = (service: Partial<ReviewStoreService>): Layer.Layer<ReviewStor
   });
 
 describe("Raycast review UI boundary", () => {
+  it.effect("reports due, new, and skipped-deck counts for the menu bar", () =>
+    Effect.gen(function* () {
+      const result = yield* getReviewStatusForUi("/decks", new Date("2026-08-13T12:00:00Z"));
+
+      expect(result).toEqual({
+        _tag: "ReviewStatusLoaded",
+        due: 12,
+        new: 47,
+        unavailableDecks: 1,
+      });
+    }).pipe(
+      Effect.provide(
+        makeLayer({
+          startSession: () =>
+            Effect.succeed({
+              rootPath: "/decks",
+              cards: [],
+              totalDue: 12,
+              totalNew: 47,
+              issues: [
+                {
+                  deckPath: "/decks/broken.md",
+                  relativePath: "broken.md",
+                  kind: "parse_error",
+                  message: "Invalid metadata",
+                },
+              ],
+            }),
+        }),
+      ),
+    ),
+  );
+
   it.effect("returns workspace failures as UI state", () =>
     Effect.gen(function* () {
       const result = yield* startReviewForUi("/missing");

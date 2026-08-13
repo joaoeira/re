@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createCardForUi, loadDecksForUi, type CardField, type CardType } from "./card-creation";
 import { insertImageForUi } from "./image-insertion";
+import { refreshReviewStatusMenu } from "./review-status-refresh";
 import { runRaycastEffect } from "./runtime";
 
 type FormErrors = Partial<Record<CardField, string>>;
@@ -149,6 +150,7 @@ export default function CreateCardCommand() {
       setQuestion("");
       setAnswer("");
       setContent("");
+      void refreshReviewStatusMenu();
 
       if (preferences.closeAfterSubmit) {
         await toast.hide();

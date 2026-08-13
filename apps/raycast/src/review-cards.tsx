@@ -20,6 +20,7 @@ import type {
   ReviewDeckIssue,
   ReviewSession,
 } from "./review-store";
+import { refreshReviewStatusMenu } from "./review-status-refresh";
 import { runRaycastEffect } from "./runtime";
 
 interface SessionStats {
@@ -223,6 +224,7 @@ export default function ReviewCardsCommand() {
         }
 
         setStats((current) => incrementStats(current, grade));
+        void refreshReviewStatusMenu();
         advance();
       } finally {
         gradingInFlight.current = false;

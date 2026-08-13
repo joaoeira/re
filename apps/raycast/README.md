@@ -27,6 +27,10 @@ folder. Press `↵` to reveal a card and `↵` again to grade it **Good**. Use `
 or `⌘ 4` to grade it **Again**, **Hard**, **Good**, or **Easy**. Each grade updates the card's
 scheduling metadata in its original deck before the next card is shown.
 
+Run **Review Status** once to add a card-stack icon to the macOS menu bar. Its number shows cards
+due now; new cards and unreadable decks are listed inside the menu. The status refreshes every 15
+minutes and after creating or grading a card.
+
 ## Development
 
 ```bash
