@@ -1,0 +1,60 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "re",
+  "version": "0.0.1",
+  "description": "Create cards directly in re decks",
+  "categories": [
+    "Productivity"
+  ],
+  "license": "MIT",
+  "author": "joaoeira",
+  "scripts": {
+    "build": "ray build",
+    "dev": "ray develop",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@effect/platform": "^0.94.5",
+    "@effect/platform-node": "0.104.0",
+    "@raycast/api": "1.104.24",
+    "@re/core": "workspace:*",
+    "@re/types": "workspace:*",
+    "@re/workspace": "workspace:*",
+    "effect": "3.19.18"
+  },
+  "devDependencies": {
+    "@effect/vitest": "^0.27.0",
+    "@types/node": "22.19.17",
+    "@types/react": "19.0.10",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "commands": [
+    {
+      "name": "create-card",
+      "title": "Create Card",
+      "description": "Create a Q&A or cloze card in a re deck",
+      "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "workspacePath",
+      "title": "Decks Folder",
+      "description": "The folder containing your re Markdown decks",
+      "type": "directory",
+      "required": true
+    },
+    {
+      "name": "closeAfterSubmit",
+      "title": "Close Raycast After Creating a Card",
+      "description": "Close Raycast after a card is created successfully",
+      "type": "checkbox",
+      "required": false,
+      "default": false
+    }
+  ],
+  "title": "re"
+}
