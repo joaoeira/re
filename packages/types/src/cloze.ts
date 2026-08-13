@@ -1,12 +1,16 @@
 import { Effect, Option, Schema } from "effect";
 import {
   type CardSpec,
+  type ContentParseDiagnostic,
   type Grade,
   type ItemType,
   ContentParseError,
-  parseClozeDeletions,
+  parseClozeDeletionsStrict,
   replaceClozeDeletionsWithContext,
   manualCardSpec,
+  type ClozeSyntaxError,
+  type ClozeSyntaxIssue,
+  type ClozeSyntaxMatch,
 } from "@re/core";
 
 export const ClozeDeletion = Schema.Struct({
@@ -28,8 +32,8 @@ export type ClozeContent = typeof ClozeContent.Type;
 
 const CLOZE = "cloze";
 
-const parseDeletions = (text: string): ClozeDeletion[] => {
-  const deletions = parseClozeDeletions(text).map(
+const toSortedDeletions = (matches: readonly ClozeSyntaxMatch[]): ClozeDeletion[] => {
+  const deletions = matches.map(
     (deletion): ClozeDeletion => ({
       index: deletion.index,
       hidden: deletion.hidden,
@@ -40,6 +44,37 @@ const parseDeletions = (text: string): ClozeDeletion[] => {
   );
 
   return deletions.sort((a, b) => a.index - b.index);
+};
+
+const toDiagnostic = (issue: ClozeSyntaxIssue): ContentParseDiagnostic =>
+  issue.end === undefined
+    ? {
+        reason: issue.reason,
+        start: issue.start,
+        fragment: issue.fragment,
+        message: issue.message,
+      }
+    : {
+        reason: issue.reason,
+        start: issue.start,
+        end: issue.end,
+        fragment: issue.fragment,
+        message: issue.message,
+      };
+
+const toContentParseError = (error: ClozeSyntaxError, raw: string): ContentParseError => {
+  const primary = error.issues[0];
+  const diagnostic = toDiagnostic(primary);
+  return new ContentParseError({
+    type: CLOZE,
+    message: diagnostic.message,
+    raw,
+    reason: diagnostic.reason,
+    start: diagnostic.start,
+    ...(diagnostic.end === undefined ? {} : { end: diagnostic.end }),
+    fragment: diagnostic.fragment,
+    issues: error.issues.map(toDiagnostic),
+  });
 };
 
 const escapeTexText = (text: string): string => text.replace(/([\\{}^_%#&~$])/g, "\\$1");
@@ -73,24 +108,28 @@ const generatePrompt = (content: ClozeContent, targetIndex: number): string =>
 export const ClozeType: ItemType<ClozeContent, Grade, never> = {
   name: "cloze",
 
-  parse: (content: string) => {
-    const deletions = parseDeletions(content);
+  parse: (content: string) =>
+    parseClozeDeletionsStrict(content).pipe(
+      Effect.catchTag("ClozeSyntaxError", (error) =>
+        Effect.fail(toContentParseError(error, content)),
+      ),
+      Effect.flatMap((matches) => {
+        if (matches.length === 0) {
+          return Effect.fail(
+            new ContentParseError({
+              type: CLOZE,
+              message: "No cloze deletions found (expected {{c1::...}} syntax)",
+              raw: content,
+            }),
+          );
+        }
 
-    if (deletions.length === 0) {
-      return Effect.fail(
-        new ContentParseError({
-          type: CLOZE,
-          message: "No cloze deletions found (expected {{c1::...}} syntax)",
-          raw: content,
-        }),
-      );
-    }
-
-    return Effect.succeed({
-      text: content,
-      deletions,
-    });
-  },
+        return Effect.succeed({
+          text: content,
+          deletions: toSortedDeletions(matches),
+        });
+      }),
+    ),
 
   cards: (content: ClozeContent): ReadonlyArray<CardSpec<Grade, never>> => {
     const indices: number[] = [];

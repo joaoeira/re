@@ -62,6 +62,108 @@ describe("ClozeType", () => {
         assert.ok(error instanceof ContentParseError);
         assert.strictEqual(error.type, "cloze");
         assert.ok(error.message.includes("No cloze deletions"));
+        assert.strictEqual(error.reason, undefined);
+      }),
+    );
+
+    it.scoped("does not treat arbitrary {{...}} text as a cloze syntax error", () =>
+      Effect.gen(function* () {
+        const content = "See {{capital}} of France.";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.ok(error instanceof ContentParseError);
+        assert.ok(error.message.includes("No cloze deletions"));
+        assert.strictEqual(error.reason, undefined);
+      }),
+    );
+
+    it.scoped("fails on an unclosed cloze with structured diagnostics", () =>
+      Effect.gen(function* () {
+        const content = "start {{c3::unfinished";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.ok(error instanceof ContentParseError);
+        assert.strictEqual(error.reason, "unclosed");
+        assert.strictEqual(error.start, content.indexOf("{{c3::"));
+        assert.strictEqual(error.end, content.length);
+        assert.strictEqual(error.fragment, "{{c3::unfinished");
+        assert.ok(error.message.includes("Unclosed cloze deletion"));
+        assert.strictEqual(error.issues?.[0]?.reason, "unclosed");
+      }),
+    );
+
+    it.scoped("fails on a missing index", () =>
+      Effect.gen(function* () {
+        const content = "{{c::answer}}";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.strictEqual(error.reason, "missing_index");
+        assert.strictEqual(error.start, 0);
+        assert.strictEqual(error.fragment, "{{c::");
+      }),
+    );
+
+    it.scoped("fails on a malformed index", () =>
+      Effect.gen(function* () {
+        const content = "{{c1a::answer}}";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.strictEqual(error.reason, "malformed_index");
+        assert.strictEqual(error.start, 0);
+        assert.strictEqual(error.fragment, "{{c1a::");
+      }),
+    );
+
+    it.scoped("fails on a non-digit cloze index that includes ::", () =>
+      Effect.gen(function* () {
+        for (const content of ["{{c-1::answer}}", "{{cx::answer}}", "{{c_1::answer}}"]) {
+          const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+          assert.strictEqual(error.reason, "malformed_index");
+          assert.strictEqual(error.start, 0);
+          assert.ok(error.fragment?.endsWith("::"));
+        }
+      }),
+    );
+
+    it.scoped("fails on a missing :: separator", () =>
+      Effect.gen(function* () {
+        const content = "{{c1:answer}}";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.strictEqual(error.reason, "missing_separator");
+        assert.strictEqual(error.start, 0);
+        assert.strictEqual(error.fragment, "{{c1:");
+      }),
+    );
+
+    it.scoped("fails on unbalanced braces inside a cloze", () =>
+      Effect.gen(function* () {
+        const content = "{{c1::a}b}}";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.strictEqual(error.reason, "unbalanced_braces");
+        assert.strictEqual(error.start, 0);
+        assert.strictEqual(error.fragment, "{{c1::a}");
+      }),
+    );
+
+    it.scoped("fails when a malformed cloze appears next to a valid cloze", () =>
+      Effect.gen(function* () {
+        const content = "The {{c1::Paris}} is {{c2::unfinished";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.strictEqual(error.reason, "unclosed");
+        assert.strictEqual(error.start, content.indexOf("{{c2::"));
+        assert.ok(error.fragment?.includes("{{c2::unfinished"));
+      }),
+    );
+
+    it.scoped("allows index zero", () =>
+      Effect.gen(function* () {
+        const result = yield* ClozeType.parse("The {{c0::answer}}.");
+
+        assert.strictEqual(result.deletions[0]!.index, 0);
+        assert.strictEqual(result.deletions[0]!.hidden, "answer");
       }),
     );
 

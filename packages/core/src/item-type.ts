@@ -3,10 +3,23 @@ import { Data, Effect, Schema } from "effect";
 export const GradeSchema = Schema.Literal(0, 1, 2, 3);
 export type Grade = typeof GradeSchema.Type;
 
+export interface ContentParseDiagnostic {
+  readonly reason: string;
+  readonly start: number;
+  readonly end?: number;
+  readonly fragment: string;
+  readonly message: string;
+}
+
 export class ContentParseError extends Data.TaggedError("ContentParseError")<{
   readonly type: string;
   readonly message: string;
   readonly raw: string;
+  readonly reason?: string;
+  readonly start?: number;
+  readonly end?: number;
+  readonly fragment?: string;
+  readonly issues?: ReadonlyArray<ContentParseDiagnostic>;
 }> {}
 
 export interface CardSpec<Response, GradeError = never> {

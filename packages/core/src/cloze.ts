@@ -1,3 +1,5 @@
+import { Effect, Schema } from "effect";
+
 export interface ClozeSyntaxMatch {
   readonly raw: string;
   readonly index: number;
@@ -7,10 +9,47 @@ export interface ClozeSyntaxMatch {
   readonly end: number;
 }
 
+export const ClozeSyntaxReasonSchema = Schema.Literal(
+  "unclosed",
+  "unbalanced_braces",
+  "missing_index",
+  "malformed_index",
+  "missing_separator",
+);
+
+export type ClozeSyntaxReason = typeof ClozeSyntaxReasonSchema.Type;
+
+export const ClozeSyntaxIssue = Schema.Struct({
+  reason: ClozeSyntaxReasonSchema,
+  start: Schema.Number,
+  end: Schema.Number,
+  fragment: Schema.String,
+  message: Schema.String,
+});
+
+export type ClozeSyntaxIssue = typeof ClozeSyntaxIssue.Type;
+
+export class ClozeSyntaxError extends Schema.TaggedError<ClozeSyntaxError>(
+  "@re/core/ClozeSyntaxError",
+)("ClozeSyntaxError", {
+  issues: Schema.NonEmptyArray(ClozeSyntaxIssue),
+}) {}
+
 const CLOZE_DETECTION_PATTERN = /\{\{c\d+::/;
 const CLOZE_OPENER = /\{\{c(\d+)::/g;
 
-const scanBalancedBody = (content: string, bodyStart: number): number | null => {
+const isDigit = (char: string | undefined): boolean =>
+  char !== undefined && char >= "0" && char <= "9";
+
+const isIndexTokenChar = (char: string | undefined): boolean =>
+  char !== undefined && char !== ":" && char !== "{" && char !== "}" && !/\s/.test(char);
+
+type BalancedBodyResult =
+  | { readonly kind: "ok"; readonly bodyEnd: number }
+  | { readonly kind: "unclosed" }
+  | { readonly kind: "unbalanced_braces"; readonly at: number };
+
+const scanBalancedBody = (content: string, bodyStart: number): BalancedBodyResult => {
   let depth = 0;
   let i = bodyStart;
 
@@ -24,16 +63,140 @@ const scanBalancedBody = (content: string, bodyStart: number): number | null => 
     } else if (content[i] === "}") {
       if (depth === 0) {
         if (i + 1 < content.length && content[i + 1] === "}") {
-          return i;
+          return { kind: "ok", bodyEnd: i };
         }
-        return null;
+        if (i + 1 >= content.length) {
+          return { kind: "unclosed" };
+        }
+        return { kind: "unbalanced_braces", at: i };
       }
       depth -= 1;
     }
     i += 1;
   }
 
-  return null;
+  return { kind: "unclosed" };
+};
+
+const clozeIssueMessage = (reason: ClozeSyntaxReason, start: number): string => {
+  const at = `starting at character ${start}`;
+  switch (reason) {
+    case "unclosed":
+      return `Unclosed cloze deletion ${at}`;
+    case "unbalanced_braces":
+      return `Cloze deletion has an unbalanced '}' ${at}`;
+    case "missing_index":
+      return `Cloze deletion is missing an index ${at}`;
+    case "malformed_index":
+      return `Cloze deletion has a malformed index ${at}`;
+    case "missing_separator":
+      return `Cloze deletion is missing '::' after the index ${at}`;
+  }
+};
+
+const clozeIssue = (
+  content: string,
+  reason: ClozeSyntaxReason,
+  start: number,
+  end: number,
+): ClozeSyntaxIssue => ({
+  reason,
+  start,
+  end,
+  fragment: content.slice(start, end),
+  message: clozeIssueMessage(reason, start),
+});
+
+const scanClozeSyntax = (
+  content: string,
+): { readonly matches: ClozeSyntaxMatch[]; readonly issues: ClozeSyntaxIssue[] } => {
+  const matches: ClozeSyntaxMatch[] = [];
+  const issues: ClozeSyntaxIssue[] = [];
+  let searchFrom = 0;
+
+  while (searchFrom < content.length) {
+    const start = content.indexOf("{{c", searchFrom);
+    if (start === -1) {
+      break;
+    }
+
+    let pos = start + 3;
+    if (pos >= content.length) {
+      break;
+    }
+
+    if (content[pos] === ":") {
+      const end = content[pos + 1] === ":" ? pos + 2 : pos + 1;
+      issues.push(clozeIssue(content, "missing_index", start, end));
+      searchFrom = end;
+      continue;
+    }
+
+    const tokenStart = pos;
+    while (isIndexTokenChar(content[pos])) {
+      pos += 1;
+    }
+    const token = content.slice(tokenStart, pos);
+    const hadDigits = isDigit(token[0]);
+    const isPureDigits = /^\d+$/.test(token);
+
+    if (content[pos] === ":" && content[pos + 1] === ":") {
+      if (isPureDigits) {
+        const index = Number.parseInt(token, 10);
+        const bodyStart = pos + 2;
+        if (!Number.isFinite(index)) {
+          searchFrom = bodyStart;
+          continue;
+        }
+
+        const body = scanBalancedBody(content, bodyStart);
+        if (body.kind === "ok") {
+          const rawBody = content.slice(bodyStart, body.bodyEnd);
+          const { hidden, hint } = splitClozeContent(rawBody);
+          const end = body.bodyEnd + 2;
+          matches.push({
+            raw: content.slice(start, end),
+            index,
+            hidden,
+            hint,
+            start,
+            end,
+          });
+          searchFrom = end;
+          continue;
+        }
+
+        if (body.kind === "unclosed") {
+          issues.push(clozeIssue(content, "unclosed", start, content.length));
+        } else {
+          issues.push(clozeIssue(content, "unbalanced_braces", start, body.at + 1));
+        }
+        searchFrom = bodyStart;
+        continue;
+      }
+
+      if (token.length > 0) {
+        issues.push(clozeIssue(content, "malformed_index", start, pos + 2));
+        searchFrom = pos + 2;
+        continue;
+      }
+    }
+
+    if (hadDigits) {
+      if (content[pos] === ":") {
+        issues.push(clozeIssue(content, "missing_separator", start, pos + 1));
+        searchFrom = pos + 1;
+        continue;
+      }
+      issues.push(clozeIssue(content, "missing_separator", start, pos));
+      searchFrom = Math.max(pos, start + 3);
+      continue;
+    }
+
+    searchFrom = tokenStart;
+  }
+
+  return { matches, issues };
 };
 
 const splitClozeContent = (rawContent: string): { hidden: string; hint: string | null } => {
@@ -66,40 +229,18 @@ const splitClozeContent = (rawContent: string): { hidden: string; hint: string |
 
 export const hasClozeDeletion = (content: string): boolean => CLOZE_DETECTION_PATTERN.test(content);
 
-export const parseClozeDeletions = (content: string): readonly ClozeSyntaxMatch[] => {
-  const matches: ClozeSyntaxMatch[] = [];
-  const opener = new RegExp(CLOZE_OPENER.source, "g");
-  let match: RegExpExecArray | null = null;
+export const parseClozeDeletions = (content: string): readonly ClozeSyntaxMatch[] =>
+  scanClozeSyntax(content).matches;
 
-  while ((match = opener.exec(content)) !== null) {
-    const index = Number.parseInt(match[1]!, 10);
-    if (!Number.isFinite(index)) {
-      continue;
-    }
-
-    const bodyStart = match.index + match[0].length;
-    const bodyEnd = scanBalancedBody(content, bodyStart);
-    if (bodyEnd === null) {
-      continue;
-    }
-
-    const rawBody = content.slice(bodyStart, bodyEnd);
-    const { hidden, hint } = splitClozeContent(rawBody);
-    const end = bodyEnd + 2;
-
-    matches.push({
-      raw: content.slice(match.index, end),
-      index,
-      hidden,
-      hint,
-      start: match.index,
-      end,
-    });
-
-    opener.lastIndex = end;
+export const parseClozeDeletionsStrict = (
+  content: string,
+): Effect.Effect<readonly ClozeSyntaxMatch[], ClozeSyntaxError> => {
+  const { matches, issues } = scanClozeSyntax(content);
+  const [first, ...rest] = issues;
+  if (first === undefined) {
+    return Effect.succeed(matches);
   }
-
-  return matches;
+  return new ClozeSyntaxError({ issues: [first, ...rest] });
 };
 
 export const nextClozeDeletionIndex = (content: string): number => {
