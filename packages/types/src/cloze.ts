@@ -1,6 +1,7 @@
 import { Effect, Option, Schema } from "effect";
 import {
   type CardSpec,
+  type ContentParseDiagnostic,
   type Grade,
   type ItemType,
   ContentParseError,
@@ -8,6 +9,7 @@ import {
   replaceClozeDeletionsWithContext,
   manualCardSpec,
   type ClozeSyntaxError,
+  type ClozeSyntaxIssue,
   type ClozeSyntaxMatch,
 } from "@re/core";
 
@@ -44,17 +46,34 @@ const toSortedDeletions = (matches: readonly ClozeSyntaxMatch[]): ClozeDeletion[
   return deletions.sort((a, b) => a.index - b.index);
 };
 
+const toDiagnostic = (issue: ClozeSyntaxIssue): ContentParseDiagnostic =>
+  issue.end === undefined
+    ? {
+        reason: issue.reason,
+        start: issue.start,
+        fragment: issue.fragment,
+        message: issue.message,
+      }
+    : {
+        reason: issue.reason,
+        start: issue.start,
+        end: issue.end,
+        fragment: issue.fragment,
+        message: issue.message,
+      };
+
 const toContentParseError = (error: ClozeSyntaxError, raw: string): ContentParseError => {
   const primary = error.issues[0];
+  const diagnostic = toDiagnostic(primary);
   return new ContentParseError({
     type: CLOZE,
-    message: primary.message,
+    message: diagnostic.message,
     raw,
-    reason: primary.reason,
-    start: primary.start,
-    end: primary.end,
-    fragment: primary.fragment,
-    issues: error.issues,
+    reason: diagnostic.reason,
+    start: diagnostic.start,
+    ...(diagnostic.end === undefined ? {} : { end: diagnostic.end }),
+    fragment: diagnostic.fragment,
+    issues: error.issues.map(toDiagnostic),
   });
 };
 

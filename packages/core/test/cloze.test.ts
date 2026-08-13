@@ -206,7 +206,7 @@ describe("strict cloze parsing", () => {
   });
 
   it("does not treat arbitrary double-brace text as a cloze error", () => {
-    const parsed = runStrict("See {{capital}} and {{not a cloze}}.");
+    const parsed = runStrict("See {{capital}} and {{cx}} and {{not a cloze}}.");
     assert.strictEqual(parsed.length, 0);
   });
 
@@ -257,6 +257,19 @@ describe("strict cloze parsing", () => {
     assert.strictEqual(error.issues[0]!.reason, "malformed_index");
     assert.strictEqual(error.issues[0]!.start, 0);
     assert.strictEqual(error.issues[0]!.fragment, "{{c1a::");
+  });
+
+  it("reports a non-digit index that still uses the cloze delimiter", () => {
+    for (const [content, fragment] of [
+      ["{{c-1::answer}}", "{{c-1::"],
+      ["{{cx::answer}}", "{{cx::"],
+      ["{{c_1::answer}}", "{{c_1::"],
+    ] as const) {
+      const error = runStrictError(content);
+      assert.strictEqual(error.issues[0]!.reason, "malformed_index");
+      assert.strictEqual(error.issues[0]!.start, 0);
+      assert.strictEqual(error.issues[0]!.fragment, fragment);
+    }
   });
 
   it("reports a missing :: separator", () => {

@@ -114,6 +114,17 @@ describe("ClozeType", () => {
       }),
     );
 
+    it.scoped("fails on a non-digit cloze index that includes ::", () =>
+      Effect.gen(function* () {
+        for (const content of ["{{c-1::answer}}", "{{cx::answer}}", "{{c_1::answer}}"]) {
+          const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+          assert.strictEqual(error.reason, "malformed_index");
+          assert.strictEqual(error.start, 0);
+          assert.ok(error.fragment?.endsWith("::"));
+        }
+      }),
+    );
+
     it.scoped("fails on a missing :: separator", () =>
       Effect.gen(function* () {
         const content = "{{c1:answer}}";

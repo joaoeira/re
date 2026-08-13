@@ -22,7 +22,7 @@ export type ClozeSyntaxReason = typeof ClozeSyntaxReasonSchema.Type;
 export const ClozeSyntaxIssue = Schema.Struct({
   reason: ClozeSyntaxReasonSchema,
   start: Schema.Number,
-  end: Schema.optional(Schema.Number),
+  end: Schema.Number,
   fragment: Schema.String,
   message: Schema.String,
 });
@@ -41,8 +41,8 @@ const CLOZE_OPENER = /\{\{c(\d+)::/g;
 const isDigit = (char: string | undefined): boolean =>
   char !== undefined && char >= "0" && char <= "9";
 
-const isIndexJunk = (char: string | undefined): boolean =>
-  char !== undefined && /[A-Za-z0-9_]/.test(char);
+const isIndexTokenChar = (char: string | undefined): boolean =>
+  char !== undefined && char !== ":" && char !== "{" && char !== "}" && !/\s/.test(char);
 
 type BalancedBodyResult =
   | { readonly kind: "ok"; readonly bodyEnd: number }
@@ -132,68 +132,68 @@ const scanClozeSyntax = (
       continue;
     }
 
-    if (!isDigit(content[pos])) {
-      searchFrom = pos;
-      continue;
-    }
-
-    const digitsStart = pos;
-    while (isDigit(content[pos])) {
+    const tokenStart = pos;
+    while (isIndexTokenChar(content[pos])) {
       pos += 1;
     }
-    const index = Number.parseInt(content.slice(digitsStart, pos), 10);
+    const token = content.slice(tokenStart, pos);
+    const hadDigits = isDigit(token[0]);
+    const isPureDigits = /^\d+$/.test(token);
 
     if (content[pos] === ":" && content[pos + 1] === ":") {
-      const bodyStart = pos + 2;
-      if (!Number.isFinite(index)) {
+      if (isPureDigits) {
+        const index = Number.parseInt(token, 10);
+        const bodyStart = pos + 2;
+        if (!Number.isFinite(index)) {
+          searchFrom = bodyStart;
+          continue;
+        }
+
+        const body = scanBalancedBody(content, bodyStart);
+        if (body.kind === "ok") {
+          const rawBody = content.slice(bodyStart, body.bodyEnd);
+          const { hidden, hint } = splitClozeContent(rawBody);
+          const end = body.bodyEnd + 2;
+          matches.push({
+            raw: content.slice(start, end),
+            index,
+            hidden,
+            hint,
+            start,
+            end,
+          });
+          searchFrom = end;
+          continue;
+        }
+
+        if (body.kind === "unclosed") {
+          issues.push(clozeIssue(content, "unclosed", start, content.length));
+        } else {
+          issues.push(clozeIssue(content, "unbalanced_braces", start, body.at + 1));
+        }
         searchFrom = bodyStart;
         continue;
       }
 
-      const body = scanBalancedBody(content, bodyStart);
-      if (body.kind === "ok") {
-        const rawBody = content.slice(bodyStart, body.bodyEnd);
-        const { hidden, hint } = splitClozeContent(rawBody);
-        const end = body.bodyEnd + 2;
-        matches.push({
-          raw: content.slice(start, end),
-          index,
-          hidden,
-          hint,
-          start,
-          end,
-        });
-        searchFrom = end;
+      if (token.length > 0) {
+        issues.push(clozeIssue(content, "malformed_index", start, pos + 2));
+        searchFrom = pos + 2;
         continue;
       }
+    }
 
-      if (body.kind === "unclosed") {
-        issues.push(clozeIssue(content, "unclosed", start, content.length));
-      } else {
-        issues.push(clozeIssue(content, "unbalanced_braces", start, body.at + 1));
+    if (hadDigits) {
+      if (content[pos] === ":") {
+        issues.push(clozeIssue(content, "missing_separator", start, pos + 1));
+        searchFrom = pos + 1;
+        continue;
       }
-      searchFrom = bodyStart;
+      issues.push(clozeIssue(content, "missing_separator", start, pos));
+      searchFrom = Math.max(pos, start + 3);
       continue;
     }
 
-    if (content[pos] === ":") {
-      issues.push(clozeIssue(content, "missing_separator", start, pos + 1));
-      searchFrom = pos + 1;
-      continue;
-    }
-
-    let junk = pos;
-    while (isIndexJunk(content[junk])) {
-      junk += 1;
-    }
-    if (content[junk] === ":" && content[junk + 1] === ":") {
-      issues.push(clozeIssue(content, "malformed_index", start, junk + 2));
-      searchFrom = junk + 2;
-      continue;
-    }
-
-    issues.push(clozeIssue(content, "missing_separator", start, junk > pos ? junk : pos));
-    searchFrom = Math.max(pos, start + 3);
+    searchFrom = tokenStart;
   }
 
   return { matches, issues };
