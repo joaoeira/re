@@ -18,6 +18,10 @@ Submit a card with `⌘ ↵`. By default the form remains open and clears the ca
 successful write. Enable **Close Raycast After Creating a Card** in the extension preferences if
 you want a successful submission to close Raycast instead.
 
+Press `⌘ ⇧ V` to insert a copied image into the last-focused card field. The extension accepts
+PNG, JPEG, WebP, and GIF images up to 10 MiB, stores them in the workspace's `.re/assets`
+directory, and adds the corresponding Markdown to the card.
+
 Open **Review Cards** to build one shuffled queue from all new and due cards in the configured
 folder. Press `↵` to reveal a card and `↵` again to grade it **Good**. Use `⌘ 1`, `⌘ 2`, `⌘ 3`,
 or `⌘ 4` to grade it **Again**, **Hard**, **Good**, or **Easy**. Each grade updates the card's

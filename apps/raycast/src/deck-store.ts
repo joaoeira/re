@@ -2,8 +2,12 @@ import { FileSystem, Path } from "@effect/platform";
 import type { ItemMetadata, UntypedItemType } from "@re/core";
 import {
   DeckManager,
+  importDeckImageAssetFromBytes,
   scanDecks,
   type DeckEntry,
+  type ImportedDeckImageAsset,
+  type ImportDeckImageAssetOperationError,
+  type InvalidWorkspaceImageAsset,
   type ItemValidationError,
   type ScanDecksError,
   type WriteError,
@@ -22,6 +26,15 @@ export interface DeckStore {
     },
     itemType: UntypedItemType,
   ) => Effect.Effect<void, WriteError | ItemValidationError>;
+  readonly importImageFromBytes: (
+    workspacePath: string,
+    deckPath: string,
+    bytes: Uint8Array,
+    extension: string,
+  ) => Effect.Effect<
+    ImportedDeckImageAsset,
+    InvalidWorkspaceImageAsset | ImportDeckImageAssetOperationError
+  >;
 }
 
 export const DeckStore = Context.GenericTag<DeckStore>("@re/raycast/DeckStore");
@@ -44,8 +57,17 @@ export const DeckStoreLive: Layer.Layer<
           Effect.provideService(Path.Path, path),
           Effect.map((result) => result.decks),
         ),
-      appendItem: (deckPath, item, itemType) =>
-        deckManager.appendItem(deckPath, item, itemType),
+      appendItem: (deckPath, item, itemType) => deckManager.appendItem(deckPath, item, itemType),
+      importImageFromBytes: (workspacePath, deckPath, bytes, extension) =>
+        importDeckImageAssetFromBytes({
+          rootPath: workspacePath,
+          deckPath,
+          bytes,
+          extension,
+        }).pipe(
+          Effect.provideService(FileSystem.FileSystem, fileSystem),
+          Effect.provideService(Path.Path, path),
+        ),
     });
   }),
 );

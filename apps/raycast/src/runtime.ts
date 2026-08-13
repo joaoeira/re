@@ -8,6 +8,8 @@ import {
 } from "@re/workspace";
 import { Effect, Layer, ManagedRuntime } from "effect";
 
+import { ClipboardImageReader } from "./clipboard-image";
+import { ClipboardImageReaderLive } from "./clipboard-image-live";
 import { DeckStore, DeckStoreLive } from "./deck-store";
 import { ReviewStore, ReviewStoreLive } from "./review-store";
 
@@ -29,10 +31,14 @@ const ReviewStoreConfiguredLive = ReviewStoreLive.pipe(
     ),
   ),
 );
-const AppLive = Layer.merge(DeckStoreConfiguredLive, ReviewStoreConfiguredLive);
+const AppLive = Layer.mergeAll(
+  ClipboardImageReaderLive,
+  DeckStoreConfiguredLive,
+  ReviewStoreConfiguredLive,
+);
 
 const runtime = ManagedRuntime.make(AppLive);
 
 export const runRaycastEffect = <A>(
-  effect: Effect.Effect<A, never, DeckStore | ReviewStore>,
+  effect: Effect.Effect<A, never, ClipboardImageReader | DeckStore | ReviewStore>,
 ): Promise<A> => runtime.runPromise(effect);

@@ -12,15 +12,12 @@ import {
 } from "@raycast/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  createCardForUi,
-  loadDecksForUi,
-  type CardField,
-  type CardType,
-} from "./card-creation";
+import { createCardForUi, loadDecksForUi, type CardField, type CardType } from "./card-creation";
+import { insertImageForUi } from "./image-insertion";
 import { runRaycastEffect } from "./runtime";
 
 type FormErrors = Partial<Record<CardField, string>>;
+type ImageTargetField = Exclude<CardField, "deckPath">;
 
 const LAST_DECK_KEY = "last-selected-deck";
 
@@ -45,7 +42,13 @@ export default function CreateCardCommand() {
   const [deckLoadError, setDeckLoadError] = useState<string>();
   const [isLoadingDecks, setIsLoadingDecks] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isInsertingImage, setIsInsertingImage] = useState(false);
   const submitInFlight = useRef(false);
+  const imageInsertInFlight = useRef(false);
+  const imageTarget = useRef<ImageTargetField>("question");
+  const questionRef = useRef<Form.TextArea>(null);
+  const answerRef = useRef<Form.TextArea>(null);
+  const contentRef = useRef<Form.TextArea>(null);
 
   const clearError = useCallback((field: CardField) => {
     setErrors((current) => {
@@ -75,8 +78,7 @@ export default function CreateCardCommand() {
 
     setDecks(result.decks);
     setSelectedDeckPath((current) => {
-      if (result.decks.some((deck) => deck.absolutePath === current))
-        return current;
+      if (result.decks.some((deck) => deck.absolutePath === current)) return current;
       if (
         lastDeckPath !== undefined &&
         result.decks.some((deck) => deck.absolutePath === lastDeckPath)
@@ -162,11 +164,70 @@ export default function CreateCardCommand() {
       submitInFlight.current = false;
       setIsSubmitting(false);
     }
+  }, [answer, cardType, content, preferences.closeAfterSubmit, question, selectedDeckPath]);
+
+  const insertImage = useCallback(async () => {
+    if (imageInsertInFlight.current) return;
+
+    imageInsertInFlight.current = true;
+    setIsInsertingImage(true);
+    const target = cardType === "cloze" ? "content" : imageTarget.current;
+    const currentContent =
+      target === "question" ? question : target === "answer" ? answer : content;
+
+    try {
+      const toast = await showToast({
+        style: Toast.Style.Animated,
+        title: "Reading image…",
+      });
+      const result = await runRaycastEffect(
+        insertImageForUi({
+          workspacePath: preferences.workspacePath,
+          deckPath: selectedDeckPath,
+          content: currentContent,
+        }),
+      );
+
+      if (result._tag === "DeckPathError") {
+        setErrors((current) => ({ ...current, deckPath: result.message }));
+        toast.style = Toast.Style.Failure;
+        toast.title = "Choose a deck";
+        toast.message = result.message;
+        return;
+      }
+
+      if (result._tag === "OperationError") {
+        toast.style = Toast.Style.Failure;
+        toast.title = "Could not insert image";
+        toast.message = result.message;
+        return;
+      }
+
+      if (target === "question") {
+        setQuestion(result.content);
+        questionRef.current?.focus();
+      } else if (target === "answer") {
+        setAnswer(result.content);
+        answerRef.current?.focus();
+      } else {
+        setContent(result.content);
+        contentRef.current?.focus();
+      }
+      clearError(target);
+
+      toast.style = Toast.Style.Success;
+      toast.title = "Image inserted";
+      toast.message = "Markdown was added to the card.";
+    } finally {
+      imageInsertInFlight.current = false;
+      setIsInsertingImage(false);
+    }
   }, [
     answer,
     cardType,
+    clearError,
     content,
-    preferences.closeAfterSubmit,
+    preferences.workspacePath,
     question,
     selectedDeckPath,
   ]);
@@ -175,7 +236,7 @@ export default function CreateCardCommand() {
 
   return (
     <Form
-      isLoading={isLoadingDecks || isSubmitting}
+      isLoading={isLoadingDecks || isSubmitting || isInsertingImage}
       actions={
         <ActionPanel>
           <Action.SubmitForm
@@ -183,6 +244,12 @@ export default function CreateCardCommand() {
             icon={Icon.Plus}
             shortcut={{ modifiers: ["cmd"], key: "enter" }}
             onSubmit={submit}
+          />
+          <Action
+            title="Insert Image from Clipboard"
+            icon={Icon.Image}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "v" }}
+            onAction={insertImage}
           />
           <Action
             title="Refresh Decks"
@@ -221,7 +288,9 @@ export default function CreateCardCommand() {
         title="Card Type"
         value={cardType}
         onChange={(value) => {
-          setCardType(value as CardType);
+          const nextCardType = value as CardType;
+          setCardType(nextCardType);
+          imageTarget.current = nextCardType === "qa" ? "question" : "content";
           setErrors({});
         }}
       >
@@ -234,26 +303,32 @@ export default function CreateCardCommand() {
       {cardType === "qa" ? (
         <>
           <Form.TextArea
+            ref={questionRef}
             id="question"
             title="Question"
             placeholder="What do you want to remember?"
             enableMarkdown
             autoFocus
             value={question}
-            {...(errors.question === undefined
-              ? {}
-              : { error: errors.question })}
+            onFocus={() => {
+              imageTarget.current = "question";
+            }}
+            {...(errors.question === undefined ? {} : { error: errors.question })}
             onChange={(value) => {
               setQuestion(value);
               clearError("question");
             }}
           />
           <Form.TextArea
+            ref={answerRef}
             id="answer"
             title="Answer"
             placeholder="The answer"
             enableMarkdown
             value={answer}
+            onFocus={() => {
+              imageTarget.current = "answer";
+            }}
             {...(errors.answer === undefined ? {} : { error: errors.answer })}
             onChange={(value) => {
               setAnswer(value);
@@ -263,6 +338,7 @@ export default function CreateCardCommand() {
         </>
       ) : (
         <Form.TextArea
+          ref={contentRef}
           id="content"
           title="Content"
           placeholder="The {{c1::capital}} of Portugal is Lisbon."
@@ -270,6 +346,9 @@ export default function CreateCardCommand() {
           enableMarkdown
           autoFocus
           value={content}
+          onFocus={() => {
+            imageTarget.current = "content";
+          }}
           {...(errors.content === undefined ? {} : { error: errors.content })}
           onChange={(value) => {
             setContent(value);
@@ -279,8 +358,8 @@ export default function CreateCardCommand() {
       )}
 
       <Form.Description
-        title="Create"
-        text="Press ⌘ ↵ to write the card to the selected deck."
+        title="Shortcuts"
+        text="⌘ ↵ creates the card. ⌘ ⇧ V inserts a copied image."
       />
     </Form>
   );
