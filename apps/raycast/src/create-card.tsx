@@ -161,6 +161,13 @@ export default function CreateCardCommand() {
       toast.style = Toast.Style.Success;
       toast.title = message;
       toast.message = undefined;
+      setTimeout(() => {
+        if (cardType === "qa") {
+          questionRef.current?.focus();
+        } else {
+          contentRef.current?.focus();
+        }
+      }, 0);
       return true;
     } finally {
       submitInFlight.current = false;
