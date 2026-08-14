@@ -39,6 +39,8 @@ const EMPTY_STATS: SessionStats = {
   easy: 0,
 };
 
+const REVIEW_ADVANCE_SHORTCUT: Keyboard.Shortcut = { modifiers: [], key: "space" };
+
 const incrementStats = (stats: SessionStats, grade: FSRSGrade): SessionStats => {
   switch (grade) {
     case 0:
@@ -76,7 +78,9 @@ const reviewNavigationTitle = (
 ): string => {
   const deck = reference.relativePath.replace(/\.md$/, "");
   const context = `${deck} · ${currentIndex + 1}/${totalCards}`;
-  return isRevealed ? `${context} · ⌘1 Again · ⌘2 Hard · ↵ Good · ⌘4 Easy` : context;
+  return isRevealed
+    ? `${context} · ⌘1 Again · ⌘2 Hard · Space Good · ⌘4 Easy`
+    : `${context} · Space Reveal`;
 };
 
 const renderComplete = (stats: SessionStats, issues: readonly ReviewDeckIssue[]): string => {
@@ -362,7 +366,7 @@ export default function ReviewCardsCommand() {
               <Action
                 title="Good"
                 icon="3️⃣"
-                shortcut={{ modifiers: ["cmd"], key: "3" }}
+                shortcut={REVIEW_ADVANCE_SHORTCUT}
                 onAction={() => void gradeCard(2)}
               />
               <Action
@@ -385,7 +389,12 @@ export default function ReviewCardsCommand() {
               />
             </>
           ) : (
-            <Action title="Reveal Answer" icon={Icon.Eye} onAction={() => setIsRevealed(true)} />
+            <Action
+              title="Reveal Answer"
+              icon={Icon.Eye}
+              shortcut={REVIEW_ADVANCE_SHORTCUT}
+              onAction={() => setIsRevealed(true)}
+            />
           )}
           <Action.Open
             title="Open Deck"
