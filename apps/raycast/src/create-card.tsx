@@ -104,7 +104,6 @@ export default function CreateCardCommand() {
     (deckPath: string) => {
       setSelectedDeckPath(deckPath);
       clearError("deckPath");
-      void LocalStorage.setItem(LAST_DECK_KEY, deckPath);
     },
     [clearError],
   );
@@ -147,6 +146,7 @@ export default function CreateCardCommand() {
       }
 
       const message = successMessage(result.cardCount);
+      await LocalStorage.setItem(LAST_DECK_KEY, selectedDeckPath);
       setQuestion("");
       setAnswer("");
       setContent("");
