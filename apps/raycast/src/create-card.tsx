@@ -274,23 +274,25 @@ export default function CreateCardCommand() {
         </ActionPanel>
       }
     >
-      <Form.Dropdown
-        id="deckPath"
-        title="Deck"
-        placeholder="Choose a deck"
-        value={selectedDeckPath}
-        {...(deckError === undefined ? {} : { error: deckError })}
-        onChange={selectDeck}
-      >
-        {decks.map((deck) => (
-          <Form.Dropdown.Item
-            key={deck.absolutePath}
-            value={deck.absolutePath}
-            title={deck.name}
-            keywords={[deck.relativePath]}
-          />
-        ))}
-      </Form.Dropdown>
+      {isLoadingDecks ? null : (
+        <Form.Dropdown
+          id="deckPath"
+          title="Deck"
+          placeholder="Choose a deck"
+          value={selectedDeckPath}
+          {...(deckError === undefined ? {} : { error: deckError })}
+          onChange={selectDeck}
+        >
+          {decks.map((deck) => (
+            <Form.Dropdown.Item
+              key={deck.absolutePath}
+              value={deck.absolutePath}
+              title={deck.name}
+              keywords={[deck.relativePath]}
+            />
+          ))}
+        </Form.Dropdown>
+      )}
 
       <Form.Dropdown
         id="cardType"
