@@ -257,7 +257,7 @@ export default function CreateCardCommand() {
           <Action
             title="Insert Image from Clipboard"
             icon={Icon.Image}
-            shortcut={{ modifiers: ["cmd", "shift"], key: "v" }}
+            shortcut={{ modifiers: ["cmd"], key: "i" }}
             onAction={insertImage}
           />
           <Action
@@ -370,7 +370,7 @@ export default function CreateCardCommand() {
 
       <Form.Description
         title="Shortcuts"
-        text="⌘ ↵ creates the card. ⌘ ⇧ V inserts a copied image."
+        text="⌘ ↵ creates the card. ⌘ I inserts a copied image."
       />
     </Form>
   );
