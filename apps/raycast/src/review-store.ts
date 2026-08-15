@@ -5,12 +5,13 @@ import {
   DeckManager,
   ReviewQueueBuilder,
   Scheduler,
-  resolveDeckImagePath,
   snapshotWorkspace,
   toScanDecksErrorMessage,
   type FSRSGrade,
 } from "@re/workspace";
 import { Context, Data, Effect, Layer } from "effect";
+
+import { prepareMarkdownForRaycast } from "./raycast-markdown";
 
 export interface ReviewCardReference {
   readonly deckPath: string;
@@ -88,47 +89,6 @@ export interface ReviewStore {
 export const ReviewStore = Context.GenericTag<ReviewStore>("@re/raycast/ReviewStore");
 
 const itemTypes = [QAType, ClozeType] as const;
-const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
-const URI_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:/;
-
-export const rewriteDeckImageUrlsForRaycast = (options: {
-  readonly rootPath: string;
-  readonly deckPath: string;
-  readonly markdown: string;
-}): Effect.Effect<string, never, Path.Path> =>
-  Effect.gen(function* () {
-    let cursor = 0;
-    let output = "";
-
-    for (const match of options.markdown.matchAll(MARKDOWN_IMAGE_PATTERN)) {
-      const index = match.index ?? 0;
-      const fullMatch = match[0] ?? "";
-      const altText = match[1] ?? "";
-      const rawUrl = (match[2] ?? "").trim();
-
-      output += options.markdown.slice(cursor, index);
-
-      if (URI_SCHEME_PATTERN.test(rawUrl) || rawUrl.startsWith("//")) {
-        output += fullMatch;
-      } else {
-        const resolved = yield* resolveDeckImagePath({
-          rootPath: options.rootPath,
-          deckPath: options.deckPath,
-          imagePath: rawUrl,
-        }).pipe(Effect.either);
-
-        output +=
-          resolved._tag === "Left"
-            ? `![${altText}]()`
-            : `![${altText}](${encodeURI(resolved.right.absolutePath)})`;
-      }
-
-      cursor = index + fullMatch.length;
-    }
-
-    output += options.markdown.slice(cursor);
-    return output;
-  });
 
 const findItemByCardId = (items: readonly Item[], cardId: string) => {
   for (const item of items) {
@@ -264,16 +224,27 @@ export const ReviewStoreLive: Layer.Layer<
         });
       }
 
-      const prompt = yield* rewriteDeckImageUrlsForRaycast({
-        rootPath,
-        deckPath: reference.deckPath,
-        markdown: cardSpec.prompt,
-      }).pipe(Effect.provideService(Path.Path, pathService));
-      const reveal = yield* rewriteDeckImageUrlsForRaycast({
-        rootPath,
-        deckPath: reference.deckPath,
-        markdown: cardSpec.reveal,
-      }).pipe(Effect.provideService(Path.Path, pathService));
+      const prepareMarkdown = (markdown: string) =>
+        prepareMarkdownForRaycast(
+          {
+            rootPath,
+            deckPath: reference.deckPath,
+          },
+          markdown,
+        ).pipe(
+          Effect.provideService(Path.Path, pathService),
+          Effect.mapError(
+            (error) =>
+              new ReviewCardLoadError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: `Could not prepare the card for Raycast: ${error.message}`,
+              }),
+          ),
+        );
+
+      const prompt = yield* prepareMarkdown(cardSpec.prompt);
+      const reveal = yield* prepareMarkdown(cardSpec.reveal);
 
       return {
         prompt,

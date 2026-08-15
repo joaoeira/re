@@ -57,6 +57,30 @@ Success, expected errors, and requirements.
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
+  it.scoped("prepares inline math for Raycast when loading a card", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
+      yield* fileSystem.writeFileString(
+        `${workspacePath}/computing.md`,
+        `<!--@ math-card 0 0 0 0-->
+If a page contains $2^n$ bytes, how many offset bits are needed?
+---
+$n$ bits
+`,
+      );
+
+      const reviews = yield* ReviewStore;
+      const session = yield* reviews.startSession(workspacePath, new Date("2026-08-13T12:00:00Z"));
+      const card = yield* reviews.loadCard(session.rootPath, session.cards[0]!);
+
+      expect(card.prompt).toBe(
+        "If a page contains \\(2^n\\) bytes, how many offset bits are needed?",
+      );
+      expect(card.reveal).toBe("\\(n\\) bits");
+    }).pipe(Effect.provide(TestWithPlatformLive)),
+  );
+
   it.scoped("grades a card and writes its new schedule to the deck", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

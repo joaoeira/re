@@ -25,10 +25,14 @@
     "@re/core": "workspace:*",
     "@re/types": "workspace:*",
     "@re/workspace": "workspace:*",
-    "effect": "3.19.18"
+    "effect": "3.19.18",
+    "remark-math": "^6.0.0",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5"
   },
   "devDependencies": {
     "@effect/vitest": "^0.27.0",
+    "@types/mdast": "^4.0.4",
     "@types/node": "22.19.17",
     "@types/react": "19.0.10",
     "typescript": "^5.9.3",
