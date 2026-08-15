@@ -1,6 +1,5 @@
 - wonder if i can do recursive permutations
 - need to store last topic looked at so that we can go back to it, maybe add completion for topics
-- cant edit generated clozes
 - images
 - move editing to be inline
 - flash lite can be used as an evaluator given a rubrick
