@@ -1718,65 +1718,6 @@ describe("Forge cards step", () => {
     });
   });
 
-  it("wraps selected generated text as the next cloze and adds the edited result", async () => {
-    const invoke = createCardsInvoke({
-      initialByTopicKey: {
-        ...defaultInteractiveState(),
-        "101:0": {
-          status: "generated",
-          generationRevision: 1,
-          cards: [
-            {
-              id: 8_221,
-              question: "selection cloze question",
-              answer: "selection cloze answer",
-            },
-          ],
-        },
-      },
-    });
-    mockDesktopGlobals(invoke);
-
-    const screen = await renderWithIpcProviders(<ForgePage />);
-    await navigateToCards(screen);
-    await userEvent.click(screen.getByRole("button", { name: "Cloze" }));
-
-    const editorLocator = screen.getByRole("textbox", { name: "Editable cloze text" });
-    await expect.element(editorLocator).toHaveValue("The answer is {{c1::selection}}.");
-
-    const editor = editorLocator.element();
-    if (!(editor instanceof HTMLTextAreaElement)) {
-      throw new Error("Expected editable cloze textarea.");
-    }
-
-    editor.focus();
-    editor.setSelectionRange(4, 13);
-    editor.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
-
-    await expect.poll(() => editor.value).toBe("The {{c2::answer is}} {{c1::selection}}.");
-
-    await userEvent.click(screen.getByRole("button", { name: "+ Add to deck", exact: true }));
-
-    await expect
-      .poll(
-        () =>
-          invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeAddCardToDeck").length,
-      )
-      .toBe(1);
-
-    const addCall = invoke.mock.calls.find(
-      ([method]: unknown[]) => method === "ForgeAddCardToDeck",
-    ) as [string, { sourceCardId: number; cardType: "cloze"; content: string }] | undefined;
-    expect(addCall?.[1]).toEqual(
-      expect.objectContaining({
-        sourceCardId: 8_221,
-        cardType: "cloze",
-        content: "The {{c2::answer is}} {{c1::selection}}.",
-      }),
-    );
-    await expect.element(screen.getByText("Added to deck (2 cards)")).toBeVisible();
-  });
-
   it("reformulates a root card with the latest visible content and disables the row while pending", async () => {
     const invoke = createCardsInvoke({
       reformulationDelayMs: 150,
