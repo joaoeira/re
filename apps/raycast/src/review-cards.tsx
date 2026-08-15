@@ -52,6 +52,7 @@ const EMPTY_STATS: SessionStats = {
 };
 
 const REVIEW_ADVANCE_SHORTCUT: Keyboard.Shortcut = { modifiers: [], key: "space" };
+const GOOD_GRADE_SHORTCUT: Keyboard.Shortcut = { modifiers: [], key: "3" };
 const UNDO_REVIEW_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd"], key: "z" };
 
 const incrementStats = (stats: SessionStats, grade: FSRSGrade): SessionStats => {
@@ -107,7 +108,7 @@ const reviewNavigationTitle = (
   const context = `${deck} · ${currentIndex + 1}/${totalCards}`;
   const undoHint = canUndo ? " · ⌘Z Undo" : "";
   return isRevealed
-    ? `${context} · 1 Again · 2 Hard · Space Good · 4 Easy${undoHint}`
+    ? `${context} · 1 Again · 2 Hard · Space / 3 Good · 4 Easy${undoHint}`
     : `${context} · Space Reveal${undoHint}`;
 };
 
@@ -475,6 +476,12 @@ export default function ReviewCardsCommand() {
                 icon="2️⃣"
                 shortcut={{ modifiers: [], key: "2" }}
                 onAction={() => void gradeCard(1)}
+              />
+              <Action
+                title="Good"
+                icon="3️⃣"
+                shortcut={GOOD_GRADE_SHORTCUT}
+                onAction={() => void gradeCard(2)}
               />
               <Action
                 title="Easy"
