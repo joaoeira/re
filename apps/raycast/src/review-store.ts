@@ -8,6 +8,7 @@ import {
   snapshotWorkspace,
   toScanDecksErrorMessage,
   type FSRSGrade,
+  type RemovedDeckItem,
 } from "@re/workspace";
 import { Context, Data, Effect, Layer } from "effect";
 
@@ -40,11 +41,17 @@ export interface ReviewCardContent {
   readonly prompt: string;
   readonly reveal: string;
   readonly cardType: "qa" | "cloze";
+  readonly sourceCardIds: readonly string[];
 }
 
 export interface ReviewUndoToken {
   readonly card: ReviewCardReference;
   readonly previousMetadata: ItemMetadata;
+}
+
+export interface ReviewDeleteUndoToken {
+  readonly card: ReviewCardReference;
+  readonly removed: RemovedDeckItem;
 }
 
 export class ReviewWorkspaceError extends Data.TaggedError("ReviewWorkspaceError")<{
@@ -69,6 +76,18 @@ export class ReviewUndoError extends Data.TaggedError("ReviewUndoError")<{
   readonly message: string;
 }> {}
 
+export class ReviewDeleteError extends Data.TaggedError("ReviewDeleteError")<{
+  readonly deckPath: string;
+  readonly cardId: string;
+  readonly message: string;
+}> {}
+
+export class ReviewDeleteUndoError extends Data.TaggedError("ReviewDeleteUndoError")<{
+  readonly deckPath: string;
+  readonly cardId: string;
+  readonly message: string;
+}> {}
+
 export interface ReviewStore {
   readonly startSession: (
     workspacePath: string,
@@ -84,6 +103,10 @@ export interface ReviewStore {
     now: Date,
   ) => Effect.Effect<ReviewUndoToken, ReviewGradeError>;
   readonly undoGrade: (undo: ReviewUndoToken) => Effect.Effect<void, ReviewUndoError>;
+  readonly deleteItem: (
+    card: ReviewCardReference,
+  ) => Effect.Effect<ReviewDeleteUndoToken, ReviewDeleteError>;
+  readonly undoDelete: (undo: ReviewDeleteUndoToken) => Effect.Effect<void, ReviewDeleteUndoError>;
 }
 
 export const ReviewStore = Context.GenericTag<ReviewStore>("@re/raycast/ReviewStore");
@@ -250,6 +273,7 @@ export const ReviewStoreLive: Layer.Layer<
         prompt,
         reveal,
         cardType: cardSpec.cardType,
+        sourceCardIds: found.item.cards.map((card) => card.id),
       } satisfies ReviewCardContent;
     });
 
@@ -409,6 +433,103 @@ export const ReviewStoreLive: Layer.Layer<
         );
     });
 
-    return ReviewStore.of({ startSession, loadCard, gradeCard, undoGrade });
+    const deleteItem = Effect.fn("ReviewStore.deleteItem")(function* (
+      reference: ReviewCardReference,
+    ) {
+      const removed = yield* deckManager.removeItem(reference.deckPath, reference.cardId).pipe(
+        Effect.catchTags({
+          DeckNotFound: () =>
+            Effect.fail(
+              new ReviewDeleteError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: "The deck no longer exists.",
+              }),
+            ),
+          DeckReadError: (error) =>
+            Effect.fail(
+              new ReviewDeleteError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: `Could not read the deck: ${error.message}`,
+              }),
+            ),
+          DeckParseError: (error) =>
+            Effect.fail(
+              new ReviewDeleteError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: `The deck metadata is invalid: ${error.message}`,
+              }),
+            ),
+          DeckWriteError: (error) =>
+            Effect.fail(
+              new ReviewDeleteError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: `Could not delete the card: ${error.message}`,
+              }),
+            ),
+          CardNotFound: () =>
+            Effect.fail(
+              new ReviewDeleteError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: "The card no longer exists in its deck.",
+              }),
+            ),
+        }),
+      );
+
+      return { card: reference, removed } satisfies ReviewDeleteUndoToken;
+    });
+
+    const undoDelete = Effect.fn("ReviewStore.undoDelete")(function* (undo: ReviewDeleteUndoToken) {
+      yield* deckManager.restoreItem(undo.card.deckPath, undo.removed).pipe(
+        Effect.catchTags({
+          DeckNotFound: () =>
+            Effect.fail(
+              new ReviewDeleteUndoError({
+                deckPath: undo.card.deckPath,
+                cardId: undo.card.cardId,
+                message: "The deck no longer exists.",
+              }),
+            ),
+          DeckReadError: (error) =>
+            Effect.fail(
+              new ReviewDeleteUndoError({
+                deckPath: undo.card.deckPath,
+                cardId: undo.card.cardId,
+                message: `Could not read the deck: ${error.message}`,
+              }),
+            ),
+          DeckParseError: (error) =>
+            Effect.fail(
+              new ReviewDeleteUndoError({
+                deckPath: undo.card.deckPath,
+                cardId: undo.card.cardId,
+                message: `The deck metadata is invalid: ${error.message}`,
+              }),
+            ),
+          DeckWriteError: (error) =>
+            Effect.fail(
+              new ReviewDeleteUndoError({
+                deckPath: undo.card.deckPath,
+                cardId: undo.card.cardId,
+                message: `Could not restore the deleted card: ${error.message}`,
+              }),
+            ),
+        }),
+      );
+    });
+
+    return ReviewStore.of({
+      startSession,
+      loadCard,
+      gradeCard,
+      undoGrade,
+      deleteItem,
+      undoDelete,
+    });
   }),
 );

@@ -5,6 +5,7 @@ import {
   ReviewStore,
   type ReviewCardContent,
   type ReviewCardReference,
+  type ReviewDeleteUndoToken,
   type ReviewSession,
   type ReviewUndoToken,
 } from "./review-store";
@@ -24,6 +25,14 @@ export type GradeReviewCardUiResult =
 export type UndoReviewCardUiResult =
   | { readonly _tag: "ReviewCardUndone" }
   | { readonly _tag: "ReviewUndoError"; readonly message: string };
+
+export type DeleteReviewItemUiResult =
+  | { readonly _tag: "ReviewItemDeleted"; readonly undo: ReviewDeleteUndoToken }
+  | { readonly _tag: "ReviewDeleteError"; readonly message: string };
+
+export type UndoDeleteReviewItemUiResult =
+  | { readonly _tag: "ReviewDeletedItemRestored" }
+  | { readonly _tag: "ReviewDeleteUndoError"; readonly message: string };
 
 export type ReviewStatusUiResult =
   | {
@@ -126,6 +135,39 @@ export const undoReviewCardForUi = (
     Effect.catchTag("ReviewUndoError", (error) =>
       Effect.succeed<UndoReviewCardUiResult>({
         _tag: "ReviewUndoError",
+        message: error.message,
+      }),
+    ),
+  );
+
+export const deleteReviewItemForUi = (
+  card: ReviewCardReference,
+): Effect.Effect<DeleteReviewItemUiResult, never, ReviewStore> =>
+  ReviewStore.pipe(
+    Effect.flatMap((reviews) => reviews.deleteItem(card)),
+    Effect.map(
+      (undo): DeleteReviewItemUiResult => ({
+        _tag: "ReviewItemDeleted",
+        undo,
+      }),
+    ),
+    Effect.catchTag("ReviewDeleteError", (error) =>
+      Effect.succeed<DeleteReviewItemUiResult>({
+        _tag: "ReviewDeleteError",
+        message: error.message,
+      }),
+    ),
+  );
+
+export const undoDeleteReviewItemForUi = (
+  undo: ReviewDeleteUndoToken,
+): Effect.Effect<UndoDeleteReviewItemUiResult, never, ReviewStore> =>
+  ReviewStore.pipe(
+    Effect.flatMap((reviews) => reviews.undoDelete(undo)),
+    Effect.as<UndoDeleteReviewItemUiResult>({ _tag: "ReviewDeletedItemRestored" }),
+    Effect.catchTag("ReviewDeleteUndoError", (error) =>
+      Effect.succeed<UndoDeleteReviewItemUiResult>({
+        _tag: "ReviewDeleteUndoError",
         message: error.message,
       }),
     ),

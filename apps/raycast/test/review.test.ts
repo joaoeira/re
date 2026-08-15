@@ -3,14 +3,18 @@ import { createMetadataWithId, type ItemId } from "@re/core";
 import { Effect, Layer } from "effect";
 
 import {
+  deleteReviewItemForUi,
   getReviewStatusForUi,
   gradeReviewCardForUi,
   loadReviewCardForUi,
   startReviewForUi,
+  undoDeleteReviewItemForUi,
   undoReviewCardForUi,
 } from "../src/review";
 import {
   ReviewCardLoadError,
+  ReviewDeleteError,
+  ReviewDeleteUndoError,
   ReviewGradeError,
   ReviewStore,
   ReviewUndoError,
@@ -50,6 +54,22 @@ const makeLayer = (service: Partial<ReviewStoreService>): Layer.Layer<ReviewStor
     undoGrade: () =>
       Effect.fail(
         new ReviewUndoError({
+          deckPath: reference.deckPath,
+          cardId: reference.cardId,
+          message: "Not configured for this test",
+        }),
+      ),
+    deleteItem: () =>
+      Effect.fail(
+        new ReviewDeleteError({
+          deckPath: reference.deckPath,
+          cardId: reference.cardId,
+          message: "Not configured for this test",
+        }),
+      ),
+    undoDelete: () =>
+      Effect.fail(
+        new ReviewDeleteUndoError({
           deckPath: reference.deckPath,
           cardId: reference.cardId,
           message: "Not configured for this test",
@@ -171,6 +191,61 @@ describe("Raycast review UI boundary", () => {
           undoGrade: () =>
             Effect.fail(
               new ReviewUndoError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: "Disk is read-only",
+              }),
+            ),
+        }),
+      ),
+    ),
+  );
+
+  it.effect("returns delete failures as UI state", () =>
+    Effect.gen(function* () {
+      const result = yield* deleteReviewItemForUi(reference);
+      expect(result).toEqual({
+        _tag: "ReviewDeleteError",
+        message: "Disk is read-only",
+      });
+    }).pipe(
+      Effect.provide(
+        makeLayer({
+          deleteItem: () =>
+            Effect.fail(
+              new ReviewDeleteError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: "Disk is read-only",
+              }),
+            ),
+        }),
+      ),
+    ),
+  );
+
+  it.effect("returns delete-undo failures as UI state", () =>
+    Effect.gen(function* () {
+      const result = yield* undoDeleteReviewItemForUi({
+        card: reference,
+        removed: {
+          itemIndex: 0,
+          item: {
+            cards: [createMetadataWithId(reference.cardId as ItemId)],
+            content: "Question\n---\nAnswer\n",
+          },
+        },
+      });
+      expect(result).toEqual({
+        _tag: "ReviewDeleteUndoError",
+        message: "Disk is read-only",
+      });
+    }).pipe(
+      Effect.provide(
+        makeLayer({
+          undoDelete: () =>
+            Effect.fail(
+              new ReviewDeleteUndoError({
                 deckPath: reference.deckPath,
                 cardId: reference.cardId,
                 message: "Disk is read-only",

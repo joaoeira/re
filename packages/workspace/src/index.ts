@@ -83,6 +83,7 @@ export {
   type ReadError,
   type WriteError,
   type DeckLifecycleError,
+  type RemovedDeckItem,
 } from "./DeckManager";
 
 export {

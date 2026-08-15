@@ -100,7 +100,12 @@ describe("analytics replay", () => {
       updateCardMetadata: () => Effect.void,
       replaceItem: () => Effect.void,
       appendItem: () => Effect.void,
-      removeItem: () => Effect.void,
+      removeItem: () =>
+        Effect.succeed({
+          itemIndex: 0,
+          item: { content: "Question\n---\nAnswer\n", cards: [metadata] },
+        }),
+      restoreItem: () => Effect.void,
       createDeck: () => Effect.void,
       deleteDeck: () => Effect.void,
       renameDeck: () => Effect.void,
@@ -155,7 +160,12 @@ describe("analytics replay", () => {
       updateCardMetadata: () => Effect.void,
       replaceItem: () => Effect.void,
       appendItem: () => Effect.void,
-      removeItem: () => Effect.void,
+      removeItem: () =>
+        Effect.succeed({
+          itemIndex: 0,
+          item: { content: "Q\n---\nA\n", cards: [metadata] },
+        }),
+      restoreItem: () => Effect.void,
       createDeck: () => Effect.void,
       deleteDeck: () => Effect.void,
       renameDeck: () => Effect.void,

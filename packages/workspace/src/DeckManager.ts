@@ -4,6 +4,7 @@ import { Schema } from "@effect/schema";
 import {
   parseFile,
   serializeFile,
+  type Item,
   type ItemMetadata,
   type UntypedItemType,
   type ParsedFile,
@@ -103,6 +104,11 @@ export type DeckLifecycleError =
   | DeckFileNotFound
   | DeckFileOperationError;
 
+export interface RemovedDeckItem {
+  readonly itemIndex: number;
+  readonly item: Item;
+}
+
 export interface DeckManager {
   readonly readDeck: (deckPath: string) => Effect.Effect<ParsedFile, ReadError>;
 
@@ -128,7 +134,12 @@ export interface DeckManager {
   readonly removeItem: (
     deckPath: string,
     cardId: string,
-  ) => Effect.Effect<void, WriteError | CardNotFound>;
+  ) => Effect.Effect<RemovedDeckItem, WriteError | CardNotFound>;
+
+  readonly restoreItem: (
+    deckPath: string,
+    removed: RemovedDeckItem,
+  ) => Effect.Effect<void, WriteError>;
 
   readonly createDeck: (
     deckPath: string,
@@ -426,8 +437,20 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
           Effect.gen(function* () {
             const parsed = yield* readAndParse(deckPath);
             const { itemIndex } = yield* findItemByCardId(parsed, cardId, deckPath);
+            const item = parsed.items[itemIndex]!;
 
             const updatedItems = parsed.items.filter((_, idx) => idx !== itemIndex);
+            const serialized = serializeFile({ ...parsed, items: updatedItems });
+            yield* atomicWrite(deckPath, serialized);
+            return { itemIndex, item } satisfies RemovedDeckItem;
+          }),
+
+        restoreItem: (deckPath, removed) =>
+          Effect.gen(function* () {
+            const parsed = yield* readAndParse(deckPath);
+            const updatedItems = [...parsed.items];
+            updatedItems.splice(removed.itemIndex, 0, removed.item);
+
             const serialized = serializeFile({ ...parsed, items: updatedItems });
             yield* atomicWrite(deckPath, serialized);
           }),

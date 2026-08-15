@@ -497,6 +497,28 @@ describe("DeckManager.appendItem", () => {
 });
 
 describe("DeckManager.removeItem", () => {
+  it("restores a removed item at its original position", async () => {
+    const content = `${singleCardItem("a", "QA\n")}${singleCardItem("b", "QB\n")}${singleCardItem("c", "QC\n")}`;
+    const config: MockFileSystemConfig = {
+      entryTypes: {},
+      directories: {},
+      fileContents: { "/deck.md": content },
+    };
+    const { promise, store } = runSuccess(config, (manager) =>
+      Effect.gen(function* () {
+        const removed = yield* manager.removeItem("/deck.md", "b");
+        yield* manager.restoreItem("/deck.md", removed);
+        return removed;
+      }),
+    );
+
+    const removed = await promise;
+
+    expect(removed.itemIndex).toBe(1);
+    expect(removed.item.cards.map((card) => card.id)).toEqual(["b"]);
+    expect(store["/deck.md"]).toBe(content);
+  });
+
   it("removes item from middle, preserves surrounding items", async () => {
     const content = `${singleCardItem("a", "QA\n")}${singleCardItem("b", "QB\n")}${singleCardItem("c", "QC\n")}`;
     const config: MockFileSystemConfig = {

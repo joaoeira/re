@@ -1,11 +1,13 @@
 import {
   Action,
   ActionPanel,
+  Alert,
   Detail,
   Icon,
   Keyboard,
   Toast,
   closeMainWindow,
+  confirmAlert,
   getPreferenceValues,
   openExtensionPreferences,
   showToast,
@@ -14,14 +16,22 @@ import type { FSRSGrade } from "@re/workspace";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  deleteReviewItemForUi,
   gradeReviewCardForUi,
   loadReviewCardForUi,
   startReviewForUi,
+  undoDeleteReviewItemForUi,
   undoReviewCardForUi,
 } from "./review";
+import {
+  removeSourceItemFromSession,
+  restoreSourceItemToSession,
+  type RemovedReviewQueueEntry,
+} from "./review-session-state";
 import type {
   ReviewCardContent,
   ReviewCardReference,
+  ReviewDeleteUndoToken,
   ReviewDeckIssue,
   ReviewSession,
   ReviewUndoToken,
@@ -37,11 +47,21 @@ interface SessionStats {
   readonly easy: number;
 }
 
-interface LastReview {
+interface LastGradeAction {
+  readonly _tag: "Grade";
   readonly undo: ReviewUndoToken;
   readonly cardIndex: number;
   readonly grade: FSRSGrade;
 }
+
+interface LastDeleteAction {
+  readonly _tag: "Delete";
+  readonly undo: ReviewDeleteUndoToken;
+  readonly cardIndex: number;
+  readonly removedEntries: readonly RemovedReviewQueueEntry[];
+}
+
+type LastAction = LastGradeAction | LastDeleteAction;
 
 const EMPTY_STATS: SessionStats = {
   reviewed: 0,
@@ -54,6 +74,7 @@ const EMPTY_STATS: SessionStats = {
 const REVIEW_ADVANCE_SHORTCUT: Keyboard.Shortcut = { modifiers: [], key: "space" };
 const GOOD_GRADE_SHORTCUT: Keyboard.Shortcut = { modifiers: [], key: "3" };
 const UNDO_REVIEW_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd"], key: "z" };
+const DELETE_ITEM_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd"], key: "backspace" };
 
 const incrementStats = (stats: SessionStats, grade: FSRSGrade): SessionStats => {
   switch (grade) {
@@ -155,7 +176,7 @@ export default function ReviewCardsCommand() {
   const [isMutatingReview, setIsMutatingReview] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [stats, setStats] = useState<SessionStats>(EMPTY_STATS);
-  const [lastReview, setLastReview] = useState<LastReview>();
+  const [lastAction, setLastAction] = useState<LastAction>();
   const startGeneration = useRef(0);
   const cardGeneration = useRef(0);
   const reviewMutationInFlight = useRef(false);
@@ -173,7 +194,7 @@ export default function ReviewCardsCommand() {
     setIsRevealed(false);
     setIsComplete(false);
     setStats(EMPTY_STATS);
-    setLastReview(undefined);
+    setLastAction(undefined);
 
     const result = await runRaycastEffect(startReviewForUi(preferences.workspacePath));
     if (generation !== startGeneration.current) return;
@@ -264,7 +285,7 @@ export default function ReviewCardsCommand() {
         }
 
         setStats((current) => incrementStats(current, grade));
-        setLastReview({ undo: result.undo, cardIndex: currentIndex, grade });
+        setLastAction({ _tag: "Grade", undo: result.undo, cardIndex: currentIndex, grade });
         void refreshReviewStatusMenu();
         advance();
       } finally {
@@ -275,45 +296,122 @@ export default function ReviewCardsCommand() {
     [advance, card, currentIndex, isRevealed, session],
   );
 
-  const undoLastReview = useCallback(async () => {
-    if (reviewMutationInFlight.current || lastReview === undefined) return;
+  const deleteCurrentItem = useCallback(async () => {
+    if (reviewMutationInFlight.current || session === undefined || card === undefined) return;
+    const reference = session.cards[currentIndex];
+    if (reference === undefined) return;
+
+    const isCloze = card.cardType === "cloze";
+    const generatedCards =
+      card.sourceCardIds.length === 1 ? "the card" : `all ${card.sourceCardIds.length} cards`;
+    const confirmed = await confirmAlert({
+      icon: Icon.Trash,
+      title: isCloze ? "Delete Cloze Note?" : "Delete Card?",
+      message: isCloze
+        ? `This removes the cloze note and ${generatedCards} it creates. You can undo this during the current review session.`
+        : "This removes the card from its deck. You can undo this during the current review session.",
+      primaryAction: {
+        title: "Delete",
+        style: Alert.ActionStyle.Destructive,
+      },
+    });
+    if (!confirmed || reviewMutationInFlight.current) return;
 
     reviewMutationInFlight.current = true;
     setIsMutatingReview(true);
     try {
-      const result = await runRaycastEffect(undoReviewCardForUi(lastReview.undo));
-      if (result._tag === "ReviewUndoError") {
+      const result = await runRaycastEffect(deleteReviewItemForUi(reference));
+      if (result._tag === "ReviewDeleteError") {
         await showToast({
           style: Toast.Style.Failure,
-          title: "Could not undo the review",
+          title: "Could not delete the card",
           message: result.message,
         });
         return;
       }
 
+      const removal = removeSourceItemFromSession(session, currentIndex, {
+        deckPath: reference.deckPath,
+        sourceCardIds: card.sourceCardIds,
+      });
       cardGeneration.current += 1;
+      setSession(removal.session);
       setCard(undefined);
       setCardLoadError(undefined);
-      setCurrentIndex(lastReview.cardIndex);
+      setCurrentIndex(removal.nextIndex ?? removal.session.cards.length);
       setIsRevealed(false);
-      setIsComplete(false);
-      setStats((current) => decrementStats(current, lastReview.grade));
-      setLastReview(undefined);
+      setIsComplete(removal.nextIndex === null);
+      setLastAction({
+        _tag: "Delete",
+        undo: result.undo,
+        cardIndex: currentIndex,
+        removedEntries: removal.removedEntries,
+      });
       void refreshReviewStatusMenu();
     } finally {
       reviewMutationInFlight.current = false;
       setIsMutatingReview(false);
     }
-  }, [lastReview]);
+  }, [card, currentIndex, session]);
+
+  const undoLastAction = useCallback(async () => {
+    if (reviewMutationInFlight.current || lastAction === undefined) return;
+
+    reviewMutationInFlight.current = true;
+    setIsMutatingReview(true);
+    try {
+      if (lastAction._tag === "Grade") {
+        const result = await runRaycastEffect(undoReviewCardForUi(lastAction.undo));
+        if (result._tag === "ReviewUndoError") {
+          await showToast({
+            style: Toast.Style.Failure,
+            title: "Could not undo the review",
+            message: result.message,
+          });
+          return;
+        }
+
+        setStats((current) => decrementStats(current, lastAction.grade));
+      } else {
+        const result = await runRaycastEffect(undoDeleteReviewItemForUi(lastAction.undo));
+        if (result._tag === "ReviewDeleteUndoError") {
+          await showToast({
+            style: Toast.Style.Failure,
+            title: "Could not restore the deleted card",
+            message: result.message,
+          });
+          return;
+        }
+
+        setSession((current) =>
+          current === undefined
+            ? current
+            : restoreSourceItemToSession(current, lastAction.removedEntries),
+        );
+      }
+
+      cardGeneration.current += 1;
+      setCard(undefined);
+      setCardLoadError(undefined);
+      setCurrentIndex(lastAction.cardIndex);
+      setIsRevealed(false);
+      setIsComplete(false);
+      setLastAction(undefined);
+      void refreshReviewStatusMenu();
+    } finally {
+      reviewMutationInFlight.current = false;
+      setIsMutatingReview(false);
+    }
+  }, [lastAction]);
 
   const currentReference = session?.cards[currentIndex];
   const undoAction =
-    lastReview === undefined ? null : (
+    lastAction === undefined ? null : (
       <Action
-        title="Undo Last Review"
+        title={lastAction._tag === "Grade" ? "Undo Last Review" : "Undo Delete"}
         icon="↩️"
         shortcut={UNDO_REVIEW_SHORTCUT}
-        onAction={() => void undoLastReview()}
+        onAction={() => void undoLastAction()}
       />
     );
 
@@ -345,11 +443,11 @@ export default function ReviewCardsCommand() {
   }
 
   if (isComplete) {
-    const isEmpty = stats.reviewed === 0 && session.cards.length === 0;
+    const isEmpty = stats.reviewed === 0 && session.cards.length === 0 && lastAction === undefined;
     return (
       <Detail
         isLoading={isMutatingReview}
-        navigationTitle={lastReview === undefined ? "Review Cards" : "Review Cards · ⌘Z Undo"}
+        navigationTitle={lastAction === undefined ? "Review Cards" : "Review Cards · ⌘Z Undo"}
         markdown={isEmpty ? renderEmpty(session.issues) : renderComplete(stats, session.issues)}
         actions={
           <ActionPanel>
@@ -395,7 +493,7 @@ export default function ReviewCardsCommand() {
                 currentIndex,
                 session.cards.length,
                 false,
-                lastReview !== undefined,
+                lastAction !== undefined,
               )
         }
         actions={undoAction === null ? undefined : <ActionPanel>{undoAction}</ActionPanel>}
@@ -411,7 +509,7 @@ export default function ReviewCardsCommand() {
           currentIndex,
           session.cards.length,
           false,
-          lastReview !== undefined,
+          lastAction !== undefined,
         )}
         markdown={`# Could not load this card\n\n${cardLoadError}\n\n_${currentReference.relativePath}_`}
         actions={
@@ -436,7 +534,7 @@ export default function ReviewCardsCommand() {
       <Detail
         isLoading
         markdown=""
-        navigationTitle={lastReview === undefined ? "Review Cards" : "Review Cards · ⌘Z Undo"}
+        navigationTitle={lastAction === undefined ? "Review Cards" : "Review Cards · ⌘Z Undo"}
         actions={undoAction === null ? undefined : <ActionPanel>{undoAction}</ActionPanel>}
       />
     );
@@ -452,7 +550,7 @@ export default function ReviewCardsCommand() {
         currentIndex,
         session.cards.length,
         isRevealed,
-        lastReview !== undefined,
+        lastAction !== undefined,
       )}
       markdown={markdown}
       actions={
@@ -503,6 +601,12 @@ export default function ReviewCardsCommand() {
             title="Open Deck"
             target={currentReference.deckPath}
             shortcut={Keyboard.Shortcut.Common.Open}
+          />
+          <Action
+            title={card.cardType === "cloze" ? "Delete Cloze Note" : "Delete Card"}
+            icon={Icon.Trash}
+            shortcut={DELETE_ITEM_SHORTCUT}
+            onAction={() => void deleteCurrentItem()}
           />
         </ActionPanel>
       }

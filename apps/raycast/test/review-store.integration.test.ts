@@ -53,6 +53,7 @@ Success, expected errors, and requirements.
         prompt: "What does Effect track?",
         reveal: "Success, expected errors, and requirements.",
         cardType: "qa",
+        sourceCardIds: ["effect-card"],
       });
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
@@ -143,6 +144,44 @@ Success, expected errors, and requirements.
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
+  it.scoped("deletes and restores an entire cloze item", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
+      const deckPath = `${workspacePath}/geography.md`;
+      yield* fileSystem.writeFileString(
+        deckPath,
+        `<!--@ lisbon-card 0 0 0 0-->
+<!--@ portugal-card 0 0 0 0-->
+{{c1::Lisbon}} is the capital of {{c2::Portugal}}.
+`,
+      );
+
+      const reviews = yield* ReviewStore;
+      const session = yield* reviews.startSession(workspacePath, new Date("2026-08-13T12:00:00Z"));
+      const loaded = yield* reviews.loadCard(session.rootPath, session.cards[0]!);
+
+      expect(loaded.sourceCardIds).toEqual(["lisbon-card", "portugal-card"]);
+
+      const undo = yield* reviews.deleteItem(session.cards[0]!);
+      const afterDelete = yield* fileSystem
+        .readFileString(deckPath)
+        .pipe(Effect.flatMap(parseFile));
+      expect(afterDelete.items).toEqual([]);
+
+      yield* reviews.undoDelete(undo);
+      const afterUndo = yield* fileSystem.readFileString(deckPath).pipe(Effect.flatMap(parseFile));
+      expect(afterUndo.items).toHaveLength(1);
+      expect(afterUndo.items[0]!.cards.map((card) => card.id)).toEqual([
+        "lisbon-card",
+        "portugal-card",
+      ]);
+      expect(afterUndo.items[0]!.content).toBe(
+        "{{c1::Lisbon}} is the capital of {{c2::Portugal}}.\n",
+      );
+    }).pipe(Effect.provide(TestWithPlatformLive)),
+  );
+
   it.scoped("renders each cloze index as its own card", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
@@ -173,11 +212,13 @@ Success, expected errors, and requirements.
             prompt: "**[...]** is the capital of Portugal.",
             reveal: "**Lisbon** is the capital of Portugal.",
             cardType: "cloze",
+            sourceCardIds: ["lisbon-card", "portugal-card"],
           },
           {
             prompt: "Lisbon is the capital of **[...]**.",
             reveal: "Lisbon is the capital of **Portugal**.",
             cardType: "cloze",
+            sourceCardIds: ["lisbon-card", "portugal-card"],
           },
         ]),
       );
