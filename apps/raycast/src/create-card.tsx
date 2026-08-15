@@ -367,11 +367,6 @@ export default function CreateCardCommand() {
           }}
         />
       )}
-
-      <Form.Description
-        title="Shortcuts"
-        text="⌘ ↵ creates the card. ⌘ I inserts a copied image."
-      />
     </Form>
   );
 }
