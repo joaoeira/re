@@ -79,7 +79,7 @@ const reviewNavigationTitle = (
   const deck = reference.relativePath.replace(/\.md$/, "");
   const context = `${deck} · ${currentIndex + 1}/${totalCards}`;
   return isRevealed
-    ? `${context} · ⌘1 Again · ⌘2 Hard · Space Good · ⌘4 Easy`
+    ? `${context} · 1 Again · 2 Hard · Space Good · 4 Easy`
     : `${context} · Space Reveal`;
 };
 
@@ -372,19 +372,19 @@ export default function ReviewCardsCommand() {
               <Action
                 title="Again"
                 icon="1️⃣"
-                shortcut={{ modifiers: ["cmd"], key: "1" }}
+                shortcut={{ modifiers: [], key: "1" }}
                 onAction={() => void gradeCard(0)}
               />
               <Action
                 title="Hard"
                 icon="2️⃣"
-                shortcut={{ modifiers: ["cmd"], key: "2" }}
+                shortcut={{ modifiers: [], key: "2" }}
                 onAction={() => void gradeCard(1)}
               />
               <Action
                 title="Easy"
                 icon="4️⃣"
-                shortcut={{ modifiers: ["cmd"], key: "4" }}
+                shortcut={{ modifiers: [], key: "4" }}
                 onAction={() => void gradeCard(3)}
               />
             </>
