@@ -13,12 +13,18 @@ import {
 import type { FSRSGrade } from "@re/workspace";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { gradeReviewCardForUi, loadReviewCardForUi, startReviewForUi } from "./review";
+import {
+  gradeReviewCardForUi,
+  loadReviewCardForUi,
+  startReviewForUi,
+  undoReviewCardForUi,
+} from "./review";
 import type {
   ReviewCardContent,
   ReviewCardReference,
   ReviewDeckIssue,
   ReviewSession,
+  ReviewUndoToken,
 } from "./review-store";
 import { refreshReviewStatusMenu } from "./review-status-refresh";
 import { runRaycastEffect } from "./runtime";
@@ -31,6 +37,12 @@ interface SessionStats {
   readonly easy: number;
 }
 
+interface LastReview {
+  readonly undo: ReviewUndoToken;
+  readonly cardIndex: number;
+  readonly grade: FSRSGrade;
+}
+
 const EMPTY_STATS: SessionStats = {
   reviewed: 0,
   again: 0,
@@ -40,6 +52,7 @@ const EMPTY_STATS: SessionStats = {
 };
 
 const REVIEW_ADVANCE_SHORTCUT: Keyboard.Shortcut = { modifiers: [], key: "space" };
+const UNDO_REVIEW_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd"], key: "z" };
 
 const incrementStats = (stats: SessionStats, grade: FSRSGrade): SessionStats => {
   switch (grade) {
@@ -51,6 +64,19 @@ const incrementStats = (stats: SessionStats, grade: FSRSGrade): SessionStats => 
       return { ...stats, reviewed: stats.reviewed + 1, good: stats.good + 1 };
     case 3:
       return { ...stats, reviewed: stats.reviewed + 1, easy: stats.easy + 1 };
+  }
+};
+
+const decrementStats = (stats: SessionStats, grade: FSRSGrade): SessionStats => {
+  switch (grade) {
+    case 0:
+      return { ...stats, reviewed: stats.reviewed - 1, again: stats.again - 1 };
+    case 1:
+      return { ...stats, reviewed: stats.reviewed - 1, hard: stats.hard - 1 };
+    case 2:
+      return { ...stats, reviewed: stats.reviewed - 1, good: stats.good - 1 };
+    case 3:
+      return { ...stats, reviewed: stats.reviewed - 1, easy: stats.easy - 1 };
   }
 };
 
@@ -75,12 +101,14 @@ const reviewNavigationTitle = (
   currentIndex: number,
   totalCards: number,
   isRevealed: boolean,
+  canUndo: boolean,
 ): string => {
   const deck = reference.relativePath.replace(/\.md$/, "");
   const context = `${deck} · ${currentIndex + 1}/${totalCards}`;
+  const undoHint = canUndo ? " · ⌘Z Undo" : "";
   return isRevealed
-    ? `${context} · 1 Again · 2 Hard · Space Good · 4 Easy`
-    : `${context} · Space Reveal`;
+    ? `${context} · 1 Again · 2 Hard · Space Good · 4 Easy${undoHint}`
+    : `${context} · Space Reveal${undoHint}`;
 };
 
 const renderComplete = (stats: SessionStats, issues: readonly ReviewDeckIssue[]): string => {
@@ -123,12 +151,13 @@ export default function ReviewCardsCommand() {
   const [isLoadingCard, setIsLoadingCard] = useState(false);
   const [cardReloadCycle, setCardReloadCycle] = useState(0);
   const [isRevealed, setIsRevealed] = useState(false);
-  const [isGrading, setIsGrading] = useState(false);
+  const [isMutatingReview, setIsMutatingReview] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [stats, setStats] = useState<SessionStats>(EMPTY_STATS);
+  const [lastReview, setLastReview] = useState<LastReview>();
   const startGeneration = useRef(0);
   const cardGeneration = useRef(0);
-  const gradingInFlight = useRef(false);
+  const reviewMutationInFlight = useRef(false);
 
   const startReview = useCallback(async () => {
     const generation = ++startGeneration.current;
@@ -143,6 +172,7 @@ export default function ReviewCardsCommand() {
     setIsRevealed(false);
     setIsComplete(false);
     setStats(EMPTY_STATS);
+    setLastReview(undefined);
 
     const result = await runRaycastEffect(startReviewForUi(preferences.workspacePath));
     if (generation !== startGeneration.current) return;
@@ -208,14 +238,19 @@ export default function ReviewCardsCommand() {
 
   const gradeCard = useCallback(
     async (grade: FSRSGrade) => {
-      if (gradingInFlight.current || session === undefined || card === undefined || !isRevealed) {
+      if (
+        reviewMutationInFlight.current ||
+        session === undefined ||
+        card === undefined ||
+        !isRevealed
+      ) {
         return;
       }
       const reference = session.cards[currentIndex];
       if (reference === undefined) return;
 
-      gradingInFlight.current = true;
-      setIsGrading(true);
+      reviewMutationInFlight.current = true;
+      setIsMutatingReview(true);
       try {
         const result = await runRaycastEffect(gradeReviewCardForUi(reference, grade));
         if (result._tag === "ReviewGradeError") {
@@ -228,17 +263,58 @@ export default function ReviewCardsCommand() {
         }
 
         setStats((current) => incrementStats(current, grade));
+        setLastReview({ undo: result.undo, cardIndex: currentIndex, grade });
         void refreshReviewStatusMenu();
         advance();
       } finally {
-        gradingInFlight.current = false;
-        setIsGrading(false);
+        reviewMutationInFlight.current = false;
+        setIsMutatingReview(false);
       }
     },
     [advance, card, currentIndex, isRevealed, session],
   );
 
+  const undoLastReview = useCallback(async () => {
+    if (reviewMutationInFlight.current || lastReview === undefined) return;
+
+    reviewMutationInFlight.current = true;
+    setIsMutatingReview(true);
+    try {
+      const result = await runRaycastEffect(undoReviewCardForUi(lastReview.undo));
+      if (result._tag === "ReviewUndoError") {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Could not undo the review",
+          message: result.message,
+        });
+        return;
+      }
+
+      cardGeneration.current += 1;
+      setCard(undefined);
+      setCardLoadError(undefined);
+      setCurrentIndex(lastReview.cardIndex);
+      setIsRevealed(false);
+      setIsComplete(false);
+      setStats((current) => decrementStats(current, lastReview.grade));
+      setLastReview(undefined);
+      void refreshReviewStatusMenu();
+    } finally {
+      reviewMutationInFlight.current = false;
+      setIsMutatingReview(false);
+    }
+  }, [lastReview]);
+
   const currentReference = session?.cards[currentIndex];
+  const undoAction =
+    lastReview === undefined ? null : (
+      <Action
+        title="Undo Last Review"
+        icon="↩️"
+        shortcut={UNDO_REVIEW_SHORTCUT}
+        onAction={() => void undoLastReview()}
+      />
+    );
 
   if (isStarting) {
     return <Detail isLoading markdown="" navigationTitle="Review Cards" />;
@@ -271,7 +347,8 @@ export default function ReviewCardsCommand() {
     const isEmpty = stats.reviewed === 0 && session.cards.length === 0;
     return (
       <Detail
-        navigationTitle="Review Cards"
+        isLoading={isMutatingReview}
+        navigationTitle={lastReview === undefined ? "Review Cards" : "Review Cards · ⌘Z Undo"}
         markdown={isEmpty ? renderEmpty(session.issues) : renderComplete(stats, session.issues)}
         actions={
           <ActionPanel>
@@ -292,6 +369,7 @@ export default function ReviewCardsCommand() {
                 onAction={() => void startReview()}
               />
             )}
+            {undoAction}
             <Action
               title="Open Extension Preferences"
               icon={Icon.Gear}
@@ -311,8 +389,15 @@ export default function ReviewCardsCommand() {
         navigationTitle={
           currentReference === undefined
             ? `Review Cards · ${currentIndex + 1}/${session.cards.length}`
-            : reviewNavigationTitle(currentReference, currentIndex, session.cards.length, false)
+            : reviewNavigationTitle(
+                currentReference,
+                currentIndex,
+                session.cards.length,
+                false,
+                lastReview !== undefined,
+              )
         }
+        actions={undoAction === null ? undefined : <ActionPanel>{undoAction}</ActionPanel>}
       />
     );
   }
@@ -325,6 +410,7 @@ export default function ReviewCardsCommand() {
           currentIndex,
           session.cards.length,
           false,
+          lastReview !== undefined,
         )}
         markdown={`# Could not load this card\n\n${cardLoadError}\n\n_${currentReference.relativePath}_`}
         actions={
@@ -336,6 +422,7 @@ export default function ReviewCardsCommand() {
               shortcut={Keyboard.Shortcut.Common.Refresh}
               onAction={() => setCardReloadCycle((cycle) => cycle + 1)}
             />
+            {undoAction}
             <Action.Open title="Open Deck" target={currentReference.deckPath} />
           </ActionPanel>
         }
@@ -344,19 +431,27 @@ export default function ReviewCardsCommand() {
   }
 
   if (card === undefined) {
-    return <Detail isLoading markdown="" navigationTitle="Review Cards" />;
+    return (
+      <Detail
+        isLoading
+        markdown=""
+        navigationTitle={lastReview === undefined ? "Review Cards" : "Review Cards · ⌘Z Undo"}
+        actions={undoAction === null ? undefined : <ActionPanel>{undoAction}</ActionPanel>}
+      />
+    );
   }
 
   const markdown = renderCardMarkdown(card, isRevealed);
 
   return (
     <Detail
-      isLoading={isGrading}
+      isLoading={isMutatingReview}
       navigationTitle={reviewNavigationTitle(
         currentReference,
         currentIndex,
         session.cards.length,
         isRevealed,
+        lastReview !== undefined,
       )}
       markdown={markdown}
       actions={
@@ -396,6 +491,7 @@ export default function ReviewCardsCommand() {
               onAction={() => setIsRevealed(true)}
             />
           )}
+          {undoAction}
           <Action.Open
             title="Open Deck"
             target={currentReference.deckPath}

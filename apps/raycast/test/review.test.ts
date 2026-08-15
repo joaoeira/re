@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
+import { createMetadataWithId, type ItemId } from "@re/core";
 import { Effect, Layer } from "effect";
 
 import {
@@ -6,11 +7,13 @@ import {
   gradeReviewCardForUi,
   loadReviewCardForUi,
   startReviewForUi,
+  undoReviewCardForUi,
 } from "../src/review";
 import {
   ReviewCardLoadError,
   ReviewGradeError,
   ReviewStore,
+  ReviewUndoError,
   ReviewWorkspaceError,
   type ReviewCardReference,
   type ReviewStore as ReviewStoreService,
@@ -39,6 +42,14 @@ const makeLayer = (service: Partial<ReviewStoreService>): Layer.Layer<ReviewStor
     gradeCard: () =>
       Effect.fail(
         new ReviewGradeError({
+          deckPath: reference.deckPath,
+          cardId: reference.cardId,
+          message: "Not configured for this test",
+        }),
+      ),
+    undoGrade: () =>
+      Effect.fail(
+        new ReviewUndoError({
           deckPath: reference.deckPath,
           cardId: reference.cardId,
           message: "Not configured for this test",
@@ -134,6 +145,32 @@ describe("Raycast review UI boundary", () => {
           gradeCard: () =>
             Effect.fail(
               new ReviewGradeError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: "Disk is read-only",
+              }),
+            ),
+        }),
+      ),
+    ),
+  );
+
+  it.effect("returns undo failures as UI state", () =>
+    Effect.gen(function* () {
+      const result = yield* undoReviewCardForUi({
+        card: reference,
+        previousMetadata: createMetadataWithId(reference.cardId as ItemId),
+      });
+      expect(result).toEqual({
+        _tag: "ReviewUndoError",
+        message: "Disk is read-only",
+      });
+    }).pipe(
+      Effect.provide(
+        makeLayer({
+          undoGrade: () =>
+            Effect.fail(
+              new ReviewUndoError({
                 deckPath: reference.deckPath,
                 cardId: reference.cardId,
                 message: "Disk is read-only",

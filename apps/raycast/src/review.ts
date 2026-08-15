@@ -6,6 +6,7 @@ import {
   type ReviewCardContent,
   type ReviewCardReference,
   type ReviewSession,
+  type ReviewUndoToken,
 } from "./review-store";
 
 export type StartReviewUiResult =
@@ -17,8 +18,12 @@ export type LoadReviewCardUiResult =
   | { readonly _tag: "ReviewCardLoadError"; readonly message: string };
 
 export type GradeReviewCardUiResult =
-  | { readonly _tag: "ReviewCardGraded" }
+  | { readonly _tag: "ReviewCardGraded"; readonly undo: ReviewUndoToken }
   | { readonly _tag: "ReviewGradeError"; readonly message: string };
+
+export type UndoReviewCardUiResult =
+  | { readonly _tag: "ReviewCardUndone" }
+  | { readonly _tag: "ReviewUndoError"; readonly message: string };
 
 export type ReviewStatusUiResult =
   | {
@@ -98,10 +103,29 @@ export const gradeReviewCardForUi = (
 ): Effect.Effect<GradeReviewCardUiResult, never, ReviewStore> =>
   ReviewStore.pipe(
     Effect.flatMap((reviews) => reviews.gradeCard(card, grade, now)),
-    Effect.as<GradeReviewCardUiResult>({ _tag: "ReviewCardGraded" }),
+    Effect.map(
+      (undo): GradeReviewCardUiResult => ({
+        _tag: "ReviewCardGraded",
+        undo,
+      }),
+    ),
     Effect.catchTag("ReviewGradeError", (error) =>
       Effect.succeed<GradeReviewCardUiResult>({
         _tag: "ReviewGradeError",
+        message: error.message,
+      }),
+    ),
+  );
+
+export const undoReviewCardForUi = (
+  undo: ReviewUndoToken,
+): Effect.Effect<UndoReviewCardUiResult, never, ReviewStore> =>
+  ReviewStore.pipe(
+    Effect.flatMap((reviews) => reviews.undoGrade(undo)),
+    Effect.as<UndoReviewCardUiResult>({ _tag: "ReviewCardUndone" }),
+    Effect.catchTag("ReviewUndoError", (error) =>
+      Effect.succeed<UndoReviewCardUiResult>({
+        _tag: "ReviewUndoError",
         message: error.message,
       }),
     ),

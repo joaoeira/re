@@ -1,5 +1,5 @@
 import { FileSystem, Path } from "@effect/platform";
-import { inferType, type Item } from "@re/core";
+import { inferType, type Item, type ItemMetadata } from "@re/core";
 import { ClozeType, QAType } from "@re/types";
 import {
   DeckManager,
@@ -41,6 +41,11 @@ export interface ReviewCardContent {
   readonly cardType: "qa" | "cloze";
 }
 
+export interface ReviewUndoToken {
+  readonly card: ReviewCardReference;
+  readonly previousMetadata: ItemMetadata;
+}
+
 export class ReviewWorkspaceError extends Data.TaggedError("ReviewWorkspaceError")<{
   readonly message: string;
 }> {}
@@ -52,6 +57,12 @@ export class ReviewCardLoadError extends Data.TaggedError("ReviewCardLoadError")
 }> {}
 
 export class ReviewGradeError extends Data.TaggedError("ReviewGradeError")<{
+  readonly deckPath: string;
+  readonly cardId: string;
+  readonly message: string;
+}> {}
+
+export class ReviewUndoError extends Data.TaggedError("ReviewUndoError")<{
   readonly deckPath: string;
   readonly cardId: string;
   readonly message: string;
@@ -70,7 +81,8 @@ export interface ReviewStore {
     card: ReviewCardReference,
     grade: FSRSGrade,
     now: Date,
-  ) => Effect.Effect<void, ReviewGradeError>;
+  ) => Effect.Effect<ReviewUndoToken, ReviewGradeError>;
+  readonly undoGrade: (undo: ReviewUndoToken) => Effect.Effect<void, ReviewUndoError>;
 }
 
 export const ReviewStore = Context.GenericTag<ReviewStore>("@re/raycast/ReviewStore");
@@ -370,8 +382,62 @@ export const ReviewStoreLive: Layer.Layer<
               ),
           }),
         );
+
+      return {
+        card: reference,
+        previousMetadata: scheduled.schedulerLog.previousCard,
+      } satisfies ReviewUndoToken;
     });
 
-    return ReviewStore.of({ startSession, loadCard, gradeCard });
+    const undoGrade = Effect.fn("ReviewStore.undoGrade")(function* (undo: ReviewUndoToken) {
+      yield* deckManager
+        .updateCardMetadata(undo.card.deckPath, undo.card.cardId, undo.previousMetadata)
+        .pipe(
+          Effect.catchTags({
+            DeckNotFound: () =>
+              Effect.fail(
+                new ReviewUndoError({
+                  deckPath: undo.card.deckPath,
+                  cardId: undo.card.cardId,
+                  message: "The deck no longer exists.",
+                }),
+              ),
+            DeckReadError: (error) =>
+              Effect.fail(
+                new ReviewUndoError({
+                  deckPath: undo.card.deckPath,
+                  cardId: undo.card.cardId,
+                  message: `Could not read the deck: ${error.message}`,
+                }),
+              ),
+            DeckParseError: (error) =>
+              Effect.fail(
+                new ReviewUndoError({
+                  deckPath: undo.card.deckPath,
+                  cardId: undo.card.cardId,
+                  message: `The deck metadata is invalid: ${error.message}`,
+                }),
+              ),
+            DeckWriteError: (error) =>
+              Effect.fail(
+                new ReviewUndoError({
+                  deckPath: undo.card.deckPath,
+                  cardId: undo.card.cardId,
+                  message: `Could not undo the review: ${error.message}`,
+                }),
+              ),
+            CardNotFound: () =>
+              Effect.fail(
+                new ReviewUndoError({
+                  deckPath: undo.card.deckPath,
+                  cardId: undo.card.cardId,
+                  message: "The card no longer exists in its deck.",
+                }),
+              ),
+          }),
+        );
+    });
+
+    return ReviewStore.of({ startSession, loadCard, gradeCard, undoGrade });
   }),
 );

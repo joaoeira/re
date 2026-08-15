@@ -90,6 +90,35 @@ Success, expected errors, and requirements.
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
+  it.scoped("undoes a grade by restoring the card's exact previous schedule", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
+      const deckPath = `${workspacePath}/computing.md`;
+      yield* fileSystem.writeFileString(
+        deckPath,
+        `<!--@ effect-card 0 0 0 0-->
+What does Effect track?
+---
+Success, expected errors, and requirements.
+`,
+      );
+
+      const before = yield* fileSystem.readFileString(deckPath).pipe(Effect.flatMap(parseFile));
+      const previousMetadata = before.items[0]!.cards[0]!;
+      const reviews = yield* ReviewStore;
+      const reviewedAt = new Date("2026-08-13T12:00:00Z");
+      const session = yield* reviews.startSession(workspacePath, reviewedAt);
+      const undo = yield* reviews.gradeCard(session.cards[0]!, 2, reviewedAt);
+
+      yield* reviews.undoGrade(undo);
+
+      const written = yield* fileSystem.readFileString(deckPath);
+      const parsed = yield* parseFile(written);
+      expect(parsed.items[0]!.cards[0]).toEqual(previousMetadata);
+    }).pipe(Effect.provide(TestWithPlatformLive)),
+  );
+
   it.scoped("renders each cloze index as its own card", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
