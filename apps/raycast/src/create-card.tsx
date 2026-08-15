@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createCardForUi, loadDecksForUi, type CardField, type CardType } from "./card-creation";
+import { appendNextClozeTemplate } from "./cloze-template";
 import { insertImageForUi } from "./image-insertion";
 import { refreshReviewStatusMenu } from "./review-status-refresh";
 import { runRaycastEffect } from "./runtime";
@@ -175,6 +176,12 @@ export default function CreateCardCommand() {
     }
   }, [answer, cardType, content, preferences.closeAfterSubmit, question, selectedDeckPath]);
 
+  const insertClozeTemplate = useCallback(() => {
+    setContent((current) => appendNextClozeTemplate(current));
+    clearError("content");
+    setTimeout(() => contentRef.current?.focus(), 0);
+  }, [clearError]);
+
   const insertImage = useCallback(async () => {
     if (imageInsertInFlight.current) return;
 
@@ -254,6 +261,14 @@ export default function CreateCardCommand() {
             shortcut={{ modifiers: ["cmd"], key: "enter" }}
             onSubmit={submit}
           />
+          {cardType === "cloze" && (
+            <Action
+              title="Insert Cloze Template"
+              icon={Icon.TextCursor}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
+              onAction={insertClozeTemplate}
+            />
+          )}
           <Action
             title="Insert Image from Clipboard"
             icon={Icon.Image}
