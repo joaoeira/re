@@ -39,6 +39,7 @@ export type ReviewStatusUiResult =
       readonly _tag: "ReviewStatusLoaded";
       readonly due: number;
       readonly new: number;
+      readonly total: number;
       readonly unavailableDecks: number;
     }
   | { readonly _tag: "ReviewStatusError"; readonly message: string };
@@ -54,6 +55,7 @@ export const getReviewStatusForUi = (
         _tag: "ReviewStatusLoaded",
         due: session.totalDue,
         new: session.totalNew,
+        total: session.totalCards,
         unavailableDecks: session.issues.length,
       }),
     ),

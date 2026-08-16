@@ -62,6 +62,10 @@ export default function ReviewStatusCommand() {
               title={countLabel(status.new, "new card", "new cards")}
               icon={Icon.PlusCircle}
             />
+            <MenuBarExtra.Item
+              title={countLabel(status.total, "total card", "total cards")}
+              icon={Icon.Layers}
+            />
             {status.unavailableDecks > 0 && (
               <MenuBarExtra.Item
                 title={countLabel(status.unavailableDecks, "deck unavailable", "decks unavailable")}

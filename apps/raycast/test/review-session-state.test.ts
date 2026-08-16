@@ -19,6 +19,7 @@ const session = (cards: readonly ReviewCardReference[]): ReviewSession => ({
   cards,
   totalDue: 0,
   totalNew: cards.length,
+  totalCards: cards.length,
   issues: [],
 });
 

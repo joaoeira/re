@@ -34,6 +34,7 @@ export interface ReviewSession {
   readonly cards: readonly ReviewCardReference[];
   readonly totalNew: number;
   readonly totalDue: number;
+  readonly totalCards: number;
   readonly issues: readonly ReviewDeckIssue[];
 }
 
@@ -149,6 +150,10 @@ export const ReviewStoreLive: Layer.Layer<
       const validDeckPaths = snapshot.decks
         .filter((deck) => deck.status === "ok")
         .map((deck) => deck.absolutePath);
+      const totalCards = snapshot.decks.reduce(
+        (total, deck) => total + (deck.status === "ok" ? deck.totalCards : 0),
+        0,
+      );
       const issues: ReviewDeckIssue[] = snapshot.decks.flatMap((deck) =>
         deck.status === "ok"
           ? []
@@ -181,6 +186,7 @@ export const ReviewStoreLive: Layer.Layer<
         ),
         totalNew: queue.totalNew,
         totalDue: queue.totalDue,
+        totalCards,
         issues,
       } satisfies ReviewSession;
     });

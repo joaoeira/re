@@ -276,6 +276,7 @@ Answer
       expect(session.cards).toEqual([]);
       expect(session.totalNew).toBe(0);
       expect(session.totalDue).toBe(0);
+      expect(session.totalCards).toBe(1);
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 

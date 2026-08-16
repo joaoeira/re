@@ -79,7 +79,7 @@ const makeLayer = (service: Partial<ReviewStoreService>): Layer.Layer<ReviewStor
   });
 
 describe("Raycast review UI boundary", () => {
-  it.effect("reports due, new, and skipped-deck counts for the menu bar", () =>
+  it.effect("reports due, new, total, and skipped-deck counts for the menu bar", () =>
     Effect.gen(function* () {
       const result = yield* getReviewStatusForUi("/decks", new Date("2026-08-13T12:00:00Z"));
 
@@ -87,6 +87,7 @@ describe("Raycast review UI boundary", () => {
         _tag: "ReviewStatusLoaded",
         due: 12,
         new: 47,
+        total: 115,
         unavailableDecks: 1,
       });
     }).pipe(
@@ -98,6 +99,7 @@ describe("Raycast review UI boundary", () => {
               cards: [],
               totalDue: 12,
               totalNew: 47,
+              totalCards: 115,
               issues: [
                 {
                   deckPath: "/decks/broken.md",
