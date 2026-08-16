@@ -97,3 +97,18 @@ export const LastReviewFromString: Schema.Schema<Date, string> = Schema.transfor
     },
   },
 );
+
+/**
+ * Plain fast-path decode for the parser hot path.
+ * Must accept exactly the strings LastReviewFromString accepts.
+ */
+export const decodeLastReview = (s: string): Date | null => {
+  if (!ISO_TIMESTAMP_PATTERN.test(s)) {
+    return null;
+  }
+  const d = new Date(s);
+  if (isNaN(d.getTime()) || !isValidCalendarDate(s, d)) {
+    return null;
+  }
+  return d;
+};

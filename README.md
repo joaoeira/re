@@ -196,9 +196,9 @@ Benchmarks on M-series Mac:
 
 | Operation  | 1k cards | 10k cards |
 | ---------- | -------- | --------- |
-| Parse      | ~3.5ms   | ~35ms     |
+| Parse      | ~1.4ms   | ~14ms     |
 | Serialize  | ~0.26ms  | ~2.6ms    |
-| Round-trip | ~4ms     | ~40ms     |
+| Round-trip | ~1.7ms   | ~17ms     |
 
 For typical review sessions (< 10k cards), full file writes on each card update are fast enough (~10-50ms including disk I/O).
 

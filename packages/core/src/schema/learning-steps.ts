@@ -21,3 +21,16 @@ export const LearningStepsFromString: Schema.Schema<number, string> = Schema.tra
     encode: (n) => ParseResult.succeed(n.toString()),
   },
 );
+
+/**
+ * Plain fast-path decode for the parser hot path.
+ * Must accept exactly the strings LearningStepsFromString accepts;
+ * the safe-integer check mirrors Schema.int().
+ */
+export const decodeLearningSteps = (s: string): number | null => {
+  if (!LEARNING_STEPS_PATTERN.test(s)) {
+    return null;
+  }
+  const value = parseInt(s, 10);
+  return Number.isSafeInteger(value) ? value : null;
+};

@@ -2,6 +2,21 @@
  * Benchmark results history
  * -------------------------
  *
+ * 2026-08-16 (fast-path metadata decode, schema fallback for malformed lines)
+ * Machine: Apple M-series
+ *
+ * parseFile:
+ *   10 items:    61,625 ops/sec (0.016ms mean)
+ *   100 items:    7,349 ops/sec (0.136ms mean)
+ *   1000 items:     711 ops/sec (1.406ms mean)
+ *
+ * round-trip:
+ *   10 items:   55,882 ops/sec (0.018ms mean)
+ *   100 items:   6,160 ops/sec (0.162ms mean)
+ *   1000 items:    583 ops/sec (1.715ms mean)
+ *
+ * serializeFile / createMetadata / build file: unchanged
+ *
  * 2026-01-04 (multi-card support, Item.cards: ItemMetadata[])
  * Machine: Apple M-series
  *

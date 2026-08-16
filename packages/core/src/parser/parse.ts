@@ -7,8 +7,58 @@ import {
   StateFromString,
   LearningStepsFromString,
   LastReviewFromString,
+  isItemId,
+  decodeNumericField,
+  decodeState,
+  decodeLearningSteps,
+  decodeLastReview,
 } from "../schema/index";
 import { METADATA_LINE_PATTERN } from "./patterns";
+
+const decodeMetadataFast = (tokens: readonly string[]): ItemMetadata | null => {
+  const idRaw = tokens[0]!;
+  if (!isItemId(idRaw)) {
+    return null;
+  }
+
+  const stability = decodeNumericField(tokens[1]!);
+  if (stability === null) {
+    return null;
+  }
+
+  const difficulty = decodeNumericField(tokens[2]!);
+  if (difficulty === null) {
+    return null;
+  }
+
+  const state = decodeState(tokens[3]!);
+  if (state === null) {
+    return null;
+  }
+
+  const learningSteps = decodeLearningSteps(tokens[4]!);
+  if (learningSteps === null) {
+    return null;
+  }
+
+  let lastReview: Date | null = null;
+  if (tokens.length >= 6) {
+    lastReview = decodeLastReview(tokens[5]!);
+    if (lastReview === null) {
+      return null;
+    }
+  }
+
+  let due: Date | null = null;
+  if (tokens.length === 7) {
+    due = decodeLastReview(tokens[6]!);
+    if (due === null) {
+      return null;
+    }
+  }
+
+  return { id: idRaw, stability, difficulty, state, learningSteps, lastReview, due };
+};
 
 const parseMetadataLine = (
   inner: string,
@@ -24,6 +74,13 @@ const parseMetadataLine = (
         reason: `Expected 5-7 fields, got ${tokens.length}`,
       }),
     );
+  }
+
+  // Fast path for well-formed lines; anything it rejects falls through to the
+  // schema pipeline below, which produces the detailed parse error.
+  const fastMetadata = decodeMetadataFast(tokens);
+  if (fastMetadata !== null) {
+    return Effect.succeed(fastMetadata);
   }
 
   const [idRaw, stabilityRaw, difficultyRaw, stateRaw, stepsRaw, reviewOrDueRaw, dueRaw] = tokens;

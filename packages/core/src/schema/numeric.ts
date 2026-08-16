@@ -45,3 +45,15 @@ export const NumericFieldFromString: Schema.Schema<NumericField, string> = Schem
  * Use this when you need to validate a NumericField that's already been parsed.
  */
 export const NumericFieldSchema = Schema.typeSchema(NumericFieldFromString);
+
+/**
+ * Plain fast-path decode for the parser hot path.
+ * Must accept exactly the strings NumericFieldFromString accepts.
+ */
+export const decodeNumericField = (raw: string): NumericField | null => {
+  if (!NUMERIC_PATTERN.test(raw)) {
+    return null;
+  }
+  const value = parseFloat(raw);
+  return Number.isFinite(value) ? { value, raw } : null;
+};

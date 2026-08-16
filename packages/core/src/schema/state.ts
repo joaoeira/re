@@ -22,3 +22,10 @@ export const StateFromString: Schema.Schema<State, string> = Schema.transformOrF
 );
 
 export const StateSchema = Schema.typeSchema(StateFromString);
+
+/**
+ * Plain fast-path decode for the parser hot path.
+ * Must accept exactly the strings StateFromString accepts.
+ */
+export const decodeState = (s: string): State | null =>
+  STATE_PATTERN.test(s) ? (parseInt(s, 10) as State) : null;
