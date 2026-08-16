@@ -74,7 +74,7 @@ const requireText = (
     : Effect.succeed(value);
 };
 
-const formatContentParseError = (error: ContentParseError): string => {
+export const formatContentParseError = (error: ContentParseError): string => {
   const fragment = error.fragment === undefined ? "" : ` — ${error.fragment}`;
   return `${error.message}${fragment}`;
 };

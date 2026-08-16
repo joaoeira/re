@@ -1,6 +1,7 @@
 import {
   Action,
   ActionPanel,
+  Detail,
   Form,
   Icon,
   LocalStorage,
@@ -9,9 +10,15 @@ import {
   openExtensionPreferences,
   showHUD,
   showToast,
+  useNavigation,
 } from "@raycast/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  prepareCardPreviewForUi,
+  renderCardPreviewMarkdown,
+  type PreviewCard,
+} from "./card-preview";
 import { createCardForUi, loadDecksForUi, type CardField, type CardType } from "./card-creation";
 import { appendNextClozeTemplate } from "./cloze-template";
 import { insertImageForUi } from "./image-insertion";
@@ -26,7 +33,70 @@ const LAST_DECK_KEY = "last-selected-deck";
 const successMessage = (cardCount: number): string =>
   cardCount === 1 ? "Card created" : `${cardCount} cards created`;
 
+function CardPreview({
+  cards,
+  deckName,
+  onCreate,
+}: {
+  readonly cards: readonly PreviewCard[];
+  readonly deckName: string;
+  readonly onCreate: () => Promise<boolean>;
+}) {
+  const { pop } = useNavigation();
+  const [cardIndex, setCardIndex] = useState(0);
+  const card = cards[cardIndex]!;
+  const multipleCards = cards.length > 1;
+
+  const createFromPreview = useCallback(async () => {
+    if (await onCreate()) pop();
+  }, [onCreate, pop]);
+
+  return (
+    <Detail
+      navigationTitle={
+        multipleCards
+          ? `${deckName} · Card Preview ${cardIndex + 1}/${cards.length}`
+          : `${deckName} · Card Preview`
+      }
+      markdown={renderCardPreviewMarkdown(card)}
+      actions={
+        <ActionPanel>
+          <Action
+            title="Edit Card"
+            icon={Icon.Pencil}
+            shortcut={{ modifiers: ["cmd"], key: "p" }}
+            onAction={pop}
+          />
+          <Action
+            title="Create Card"
+            icon={Icon.Plus}
+            shortcut={{ modifiers: ["cmd"], key: "enter" }}
+            onAction={() => void createFromPreview()}
+          />
+          {multipleCards && cardIndex < cards.length - 1 && (
+            <Action
+              title="Next Card"
+              icon={Icon.ArrowRight}
+              shortcut={{ modifiers: ["opt"], key: "arrowRight" }}
+              onAction={() => setCardIndex((current) => current + 1)}
+            />
+          )}
+          {multipleCards && cardIndex > 0 && (
+            <Action
+              title="Previous Card"
+              icon={Icon.ArrowLeft}
+              shortcut={{ modifiers: ["opt"], key: "arrowLeft" }}
+              onAction={() => setCardIndex((current) => current - 1)}
+            />
+          )}
+        </ActionPanel>
+      }
+    />
+  );
+}
+
 export default function CreateCardCommand() {
+  const { push } = useNavigation();
   const preferences = getPreferenceValues<Preferences>();
   const [decks, setDecks] = useState<
     readonly {
@@ -45,8 +115,10 @@ export default function CreateCardCommand() {
   const [isLoadingDecks, setIsLoadingDecks] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isInsertingImage, setIsInsertingImage] = useState(false);
+  const [isPreparingPreview, setIsPreparingPreview] = useState(false);
   const submitInFlight = useRef(false);
   const imageInsertInFlight = useRef(false);
+  const previewInFlight = useRef(false);
   const imageTarget = useRef<ImageTargetField>("question");
   const questionRef = useRef<Form.TextArea>(null);
   const answerRef = useRef<Form.TextArea>(null);
@@ -182,6 +254,62 @@ export default function CreateCardCommand() {
     setTimeout(() => contentRef.current?.focus(), 0);
   }, [clearError]);
 
+  const openPreview = useCallback(async () => {
+    if (previewInFlight.current) return;
+
+    previewInFlight.current = true;
+    setIsPreparingPreview(true);
+    setErrors({});
+
+    try {
+      const result = await runRaycastEffect(
+        prepareCardPreviewForUi({
+          workspacePath: preferences.workspacePath,
+          cardType,
+          deckPath: selectedDeckPath,
+          question,
+          answer,
+          content,
+        }),
+      );
+
+      if (result._tag === "FieldError") {
+        setErrors({ [result.field]: result.message });
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Check the card",
+          message: result.message,
+        });
+        return;
+      }
+
+      if (result._tag === "OperationError") {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Could not preview card",
+          message: result.message,
+        });
+        return;
+      }
+
+      const deckName = decks.find((deck) => deck.absolutePath === selectedDeckPath)?.name ?? "Deck";
+      push(<CardPreview cards={result.cards} deckName={deckName} onCreate={submit} />);
+    } finally {
+      previewInFlight.current = false;
+      setIsPreparingPreview(false);
+    }
+  }, [
+    answer,
+    cardType,
+    content,
+    decks,
+    preferences.workspacePath,
+    push,
+    question,
+    selectedDeckPath,
+    submit,
+  ]);
+
   const insertImage = useCallback(async () => {
     if (imageInsertInFlight.current) return;
 
@@ -252,7 +380,7 @@ export default function CreateCardCommand() {
 
   return (
     <Form
-      isLoading={isLoadingDecks || isSubmitting || isInsertingImage}
+      isLoading={isLoadingDecks || isSubmitting || isInsertingImage || isPreparingPreview}
       actions={
         <ActionPanel>
           <Action.SubmitForm
@@ -260,6 +388,12 @@ export default function CreateCardCommand() {
             icon={Icon.Plus}
             shortcut={{ modifiers: ["cmd"], key: "enter" }}
             onSubmit={submit}
+          />
+          <Action
+            title="Preview Card"
+            icon={Icon.Eye}
+            shortcut={{ modifiers: ["cmd"], key: "p" }}
+            onAction={() => void openPreview()}
           />
           {cardType === "cloze" && (
             <Action

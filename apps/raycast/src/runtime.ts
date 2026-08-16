@@ -1,3 +1,4 @@
+import { Path } from "@effect/platform";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import {
@@ -35,10 +36,11 @@ const AppLive = Layer.mergeAll(
   ClipboardImageReaderLive,
   DeckStoreConfiguredLive,
   ReviewStoreConfiguredLive,
+  NodePath.layer,
 );
 
 const runtime = ManagedRuntime.make(AppLive);
 
 export const runRaycastEffect = <A>(
-  effect: Effect.Effect<A, never, ClipboardImageReader | DeckStore | ReviewStore>,
+  effect: Effect.Effect<A, never, ClipboardImageReader | DeckStore | ReviewStore | Path.Path>,
 ): Promise<A> => runtime.runPromise(effect);
