@@ -1,4 +1,5 @@
 import {
+  Color,
   Icon,
   LaunchType,
   MenuBarExtra,
@@ -56,15 +57,18 @@ export default function ReviewStatusCommand() {
           <MenuBarExtra.Section>
             <MenuBarExtra.Item
               title={countLabel(status.due, "card due now", "cards due now")}
-              icon={status.due === 0 ? Icon.CheckCircle : Icon.Clock}
+              icon={{
+                source: status.due === 0 ? Icon.CheckCircle : Icon.Clock,
+                tintColor: Color.SecondaryText,
+              }}
             />
             <MenuBarExtra.Item
               title={countLabel(status.new, "new card", "new cards")}
-              icon={Icon.PlusCircle}
+              icon={{ source: Icon.PlusCircle, tintColor: Color.SecondaryText }}
             />
             <MenuBarExtra.Item
               title={countLabel(status.total, "total card", "total cards")}
-              icon={Icon.Layers}
+              icon={{ source: Icon.Layers, tintColor: Color.SecondaryText }}
             />
             {status.unavailableDecks > 0 && (
               <MenuBarExtra.Item
