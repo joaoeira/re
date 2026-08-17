@@ -1,5 +1,5 @@
 import { FileSystem, Path } from "@effect/platform";
-import { inferType, type Item, type ItemMetadata } from "@re/core";
+import { inferType, type Item, type ItemMetadata, type UntypedItemType } from "@re/core";
 import { ClozeType, QAType } from "@re/types";
 import {
   DeckManager,
@@ -43,7 +43,19 @@ export interface ReviewCardContent {
   readonly reveal: string;
   readonly cardType: "qa" | "cloze";
   readonly sourceCardIds: readonly string[];
+  readonly draft: ReviewCardDraft;
 }
+
+export type ReviewCardDraft =
+  | {
+      readonly cardType: "qa";
+      readonly question: string;
+      readonly answer: string;
+    }
+  | {
+      readonly cardType: "cloze";
+      readonly content: string;
+    };
 
 export interface ReviewUndoToken {
   readonly card: ReviewCardReference;
@@ -89,6 +101,17 @@ export class ReviewDeleteUndoError extends Data.TaggedError("ReviewDeleteUndoErr
   readonly message: string;
 }> {}
 
+export class ReviewEditValidationError extends Data.TaggedError("ReviewEditValidationError")<{
+  readonly field: "question" | "answer" | "content";
+  readonly message: string;
+}> {}
+
+export class ReviewEditError extends Data.TaggedError("ReviewEditError")<{
+  readonly deckPath: string;
+  readonly cardId: string;
+  readonly message: string;
+}> {}
+
 export interface ReviewStore {
   readonly startSession: (
     workspacePath: string,
@@ -98,6 +121,10 @@ export interface ReviewStore {
     rootPath: string,
     card: ReviewCardReference,
   ) => Effect.Effect<ReviewCardContent, ReviewCardLoadError>;
+  readonly saveEdit: (
+    card: ReviewCardReference,
+    draft: ReviewCardDraft,
+  ) => Effect.Effect<void, ReviewEditValidationError | ReviewEditError>;
   readonly gradeCard: (
     card: ReviewCardReference,
     grade: FSRSGrade,
@@ -113,6 +140,93 @@ export interface ReviewStore {
 export const ReviewStore = Context.GenericTag<ReviewStore>("@re/raycast/ReviewStore");
 
 const itemTypes = [QAType, ClozeType] as const;
+const QA_SEPARATOR = "\n---\n";
+
+interface PreparedReviewEdit {
+  readonly cardType: "qa" | "cloze";
+  readonly content: string;
+  readonly itemType: UntypedItemType;
+  readonly clozeIndices: readonly number[];
+}
+
+const formatContentParseError = (error: {
+  readonly message: string;
+  readonly fragment?: string;
+}) => {
+  const fragment = error.fragment === undefined ? "" : ` — ${error.fragment}`;
+  return `${error.message}${fragment}`;
+};
+
+const prepareReviewEdit = Effect.fn("ReviewStore.prepareEdit")(function* (draft: ReviewCardDraft) {
+  if (draft.cardType === "qa") {
+    const question = draft.question.trim();
+    const answer = draft.answer.trim();
+
+    if (question.length === 0) {
+      return yield* new ReviewEditValidationError({
+        field: "question",
+        message: "Enter a question.",
+      });
+    }
+    if (answer.length === 0) {
+      return yield* new ReviewEditValidationError({
+        field: "answer",
+        message: "Enter an answer.",
+      });
+    }
+    if (question.includes(QA_SEPARATOR)) {
+      return yield* new ReviewEditValidationError({
+        field: "question",
+        message: "A question cannot contain a line consisting only of ---.",
+      });
+    }
+
+    const content = `${question}${QA_SEPARATOR}${answer}`;
+    yield* QAType.parse(content).pipe(
+      Effect.mapError(
+        (error) =>
+          new ReviewEditValidationError({
+            field: "question",
+            message: formatContentParseError(error),
+          }),
+      ),
+    );
+
+    return {
+      cardType: "qa",
+      content,
+      itemType: QAType as UntypedItemType,
+      clozeIndices: [],
+    } satisfies PreparedReviewEdit;
+  }
+
+  if (draft.content.trim().length === 0) {
+    return yield* new ReviewEditValidationError({
+      field: "content",
+      message: "Enter cloze content.",
+    });
+  }
+
+  const parsed = yield* ClozeType.parse(draft.content).pipe(
+    Effect.mapError(
+      (error) =>
+        new ReviewEditValidationError({
+          field: "content",
+          message: formatContentParseError(error),
+        }),
+    ),
+  );
+
+  return {
+    cardType: "cloze",
+    content: draft.content,
+    itemType: ClozeType as UntypedItemType,
+    clozeIndices: [...new Set(parsed.deletions.map((deletion) => deletion.index))],
+  } satisfies PreparedReviewEdit;
+});
+
+const sameNumbers = (left: readonly number[], right: readonly number[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
 
 const findItemByCardId = (items: readonly Item[], cardId: string) => {
   for (const item of items) {
@@ -274,13 +388,180 @@ export const ReviewStoreLive: Layer.Layer<
 
       const prompt = yield* prepareMarkdown(cardSpec.prompt);
       const reveal = yield* prepareMarkdown(cardSpec.reveal);
+      const draft: ReviewCardDraft =
+        cardSpec.cardType === "qa"
+          ? yield* QAType.parse(found.item.content).pipe(
+              Effect.map(
+                ({ question, answer }): ReviewCardDraft => ({
+                  cardType: "qa",
+                  question,
+                  answer,
+                }),
+              ),
+              Effect.mapError(
+                () =>
+                  new ReviewCardLoadError({
+                    deckPath: reference.deckPath,
+                    cardId: reference.cardId,
+                    message: "The card content is not valid Q&A content.",
+                  }),
+              ),
+            )
+          : { cardType: "cloze", content: found.item.content };
 
       return {
         prompt,
         reveal,
         cardType: cardSpec.cardType,
         sourceCardIds: found.item.cards.map((card) => card.id),
+        draft,
       } satisfies ReviewCardContent;
+    });
+
+    const saveEdit = Effect.fn("ReviewStore.saveEdit")(function* (
+      reference: ReviewCardReference,
+      draft: ReviewCardDraft,
+    ) {
+      const prepared = yield* prepareReviewEdit(draft);
+      const parsed = yield* deckManager.readDeck(reference.deckPath).pipe(
+        Effect.catchTags({
+          DeckNotFound: () =>
+            Effect.fail(
+              new ReviewEditError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: "The deck no longer exists.",
+              }),
+            ),
+          DeckReadError: (error) =>
+            Effect.fail(
+              new ReviewEditError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: `Could not read the deck: ${error.message}`,
+              }),
+            ),
+          DeckParseError: (error) =>
+            Effect.fail(
+              new ReviewEditError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: `The deck metadata is invalid: ${error.message}`,
+              }),
+            ),
+        }),
+      );
+      const found = findItemByCardId(parsed.items, reference.cardId);
+
+      if (found === null) {
+        return yield* new ReviewEditError({
+          deckPath: reference.deckPath,
+          cardId: reference.cardId,
+          message: "The card no longer exists in its deck.",
+        });
+      }
+
+      const original = yield* inferType(itemTypes, found.item.content).pipe(
+        Effect.mapError(
+          () =>
+            new ReviewEditError({
+              deckPath: reference.deckPath,
+              cardId: reference.cardId,
+              message: "The card content is not valid Q&A or cloze content.",
+            }),
+        ),
+      );
+
+      if (original.type.name !== prepared.itemType.name) {
+        return yield* new ReviewEditError({
+          deckPath: reference.deckPath,
+          cardId: reference.cardId,
+          message: "The card type changed while it was being edited.",
+        });
+      }
+
+      if (prepared.cardType === "cloze") {
+        const originalCloze = yield* ClozeType.parse(found.item.content).pipe(
+          Effect.mapError(
+            () =>
+              new ReviewEditError({
+                deckPath: reference.deckPath,
+                cardId: reference.cardId,
+                message: "The original cloze content is no longer valid.",
+              }),
+          ),
+        );
+        const originalIndices = [
+          ...new Set(originalCloze.deletions.map((deletion) => deletion.index)),
+        ];
+
+        if (!sameNumbers(originalIndices, prepared.clozeIndices)) {
+          return yield* new ReviewEditValidationError({
+            field: "content",
+            message: "Editing cannot add, remove, or renumber cloze indices during a review.",
+          });
+        }
+      }
+
+      yield* deckManager
+        .replaceItem(
+          reference.deckPath,
+          reference.cardId,
+          { cards: found.item.cards, content: prepared.content },
+          prepared.itemType,
+        )
+        .pipe(
+          Effect.catchTags({
+            DeckNotFound: () =>
+              Effect.fail(
+                new ReviewEditError({
+                  deckPath: reference.deckPath,
+                  cardId: reference.cardId,
+                  message: "The deck no longer exists.",
+                }),
+              ),
+            DeckReadError: (error) =>
+              Effect.fail(
+                new ReviewEditError({
+                  deckPath: reference.deckPath,
+                  cardId: reference.cardId,
+                  message: `Could not read the deck: ${error.message}`,
+                }),
+              ),
+            DeckParseError: (error) =>
+              Effect.fail(
+                new ReviewEditError({
+                  deckPath: reference.deckPath,
+                  cardId: reference.cardId,
+                  message: `The deck metadata is invalid: ${error.message}`,
+                }),
+              ),
+            DeckWriteError: (error) =>
+              Effect.fail(
+                new ReviewEditError({
+                  deckPath: reference.deckPath,
+                  cardId: reference.cardId,
+                  message: `Could not save the card: ${error.message}`,
+                }),
+              ),
+            CardNotFound: () =>
+              Effect.fail(
+                new ReviewEditError({
+                  deckPath: reference.deckPath,
+                  cardId: reference.cardId,
+                  message: "The card no longer exists in its deck.",
+                }),
+              ),
+            ItemValidationError: (error) =>
+              Effect.fail(
+                new ReviewEditError({
+                  deckPath: reference.deckPath,
+                  cardId: reference.cardId,
+                  message: error.message,
+                }),
+              ),
+          }),
+        );
     });
 
     const gradeCard = Effect.fn("ReviewStore.gradeCard")(function* (
@@ -532,6 +813,7 @@ export const ReviewStoreLive: Layer.Layer<
     return ReviewStore.of({
       startSession,
       loadCard,
+      saveEdit,
       gradeCard,
       undoGrade,
       deleteItem,

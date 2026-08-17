@@ -11,6 +11,7 @@ import {
   getPreferenceValues,
   openExtensionPreferences,
   showToast,
+  useNavigation,
 } from "@raycast/api";
 import type { FSRSGrade } from "@re/workspace";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -23,6 +24,7 @@ import {
   undoDeleteReviewItemForUi,
   undoReviewCardForUi,
 } from "./review";
+import { ReviewCardEditor } from "./review-card-editor";
 import {
   removeSourceItemFromSession,
   restoreSourceItemToSession,
@@ -75,6 +77,7 @@ const REVIEW_ADVANCE_SHORTCUT: Keyboard.Shortcut = { modifiers: [], key: "space"
 const GOOD_GRADE_SHORTCUT: Keyboard.Shortcut = { modifiers: [], key: "3" };
 const UNDO_REVIEW_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd"], key: "z" };
 const DELETE_ITEM_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd"], key: "backspace" };
+const EDIT_CARD_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd"], key: "e" };
 
 const incrementStats = (stats: SessionStats, grade: FSRSGrade): SessionStats => {
   switch (grade) {
@@ -163,6 +166,7 @@ ${renderIssues(issues)}`;
 };
 
 export default function ReviewCardsCommand() {
+  const { push } = useNavigation();
   const preferences = getPreferenceValues<Preferences>();
   const [session, setSession] = useState<ReviewSession>();
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -405,6 +409,23 @@ export default function ReviewCardsCommand() {
   }, [lastAction]);
 
   const currentReference = session?.cards[currentIndex];
+  const openEditor = useCallback(() => {
+    if (currentReference === undefined || card === undefined) return;
+
+    push(
+      <ReviewCardEditor
+        reference={currentReference}
+        draft={card.draft}
+        onSaved={() => {
+          cardGeneration.current += 1;
+          setCard(undefined);
+          setCardLoadError(undefined);
+          setIsRevealed(false);
+          setCardReloadCycle((cycle) => cycle + 1);
+        }}
+      />,
+    );
+  }, [card, currentReference, push]);
   const undoAction =
     lastAction === undefined ? null : (
       <Action
@@ -597,6 +618,12 @@ export default function ReviewCardsCommand() {
             />
           )}
           {undoAction}
+          <Action
+            title={card.cardType === "cloze" ? "Edit Cloze Note" : "Edit Card"}
+            icon={Icon.Pencil}
+            shortcut={EDIT_CARD_SHORTCUT}
+            onAction={openEditor}
+          />
           <Action.Open
             title="Open Deck"
             target={currentReference.deckPath}

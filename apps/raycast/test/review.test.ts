@@ -7,6 +7,7 @@ import {
   getReviewStatusForUi,
   gradeReviewCardForUi,
   loadReviewCardForUi,
+  saveReviewEditForUi,
   startReviewForUi,
   undoDeleteReviewItemForUi,
   undoReviewCardForUi,
@@ -15,6 +16,8 @@ import {
   ReviewCardLoadError,
   ReviewDeleteError,
   ReviewDeleteUndoError,
+  ReviewEditError,
+  ReviewEditValidationError,
   ReviewGradeError,
   ReviewStore,
   ReviewUndoError,
@@ -38,6 +41,14 @@ const makeLayer = (service: Partial<ReviewStoreService>): Layer.Layer<ReviewStor
     loadCard: () =>
       Effect.fail(
         new ReviewCardLoadError({
+          deckPath: reference.deckPath,
+          cardId: reference.cardId,
+          message: "Not configured for this test",
+        }),
+      ),
+    saveEdit: () =>
+      Effect.fail(
+        new ReviewEditError({
           deckPath: reference.deckPath,
           cardId: reference.cardId,
           message: "Not configured for this test",
@@ -147,6 +158,32 @@ describe("Raycast review UI boundary", () => {
                 deckPath: reference.deckPath,
                 cardId: reference.cardId,
                 message: "Malformed cloze",
+              }),
+            ),
+        }),
+      ),
+    ),
+  );
+
+  it.effect("returns edit validation failures on the affected form field", () =>
+    Effect.gen(function* () {
+      const result = yield* saveReviewEditForUi(reference, {
+        cardType: "cloze",
+        content: "{{c2::changed}}",
+      });
+      expect(result).toEqual({
+        _tag: "ReviewEditFieldError",
+        field: "content",
+        message: "Keep the same cloze indices.",
+      });
+    }).pipe(
+      Effect.provide(
+        makeLayer({
+          saveEdit: () =>
+            Effect.fail(
+              new ReviewEditValidationError({
+                field: "content",
+                message: "Keep the same cloze indices.",
               }),
             ),
         }),

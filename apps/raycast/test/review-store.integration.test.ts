@@ -54,6 +54,11 @@ Success, expected errors, and requirements.
         reveal: "Success, expected errors, and requirements.",
         cardType: "qa",
         sourceCardIds: ["effect-card"],
+        draft: {
+          cardType: "qa",
+          question: "What does Effect track?",
+          answer: "Success, expected errors, and requirements.",
+        },
       });
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
@@ -79,6 +84,85 @@ $n$ bits
         "If a page contains \\(2^n\\) bytes, how many offset bits are needed?",
       );
       expect(card.reveal).toBe("\\(n\\) bits");
+    }).pipe(Effect.provide(TestWithPlatformLive)),
+  );
+
+  it.scoped("saves Q&A edits without changing scheduling metadata", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
+      const deckPath = `${workspacePath}/computing.md`;
+      yield* fileSystem.writeFileString(
+        deckPath,
+        `<!--@ edit-card 10 5 2 0 2026-08-01T12:00:00Z 2026-09-01T12:00:00Z-->
+Old question
+---
+Old answer
+`,
+      );
+
+      const before = yield* fileSystem.readFileString(deckPath).pipe(Effect.flatMap(parseFile));
+      const reviews = yield* ReviewStore;
+      yield* reviews.saveEdit(
+        {
+          deckPath,
+          deckName: "computing",
+          relativePath: "computing.md",
+          cardId: "edit-card",
+          cardIndex: 0,
+        },
+        {
+          cardType: "qa",
+          question: "New question",
+          answer: "New answer",
+        },
+      );
+
+      const after = yield* fileSystem.readFileString(deckPath).pipe(Effect.flatMap(parseFile));
+      expect(after.items[0]!.content).toBe("New question\n---\nNew answer");
+      expect(after.items[0]!.cards).toEqual(before.items[0]!.cards);
+    }).pipe(Effect.provide(TestWithPlatformLive)),
+  );
+
+  it.scoped("rejects cloze edits that change the generated card indices", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
+      const deckPath = `${workspacePath}/geography.md`;
+      yield* fileSystem.writeFileString(
+        deckPath,
+        `<!--@ france-card 0 0 0 0-->
+<!--@ germany-card 0 0 0 0-->
+France: {{c1::Paris}}. Germany: {{c2::Berlin}}.
+`,
+      );
+
+      const reviews = yield* ReviewStore;
+      const result = yield* reviews
+        .saveEdit(
+          {
+            deckPath,
+            deckName: "geography",
+            relativePath: "geography.md",
+            cardId: "france-card",
+            cardIndex: 0,
+          },
+          {
+            cardType: "cloze",
+            content: "France: {{c1::Paris}}. Germany: {{c3::Berlin}}.",
+          },
+        )
+        .pipe(Effect.either);
+
+      expect(result).toMatchObject({
+        _tag: "Left",
+        left: {
+          _tag: "ReviewEditValidationError",
+          field: "content",
+        },
+      });
+      const written = yield* fileSystem.readFileString(deckPath);
+      expect(written).toContain("{{c2::Berlin}}");
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
@@ -213,12 +297,20 @@ Success, expected errors, and requirements.
             reveal: "**Lisbon** is the capital of Portugal.",
             cardType: "cloze",
             sourceCardIds: ["lisbon-card", "portugal-card"],
+            draft: {
+              cardType: "cloze",
+              content: "{{c1::Lisbon}} is the capital of {{c2::Portugal}}.\n",
+            },
           },
           {
             prompt: "Lisbon is the capital of **[...]**.",
             reveal: "Lisbon is the capital of **Portugal**.",
             cardType: "cloze",
             sourceCardIds: ["lisbon-card", "portugal-card"],
+            draft: {
+              cardType: "cloze",
+              content: "{{c1::Lisbon}} is the capital of {{c2::Portugal}}.\n",
+            },
           },
         ]),
       );

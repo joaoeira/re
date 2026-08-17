@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import {
   ReviewStore,
   type ReviewCardContent,
+  type ReviewCardDraft,
   type ReviewCardReference,
   type ReviewDeleteUndoToken,
   type ReviewSession,
@@ -33,6 +34,15 @@ export type DeleteReviewItemUiResult =
 export type UndoDeleteReviewItemUiResult =
   | { readonly _tag: "ReviewDeletedItemRestored" }
   | { readonly _tag: "ReviewDeleteUndoError"; readonly message: string };
+
+export type SaveReviewEditUiResult =
+  | { readonly _tag: "ReviewEditSaved" }
+  | {
+      readonly _tag: "ReviewEditFieldError";
+      readonly field: "question" | "answer" | "content";
+      readonly message: string;
+    }
+  | { readonly _tag: "ReviewEditSaveError"; readonly message: string };
 
 export type ReviewStatusUiResult =
   | {
@@ -105,6 +115,28 @@ export const loadReviewCardForUi = (
         message: error.message,
       }),
     ),
+  );
+
+export const saveReviewEditForUi = (
+  card: ReviewCardReference,
+  draft: ReviewCardDraft,
+): Effect.Effect<SaveReviewEditUiResult, never, ReviewStore> =>
+  ReviewStore.pipe(
+    Effect.flatMap((reviews) => reviews.saveEdit(card, draft)),
+    Effect.as<SaveReviewEditUiResult>({ _tag: "ReviewEditSaved" }),
+    Effect.catchTags({
+      ReviewEditValidationError: (error) =>
+        Effect.succeed<SaveReviewEditUiResult>({
+          _tag: "ReviewEditFieldError",
+          field: error.field,
+          message: error.message,
+        }),
+      ReviewEditError: (error) =>
+        Effect.succeed<SaveReviewEditUiResult>({
+          _tag: "ReviewEditSaveError",
+          message: error.message,
+        }),
+    }),
   );
 
 export const gradeReviewCardForUi = (
