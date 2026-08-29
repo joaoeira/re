@@ -30,6 +30,20 @@ interface Replacement {
 const markdownParser = unified().use(remarkParse).use(remarkMath).freeze();
 const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
 const URI_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+const CURRENCY_AMOUNT_PATTERN = /^\$\d[\d,.]*(?:[kKmMbBtT])?\b/;
+
+const startsWithCurrencyAmount = (markdown: string, dollarOffset: number): boolean =>
+  CURRENCY_AMOUNT_PATTERN.test(markdown.slice(dollarOffset));
+
+// remark-math pairs repeated currency markers as delimiters: "$150 ... $150".
+const isCurrencyPairMisparsedAsInlineMath = (
+  markdown: string,
+  start: number,
+  end: number,
+): boolean =>
+  startsWithCurrencyAmount(markdown, start) && startsWithCurrencyAmount(markdown, end - 1);
+
+const escapeInlineMathDelimiters = (source: string): string => `\\${source.slice(0, -1)}\\$`;
 
 const rewriteInlineMath = (markdown: string, tree: Nodes): string => {
   const replacements: Replacement[] = [];
@@ -42,7 +56,13 @@ const rewriteInlineMath = (markdown: string, tree: Nodes): string => {
       if (start !== undefined && end !== undefined) {
         const source = markdown.slice(start, end);
 
-        if (
+        if (isCurrencyPairMisparsedAsInlineMath(markdown, start, end)) {
+          replacements.push({
+            start,
+            end,
+            value: escapeInlineMathDelimiters(source),
+          });
+        } else if (
           source.startsWith("$") &&
           !source.startsWith("$$") &&
           source.endsWith("$") &&

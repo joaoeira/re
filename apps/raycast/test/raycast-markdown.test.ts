@@ -20,6 +20,28 @@ describe("Raycast Markdown compatibility", () => {
     }),
   );
 
+  it.effect("escapes repeated currency amounts misparsed as one inline expression", () =>
+    Effect.gen(function* () {
+      const markdown = yield* rewriteMathForRaycast(
+        "Why is it wrong to infer that if AI can replace a $150k software engineer, the AI provider can capture the full $150k as revenue?",
+      );
+
+      expect(markdown).toBe(
+        "Why is it wrong to infer that if AI can replace a \\$150k software engineer, the AI provider can capture the full \\$150k as revenue?",
+      );
+    }),
+  );
+
+  it.effect("preserves numeric inline math", () =>
+    Effect.gen(function* () {
+      const expression = yield* rewriteMathForRaycast("$2 + 2$ equals $4$.");
+      const coefficient = yield* rewriteMathForRaycast("The expression is $150k$.");
+
+      expect(expression).toBe("\\(2 + 2\\) equals \\(4\\).");
+      expect(coefficient).toBe("The expression is \\(150k\\).");
+    }),
+  );
+
   it.effect("preserves display math", () =>
     Effect.gen(function* () {
       const inlineDisplay = yield* rewriteMathForRaycast("Value: $$2^n$$ bytes");
