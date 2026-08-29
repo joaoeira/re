@@ -124,6 +124,49 @@ Old answer
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
+  it.scoped("keeps the following card separate when editing a Q&A card", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
+      const deckPath = `${workspacePath}/computing.md`;
+      yield* fileSystem.writeFileString(
+        deckPath,
+        `<!--@ first-card 0 0 0 0-->
+First question
+---
+First answer
+
+<!--@ second-card 0 0 0 0-->
+Second question
+---
+Second answer
+`,
+      );
+
+      const reviews = yield* ReviewStore;
+      yield* reviews.saveEdit(
+        {
+          deckPath,
+          deckName: "computing",
+          relativePath: "computing.md",
+          cardId: "first-card",
+          cardIndex: 0,
+        },
+        {
+          cardType: "qa",
+          question: "Edited first question",
+          answer: "Edited first answer",
+        },
+      );
+
+      const after = yield* fileSystem.readFileString(deckPath).pipe(Effect.flatMap(parseFile));
+      expect(after.items).toHaveLength(2);
+      expect(after.items[0]!.content).toBe("Edited first question\n---\nEdited first answer\n");
+      expect(after.items[1]!.cards[0]!.id).toBe("second-card");
+      expect(after.items[1]!.content).toBe("Second question\n---\nSecond answer\n");
+    }).pipe(Effect.provide(TestWithPlatformLive)),
+  );
+
   it.scoped("rejects cloze edits that change the generated card indices", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

@@ -329,14 +329,14 @@ describe("DeckManager.replaceItem", () => {
     };
     const newItem: Item = {
       cards: [meta("item-a")],
-      content: "NewQ\n---\nNewA\n",
+      content: "NewQ\n---\nNewA",
     };
     const { promise, store } = runSuccess(config, (m) =>
       m.replaceItem("/deck.md", "item-a", newItem, twoSidedType),
     );
 
     await promise;
-    expect(store["/deck.md"]).toContain("NewQ\n---\nNewA\n");
+    expect(store["/deck.md"]).toContain("NewQ\n---\nNewA\n<!--@ item-b 0 0 0 0-->");
     expect(store["/deck.md"]).not.toContain("OldQ");
     expect(store["/deck.md"]).toContain("<!--@ item-b 0 0 0 0-->");
   });

@@ -398,9 +398,17 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
             const { itemIndex } = yield* findItemByCardId(parsed, cardId, deckPath);
             yield* validateItemCardCount(newItem, itemType, deckPath);
 
-            const updatedItems = parsed.items.map((item, idx) =>
-              idx === itemIndex ? newItem : item,
-            );
+            const updatedItems = parsed.items.map((item, idx) => {
+              if (idx !== itemIndex) return item;
+              if (idx === parsed.items.length - 1 || newItem.content.endsWith("\n")) {
+                return newItem;
+              }
+
+              return {
+                ...newItem,
+                content: newItem.content + "\n",
+              };
+            });
 
             const serialized = serializeFile({ ...parsed, items: updatedItems });
             yield* atomicWrite(deckPath, serialized);
