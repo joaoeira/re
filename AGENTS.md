@@ -11,6 +11,14 @@ Search here for real implementations when docs aren't enough.
 
 <!-- effect-solutions:end -->
 
+## Test quality
+
+A test earns its place by pinning down a behavior someone could plausibly break: an outcome a caller depends on, an ordering that matters, a failure that must stay contained. It does not earn its place by restating the source in assertion form, by replaying the same decision through a second call site, or by checking that a getter returns what it was just given. The tell is what happens when the implementation changes. A good test survives any refactor that preserves behavior and fails on any change that alters it. A bad test breaks on every edit and catches nothing, and it teaches people to update it reflexively, which is worse than having no test at all.
+
+Assert through public outputs, match on the fields that matter rather than the whole object, and write one test per distinct behavior rather than one per branch. Be suspicious of any parameter, return value, or export whose only consumer is a test, because that is the test dictating the design rather than verifying it. Either find a way to observe the behavior from outside or delete the test, and then remove the seam.
+
+When a test is kept because it guards something subtle, prove that it does by breaking the code on purpose and watching it fail. Fewer tests that each mean something beat many that mean nothing, because a suite people trust is one they will actually read when it goes red.
+
 ## Effect service definitions
 
 Always define service interfaces explicitly. Never let a service's public API be inferred from its implementation.

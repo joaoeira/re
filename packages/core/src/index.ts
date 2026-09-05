@@ -39,6 +39,9 @@ export type {
   Grade,
   InferredType,
   ContentParseDiagnostic,
+  EvaluableCardSpec,
+  EvaluableItemType,
+  InferredCards,
 } from "./item-type.js";
 export {
   GradeSchema,
@@ -46,4 +49,7 @@ export {
   NoMatchingTypeError,
   manualCardSpec,
   inferType,
+  ResponseValidationError,
+  adaptItemType,
+  inferCards,
 } from "./item-type.js";
