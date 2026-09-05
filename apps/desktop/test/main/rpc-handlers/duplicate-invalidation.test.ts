@@ -49,7 +49,7 @@ Answer
         ),
       );
 
-      await Effect.runPromise(rpc.handlers.SetWorkspaceRootPath({ rootPath }));
+      await Effect.runPromise(rpc.handlers.SetWorkspaceRootPath({ rootPath }, { sender: null }));
 
       const duplicateInput = {
         content: "Question\n---\nAnswer",
@@ -59,7 +59,7 @@ Answer
       };
 
       const initialDuplicate = await Effect.runPromise(
-        rpc.handlers.CheckDuplicates(duplicateInput),
+        rpc.handlers.CheckDuplicates(duplicateInput, { sender: null }),
       );
       expect(initialDuplicate.isDuplicate).toBe(true);
 
@@ -73,13 +73,15 @@ Updated answer
         "utf8",
       );
 
-      const staleDuplicate = await Effect.runPromise(rpc.handlers.CheckDuplicates(duplicateInput));
+      const staleDuplicate = await Effect.runPromise(
+        rpc.handlers.CheckDuplicates(duplicateInput, { sender: null }),
+      );
       expect(staleDuplicate.isDuplicate).toBe(true);
 
-      await Effect.runPromise(rpc.handlers.SetWorkspaceRootPath({ rootPath }));
+      await Effect.runPromise(rpc.handlers.SetWorkspaceRootPath({ rootPath }, { sender: null }));
 
       const refreshedDuplicate = await Effect.runPromise(
-        rpc.handlers.CheckDuplicates(duplicateInput),
+        rpc.handlers.CheckDuplicates(duplicateInput, { sender: null }),
       );
       expect(refreshedDuplicate.isDuplicate).toBe(false);
     } finally {

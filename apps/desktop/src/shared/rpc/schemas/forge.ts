@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 import { ModelIdSchema } from "./ai";
 
 const PositiveIntSchema = Schema.Number.pipe(Schema.int(), Schema.positive());

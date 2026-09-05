@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 
 import { ResolvedAiModelSchema } from "@shared/ai-models";
 import { SecretKeySchema } from "@shared/secrets";

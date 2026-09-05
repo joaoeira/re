@@ -1,6 +1,6 @@
 import { FileSystem, Path } from "@effect/platform";
 import type { PlatformError } from "@effect/platform/Error";
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 import { Array as Arr, Effect, Option, Order } from "effect";
 import ignore from "ignore";
 

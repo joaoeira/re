@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -6,7 +6,8 @@ import { GetAnglesPromptSpec } from "@main/forge/prompts";
 
 const sampleInput = {
   topic: "Photosynthesis converts sunlight into chemical energy in plant cells.",
-  contextText: "Photosynthesis is a process used by plants and other organisms to convert light energy into chemical energy.",
+  contextText:
+    "Photosynthesis is a process used by plants and other organisms to convert light energy into chemical energy.",
 };
 
 describe("GetAnglesPromptSpec", () => {

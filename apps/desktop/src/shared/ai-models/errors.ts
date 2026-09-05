@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 
 export class AiModelCatalogReadFailed extends Schema.TaggedError<AiModelCatalogReadFailed>(
   "@re/desktop/ai/AiModelCatalogReadFailed",

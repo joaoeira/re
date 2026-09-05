@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 
 import type { PromptAttemptContext, PromptSpec } from "@main/forge/prompts/types";
 import { CardQualityPrinciples } from "@main/forge/prompts/card-principles";

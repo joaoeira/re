@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 import type * as Schedule from "effect/Schedule";
 
 import type { AiMessage } from "@shared/rpc/schemas/ai";

@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 
 export class EditorOperationError extends Schema.TaggedError<EditorOperationError>(
   "@re/desktop/rpc/EditorOperationError",

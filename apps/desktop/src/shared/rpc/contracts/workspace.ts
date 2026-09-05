@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 import { MetadataParseErrorSchema } from "@re/core";
 import {
   ScanDecksErrorSchema,

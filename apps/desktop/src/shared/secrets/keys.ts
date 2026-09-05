@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 
 export const SECRET_KEYS = [
   "openai-api-key",

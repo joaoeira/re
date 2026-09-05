@@ -2,7 +2,7 @@ import path from "node:path";
 
 import { FileSystem } from "@effect/platform";
 import type { PlatformError } from "@effect/platform/Error";
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 import { Effect } from "effect";
 import { safeStorage } from "electron";
 

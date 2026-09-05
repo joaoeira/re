@@ -49,10 +49,13 @@ describe("AI handlers", () => {
     );
 
     const result = await Effect.runPromise(
-      handlers.AiGenerateText({
-        model: OPENAI_MODEL,
-        messages: [{ role: "user", content: "hello world" }],
-      }),
+      handlers.AiGenerateText(
+        {
+          model: OPENAI_MODEL,
+          messages: [{ role: "user", content: "hello world" }],
+        },
+        { sender: null },
+      ),
     );
 
     expect(result).toEqual({
@@ -79,10 +82,13 @@ describe("AI handlers", () => {
     );
 
     const exit = await Effect.runPromiseExit(
-      handlers.AiGenerateText({
-        model: OPENAI_MODEL,
-        messages: [{ role: "user", content: "hello" }],
-      }),
+      handlers.AiGenerateText(
+        {
+          model: OPENAI_MODEL,
+          messages: [{ role: "user", content: "hello" }],
+        },
+        { sender: null },
+      ),
     );
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
@@ -116,15 +122,18 @@ describe("AI handlers", () => {
     );
 
     await Effect.runPromise(
-      handlers.AiGenerateText({
-        model: {
-          key: "openai/gpt-5.6-sol",
-          providerId: "anthropic",
-          providerModelId: "claude-sonnet-4-20250514",
-          displayName: "Forged tuple",
-        } as unknown as ResolvedAiModel,
-        messages: [{ role: "user", content: "hello world" }],
-      }),
+      handlers.AiGenerateText(
+        {
+          model: {
+            key: "openai/gpt-5.6-sol",
+            providerId: "anthropic",
+            providerModelId: "claude-sonnet-4-20250514",
+            displayName: "Forged tuple",
+          } as unknown as ResolvedAiModel,
+          messages: [{ role: "user", content: "hello world" }],
+        },
+        { sender: null },
+      ),
     );
 
     expect(receivedModel).toEqual(OPENAI_MODEL);
@@ -155,10 +164,13 @@ describe("AI stream handlers", () => {
 
     const chunks = await Effect.runPromise(
       streamHandlers
-        .AiStreamText({
-          model: OPENAI_MODEL,
-          messages: [{ role: "user", content: "hello world" }],
-        })
+        .AiStreamText(
+          {
+            model: OPENAI_MODEL,
+            messages: [{ role: "user", content: "hello world" }],
+          },
+          { sender: null },
+        )
         .pipe(Stream.runCollect),
     );
 
@@ -184,10 +196,13 @@ describe("AI stream handlers", () => {
 
     const exit = await Effect.runPromiseExit(
       streamHandlers
-        .AiStreamText({
-          model: OPENAI_MODEL,
-          messages: [{ role: "user", content: "hello" }],
-        })
+        .AiStreamText(
+          {
+            model: OPENAI_MODEL,
+            messages: [{ role: "user", content: "hello" }],
+          },
+          { sender: null },
+        )
         .pipe(Stream.runCollect),
     );
     expect(Exit.isFailure(exit)).toBe(true);
@@ -220,10 +235,13 @@ describe("AI stream handlers", () => {
 
     const exit = await Effect.runPromiseExit(
       streamHandlers
-        .AiStreamText({
-          model: INVALID_MODEL,
-          messages: [{ role: "user", content: "hello" }],
-        })
+        .AiStreamText(
+          {
+            model: INVALID_MODEL,
+            messages: [{ role: "user", content: "hello" }],
+          },
+          { sender: null },
+        )
         .pipe(Stream.runCollect),
     );
     expect(Exit.isFailure(exit)).toBe(true);

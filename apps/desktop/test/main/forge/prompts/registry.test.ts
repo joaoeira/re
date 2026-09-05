@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vitest";
 
 import { createForgePromptRegistry, type PromptSpec } from "@main/forge/prompts";

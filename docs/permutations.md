@@ -143,13 +143,9 @@ Internally, the review handler should still detect cloze items with `inferType([
 
 When cloze support is eventually added, the public review assistant schema should not expose raw `ClozeContent` unchanged unless the transport behavior of `Option<string>` has been explicitly validated. The safer design is a dedicated transport schema with JSON-safe fields and a resolved target deletion identity.
 
-### Schema import caveat
+### Schema composition
 
-`apps/desktop/src/shared/rpc/schemas/*` mostly imports `Schema` from `@effect/schema`, while `@re/types` currently defines schemas using `Schema` from `effect`. In practice these may interoperate, but that should be verified before composing the QA schema directly.
-
-If composition works, import the schemas directly from `@re/types`.
-
-If composition does not work cleanly, the correct response is **not** to duplicate the field definitions ad hoc in review. Instead, introduce a small shared re-export or adapter layer so the canonical source schema still has one owner.
+Desktop RPC schemas and `@re/types` use Effect's built-in Schema implementation. Import canonical schemas directly from `@re/types`; no compatibility adapter is needed. The isolated package consumer verifies composition with `effect/Schema`, including tagged errors from core and workspace.
 
 ## Recommended RPC Surface
 

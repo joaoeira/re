@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 import * as SqlClient from "@effect/sql/SqlClient";
 import type * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import { Data, Effect, ManagedRuntime } from "effect";
@@ -2931,9 +2931,7 @@ export const makeInMemoryForgeSessionRepository = (): ForgeSessionRepository => 
       }),
     setTopicMarkedDone: ({ sessionId, topicId, markedDone }) =>
       Effect.sync(() => {
-        const topic = topics.find(
-          (entry) => entry.id === topicId && entry.sessionId === sessionId,
-        );
+        const topic = topics.find((entry) => entry.id === topicId && entry.sessionId === sessionId);
         if (!topic) return false;
         topic.markedDoneAt = markedDone ? nowIso() : null;
         return true;

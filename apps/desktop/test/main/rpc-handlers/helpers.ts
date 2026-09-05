@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { IpcMainHandle } from "electron-effect-rpc/types";
+import type { Implementations, IpcMainHandle } from "electron-effect-rpc/types";
 
 import type { ReviewAnalyticsRepository } from "@main/analytics";
 import { createNoopReviewAnalyticsRepository } from "@main/analytics";
@@ -69,22 +69,39 @@ export const stubSecretStore: SecretStore = {
 
 export const noOpPublish = NoOpAppEventPublisher as IpcMainHandle<AppContract>["publish"];
 
-export const defaultHandlers = Effect.runSync(
-  makeAppRpcHandlersEffect.pipe(
-    Effect.provide(
-      MainAppDirectLive({
-        settingsRepository: stubSettingsRepository,
-        secretStore: stubSecretStore,
-        analyticsRepository: createNoopReviewAnalyticsRepository(),
-        deckWriteCoordinator: NoOpDeckWriteCoordinator,
-        publish: noOpPublish,
-        watcher: stubWatcher,
-        openEditorWindow: () => undefined,
-      }),
+type TestHandlers = {
+  [K in keyof Implementations<AppContract>]: (
+    input: Parameters<Implementations<AppContract>[K]>[0],
+  ) => ReturnType<Implementations<AppContract>[K]>;
+};
+
+// Direct handler tests have no renderer; the RPC endpoint supplies this context in the app.
+const bindTestContext = (handlers: Implementations<AppContract>): TestHandlers =>
+  Object.fromEntries(
+    Object.entries(handlers).map(([key, handler]) => [
+      key,
+      (input: never) => handler(input, { sender: null }),
+    ]),
+  ) as TestHandlers;
+
+export const defaultHandlers = bindTestContext(
+  Effect.runSync(
+    makeAppRpcHandlersEffect.pipe(
+      Effect.provide(
+        MainAppDirectLive({
+          settingsRepository: stubSettingsRepository,
+          secretStore: stubSecretStore,
+          analyticsRepository: createNoopReviewAnalyticsRepository(),
+          deckWriteCoordinator: NoOpDeckWriteCoordinator,
+          publish: noOpPublish,
+          watcher: stubWatcher,
+          openEditorWindow: () => undefined,
+        }),
+      ),
+      Effect.provide(NodeServicesLive),
     ),
-    Effect.provide(NodeServicesLive),
-  ),
-).handlers;
+  ).handlers,
+);
 
 export type HandlerTestOverrides = {
   readonly watcher?: WorkspaceWatcher | undefined;
@@ -131,5 +148,5 @@ export const createHandlersWithOverrides = async (
       ),
     );
 
-    return rpc.handlers;
+    return bindTestContext(rpc.handlers);
   }).pipe(Effect.provide(NodeServicesLive), Effect.runPromise);

@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 import { rpc } from "electron-effect-rpc/contract";
 
 import { SecretKeySchema, SecretStoreErrorSchema } from "@shared/secrets";

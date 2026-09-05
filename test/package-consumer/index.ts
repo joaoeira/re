@@ -6,11 +6,21 @@ import { fileURLToPath } from "node:url";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import { Effect, Layer } from "effect";
-import { createMetadata, parseFile, serializeFile, type Item, type ParsedFile } from "@re/core";
-import { ClozeType, QAType } from "@re/types";
+import * as Schema from "effect/Schema";
+import {
+  createMetadata,
+  InvalidMetadataFormat,
+  MetadataParseErrorSchema,
+  parseFile,
+  serializeFile,
+  type Item,
+  type ParsedFile,
+} from "@re/core";
+import { ClozeType, QAContent, QAType } from "@re/types";
 import {
   DeckManager,
   DeckManagerLive,
+  DeckNotFound,
   NewFirstOrderingStrategy,
   ReviewQueueBuilder,
   ReviewQueueBuilderLive,
@@ -31,6 +41,27 @@ for (const name of ["core", "types", "workspace"]) {
 const qaContent = "What is the capital of France?\n---\nParis\n\n";
 const qa = Effect.runSync(QAType.parse(qaContent));
 assert.equal(QAType.cards(qa)[0]?.reveal, "Paris");
+
+// Exported schemas from all three libraries compose with the consumer's Schema implementation.
+const ConsumerSchema = Schema.Struct({
+  content: QAContent,
+  metadataError: MetadataParseErrorSchema,
+  workspaceError: DeckNotFound,
+});
+const schemaValue = {
+  content: qa,
+  metadataError: new InvalidMetadataFormat({ line: 1, raw: "invalid", reason: "fixture" }),
+  workspaceError: new DeckNotFound({ deckPath: "missing.md" }),
+};
+const encodedSchemaValue = Schema.encodeSync(ConsumerSchema)(schemaValue);
+assert.deepEqual(Schema.decodeUnknownSync(ConsumerSchema)(encodedSchemaValue), schemaValue);
+assert.throws(() =>
+  Schema.decodeUnknownSync(ConsumerSchema)({
+    ...encodedSchemaValue,
+    metadataError: { ...encodedSchemaValue.metadataError, line: "invalid" },
+  }),
+);
+
 const clozeContent = "{{c1::Paris}} is in {{c2::France}}.\n";
 const cloze = Effect.runSync(ClozeType.parse(clozeContent));
 assert.equal(ClozeType.cards(cloze).length, 2);
@@ -97,7 +128,7 @@ try {
   const persisted = Effect.runSync(parseFile(await readFile(deckPath, "utf8")));
   assert.equal(persisted.items[0]?.cards[0]?.lastReview?.toISOString(), reviewedAt.toISOString());
   console.log(
-    "Passed: public imports, declarations, round-trip, Q&A, cloze, scheduling, tagged errors, deck writes, scan, snapshot, queue.",
+    "Passed: public imports, declarations, schema composition, round-trip, Q&A, cloze, scheduling, tagged errors, deck writes, scan, snapshot, queue.",
   );
 } finally {
   await rm(rootPath, { recursive: true, force: true });

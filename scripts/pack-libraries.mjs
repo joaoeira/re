@@ -56,6 +56,13 @@ export const packLibraries = async (destination) => {
         /^package\/(?:package\.json|README\.md|dist\/.+\.(?:js|d\.ts(?:\.map)?)|src\/.+\.ts)$/,
         `Unexpected file in ${manifest.name}: ${entry}`,
       );
+      if (entry.endsWith(".js") || entry.endsWith(".ts")) {
+        assert.doesNotMatch(
+          await run("tar", ["-xOf", archive, entry]),
+          /@effect\/schema/,
+          `Legacy Schema reference in ${entry}`,
+        );
+      }
     }
     // Declaration navigation must resolve inside the delivered package, including nested modules.
     for (const declaration of entries.filter((entry) => entry.endsWith(".d.ts"))) {
@@ -84,6 +91,7 @@ export const packLibraries = async (destination) => {
       "devDependencies",
     ]) {
       for (const [name, version] of Object.entries(manifest[field] ?? {})) {
+        assert.notEqual(name, "@effect/schema", `${manifest.name}: legacy Schema ${field}`);
         assert.doesNotMatch(version, /^(?:workspace|file|link):/, `${manifest.name}: ${name}`);
         if (manifests.has(name)) assert.equal(version, manifests.get(name).version);
       }

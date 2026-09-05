@@ -38,7 +38,15 @@ try {
   delete env.NODE_OPTIONS;
   console.log("Installing archives with npm in an isolated directory...");
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], consumer, env);
-  for (const name of ["effect", "@effect/platform", "@effect/schema"]) {
+  const consumerLock = JSON.parse(await readFile(path.join(consumer, "package-lock.json"), "utf8"));
+  for (const installedPath of Object.keys(consumerLock.packages)) {
+    assert.doesNotMatch(
+      installedPath,
+      /(?:^|\/)node_modules\/@effect\/schema$/,
+      "The consumer must not install the legacy Schema package",
+    );
+  }
+  for (const name of ["effect", "@effect/platform"]) {
     const installations = await Promise.all(
       (await run("npm", ["ls", name, "--all", "--parseable"], consumer, env))
         .split("\n")

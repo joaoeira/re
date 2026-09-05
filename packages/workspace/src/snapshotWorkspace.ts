@@ -1,5 +1,5 @@
 import { FileSystem, Path } from "@effect/platform";
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 import { parseFile, State, type MetadataParseError, type ParsedFile } from "@re/core";
 import { Effect } from "effect";
 

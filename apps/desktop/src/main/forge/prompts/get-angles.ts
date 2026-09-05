@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 
 import type { PromptAttemptContext, PromptSpec } from "./types";
 import { NormalizedStringArraySchema } from "./normalize";
@@ -13,8 +13,7 @@ export const GetAnglesPromptOutputSchema = Schema.Struct({
   angles: NormalizedStringArraySchema.pipe(
     Schema.filter((angles) => angles.length > 0, {
       message: () => ({
-        message:
-          "Angle list must contain at least one non-empty entry after normalization.",
+        message: "Angle list must contain at least one non-empty entry after normalization.",
         override: true,
       }),
     }),
@@ -185,10 +184,7 @@ const renderRepairInstruction = (context: PromptAttemptContext): string => {
   ].join("\n");
 };
 
-export const GetAnglesPromptSpec: PromptSpec<
-  GetAnglesPromptInput,
-  GetAnglesPromptOutput
-> = {
+export const GetAnglesPromptSpec: PromptSpec<GetAnglesPromptInput, GetAnglesPromptOutput> = {
   promptId: "forge/get-angles",
   displayName: "Angle extraction",
   version: "1",

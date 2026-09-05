@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 
 export const AiProviderIdSchema = Schema.Literal("anthropic", "gemini", "openai", "openrouter");
 export type AiProviderId = typeof AiProviderIdSchema.Type;

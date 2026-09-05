@@ -1,4 +1,4 @@
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 
 import type { PromptAttemptContext, PromptSpec } from "./types";
 
@@ -9,9 +9,7 @@ export const CreateCardsPromptInputSchema = Schema.Struct({
   contextText: Schema.String.pipe(Schema.minLength(1)),
   topic: Schema.String.pipe(Schema.minLength(1)),
   instruction: Schema.optional(Schema.String),
-  angles: Schema.optional(
-    Schema.Array(Schema.String.pipe(Schema.minLength(1))),
-  ),
+  angles: Schema.optional(Schema.Array(Schema.String.pipe(Schema.minLength(1)))),
 });
 export type CreateCardsPromptInput = typeof CreateCardsPromptInputSchema.Type;
 
@@ -109,10 +107,7 @@ const renderRepairInstruction = (context: PromptAttemptContext): string => {
   ].join("\n");
 };
 
-export const CreateCardsPromptSpec: PromptSpec<
-  CreateCardsPromptInput,
-  CreateCardsPromptOutput
-> = {
+export const CreateCardsPromptSpec: PromptSpec<CreateCardsPromptInput, CreateCardsPromptOutput> = {
   promptId: "forge/create-cards",
   displayName: "Card generation",
   version: "1",

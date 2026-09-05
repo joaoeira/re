@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { Schema } from "@effect/schema";
+import * as Schema from "effect/Schema";
 import { Context, Data, Effect, Schedule } from "effect";
 
 import type { AiClient } from "@main/ai/ai-client";
