@@ -110,7 +110,7 @@ const NullableDateFromStringSchema = Schema.Union(StrictDateFromStringSchema, Sc
 export const LightQueueItemSchema = Schema.Struct({
   deckPath: Schema.String,
   cardId: Schema.String,
-  cardKey: Schema.NullOr(Schema.String),
+  cardKey: Schema.String,
   deckName: Schema.String,
 });
 
@@ -119,7 +119,7 @@ export type LightQueueItem = typeof LightQueueItemSchema.Type;
 export const ReviewCardRefSchema = Schema.Struct({
   deckPath: Schema.String,
   cardId: Schema.String,
-  cardKey: Schema.NullOr(Schema.String),
+  cardKey: Schema.String,
 });
 
 export type ReviewCardRef = typeof ReviewCardRefSchema.Type;
@@ -209,7 +209,7 @@ export type ReviewAssistantSourceCardError = typeof ReviewAssistantSourceCardErr
 export const ReviewGeneratePermutationsInputSchema = Schema.Struct({
   deckPath: Schema.String,
   cardId: Schema.String,
-  cardKey: Schema.NullOr(Schema.String),
+  cardKey: Schema.String,
   instruction: Schema.optional(Schema.String),
   model: Schema.optional(ModelIdSchema),
 });
@@ -366,10 +366,18 @@ export const getReviewSessionCardCount = (
   return options.cardLimit === null ? includedCount : Math.min(options.cardLimit, includedCount);
 };
 
+export const ReviewQueueIssueSchema = Schema.Struct({
+  deckPath: Schema.String,
+  message: Schema.String,
+});
+
+export type ReviewQueueIssue = typeof ReviewQueueIssueSchema.Type;
+
 export const BuildReviewQueueResultSchema = Schema.Struct({
   items: Schema.Array(LightQueueItemSchema),
   totalNew: Schema.Number.pipe(Schema.nonNegative()),
   totalDue: Schema.Number.pipe(Schema.nonNegative()),
+  deckErrors: Schema.Array(ReviewQueueIssueSchema),
 });
 
 export type BuildReviewQueueResult = typeof BuildReviewQueueResultSchema.Type;

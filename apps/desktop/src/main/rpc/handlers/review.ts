@@ -153,7 +153,7 @@ const loadResolvedReviewCard = (options: {
   readonly settingsRepository: SettingsRepository;
   readonly deckPath: string;
   readonly cardId: string;
-  readonly cardKey: string | null;
+  readonly cardKey: string;
 }): Effect.Effect<
   ResolvedReviewCard,
   CardContentReadError | CardContentNotFoundError | CardContentParseError,
@@ -253,7 +253,7 @@ const resolveReviewAssistantQaSourceCard = (options: {
   readonly settingsRepository: SettingsRepository;
   readonly deckPath: string;
   readonly cardId: string;
-  readonly cardKey: string | null;
+  readonly cardKey: string;
 }): Effect.Effect<
   {
     readonly sourceCard: {
@@ -367,10 +367,14 @@ export const createReviewHandlers = () =>
             deckPaths,
             rootPath: configuredRootPath,
             now: new Date(),
-            options,
+            options: { ...options, cardLimit: null },
           });
 
-          const items = yield* annotateBuiltinCardKeys(queue.items);
+          const annotated = yield* annotateBuiltinCardKeys(queue.items);
+          const items =
+            options.cardLimit === null
+              ? annotated.items
+              : annotated.items.slice(0, options.cardLimit);
           return {
             items: items.map((item) => ({
               deckPath: item.deckPath,
@@ -378,8 +382,18 @@ export const createReviewHandlers = () =>
               cardKey: item.cardKey,
               deckName: item.deckName,
             })),
-            totalNew: queue.totalNew,
-            totalDue: queue.totalDue,
+            totalNew: items.filter((item) => item.category === "new").length,
+            totalDue: items.filter((item) => item.category === "due").length,
+            deckErrors: [
+              ...queue.deckErrors.map((error) => ({
+                deckPath: error.deckPath,
+                message: error.message || "Deck could not be read.",
+              })),
+              ...annotated.errors.map(({ entry, error }) => ({
+                deckPath: entry.deckPath,
+                message: `Card ${entry.card.id}: ${error.message}`,
+              })),
+            ],
           };
         }).pipe(Effect.mapError((e) => new ReviewOperationError({ message: toErrorMessage(e) }))),
       GetCardContent: ({ deckPath, cardId, cardKey }) =>

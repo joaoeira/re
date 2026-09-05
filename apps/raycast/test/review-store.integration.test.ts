@@ -28,6 +28,33 @@ const TestLive = ReviewStoreLive.pipe(
 const TestWithPlatformLive = Layer.merge(TestLive, PlatformLive);
 
 describe("ReviewStoreLive", () => {
+  it.scoped(
+    "keeps healthy cards from a deck with a mismatched item and reports the skipped item",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const rootPath = yield* fileSystem.makeTempDirectoryScoped();
+        const deckPath = `${rootPath}/mixed.md`;
+        yield* fileSystem.writeFileString(
+          deckPath,
+          "<!--@ broken 0 0 0 0-->\n<!--@ extra 0 0 0 0-->\n{{c1::Only one}}\n" +
+            "<!--@ healthy 3 4.5 2 0 2025-01-01T00:00:00Z 2025-01-04T00:00:00Z-->\nQuestion\n---\nAnswer",
+        );
+        const reviews = yield* ReviewStore;
+        const session = yield* reviews.startSession(rootPath, new Date("2026-08-13T12:00:00Z"));
+        expect(session.cards).toMatchObject([{ cardId: "healthy", cardKey: "main" }]);
+        expect(session.totalNew).toBe(0);
+        expect(session.totalDue).toBe(1);
+        expect(session.issues).toMatchObject([
+          {
+            relativePath: "mixed.md",
+            kind: "parse_error",
+            message: expect.stringContaining("Card broken:"),
+          },
+        ]);
+      }).pipe(Effect.provide(TestWithPlatformLive)),
+  );
+
   it.scoped("keeps the queued cloze key when an earlier cloze is removed", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

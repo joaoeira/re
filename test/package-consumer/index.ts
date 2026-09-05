@@ -156,9 +156,10 @@ try {
       });
       assert.equal(queue.totalNew, 2);
       assert.equal(queue.totalDue, 0);
-      const keyedItems = yield* annotateBuiltinCardKeys(queue.items);
+      const { items: keyedItems, errors: itemErrors } = yield* annotateBuiltinCardKeys(queue.items);
       assert.deepEqual(keyedItems.map((entry) => entry.cardKey).sort(), ["c1", "c2"]);
       assert.equal(keyedItems[0]?.deckPath, deckPath);
+      assert.equal(itemErrors.length, 0);
       const deckErrors: readonly ReadError[] = queue.deckErrors;
       assert.equal(deckErrors.length, 1);
       // Apps can turn a partial result into a typed failure using their own policy.

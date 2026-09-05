@@ -33,7 +33,9 @@ normally. Until repaired, count-mismatched items are skipped by desktop's
 duplicate index and do not participate in duplicate checks.
 
 For a review queue, call `annotateBuiltinCardKeys(entries)`. It accepts entries with `{ item, card }`,
-preserves their order and other fields, and adds `cardKey`. It resolves each shared item snapshot
+returns `{ items, errors }`, preserves valid entries' order and other fields, and adds a string `cardKey`.
+Unresolvable entries are excluded, with one error per invalid item containing an entry that identifies
+its location. It resolves each shared item snapshot
 once, even when its cards are interleaved in the queue. Desktop, CLI, and Raycast all use this helper;
 it has no dependency on workspace queue types. For a single card, use
 `getBuiltinCardKey(queuedItem, cardId)` to capture the key from its snapshot.
@@ -43,9 +45,10 @@ resolved item `type` and all generated `cards`. Selection uses the key and verif
 so cloze removal or reordering cannot redirect a review. A missing key or an ID/key disagreement
 fails with `BuiltinCardNotFound`; parse and count errors retain their existing tags.
 
-Apps preserve unparseable queue entries with `cardKey: null` so they surface as recoverable load
-errors. A null key never falls back to an array position; refresh the queue after repairing such
-an item. Keys remain derived from content, with no Markdown format change.
+Apps report excluded items through their queue issues and count only reviewable cards. Session limits
+are applied after filtering, so broken items do not consume the limit. Refresh the queue after
+repairing an item. Content that becomes invalid after the queue was built still fails at load or
+grade time. Keys remain derived from content, with no Markdown format change.
 
 Build locally with `bun run build`. From the repository root, `bun run pack:libraries`
 creates installable archives and `bun run check:packages` verifies them in an isolated Node consumer.

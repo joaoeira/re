@@ -89,12 +89,12 @@ type DesktopReviewSessionInput = {
   readonly loadCard: (input: {
     deckPath: string;
     cardId: string;
-    cardKey: string | null;
+    cardKey: string;
   }) => Promise<CardContent>;
   readonly scheduleReview: (input: {
     deckPath: string;
     cardId: string;
-    cardKey: string | null;
+    cardKey: string;
     grade: FSRSGrade;
   }) => Promise<{
     reviewEntryId: number | null;

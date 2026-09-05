@@ -21,7 +21,11 @@ import {
   type ReviewAssistantCardRef,
 } from "@/lib/review-assistant";
 import type { DesktopReviewSessionSnapshot } from "@/machines/desktopReviewSession";
-import type { LightQueueItem, ReviewSessionOptions } from "@shared/rpc/schemas/review";
+import type {
+  LightQueueItem,
+  ReviewQueueIssue,
+  ReviewSessionOptions,
+} from "@shared/rpc/schemas/review";
 
 type ReviewSessionProps = {
   readonly decks: "all" | string[];
@@ -262,6 +266,7 @@ export function ReviewSession({ decks, options }: ReviewSessionProps) {
       <div className="flex flex-1 items-center justify-center">
         <div className="mx-auto flex max-w-xl flex-col items-center gap-4 text-center">
           <h2 className="text-xl font-semibold">Nothing to review</h2>
+          <ReviewQueueIssues issues={session.deckErrors} />
           <Button type="button" size="sm" onClick={() => void navigate({ to: "/" })}>
             Back to decks
           </Button>
@@ -293,6 +298,7 @@ export function ReviewSession({ decks, options }: ReviewSessionProps) {
           )}
 
           {notice && <p className="mb-4 text-center text-sm text-sky-700">{notice}</p>}
+          <ReviewQueueIssues issues={session.deckErrors} />
           {snapshot.context.error && (
             <p className="mb-4 text-center text-sm text-destructive">{snapshot.context.error}</p>
           )}
@@ -350,6 +356,22 @@ export function ReviewSession({ decks, options }: ReviewSessionProps) {
           openPermutationsForCurrentCard(snapshot);
         }}
       />
+    </div>
+  );
+}
+
+function ReviewQueueIssues({ issues }: { readonly issues: readonly ReviewQueueIssue[] }) {
+  if (issues.length === 0) return null;
+  return (
+    <div role="status" className="mb-4 rounded-md border p-3 text-sm text-muted-foreground">
+      <p>Some cards were excluded from this session:</p>
+      <ul className="mt-1 list-inside list-disc break-words">
+        {issues.map((issue, index) => (
+          <li key={`${issue.deckPath}:${index}`}>
+            {issue.deckPath}: {issue.message}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

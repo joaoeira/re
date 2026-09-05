@@ -64,6 +64,38 @@ const createReviewPromptRuntime = (
   }) as ForgePromptRuntime;
 
 describe("review handlers", () => {
+  it("excludes broken items before applying the card limit and reports partial queue failures", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-review-filter-"));
+    const deckPath = path.join(rootPath, "mixed.md");
+    const missingPath = path.join(rootPath, "missing.md");
+    try {
+      await fs.writeFile(
+        deckPath,
+        "<!--@ broken 0 0 0 0-->\n<!--@ extra 0 0 0 0-->\n{{c1::Only one card}}\n" +
+          "<!--@ healthy 0 0 0 0-->\nQuestion\n---\nAnswer\n" +
+          "<!--@ due 3 4.5 2 0 2025-01-01T00:00:00Z 2025-01-04T00:00:00Z-->\nDue question\n---\nDue answer",
+      );
+      const handlers = await createHandlersWithOverrides(path.join(rootPath, "settings.json"));
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+      const queue = await Effect.runPromise(
+        handlers.BuildReviewQueue({
+          rootPath,
+          deckPaths: [deckPath, missingPath],
+          options: { includeNew: true, includeDue: true, cardLimit: 1, order: "new-first" },
+        }),
+      );
+      expect(queue.items).toMatchObject([{ cardId: "healthy", cardKey: "main" }]);
+      expect(queue.totalNew).toBe(1);
+      expect(queue.totalDue).toBe(0);
+      expect(queue.deckErrors).toMatchObject([
+        { deckPath: missingPath },
+        { deckPath, message: expect.stringContaining("Card broken:") },
+      ]);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
   it("loads and grades the same queued cloze after an earlier cloze is removed", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-review-stable-key-"));
     const deckPath = path.join(rootPath, "cloze.md");

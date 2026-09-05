@@ -18,17 +18,18 @@ import {
   type DesktopReviewSessionSend,
   type DesktopReviewSessionSnapshot,
 } from "@/machines/desktopReviewSession";
-import type { ReviewSessionOptions } from "@shared/rpc/schemas/review";
+import type { ReviewQueueIssue, ReviewSessionOptions } from "@shared/rpc/schemas/review";
 
 type UseReviewSessionResult =
   | { status: "loading"; send: DesktopReviewSessionSend }
-  | { status: "empty"; send: DesktopReviewSessionSend }
+  | { status: "empty"; deckErrors: readonly ReviewQueueIssue[]; send: DesktopReviewSessionSend }
   | { status: "error"; message: string; send: DesktopReviewSessionSend }
   | {
       status: "ready";
       snapshot: DesktopReviewSessionSnapshot;
       totalDue: number;
       totalNew: number;
+      deckErrors: readonly ReviewQueueIssue[];
       notice: string | null;
       loadCycle: number;
       send: DesktopReviewSessionSend;
@@ -254,7 +255,7 @@ export function useReviewSession(
   }
 
   if (bootstrapQuery.data && bootstrapQuery.data.items.length === 0) {
-    return { status: "empty", send };
+    return { status: "empty", deckErrors: bootstrapQuery.data.deckErrors, send };
   }
 
   if (!readyState) {
@@ -266,6 +267,7 @@ export function useReviewSession(
     snapshot: readyState.snapshot,
     totalDue: readyState.totalDue,
     totalNew: readyState.totalNew,
+    deckErrors: bootstrapQuery.data?.deckErrors ?? [],
     notice: readyState.notice,
     loadCycle: readyState.loadCycle,
     send,

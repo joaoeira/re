@@ -81,7 +81,7 @@ describe("annotateBuiltinCardKeys", () => {
       const clozeParse = vi.spyOn(ClozeType, "parse");
       const qaParse = vi.spyOn(QAType, "parse");
 
-      const entries = yield* annotateBuiltinCardKeys([
+      const { items: entries } = yield* annotateBuiltinCardKeys([
         { item: cloze, card: cloze.cards[1]!, label: "second" },
         { item: qa, card: qa.cards[0]!, label: "qa" },
         { item: cloze, card: cloze.cards[0]!, label: "first" },
@@ -101,26 +101,31 @@ describe("annotateBuiltinCardKeys", () => {
     }),
   );
 
-  it.effect("retains unresolvable entries with null keys alongside healthy cards", () =>
-    Effect.gen(function* () {
-      const malformed = { content: "No card syntax", cards: [createMetadata()] };
-      const mismatched = {
-        content: "{{c1::one}}",
-        cards: [createMetadata(), createMetadata()],
-      };
-      const healthy = { content: "Question\n---\nAnswer", cards: [createMetadata()] };
-      const entries = yield* annotateBuiltinCardKeys([
-        { item: malformed, card: malformed.cards[0]!, label: "malformed" },
-        { item: mismatched, card: mismatched.cards[0]!, label: "mismatched" },
-        { item: healthy, card: createMetadata(), label: "missing" },
-        { item: healthy, card: healthy.cards[0]!, label: "healthy" },
-      ]);
-      expect(entries.map(({ label, cardKey }) => ({ label, cardKey }))).toEqual([
-        { label: "malformed", cardKey: null },
-        { label: "mismatched", cardKey: null },
-        { label: "missing", cardKey: null },
-        { label: "healthy", cardKey: "main" },
-      ]);
-    }),
+  it.effect(
+    "excludes invalid entries and reports each invalid item once alongside healthy cards",
+    () =>
+      Effect.gen(function* () {
+        const malformed = { content: "No card syntax", cards: [createMetadata()] };
+        const mismatched = {
+          content: "{{c1::one}}",
+          cards: [createMetadata(), createMetadata()],
+        };
+        const healthy = { content: "Question\n---\nAnswer", cards: [createMetadata()] };
+        const { items, errors } = yield* annotateBuiltinCardKeys([
+          { item: malformed, card: malformed.cards[0]!, label: "malformed" },
+          { item: mismatched, card: mismatched.cards[0]!, label: "mismatched" },
+          { item: mismatched, card: mismatched.cards[1]!, label: "same mismatched item" },
+          { item: healthy, card: createMetadata(), label: "missing" },
+          { item: healthy, card: healthy.cards[0]!, label: "healthy" },
+        ]);
+        expect(items.map(({ label, cardKey }) => ({ label, cardKey }))).toEqual([
+          { label: "healthy", cardKey: "main" },
+        ]);
+        expect(errors).toMatchObject([
+          { entry: { label: "malformed" }, error: { _tag: "NoMatchingTypeError" } },
+          { entry: { label: "mismatched" }, error: { _tag: "ItemCardCountMismatch" } },
+          { entry: { label: "missing" }, error: { _tag: "BuiltinCardNotFound" } },
+        ]);
+      }),
   );
 });

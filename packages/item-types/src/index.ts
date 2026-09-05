@@ -7,4 +7,5 @@ export {
   resolveBuiltinCard,
   BuiltinCardNotFound,
   type ResolvedBuiltinCard,
+  type AnnotatedBuiltinCards,
 } from "./resolve-builtin-item.js";

@@ -132,7 +132,15 @@ describe("review session persistence", () => {
   });
 
   it("keeps a failed review on screen without saving or counting it", async () => {
-    const { queueItem, files, runtime } = createFixture(1);
+    const { queueItem, files, runtime } = createFixture(0);
+    // The item becomes invalid after queue creation, so grading must still revalidate it.
+    files.set(
+      queueItem.deckPath,
+      serializeFile({
+        preamble: "",
+        items: [{ ...queueItem.item, content: "No longer valid card content" }],
+      }),
+    );
     const original = files.get(queueItem.deckPath);
     const actor = createActor(reviewSessionMachine, {
       input: { queue: [queueItem], runtime: await runtime.runtime() },

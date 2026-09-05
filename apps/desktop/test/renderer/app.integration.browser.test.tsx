@@ -412,6 +412,7 @@ describe("renderer integration", () => {
             items: [],
             totalDue: 0,
             totalNew: 0,
+            deckErrors: [],
           },
         };
       }

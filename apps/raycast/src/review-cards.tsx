@@ -105,9 +105,6 @@ const decrementStats = (stats: SessionStats, grade: FSRSGrade): SessionStats => 
   }
 };
 
-const issueSummary = (issues: readonly ReviewDeckIssue[]): string =>
-  issues.length === 1 ? "1 deck could not be loaded" : `${issues.length} decks could not be loaded`;
-
 const renderIssues = (issues: readonly ReviewDeckIssue[]): string =>
   issues
     .map((issue) => `- **${issue.relativePath}** — ${issue.message.replaceAll("\n", " ")}`)
@@ -140,7 +137,7 @@ const renderComplete = (stats: SessionStats, issues: readonly ReviewDeckIssue[])
   const warning =
     issues.length === 0
       ? ""
-      : `\n\n> ${issueSummary(issues)} and were not included in this session.\n\n${renderIssues(issues)}`;
+      : `\n\n> Some cards were excluded from this session.\n\n${renderIssues(issues)}`;
 
   return `# Review complete
 
@@ -158,9 +155,9 @@ const renderEmpty = (issues: readonly ReviewDeckIssue[]): string => {
 
   return `# Nothing to review
 
-There are no new or due cards in the readable decks.
+There are no reviewable new or due cards.
 
-> ${issueSummary(issues)} and may contain cards that could not be checked.
+> Some cards were excluded because of these issues:
 
 ${renderIssues(issues)}`;
 };

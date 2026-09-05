@@ -11,7 +11,10 @@ import {
 import { describe, expect, it, vi } from "vitest";
 
 import { ReviewSession } from "@/components/review-session/review-session";
-import { DEFAULT_REVIEW_SESSION_OPTIONS } from "@shared/rpc/schemas/review";
+import {
+  DEFAULT_REVIEW_SESSION_OPTIONS,
+  type BuildReviewQueueResult,
+} from "@shared/rpc/schemas/review";
 import { DEFAULT_SETTINGS } from "@shared/settings";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { IpcProvider } from "@/lib/ipc-context";
@@ -25,6 +28,7 @@ type InvokeMock = ReturnType<typeof vi.fn> & ((...args: unknown[]) => Promise<un
 
 const renderReviewSession = async (options?: {
   readonly invoke?: InvokeMock;
+  readonly queue?: BuildReviewQueueResult;
   readonly eventHandlers?: Map<string, (payload: unknown) => void>;
 }) => {
   const eventHandlers = options?.eventHandlers ?? new Map<string, (payload: unknown) => void>();
@@ -65,7 +69,7 @@ const renderReviewSession = async (options?: {
       if (method === "BuildReviewQueue") {
         return {
           type: "success",
-          data: {
+          data: options?.queue ?? {
             items: [
               {
                 deckPath: REVIEW_DECK_PATH,
@@ -76,6 +80,7 @@ const renderReviewSession = async (options?: {
             ],
             totalNew: 1,
             totalDue: 0,
+            deckErrors: [],
           },
         };
       }
@@ -174,10 +179,43 @@ const renderReviewSession = async (options?: {
     </QueryClientProvider>,
   );
 
-  await expect.element(screen.getByText("Show Answer")).toBeVisible();
+  await expect
+    .element(
+      screen.getByText(options?.queue?.items.length === 0 ? "Nothing to review" : "Show Answer"),
+    )
+    .toBeVisible();
 
   return { screen, invoke, eventHandlers };
 };
+
+describe("ReviewSession queue issues", () => {
+  it.each([true, false])(
+    "reports skipped items when reviewable cards remain: %s",
+    async (hasCards) => {
+      const { screen, invoke } = await renderReviewSession({
+        queue: {
+          items: hasCards
+            ? [{ deckPath: REVIEW_DECK_PATH, cardId: "qa-card", cardKey: "main", deckName: "deck" }]
+            : [],
+          totalNew: hasCards ? 1 : 0,
+          totalDue: 0,
+          deckErrors: [
+            {
+              deckPath: REVIEW_DECK_PATH,
+              message: "Card broken: metadata does not match its content.",
+            },
+          ],
+        },
+      });
+      await expect
+        .element(screen.getByRole("status"))
+        .toHaveTextContent("Card broken: metadata does not match its content.");
+      expect(invoke.mock.calls.filter(([method]) => method === "GetCardContent")).toHaveLength(
+        hasCards ? 1 : 0,
+      );
+    },
+  );
+});
 
 describe("ReviewSession permutations assistant", () => {
   it("opens the command dialog and suppresses reveal while a sidebar button is focused", async () => {

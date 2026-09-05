@@ -57,7 +57,7 @@ export const ScheduleReview = rpc(
   Schema.Struct({
     deckPath: Schema.String,
     cardId: Schema.String,
-    cardKey: Schema.NullOr(Schema.String),
+    cardKey: Schema.String,
     grade: FSRSGradeSchema,
   }),
   Schema.Struct({

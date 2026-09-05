@@ -175,9 +175,18 @@ export function App() {
               />
             )}
 
-            {!hasCards && <Hint>All cards are up to date</Hint>}
+            {!hasCards && queue?.deckErrors.length === 0 && <Hint>All cards are up to date</Hint>}
           </box>
         </Panel>
+
+        {queue && queue.deckErrors.length > 0 && (
+          <ErrorDisplay
+            title="Some cards were excluded"
+            message={queue.deckErrors
+              .map((error) => `${error.deckPath}: ${error.message || "Deck could not be read."}`)
+              .join("\n")}
+          />
+        )}
 
         <box marginTop={2}>
           <Footer

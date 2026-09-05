@@ -25,7 +25,7 @@ export interface ReviewCardReference {
   readonly deckName: string;
   readonly relativePath: string;
   readonly cardId: string;
-  readonly cardKey: string | null;
+  readonly cardKey: string;
 }
 
 export interface ReviewDeckIssue {
@@ -292,7 +292,7 @@ export const ReviewStoreLive: Layer.Layer<
         now,
       });
 
-      const items = yield* annotateBuiltinCardKeys(queue.items);
+      const { items, errors } = yield* annotateBuiltinCardKeys(queue.items);
       return {
         rootPath: snapshot.rootPath,
         cards: items.map(
@@ -304,10 +304,28 @@ export const ReviewStoreLive: Layer.Layer<
             cardKey: item.cardKey,
           }),
         ),
-        totalNew: queue.totalNew,
-        totalDue: queue.totalDue,
+        totalNew: items.filter((item) => item.category === "new").length,
+        totalDue: items.filter((item) => item.category === "due").length,
         totalCards,
-        issues,
+        issues: [
+          ...issues,
+          ...queue.deckErrors.map(
+            (error): ReviewDeckIssue => ({
+              deckPath: error.deckPath,
+              relativePath: pathService.relative(snapshot.rootPath, error.deckPath),
+              kind: "read_error",
+              message: error.message || "Deck could not be read.",
+            }),
+          ),
+          ...errors.map(
+            ({ entry, error }): ReviewDeckIssue => ({
+              deckPath: entry.deckPath,
+              relativePath: entry.relativePath,
+              kind: "parse_error",
+              message: `Card ${entry.card.id}: ${error.message}`,
+            }),
+          ),
+        ],
       } satisfies ReviewSession;
     });
 

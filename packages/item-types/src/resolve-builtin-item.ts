@@ -1,4 +1,4 @@
-import { Data, Effect, Option } from "effect";
+import { Data, Effect, Either } from "effect";
 import {
   adaptItemType,
   matchItemTypes,
@@ -43,29 +43,54 @@ export const getBuiltinCardKey = (
     return spec.key;
   });
 
-/** Preserve queue order and fields, resolving each shared item snapshot only once. */
+export interface AnnotatedBuiltinCards<Entry> {
+  readonly items: readonly (Entry & { readonly cardKey: string })[];
+  readonly errors: readonly {
+    readonly entry: Entry;
+    readonly error: NoMatchingTypeError | ItemCardCountMismatch | BuiltinCardNotFound;
+  }[];
+}
+
+/** Keep resolvable cards in queue order and report each invalid item once. */
 export const annotateBuiltinCardKeys = <
   Entry extends { readonly item: Item; readonly card: Pick<ItemMetadata, "id"> },
 >(
   entries: readonly Entry[],
-): Effect.Effect<Array<Entry & { readonly cardKey: string | null }>> =>
+): Effect.Effect<AnnotatedBuiltinCards<Entry>> =>
   Effect.gen(function* () {
-    const keysByItem = new Map<Item, ReadonlyMap<string, string>>();
-    return yield* Effect.forEach(entries, (entry) =>
-      Effect.gen(function* () {
-        let keys = keysByItem.get(entry.item);
-        if (!keys) {
-          const match = yield* resolveBuiltinItem(entry.item).pipe(Effect.option);
-          keys = new Map(
-            Option.isSome(match)
-              ? entry.item.cards.map((card, index) => [card.id, match.value.cards[index]!.key])
-              : [],
-          );
-          keysByItem.set(entry.item, keys);
-        }
-        return { ...entry, cardKey: keys.get(entry.card.id) ?? null };
-      }),
-    );
+    const keysByItem = new Map<
+      Item,
+      Either.Either<ReadonlyMap<string, string>, NoMatchingTypeError | ItemCardCountMismatch>
+    >();
+    const items: Array<Entry & { readonly cardKey: string }> = [];
+    const errors: Array<AnnotatedBuiltinCards<Entry>["errors"][number]> = [];
+
+    for (const entry of entries) {
+      let result = keysByItem.get(entry.item);
+      if (!result) {
+        result = yield* resolveBuiltinItem(entry.item).pipe(
+          Effect.map(
+            ({ cards }) =>
+              new Map(entry.item.cards.map((card, index) => [card.id, cards[index]!.key])),
+          ),
+          Effect.either,
+        );
+        keysByItem.set(entry.item, result);
+        if (Either.isLeft(result)) errors.push({ entry, error: result.left });
+      }
+      if (Either.isLeft(result)) continue;
+
+      const cardKey = result.right.get(entry.card.id);
+      if (cardKey === undefined) {
+        errors.push({
+          entry,
+          error: new BuiltinCardNotFound({ cardId: entry.card.id, cardKey: null }),
+        });
+      } else {
+        items.push({ ...entry, cardKey });
+      }
+    }
+    return { items, errors };
   });
 
 export interface ResolvedBuiltinCard extends ItemTypeMatch {
@@ -76,7 +101,7 @@ export interface ResolvedBuiltinCard extends ItemTypeMatch {
 /** Resolve by key and require that it still belongs to the same persistent card. */
 export const resolveBuiltinCard = (
   item: Item,
-  reference: { readonly cardId: string; readonly cardKey: string | null },
+  reference: { readonly cardId: string; readonly cardKey: string },
 ): Effect.Effect<
   ResolvedBuiltinCard,
   NoMatchingTypeError | ItemCardCountMismatch | BuiltinCardNotFound
