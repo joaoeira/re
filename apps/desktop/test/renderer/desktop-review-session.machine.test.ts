@@ -11,7 +11,7 @@ import type { LightQueueItem, SerializedItemMetadata } from "@shared/rpc/schemas
 const queueItem = (overrides: Partial<LightQueueItem> = {}): LightQueueItem => ({
   deckPath: "/workspace/deck.md",
   cardId: "card-a",
-  cardIndex: 0,
+  cardKey: "main",
   deckName: "deck",
   ...overrides,
 });

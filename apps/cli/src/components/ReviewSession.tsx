@@ -11,14 +11,14 @@ import { SessionSummary } from "./SessionSummary";
 import { Header, Footer, ErrorDisplay } from "./ui";
 import { getCardSpec } from "../lib/getCardSpec";
 import { themeColors as theme } from "../ThemeContext";
-import type { QueueItem } from "@re/workspace";
+import type { ReviewQueueItem } from "../lib/review-queue";
 import type { EvaluableCardSpec } from "@re/core";
 import { Scheduler, SchedulerLive } from "@re/scheduler";
 import { DeckManager, DeckManagerLive } from "@re/workspace";
 import { Loading } from "./Spinner";
 
 interface ReviewSessionProps {
-  queue: readonly QueueItem[];
+  queue: readonly ReviewQueueItem[];
   onComplete: () => void;
   onQuit: () => void;
 }
@@ -128,7 +128,7 @@ function ReviewSessionInner({
 
     let cancelled = false;
 
-    Effect.runPromise(getCardSpec(currentItem))
+    Runtime.runPromise(runtime)(getCardSpec(currentItem))
       .then((spec) => {
         if (!cancelled) setCardSpec(spec);
       })
@@ -139,7 +139,7 @@ function ReviewSessionInner({
     return () => {
       cancelled = true;
     };
-  }, [currentIndex, currentItem]);
+  }, [currentIndex, currentItem, runtime]);
 
   const skipCard = useCallback(() => {
     send({ type: "SKIP" });

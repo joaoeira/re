@@ -1,8 +1,12 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-import { adaptItemType, inferCards } from "@re/core";
-import { ClozeType, QAType, type QAContent } from "@re/item-types";
+import {
+  annotateBuiltinCardKeys,
+  resolveBuiltinCard,
+  QAType,
+  type QAContent,
+} from "@re/item-types";
 import { Scheduler } from "@re/scheduler";
 import { DeckManager, ReviewQueueBuilder, resolveDeckImagePath } from "@re/workspace";
 import { Path } from "@effect/platform";
@@ -24,7 +28,6 @@ import { toErrorMessage } from "@main/utils/format";
 import type { AppContract } from "@shared/rpc/contracts";
 import { toDesktopAssetUrl } from "@shared/lib/asset-url";
 import {
-  CardContentIndexOutOfBoundsError,
   CardContentNotFoundError,
   CardContentParseError,
   CardContentReadError,
@@ -45,7 +48,6 @@ import {
   validateRequestedRootPathAs,
 } from "./shared";
 
-const reviewItemTypes = [adaptItemType(QAType), adaptItemType(ClozeType)] as const;
 const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
 
 type ReviewHandlerKeys =
@@ -151,13 +153,10 @@ const loadResolvedReviewCard = (options: {
   readonly settingsRepository: SettingsRepository;
   readonly deckPath: string;
   readonly cardId: string;
-  readonly cardIndex: number;
+  readonly cardKey: string | null;
 }): Effect.Effect<
   ResolvedReviewCard,
-  | CardContentReadError
-  | CardContentNotFoundError
-  | CardContentParseError
-  | CardContentIndexOutOfBoundsError,
+  CardContentReadError | CardContentNotFoundError | CardContentParseError,
   DeckManager | Path.Path
 > =>
   Effect.gen(function* () {
@@ -195,21 +194,16 @@ const loadResolvedReviewCard = (options: {
       );
     }
 
-    const inferred = yield* inferCards(reviewItemTypes, found.item.content).pipe(
-      Effect.mapError((error) => new CardContentParseError({ message: error.message })),
+    const { spec: cardSpec } = yield* resolveBuiltinCard(found.item, options).pipe(
+      Effect.catchTags({
+        BuiltinCardNotFound: (error) =>
+          Effect.fail(new CardContentNotFoundError({ message: error.message })),
+        NoMatchingTypeError: (error) =>
+          Effect.fail(new CardContentParseError({ message: error.message })),
+        ItemCardCountMismatch: (error) =>
+          Effect.fail(new CardContentParseError({ message: error.message })),
+      }),
     );
-
-    const cards = inferred.cards;
-    const cardSpec = cards[options.cardIndex];
-
-    if (!cardSpec) {
-      return yield* Effect.fail(
-        new CardContentIndexOutOfBoundsError({
-          cardIndex: options.cardIndex,
-          availableCards: cards.length,
-        }),
-      );
-    }
 
     if (cardSpec.cardType !== "qa" && cardSpec.cardType !== "cloze") {
       return yield* Effect.fail(
@@ -259,7 +253,7 @@ const resolveReviewAssistantQaSourceCard = (options: {
   readonly settingsRepository: SettingsRepository;
   readonly deckPath: string;
   readonly cardId: string;
-  readonly cardIndex: number;
+  readonly cardKey: string | null;
 }): Effect.Effect<
   {
     readonly sourceCard: {
@@ -270,7 +264,6 @@ const resolveReviewAssistantQaSourceCard = (options: {
   | CardContentReadError
   | CardContentNotFoundError
   | CardContentParseError
-  | CardContentIndexOutOfBoundsError
   | ReviewAssistantUnsupportedCardTypeError,
   DeckManager | Path.Path
 > =>
@@ -377,23 +370,24 @@ export const createReviewHandlers = () =>
             options,
           });
 
+          const items = yield* annotateBuiltinCardKeys(queue.items);
           return {
-            items: queue.items.map((queueItem) => ({
-              deckPath: queueItem.deckPath,
-              cardId: queueItem.card.id,
-              cardIndex: queueItem.cardIndex,
-              deckName: queueItem.deckName,
+            items: items.map((item) => ({
+              deckPath: item.deckPath,
+              cardId: item.card.id,
+              cardKey: item.cardKey,
+              deckName: item.deckName,
             })),
             totalNew: queue.totalNew,
             totalDue: queue.totalDue,
           };
         }).pipe(Effect.mapError((e) => new ReviewOperationError({ message: toErrorMessage(e) }))),
-      GetCardContent: ({ deckPath, cardId, cardIndex }) =>
+      GetCardContent: ({ deckPath, cardId, cardKey }) =>
         loadResolvedReviewCard({
           settingsRepository,
           deckPath,
           cardId,
-          cardIndex,
+          cardKey,
         }).pipe(
           Effect.map(({ cardSpec }) => ({
             prompt: cardSpec.prompt,
@@ -401,20 +395,20 @@ export const createReviewHandlers = () =>
             cardType: cardSpec.cardType,
           })),
         ),
-      GetReviewAssistantSourceCard: ({ deckPath, cardId, cardIndex }) =>
+      GetReviewAssistantSourceCard: ({ deckPath, cardId, cardKey }) =>
         resolveReviewAssistantQaSourceCard({
           settingsRepository,
           deckPath,
           cardId,
-          cardIndex,
+          cardKey,
         }),
-      ReviewGeneratePermutations: ({ deckPath, cardId, cardIndex, instruction, model }) =>
+      ReviewGeneratePermutations: ({ deckPath, cardId, cardKey, instruction, model }) =>
         Effect.gen(function* () {
           const { sourceCard } = yield* resolveReviewAssistantQaSourceCard({
             settingsRepository,
             deckPath,
             cardId,
-            cardIndex,
+            cardKey,
           });
 
           const promptResult = yield* forgePromptRuntime
@@ -442,7 +436,7 @@ export const createReviewHandlers = () =>
             ),
           };
         }),
-      ScheduleReview: ({ deckPath, cardId, grade }) =>
+      ScheduleReview: ({ deckPath, cardId, cardKey, grade }) =>
         Effect.gen(function* () {
           const configuredRootPath = yield* validateDeckAccessAs(
             settingsRepository,
@@ -475,20 +469,17 @@ export const createReviewHandlers = () =>
                 );
               }
 
-              const { cards } = yield* inferCards(reviewItemTypes, cardLocation.item.content).pipe(
+              const { spec: cardSpec } = yield* resolveBuiltinCard(cardLocation.item, {
+                cardId,
+                cardKey,
+              }).pipe(
                 Effect.mapError(
-                  () =>
+                  (error) =>
                     new ReviewOperationError({
-                      message: "The card content is not valid Q&A or cloze content.",
+                      message: error.message,
                     }),
                 ),
               );
-              const cardSpec = cards[cardLocation.cardIndex];
-              if (!cardSpec) {
-                return yield* new ReviewOperationError({
-                  message: "The card content no longer matches its scheduling metadata.",
-                });
-              }
               const evaluatedGrade = yield* cardSpec
                 .evaluate(grade)
                 .pipe(

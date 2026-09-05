@@ -64,6 +64,63 @@ const createReviewPromptRuntime = (
   }) as ForgePromptRuntime;
 
 describe("review handlers", () => {
+  it("loads and grades the same queued cloze after an earlier cloze is removed", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-review-stable-key-"));
+    const deckPath = path.join(rootPath, "cloze.md");
+    try {
+      await fs.writeFile(
+        deckPath,
+        "<!--@ first 0 0 0 0-->\n<!--@ third 0 0 0 0-->\nThe {{c1::first}} and {{c3::third}}.",
+      );
+      const handlers = await createHandlersWithOverrides(path.join(rootPath, "settings.json"));
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+      const queue = await Effect.runPromise(
+        handlers.BuildReviewQueue({ rootPath, deckPaths: [deckPath] }),
+      );
+      const reference = queue.items.find((card) => card.cardId === "third")!;
+      expect(reference.cardKey).toBe("c3");
+
+      await Effect.runPromise(
+        handlers.ReplaceItem({
+          deckPath,
+          cardId: "first",
+          cardType: "cloze",
+          content: "Only {{c3::third}} remains.",
+        }),
+      );
+      const content = await Effect.runPromise(handlers.GetCardContent(reference));
+      expect(content.reveal).toContain("third");
+      await Effect.runPromise(handlers.ScheduleReview({ ...reference, grade: 2 }));
+      const saved = await Effect.runPromise(parseFile(await fs.readFile(deckPath, "utf8")));
+      expect(saved.items[0]!.cards).toHaveLength(1);
+      expect(saved.items[0]!.cards[0]!.id).toBe("third");
+      expect(saved.items[0]!.cards[0]!.state).not.toBe(0);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects grading when a key belongs to a different saved card", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-review-wrong-key-"));
+    const deckPath = path.join(rootPath, "cloze.md");
+    const source =
+      "<!--@ first 0 0 0 0-->\n<!--@ third 0 0 0 0-->\nThe {{c1::first}} and {{c3::third}}.";
+    try {
+      await fs.writeFile(deckPath, source);
+      const handlers = await createHandlersWithOverrides(path.join(rootPath, "settings.json"));
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+      const result = await Effect.runPromise(
+        handlers
+          .ScheduleReview({ deckPath, cardId: "first", cardKey: "c3", grade: 2 })
+          .pipe(Effect.either),
+      );
+      expect(result).toMatchObject({ _tag: "Left", left: { _tag: "review_operation_error" } });
+      expect(await fs.readFile(deckPath, "utf8")).toBe(source);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
   it("rejects a missing generated card without saving metadata or review history", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-stale-review-"));
     const deckPath = path.join(rootPath, "cloze.md");
@@ -84,7 +141,9 @@ describe("review handlers", () => {
       });
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
       const error = await Effect.runPromise(
-        handlers.ScheduleReview({ deckPath, cardId: "removed-card", grade: 2 }).pipe(Effect.flip),
+        handlers
+          .ScheduleReview({ cardKey: "main", deckPath, cardId: "removed-card", grade: 2 })
+          .pipe(Effect.flip),
       );
 
       expect(error._tag).toBe("review_operation_error");
@@ -126,7 +185,7 @@ Answer
         handlers.GetCardContent({
           deckPath,
           cardId: "qa-card",
-          cardIndex: 0,
+          cardKey: "main",
         }),
       );
 
@@ -176,7 +235,7 @@ Paris
         handlers.GetCardContent({
           deckPath,
           cardId: queue.items[0]!.cardId,
-          cardIndex: queue.items[0]!.cardIndex,
+          cardKey: queue.items[0]!.cardKey,
         }),
       );
 
@@ -210,11 +269,7 @@ Answer
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const scheduled = await Effect.runPromise(
-        handlers.ScheduleReview({
-          deckPath,
-          cardId: "review-card",
-          grade: 2,
-        }),
+        handlers.ScheduleReview({ cardKey: "main", deckPath, cardId: "review-card", grade: 2 }),
       );
 
       expect(scheduled.previousCard.state).toBe(0);
@@ -276,7 +331,7 @@ Answer
         handlers.GetReviewAssistantSourceCard({
           deckPath,
           cardId: "qa-card",
-          cardIndex: 0,
+          cardKey: "main",
         }),
       );
 
@@ -313,7 +368,7 @@ The capital of France is {{c1::Paris}}.
         handlers.GetReviewAssistantSourceCard({
           deckPath,
           cardId: "cloze-card",
-          cardIndex: 0,
+          cardKey: "c1",
         }),
       );
 
@@ -368,7 +423,7 @@ Answer
         handlers.ReviewGeneratePermutations({
           deckPath,
           cardId: "qa-card",
-          cardIndex: 0,
+          cardKey: "main",
         }),
       );
 
@@ -414,7 +469,7 @@ Answer
         handlers.ReviewGeneratePermutations({
           deckPath,
           cardId: "qa-card",
-          cardIndex: 0,
+          cardKey: "main",
         }),
       );
 
@@ -458,7 +513,7 @@ Answer
         handlers.GetCardContent({
           deckPath,
           cardId: "missing-card",
-          cardIndex: 0,
+          cardKey: "main",
         }),
       );
 
@@ -494,7 +549,7 @@ Answer
         handlers.GetCardContent({
           deckPath,
           cardId: "bad",
-          cardIndex: 0,
+          cardKey: "main",
         }),
       );
 
@@ -530,7 +585,7 @@ Answer
         handlers.GetCardContent({
           deckPath,
           cardId: "any-card",
-          cardIndex: 0,
+          cardKey: "main",
         }),
       );
 
@@ -566,7 +621,7 @@ Answer
         handlers.GetReviewAssistantSourceCard({
           deckPath,
           cardId: "any-card",
-          cardIndex: 0,
+          cardKey: "main",
         }),
       );
 
@@ -586,7 +641,7 @@ Answer
     }
   });
 
-  it("returns card_index_out_of_bounds when index exceeds inferred cards", async () => {
+  it("returns not_found when the generated card key is missing", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-"));
     const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));
     const settingsFilePath = path.join(settingsRoot, "settings.json");
@@ -608,7 +663,7 @@ The capital of France is {{c1::Paris}}.
         handlers.GetCardContent({
           deckPath,
           cardId: "cloze-card",
-          cardIndex: 1,
+          cardKey: "missing",
         }),
       );
 
@@ -620,7 +675,7 @@ The capital of France is {{c1::Paris}}.
       const failure = Cause.failureOption(exit.cause);
       expect(failure._tag).toBe("Some");
       if (failure._tag === "Some") {
-        expect(failure.value._tag).toBe("card_index_out_of_bounds");
+        expect(failure.value._tag).toBe("not_found");
       }
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
@@ -628,7 +683,7 @@ The capital of France is {{c1::Paris}}.
     }
   });
 
-  it("returns card_index_out_of_bounds when ReviewGeneratePermutations receives an invalid index", async () => {
+  it("returns not_found when ReviewGeneratePermutations receives a missing card key", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-generate-oob-"));
     const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));
     const settingsFilePath = path.join(settingsRoot, "settings.json");
@@ -652,7 +707,7 @@ The capital of France is {{c1::Paris}}.
         handlers.ReviewGeneratePermutations({
           deckPath,
           cardId: "cloze-card",
-          cardIndex: 1,
+          cardKey: "missing",
         }),
       );
 
@@ -664,7 +719,7 @@ The capital of France is {{c1::Paris}}.
       const failure = Cause.failureOption(exit.cause);
       expect(failure._tag).toBe("Some");
       if (failure._tag === "Some") {
-        expect(failure.value._tag).toBe("card_index_out_of_bounds");
+        expect(failure.value._tag).toBe("not_found");
       }
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
@@ -776,19 +831,11 @@ Answer
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const firstSchedule = await Effect.runPromise(
-        handlers.ScheduleReview({
-          deckPath,
-          cardId: "review-card",
-          grade: 2,
-        }),
+        handlers.ScheduleReview({ cardKey: "main", deckPath, cardId: "review-card", grade: 2 }),
       );
 
       await Effect.runPromise(
-        handlers.ScheduleReview({
-          deckPath,
-          cardId: "review-card",
-          grade: 1,
-        }),
+        handlers.ScheduleReview({ cardKey: "main", deckPath, cardId: "review-card", grade: 1 }),
       );
 
       const undoExit = await Effect.runPromiseExit(
@@ -848,11 +895,7 @@ Answer
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
 
       const scheduled = await Effect.runPromise(
-        handlers.ScheduleReview({
-          deckPath,
-          cardId: "review-card",
-          grade: 2,
-        }),
+        handlers.ScheduleReview({ cardKey: "main", deckPath, cardId: "review-card", grade: 2 }),
       );
 
       const undoExit = await Effect.runPromiseExit(

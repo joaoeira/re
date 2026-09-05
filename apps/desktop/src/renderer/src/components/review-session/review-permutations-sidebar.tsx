@@ -71,7 +71,7 @@ export const ReviewPermutationsSidebar = forwardRef<HTMLDivElement, ReviewPermut
         {
           deckPath: card.deckPath,
           cardId: card.cardId,
-          cardIndex: card.cardIndex,
+          cardKey: card.cardKey,
         },
         {
           onSuccess: (result) => {
@@ -110,7 +110,7 @@ export const ReviewPermutationsSidebar = forwardRef<HTMLDivElement, ReviewPermut
           },
         },
       );
-    }, [card.cardId, card.cardIndex, card.deckPath, cardKey, generatePermutations, generating]);
+    }, [card.cardId, card.cardKey, card.deckPath, cardKey, generatePermutations, generating]);
 
     useEffect(() => {
       if (!sourceCardQuery.isSuccess) return;

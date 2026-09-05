@@ -1,6 +1,6 @@
 import type { LightQueueItem, ReviewCardRef } from "@shared/rpc/schemas/review";
 
-export type ReviewAssistantCardRef = Pick<LightQueueItem, "deckPath" | "cardId" | "cardIndex">;
+export type ReviewAssistantCardRef = Pick<LightQueueItem, "deckPath" | "cardId" | "cardKey">;
 
 export const toReviewAssistantCardRef = (
   queueItem: LightQueueItem | null | undefined,
@@ -9,9 +9,9 @@ export const toReviewAssistantCardRef = (
     ? {
         deckPath: queueItem.deckPath,
         cardId: queueItem.cardId,
-        cardIndex: queueItem.cardIndex,
+        cardKey: queueItem.cardKey,
       }
     : null;
 
 export const toReviewAssistantCardKey = (card: ReviewCardRef | null | undefined): string | null =>
-  card ? `${card.deckPath}\u0000${card.cardId}\u0000${card.cardIndex}` : null;
+  card ? `${card.deckPath}\u0000${card.cardId}\u0000${card.cardKey}` : null;

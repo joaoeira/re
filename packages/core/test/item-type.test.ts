@@ -24,6 +24,7 @@ const textType = <E>(
       : new ContentParseError({ type: "text", raw, message: "Expected text: prefix" }),
   cards: ({ answer }) => [
     {
+      key: "main",
       prompt: "Type the answer",
       reveal: answer,
       cardType: "text",
@@ -56,6 +57,7 @@ describe("card evaluation", () => {
             : new ContentParseError({ type: "number", raw, message: "Expected number: prefix" }),
         cards: (answer) => [
           {
+            key: "main",
             prompt: "Enter the number",
             reveal: String(answer),
             cardType: "number",

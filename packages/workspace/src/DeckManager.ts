@@ -118,6 +118,19 @@ export interface DeckManager {
     metadata: ItemMetadata,
   ) => Effect.Effect<void, WriteError | CardNotFound>;
 
+  /**
+   * Read, change, validate, and save one item under the deck lock. Returns the
+   * saved item, including any newline needed to separate the following item.
+   * The callback must not invoke another mutation on this deck. Its external
+   * side effects are not rolled back if validation or saving subsequently fails.
+   */
+  readonly modifyItem: <E>(
+    deckPath: string,
+    cardId: string,
+    change: (current: Item) => Effect.Effect<Item, E>,
+    itemType: EvaluableItemType<unknown>,
+  ) => Effect.Effect<Item, WriteError | CardNotFound | ItemValidationError | E>;
+
   readonly replaceItem: (
     deckPath: string,
     cardId: string,
@@ -260,7 +273,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
           );
         });
 
-      const validateItemCardCount = (
+      const validateItem = (
         item: { readonly cards: readonly ItemMetadata[]; readonly content: string },
         itemType: EvaluableItemType<unknown>,
         deckPath: string,
@@ -274,6 +287,18 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
               }),
           ),
           Effect.flatMap((cards) => {
+            const keys = new Set<string>();
+            for (const card of cards) {
+              if (keys.has(card.key)) {
+                return Effect.fail(
+                  new ItemValidationError({
+                    deckPath,
+                    message: `Duplicate generated card key: ${card.key}`,
+                  }),
+                );
+              }
+              keys.add(card.key);
+            }
             const expectedCards = cards.length;
             if (expectedCards !== item.cards.length) {
               return Effect.fail(
@@ -406,8 +431,26 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
         );
       };
 
+      const modifyItem: DeckManager["modifyItem"] = (deckPath, cardId, change, itemType) =>
+        modifyDeck(deckPath, (parsed) =>
+          Effect.gen(function* () {
+            const { itemIndex } = yield* findItemByCardId(parsed, cardId, deckPath);
+            const changed = yield* change(parsed.items[itemIndex]!);
+            const item =
+              itemIndex === parsed.items.length - 1 || changed.content.endsWith("\n")
+                ? changed
+                : { ...changed, content: changed.content + "\n" };
+            yield* validateItem(item, itemType, deckPath);
+            const items = parsed.items.map((current, index) =>
+              index === itemIndex ? item : current,
+            );
+            return { file: { ...parsed, items }, result: item };
+          }),
+        );
+
       return DeckManager.of({
         readDeck: readAndParse,
+        modifyItem,
 
         updateCardMetadata: (deckPath, cardId, metadata) =>
           modifyDeck(deckPath, (parsed) =>
@@ -427,31 +470,12 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
           ),
 
         replaceItem: (deckPath, cardId, newItem, itemType) =>
-          modifyDeck(deckPath, (parsed) =>
-            Effect.gen(function* () {
-              const { itemIndex } = yield* findItemByCardId(parsed, cardId, deckPath);
-              yield* validateItemCardCount(newItem, itemType, deckPath);
-
-              const items = parsed.items.map((item, idx) => {
-                if (idx !== itemIndex) return item;
-                if (idx === parsed.items.length - 1 || newItem.content.endsWith("\n")) {
-                  return newItem;
-                }
-
-                return {
-                  ...newItem,
-                  content: newItem.content + "\n",
-                };
-              });
-
-              return { file: { ...parsed, items }, result: undefined };
-            }),
-          ),
+          modifyItem(deckPath, cardId, () => Effect.succeed(newItem), itemType).pipe(Effect.asVoid),
 
         appendItem: (deckPath, item, itemType) =>
           modifyDeck(deckPath, (parsed) =>
             Effect.gen(function* () {
-              yield* validateItemCardCount(item, itemType, deckPath);
+              yield* validateItem(item, itemType, deckPath);
 
               let { preamble, items } = parsed;
 

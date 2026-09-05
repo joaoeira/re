@@ -3,8 +3,13 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { parseFile, State } from "@re/core";
 import { SchedulerLive } from "@re/scheduler";
-import { DeckManagerLive, ReviewQueueBuilderLive, ShuffledOrderingStrategy } from "@re/workspace";
-import { Effect, Layer } from "effect";
+import {
+  DeckManager,
+  DeckManagerLive,
+  ReviewQueueBuilderLive,
+  ShuffledOrderingStrategy,
+} from "@re/workspace";
+import { Deferred, Effect, Fiber, Layer } from "effect";
 
 import { ReviewStore, ReviewStoreLive } from "../src/review-store";
 
@@ -23,6 +28,100 @@ const TestLive = ReviewStoreLive.pipe(
 const TestWithPlatformLive = Layer.merge(TestLive, PlatformLive);
 
 describe("ReviewStoreLive", () => {
+  it.scoped("keeps the queued cloze key when an earlier cloze is removed", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const rootPath = yield* fileSystem.makeTempDirectoryScoped();
+      const deckPath = `${rootPath}/cloze.md`;
+      yield* fileSystem.writeFileString(
+        deckPath,
+        "<!--@ first 0 0 0 0-->\n<!--@ third 0 0 0 0-->\nThe {{c1::first}} and {{c3::third}}.",
+      );
+      const reviews = yield* ReviewStore;
+      const now = new Date("2026-08-13T12:00:00Z");
+      const session = yield* reviews.startSession(rootPath, now);
+      const reference = session.cards.find((card) => card.cardId === "third")!;
+      expect(reference.cardKey).toBe("c3");
+      yield* fileSystem.writeFileString(
+        deckPath,
+        "<!--@ third 0 0 0 0-->\nOnly {{c3::third}} remains.",
+      );
+
+      const card = yield* reviews.loadCard(rootPath, reference);
+      expect(card.reveal).toContain("third");
+      yield* reviews.gradeCard(reference, 2, now);
+      const saved = yield* parseFile(yield* fileSystem.readFileString(deckPath));
+      expect(saved.items[0]!.cards[0]!.id).toBe("third");
+      expect(saved.items[0]!.cards[0]!.state).not.toBe(State.New);
+    }).pipe(Effect.provide(TestWithPlatformLive)),
+  );
+
+  it.scoped("keeps a review saved while an edit is waiting to acquire the deck lock", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const base = yield* DeckManager;
+      const directory = yield* fileSystem.makeTempDirectoryScoped();
+      const deckPath = `${directory}/deck.md`;
+      yield* fileSystem.writeFileString(
+        deckPath,
+        "<!--@ card-a 0 0 0 0-->\nOld question\n---\nOld answer",
+      );
+      const waiting = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const beforeSave = <A, E>(operation: Effect.Effect<A, E>) =>
+        Deferred.succeed(waiting, undefined).pipe(
+          Effect.zipRight(Deferred.await(release)),
+          Effect.zipRight(operation),
+        );
+      // Delay entry into either public edit operation. An unlocked read made by
+      // the caller before this point must not determine the metadata it saves.
+      const delayed: DeckManager = {
+        ...base,
+        modifyItem: (path, id, change, type) => beforeSave(base.modifyItem(path, id, change, type)),
+        replaceItem: (path, id, item, type) => beforeSave(base.replaceItem(path, id, item, type)),
+      };
+      const reviews = yield* ReviewStore.pipe(
+        Effect.provide(
+          ReviewStoreLive.pipe(
+            Layer.provide(
+              Layer.mergeAll(
+                QueueServicesLive,
+                SchedulerLive,
+                PlatformLive,
+                Layer.succeed(DeckManager, delayed),
+              ),
+            ),
+          ),
+        ),
+      );
+      const reference = {
+        deckPath,
+        deckName: "deck",
+        relativePath: "deck.md",
+        cardId: "card-a",
+        cardKey: "main",
+      };
+      const edit = yield* reviews
+        .saveEdit(reference, {
+          cardType: "qa",
+          question: "Edited question",
+          answer: "Edited answer",
+        })
+        .pipe(Effect.forkScoped);
+      yield* Deferred.await(waiting);
+
+      yield* reviews.gradeCard(reference, 2, new Date("2026-08-13T12:00:00Z"));
+      const reviewed = yield* base.readDeck(deckPath);
+      expect(reviewed.items[0]!.cards[0]!.state).not.toBe(State.New);
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(edit);
+
+      const saved = yield* base.readDeck(deckPath);
+      expect(saved.items[0]!.cards[0]).toEqual(reviewed.items[0]!.cards[0]);
+      expect(saved.items[0]!.content).toBe("Edited question\n---\nEdited answer");
+    }).pipe(Effect.provide(DeckManagerServicesLive)),
+  );
+
   it.scoped("loads a Q&A card from the whole workspace", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
@@ -105,7 +204,7 @@ Old answer
           deckName: "computing",
           relativePath: "computing.md",
           cardId: "edit-card",
-          cardIndex: 0,
+          cardKey: "main",
         },
         {
           cardType: "qa",
@@ -146,7 +245,7 @@ Second answer
           deckName: "computing",
           relativePath: "computing.md",
           cardId: "first-card",
-          cardIndex: 0,
+          cardKey: "main",
         },
         {
           cardType: "qa",
@@ -184,7 +283,7 @@ France: {{c1::Paris}}. Germany: {{c2::Berlin}}.
             deckName: "geography",
             relativePath: "geography.md",
             cardId: "france-card",
-            cardIndex: 0,
+            cardKey: "c1",
           },
           {
             cardType: "cloze",
@@ -254,7 +353,7 @@ Success, expected errors, and requirements.
             deckName: "cloze",
             relativePath: "cloze.md",
             cardId: "removed-card",
-            cardIndex: 1,
+            cardKey: "c2",
           },
           2,
           new Date("2026-08-13T12:00:00Z"),

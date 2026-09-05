@@ -12,6 +12,134 @@ import type { AppContract } from "@shared/rpc/contracts";
 import { createHandlersWithOverrides } from "./helpers";
 
 describe("editor handlers", () => {
+  it("opens a mismatched item for explicit reset-and-save recovery", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-editor-recovery-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const content = "The capital of {{c1::France}}.";
+    const original = `<!--@ first 10 5 2 0 2026-01-01T12:00:00Z 2026-01-11T12:00:00Z-->\n<!--@ extra 0 0 0 0-->\n${content}`;
+    try {
+      await fs.writeFile(deckPath, original);
+      const handlers = await createHandlersWithOverrides(path.join(rootPath, "settings.json"));
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+      const edit = await Effect.runPromise(handlers.GetItemForEdit({ deckPath, cardId: "first" }));
+      expect(edit).toMatchObject({ content, cardType: "cloze", requiresSchedulingReset: true });
+      const rejected = await Effect.runPromise(
+        handlers
+          .ReplaceItem({
+            deckPath,
+            cardId: "first",
+            content,
+            cardType: "cloze",
+          })
+          .pipe(Effect.either),
+      );
+      expect(rejected).toMatchObject({ _tag: "Left", left: { _tag: "editor_operation_error" } });
+      expect(await fs.readFile(deckPath, "utf8")).toBe(original);
+
+      const saved = await Effect.runPromise(
+        handlers.ReplaceItem({
+          deckPath,
+          cardId: "first",
+          content,
+          cardType: "cloze",
+          resetScheduling: true,
+        }),
+      );
+      expect(saved.cardIds).toHaveLength(1);
+      expect(saved.cardIds[0]).not.toBe("first");
+      expect(saved.cardIds[0]).not.toBe("extra");
+      const parsed = await Effect.runPromise(parseFile(await fs.readFile(deckPath, "utf8")));
+      expect(parsed.items[0]!.cards[0]).toMatchObject({
+        state: 0,
+        stability: { value: 0 },
+        difficulty: { value: 0 },
+        lastReview: null,
+        due: null,
+      });
+      expect(
+        await Effect.runPromise(
+          handlers.GetItemForEdit({
+            deckPath,
+            cardId: saved.cardIds[0]!,
+          }),
+        ),
+      ).toMatchObject({ requiresSchedulingReset: false });
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves healthy learning data when a requested reset is no longer needed", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-editor-stale-reset-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const content = "The capital of {{c1::France}}.";
+    const metadata = "<!--@ first 10.00 5 2 0 2026-01-01T12:00:00Z 2026-01-11T12:00:00Z-->";
+    try {
+      await fs.writeFile(deckPath, `${metadata}\n<!--@ extra 0 0 0 0-->\n${content}`);
+      const handlers = await createHandlersWithOverrides(path.join(rootPath, "settings.json"));
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+      const edit = await Effect.runPromise(handlers.GetItemForEdit({ deckPath, cardId: "first" }));
+      expect(edit.requiresSchedulingReset).toBe(true);
+
+      // An external editor repairs the metadata after this editor has opened.
+      const repaired = `${metadata}\n${content}`;
+      await fs.writeFile(deckPath, repaired);
+      const current = await Effect.runPromise(parseFile(repaired));
+      const editedContent = "The capital of {{c1::France}} is Paris.";
+      const saved = await Effect.runPromise(
+        handlers.ReplaceItem({
+          deckPath,
+          cardId: "first",
+          content: editedContent,
+          cardType: edit.cardType,
+          resetScheduling: edit.requiresSchedulingReset,
+        }),
+      );
+
+      expect(saved.cardIds).toEqual(["first"]);
+      const parsed = await Effect.runPromise(parseFile(await fs.readFile(deckPath, "utf8")));
+      expect(parsed.items[0]!.cards).toEqual(current.items[0]!.cards);
+      expect(parsed.items[0]!.content).toBe(editedContent);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("skips mismatched items while indexing healthy items for duplicates", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-editor-duplicate-mismatch-"));
+    const deckPath = path.join(rootPath, "deck.md");
+    const mismatchedContent = "The capital of {{c1::France}}.";
+    const healthyContent = "The capital of {{c1::Italy}}.";
+    try {
+      await fs.writeFile(
+        deckPath,
+        `<!--@ first 0 0 0 0-->\n<!--@ extra 0 0 0 0-->\n${mismatchedContent}\n<!--@ healthy 0 0 0 0-->\n${healthyContent}`,
+      );
+      const handlers = await createHandlersWithOverrides(path.join(rootPath, "settings.json"));
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+      const mismatched = await Effect.runPromise(
+        handlers.CheckDuplicates({
+          rootPath,
+          content: mismatchedContent,
+          cardType: "cloze",
+          excludeCardIds: [],
+        }),
+      );
+      expect(mismatched.isDuplicate).toBe(false);
+      const healthy = await Effect.runPromise(
+        handlers.CheckDuplicates({
+          rootPath,
+          content: healthyContent,
+          cardType: "cloze",
+          excludeCardIds: [],
+        }),
+      );
+      expect(healthy.isDuplicate).toBe(true);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
   it("imports image bytes into the canonical workspace asset store", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-image-import-"));
     const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-settings-"));
@@ -358,52 +486,6 @@ The {{c1::first}} and {{c3::third}}.
       expect(result.cardIds[2]).toBe("c3");
       expect(result.cardIds[1]).not.toBe("c1");
       expect(result.cardIds[1]).not.toBe("c3");
-    } finally {
-      await fs.rm(rootPath, { recursive: true, force: true });
-      await fs.rm(settingsRoot, { recursive: true, force: true });
-    }
-  });
-
-  it("adds a trailing newline during ReplaceItem to keep subsequent items parseable", async () => {
-    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-replace-newline-"));
-    const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-editor-settings-"));
-    const settingsFilePath = path.join(settingsRoot, "settings.json");
-    const deckPath = path.join(rootPath, "qa.md");
-
-    try {
-      await fs.writeFile(
-        deckPath,
-        `<!--@ first 0 0 0 0-->
-Q1
----
-A1
-
-<!--@ second 0 0 0 0-->
-Q2
----
-A2
-`,
-        "utf8",
-      );
-
-      const handlers = await createHandlersWithOverrides(settingsFilePath);
-      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
-
-      await Effect.runPromise(
-        handlers.ReplaceItem({
-          deckPath,
-          cardId: "first",
-          cardType: "qa",
-          content: "Q1 updated\n---\nA1 updated",
-        }),
-      );
-
-      const markdown = await fs.readFile(deckPath, "utf8");
-      const parsed = await Effect.runPromise(parseFile(markdown));
-      expect(parsed.items).toHaveLength(2);
-      expect(parsed.items[1]!.cards[0]!.id).toBe("second");
-      expect(markdown).toContain("A1 updated\n<!--@ second 0 0 0 0-->");
-      expect(markdown).not.toContain("A1 updated<!--@ second");
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
       await fs.rm(settingsRoot, { recursive: true, force: true });

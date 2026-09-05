@@ -40,6 +40,8 @@ export type {
   EvaluableCardSpec,
   EvaluableItemType,
   InferredCards,
+  ItemTypeMatch,
+  ParseableItemType,
 } from "./item-type.js";
 export {
   GradeSchema,
@@ -49,4 +51,12 @@ export {
   ResponseValidationError,
   adaptItemType,
   inferCards,
+  matchItemTypes,
+  ItemCardCountMismatch,
 } from "./item-type.js";
+export {
+  reconcileCards,
+  DuplicateCardKey,
+  ReconcileCardCountMismatch,
+  type ReconcileError,
+} from "./reconcile-cards.js";

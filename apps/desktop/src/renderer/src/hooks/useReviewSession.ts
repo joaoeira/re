@@ -94,8 +94,6 @@ export function useReviewSession(
               Effect.catchTags({
                 not_found: (e) => Effect.fail(new RecoverableCardLoadError(e.message)),
                 parse_error: (e) => Effect.fail(new RecoverableCardLoadError(e.message)),
-                card_index_out_of_bounds: () =>
-                  Effect.fail(new RecoverableCardLoadError("Card index out of bounds")),
                 read_error: (e) => Effect.fail(new Error(e.message)),
               }),
             ),

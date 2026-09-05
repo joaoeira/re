@@ -117,6 +117,7 @@ const VocabularyType: ItemType<{ readonly answer: string }, string, AnswerCheckE
         }),
   cards: ({ answer }) => [
     {
+      key: "main",
       prompt: "Type the answer",
       reveal: answer,
       cardType: "vocabulary",

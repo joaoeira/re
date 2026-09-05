@@ -6,12 +6,12 @@ import {
 } from "../src/review-session-state";
 import type { ReviewCardReference, ReviewSession } from "../src/review-store";
 
-const reference = (cardId: string, cardIndex: number): ReviewCardReference => ({
+const reference = (cardId: string, cardPosition: number): ReviewCardReference => ({
   deckPath: "/decks/geography.md",
   deckName: "geography",
   relativePath: "geography.md",
   cardId,
-  cardIndex,
+  cardKey: `c${cardPosition + 1}`,
 });
 
 const session = (cards: readonly ReviewCardReference[]): ReviewSession => ({

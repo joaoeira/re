@@ -25,7 +25,7 @@ Forge already has permutation generation, but the forge path is tightly coupled 
 
 Review needs the same class of outcome, but with different semantics:
 
-- The current review card is identified by review identity (`deckPath`, `cardId`, `cardIndex`), not forge IDs.
+- The current review card is identified by review identity (`deckPath`, `cardId`, `cardKey`), not forge IDs.
 - Generated permutations should be ephemeral UI state, not persisted analytical rows.
 - Adding a generated card should use the normal deck append path, not forge analytics bookkeeping.
 
@@ -74,7 +74,7 @@ The review session already uses the correct addressing information:
 
 - `deckPath`
 - `cardId`
-- `cardIndex`
+- `cardKey`
 
 This identity already exists in:
 
@@ -170,7 +170,7 @@ The generation method should still resolve the source card server-side again for
 export const GetReviewAssistantSourceCardInputSchema = Schema.Struct({
   deckPath: Schema.String,
   cardId: Schema.String,
-  cardIndex: Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
+  cardKey: Schema.NullOr(Schema.String),
 });
 ```
 
@@ -210,7 +210,7 @@ This explicitly includes the existing `not_found`, `read_error`, `parse_error`, 
 export const ReviewGeneratePermutationsInputSchema = Schema.Struct({
   deckPath: Schema.String,
   cardId: Schema.String,
-  cardIndex: Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
+  cardKey: Schema.NullOr(Schema.String),
   instruction: Schema.optional(Schema.String),
   model: Schema.optional(ModelIdSchema),
 });
@@ -435,7 +435,7 @@ Recommended state:
 - source-card load error state, if not fully query-owned
 - `activeGenerationRequestRef` containing the current card key and request token
 
-`assistantCardKey` is useful for scoping local generation state, but it is not sufficient as the only reset signal. `CARD_EDITED` can reload the same card with the same `deckPath`, `cardId`, and `cardIndex`.
+`assistantCardKey` is useful for scoping local generation state, but it is not sufficient as the only reset signal. `CARD_EDITED` can reload the same card with the same `deckPath`, `cardId`, and `cardKey`.
 
 ### Why this should not live in `desktopReviewSessionMachine`
 
@@ -503,7 +503,7 @@ Reset logic must not rely solely on card-identity changes. When the current card
 
 - `deckPath`
 - `cardId`
-- `cardIndex`
+- `cardKey`
 
 can remain unchanged.
 
@@ -532,7 +532,7 @@ The implementation must use a request-scoped staleness guard.
 
 Recommended pattern:
 
-1. Build a stable `cardKey` from `deckPath`, `cardId`, and `cardIndex`.
+1. Build a stable assistant state key from `deckPath`, `cardId`, and `cardKey`.
 2. When generation starts, create a `requestId` with `crypto.randomUUID()`.
 3. Store `{ cardKey, requestId }` in a ref such as `activeGenerationRequestRef`.
 4. In `onSuccess` and `onError`, compare the captured `{ cardKey, requestId }` for that mutation against the current ref.
@@ -893,13 +893,9 @@ Reason:
 
 ### 5. What cloze identity should future support use?
 
-Recommendation: not raw `cardIndex` alone.
-
-Reason:
-
-- `cardIndex` is the position in the derived review-card array
-- cloze semantics actually depend on the resolved deletion target
-- future public cloze transport should include a resolved target deletion identity, not just the array index
+Review references now carry `cardKey` (for example, `c3`) together with `deckPath` and `cardId`.
+Future cloze assistant support should use that key, resolving it against current content and
+checking that it still belongs to the saved ID. Array positions are not review identity.
 
 ## Final Recommendation
 

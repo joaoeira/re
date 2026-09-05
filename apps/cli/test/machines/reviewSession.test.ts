@@ -4,7 +4,7 @@ import { reviewSessionMachine } from "../../src/machines/reviewSession";
 import { State, numericField, generateId } from "@re/core";
 import type { ItemMetadata, ItemId, Item } from "@re/core";
 import type { FSRSGrade } from "@re/scheduler";
-import type { QueueItem } from "@re/workspace";
+import type { ReviewQueueItem as QueueItem } from "../../src/lib/review-queue";
 import type { ReviewLogEntry } from "../../src/services/ReviewLogEntry";
 
 const makeCard = (state: number, stability: number, lastReview: Date | null): ItemMetadata => ({
@@ -17,7 +17,7 @@ const makeCard = (state: number, stability: number, lastReview: Date | null): It
   due: null,
 });
 
-const makeQueueItem = (filePosition: number, cardIndex = 0): QueueItem => {
+const makeQueueItem = (filePosition: number): QueueItem => {
   const card = makeCard(State.New, 0, null);
   const item: Item = {
     cards: [card],
@@ -29,7 +29,7 @@ const makeQueueItem = (filePosition: number, cardIndex = 0): QueueItem => {
     relativePath: "deck.md",
     item,
     card,
-    cardIndex,
+    cardKey: "main",
     filePosition,
     category: "new",
     dueDate: null,

@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import * as Schema from "effect/Schema";
 import {
   adaptItemType,
@@ -13,11 +13,20 @@ import {
   InvalidMetadataFormat,
   MetadataParseErrorSchema,
   parseFile,
+  reconcileCards,
   serializeFile,
   type Item,
   type ParsedFile,
 } from "@re/core";
-import { ClozeType, QAContent, QAType } from "@re/item-types";
+import {
+  ClozeType,
+  QAContent,
+  QAType,
+  getBuiltinCardKey,
+  annotateBuiltinCardKeys,
+  resolveBuiltinCard,
+  resolveBuiltinItem,
+} from "@re/item-types";
 import { Scheduler, SchedulerLive } from "@re/scheduler";
 import {
   DeckManager,
@@ -106,6 +115,31 @@ try {
       assert.equal(updated.items[0]?.content, qaContent);
       assert.equal(updated.items[1]?.cards.length, 2);
 
+      const editedContent = "Which city is France's capital?\n---\nParis";
+      const reviewKey = yield* getBuiltinCardKey(updated.items[0]!, qaMetadata.id);
+      const nextCards = yield* adaptItemType(QAType).parseCards(editedContent);
+      const edited = yield* decks.modifyItem(
+        deckPath,
+        qaMetadata.id,
+        (current) =>
+          Effect.gen(function* () {
+            const previous = yield* resolveBuiltinItem(current);
+            const matched = yield* reconcileCards(
+              { keys: previous.cards.map((card) => card.key), cards: current.cards },
+              nextCards.map((card) => card.key),
+            );
+            return { content: editedContent, cards: matched.map(Option.getOrElse(createMetadata)) };
+          }),
+        adaptItemType(QAType),
+      );
+      const reviewCard = yield* resolveBuiltinCard(edited, {
+        cardId: qaMetadata.id,
+        cardKey: reviewKey,
+      });
+      assert.deepEqual(reviewCard.card, scheduled.updatedCard);
+      assert.equal(reviewCard.spec.prompt, "Which city is France's capital?");
+      assert.equal(edited.content, `${editedContent}\n`);
+
       const scan = yield* scanDecks(rootPath);
       assert.deepEqual(
         scan.decks.map((deck) => deck.relativePath),
@@ -122,6 +156,9 @@ try {
       });
       assert.equal(queue.totalNew, 2);
       assert.equal(queue.totalDue, 0);
+      const keyedItems = yield* annotateBuiltinCardKeys(queue.items);
+      assert.deepEqual(keyedItems.map((entry) => entry.cardKey).sort(), ["c1", "c2"]);
+      assert.equal(keyedItems[0]?.deckPath, deckPath);
       const deckErrors: readonly ReadError[] = queue.deckErrors;
       assert.equal(deckErrors.length, 1);
       // Apps can turn a partial result into a typed failure using their own policy.

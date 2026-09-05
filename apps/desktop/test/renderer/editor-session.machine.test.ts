@@ -43,6 +43,7 @@ const createServices = (overrides: Partial<EditorSessionServices> = {}): EditorS
   getItemForEdit: async () => ({
     content: "front\n---\nback",
     cardType: "qa",
+    requiresSchedulingReset: false,
     cardIds: ["card-1", "card-2"],
   }),
   checkDuplicates: async () => ({
@@ -321,6 +322,7 @@ describe("editorSessionMachine", () => {
       getItemForEdit: vi.fn(async () => ({
         content: "prompt\n---\nanswer",
         cardType: "qa" as const,
+        requiresSchedulingReset: false,
         cardIds: ["card-1", "card-2"],
       })),
       replaceItem: vi.fn(async () => replaceDeferred.promise),
@@ -436,6 +438,7 @@ describe("editorSessionMachine", () => {
       getItemForEdit: vi.fn(async () => ({
         content: "  prompt text  \n---\n  answer text  ",
         cardType: "qa" as const,
+        requiresSchedulingReset: false,
         cardIds: ["card-1", "card-2"],
       })),
     });
@@ -457,14 +460,16 @@ describe("editorSessionMachine", () => {
     }
   });
 
-  it("submits edit mode and rotates editCardId to the new identity", async () => {
-    const replaceItem = vi.fn(async () => ({
-      cardIds: ["card-1-new", "card-2-new"],
-    }));
+  it("requests a reset until recovery succeeds, then saves with the new identity", async () => {
+    const replaceItem = vi
+      .fn<EditorSessionServices["replaceItem"]>()
+      .mockRejectedValueOnce(new Error("Save failed"))
+      .mockResolvedValue({ cardIds: ["card-1-new", "card-2-new"] });
     const services = createServices({
       getItemForEdit: vi.fn(async () => ({
         content: "prompt\n---\nanswer",
         cardType: "qa" as const,
+        requiresSchedulingReset: true,
         cardIds: ["card-1", "card-2"],
       })),
       replaceItem,
@@ -481,6 +486,9 @@ describe("editorSessionMachine", () => {
       actor.send({ type: "SET_BACK_CONTENT", content: "updated answer" });
       actor.send({ type: "SUBMIT" });
 
+      await waitForSnapshot(actor, (snapshot) => snapshot.context.lastError === "Save failed");
+      actor.send({ type: "SUBMIT" });
+
       const saved = await waitForSnapshot(
         actor,
         (snapshot) =>
@@ -488,15 +496,24 @@ describe("editorSessionMachine", () => {
           snapshot.context.editCardId === "card-2-new" &&
           snapshot.context.dirty === false,
       );
-      expect(replaceItem).toHaveBeenCalledWith({
-        deckPath: primaryDeck.absolutePath,
-        cardId: "card-2",
-        content: "updated prompt\n---\nupdated answer",
-        cardType: "qa",
-      });
       expect(saved.context.editCardIds).toEqual(["card-1-new", "card-2-new"]);
       expect(saved.context.frontContent).toBe("updated prompt");
       expect(saved.context.backContent).toBe("updated answer");
+
+      actor.send({ type: "SUBMIT" });
+      await waitForSnapshot(actor, (snapshot) =>
+        snapshot.matches({ ready: { operations: "idle" } }),
+      );
+      const submittedContent = {
+        deckPath: primaryDeck.absolutePath,
+        content: "updated prompt\n---\nupdated answer",
+        cardType: "qa",
+      };
+      expect(replaceItem.mock.calls.map(([input]) => input)).toEqual([
+        { ...submittedContent, cardId: "card-2", resetScheduling: true },
+        { ...submittedContent, cardId: "card-2", resetScheduling: true },
+        { ...submittedContent, cardId: "card-2-new", resetScheduling: false },
+      ]);
     } finally {
       actor.stop();
     }

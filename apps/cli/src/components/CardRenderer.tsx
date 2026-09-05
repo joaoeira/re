@@ -6,7 +6,7 @@ import { RGBA } from "@opentui/core";
 import { Match } from "effect";
 
 interface CardRendererProps {
-  queueItem: QueueItem;
+  queueItem: Pick<QueueItem, "relativePath">;
   cardSpec: Pick<EvaluableCardSpec, "prompt" | "reveal" | "cardType">;
   isRevealed: boolean;
 }

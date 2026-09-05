@@ -9,7 +9,7 @@ import {
   type Item,
   type ItemId,
 } from "@re/core";
-import { Deferred, Effect, Exit, Fiber, Layer, TestClock } from "effect";
+import { Data, Deferred, Effect, Exit, Fiber, Layer, TestClock } from "effect";
 
 import { DeckManager, DeckManagerLive } from "../src";
 import { createMockFileSystem, makeSystemError } from "./mock-file-system";
@@ -23,7 +23,13 @@ const itemType: EvaluableItemType = {
   name: "single-card",
   parseCards: () =>
     Effect.succeed([
-      { prompt: "", reveal: "", cardType: "basic", evaluate: () => Effect.succeed(0 as const) },
+      {
+        prompt: "",
+        reveal: "",
+        cardType: "basic",
+        key: "main",
+        evaluate: () => Effect.succeed(0 as const),
+      },
     ]),
 };
 
@@ -249,6 +255,69 @@ const diskFixture = Effect.gen(function* () {
   // Another tool may own this filename; a deck save must leave it alone.
   yield* fs.writeFileString(`${deckPath}.tmp`, "Other tool's file");
   return { fs, directory, deckPath, original };
+});
+
+class EditRejected extends Data.TaggedError("EditRejected")<{ readonly message: string }> {}
+
+describe("DeckManager.modifyItem", () => {
+  it.scopedLive(
+    "separates the next item's metadata when edited content has no trailing newline",
+    () =>
+      Effect.gen(function* () {
+        const { fs, deckPath } = yield* diskFixture;
+        yield* fs.writeFileString(
+          deckPath,
+          serializeFile({
+            preamble: "",
+            items: [item("first", "Before\n\n"), item("second", "Following item\n")],
+          }),
+        );
+        const manager = yield* makeManager(fs);
+        const saved = yield* manager.modifyItem(
+          deckPath,
+          "first",
+          (current) => Effect.succeed({ ...current, content: "Edited" }),
+          itemType,
+        );
+
+        const reread = yield* manager.readDeck(deckPath);
+        expect(reread.items).toHaveLength(2);
+        expect(reread.items[0]!.content).toBe("Edited\n");
+        expect(reread.items[1]!).toMatchObject({
+          cards: [{ id: "second" }],
+          content: "Following item\n",
+        });
+        expect(saved.content).toBe(reread.items[0]!.content);
+      }),
+  );
+
+  it.scopedLive("leaves the file byte-identical when change fails and allows a later edit", () =>
+    Effect.gen(function* () {
+      const { fs, deckPath } = yield* diskFixture;
+      // Noncanonical spacing makes an accidental write-before-change observable.
+      const original = "<!--@ a  0 0 0 0-->\nOriginal\n";
+      yield* fs.writeFileString(deckPath, original);
+      const manager = yield* makeManager(fs);
+      const result = yield* manager
+        .modifyItem(
+          deckPath,
+          "a",
+          () => new EditRejected({ message: "Rejected by edit policy" }),
+          itemType,
+        )
+        .pipe(Effect.either);
+      expect(result).toMatchObject({ _tag: "Left", left: { _tag: "EditRejected" } });
+      expect(yield* fs.readFileString(deckPath)).toBe(original);
+
+      yield* manager.modifyItem(
+        deckPath,
+        "a",
+        (current) => Effect.succeed({ ...current, content: "Accepted" }),
+        itemType,
+      );
+      expect((yield* manager.readDeck(deckPath)).items[0]!.content).toBe("Accepted");
+    }).pipe(Effect.timeout("2 seconds")),
+  );
 });
 
 describe("DeckManager save recovery", () => {

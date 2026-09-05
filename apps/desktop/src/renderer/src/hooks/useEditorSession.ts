@@ -129,10 +129,11 @@ export function useEditorSession(search: EditorSearchParams) {
                   ),
                 ),
             ),
-          replaceItem: ({ deckPath, cardId, content, cardType }) =>
+          replaceItem: ({ deckPath, cardId, content, cardType, resetScheduling }) =>
             runIpcEffect(
               ipc.client
                 .ReplaceItem({
+                  resetScheduling,
                   deckPath,
                   cardId,
                   content,

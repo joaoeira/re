@@ -34,6 +34,7 @@ export interface EditorSessionServices {
     readonly content: string;
     readonly cardType: "qa" | "cloze";
     readonly cardIds: readonly string[];
+    readonly requiresSchedulingReset: boolean;
   }>;
   readonly checkDuplicates: (input: {
     readonly content: string;
@@ -53,6 +54,7 @@ export interface EditorSessionServices {
     readonly deckPath: string;
     readonly cardId: string;
     readonly content: string;
+    readonly resetScheduling: boolean;
     readonly cardType: "qa" | "cloze";
   }) => Promise<{
     readonly cardIds: readonly string[];
@@ -71,6 +73,7 @@ export interface EditorSessionViewContext {
   readonly deckPath: string | null;
   readonly editCardId: string | null;
   readonly editCardIds: readonly string[];
+  readonly requiresSchedulingReset: boolean;
   readonly frontContent: string;
   readonly backContent: string;
   readonly frontFrozen: boolean;
@@ -99,6 +102,7 @@ interface PendingSubmitSnapshot {
   readonly deckPath: string | null;
   readonly editCardId: string | null;
   readonly editCardIds: readonly string[];
+  readonly requiresSchedulingReset: boolean;
   readonly frontContent: string;
   readonly backContent: string;
   readonly rootPath: string | null;
@@ -201,6 +205,7 @@ const createBaseViewContext = (): EditorSessionViewContext => ({
   deckPath: null,
   editCardId: null,
   editCardIds: [] as readonly string[],
+  requiresSchedulingReset: false,
   frontContent: "",
   backContent: "",
   frontFrozen: false,
@@ -219,6 +224,7 @@ const createPendingSubmitSnapshot = (context: EditorSessionContext): PendingSubm
   deckPath: context.deckPath,
   editCardId: context.editCardId,
   editCardIds: context.editCardIds,
+  requiresSchedulingReset: context.requiresSchedulingReset,
   frontContent: context.frontContent,
   backContent: context.backContent,
   rootPath: context.rootPath,
@@ -245,6 +251,7 @@ const buildEditViewContext = (input: {
   readonly cardType: "qa" | "cloze";
   readonly cardId: string;
   readonly cardIds: readonly string[];
+  readonly requiresSchedulingReset: boolean;
   readonly deckPath: string;
 }): EditorSessionViewContext => ({
   ...createBaseViewContext(),
@@ -253,6 +260,7 @@ const buildEditViewContext = (input: {
   deckPath: input.deckPath,
   editCardId: input.cardId,
   editCardIds: input.cardIds,
+  requiresSchedulingReset: input.requiresSchedulingReset,
   ...(input.cardType === "qa"
     ? splitQaContent(input.content)
     : { frontContent: input.content.trim(), backContent: "" }),
@@ -271,6 +279,7 @@ const applyItemSaved = (
     lastError: null,
     isSubmitting: false,
     pendingSubmit: null,
+    requiresSchedulingReset: false,
   };
 
   if (draftChangedSinceSubmit) {
@@ -398,6 +407,7 @@ export const createEditorSessionMachine = (
           cardType: item.cardType,
           cardId: requestedCardId,
           cardIds: item.cardIds,
+          requiresSchedulingReset: item.requiresSchedulingReset,
           deckPath: editDeckPath,
         }),
       };
@@ -522,6 +532,7 @@ export const createEditorSessionMachine = (
       }
 
       const replaceResult = await services.replaceItem({
+        resetScheduling: snapshot.requiresSchedulingReset,
         deckPath,
         cardId: currentEditCardId,
         content,

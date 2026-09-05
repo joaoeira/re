@@ -432,7 +432,6 @@ describe("Composable ordering primitives", () => {
       lastReview: null,
       due: null,
     },
-    cardIndex: 0,
     filePosition,
     category,
     dueDate,

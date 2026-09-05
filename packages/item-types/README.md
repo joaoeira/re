@@ -18,5 +18,34 @@ const clozeCards = ClozeType.cards(cloze);
 Q&A content separates question and answer with a line containing `---`. Cloze content uses
 `{{c1::hidden text}}` syntax, with one card per distinct cloze index.
 
+Q&A generates the key `main`. Cloze generates keys from the actual deletion indices (`c1`,
+`c3`, etc.), preserving identity when another deletion is removed or the text is edited.
+
+Use `resolveBuiltinItem(item)` to interpret saved items. It checks generated card counts
+against the saved metadata, then prefers cloze when both cloze and Q&A fit. Desktop editing
+and review, CLI review, and Raycast review and editing use this same rule. Use `inferCards`
+from `@re/core` only for unsaved content that has no metadata count yet.
+
+Desktop can open a count-mismatched item using the first parseable type and offer an explicit
+reset-and-save action. The save rechecks the current item under the deck lock and creates fresh IDs
+and learning data only if its count is still mismatched; an item repaired in the meantime is matched
+normally. Until repaired, count-mismatched items are skipped by desktop's
+duplicate index and do not participate in duplicate checks.
+
+For a review queue, call `annotateBuiltinCardKeys(entries)`. It accepts entries with `{ item, card }`,
+preserves their order and other fields, and adds `cardKey`. It resolves each shared item snapshot
+once, even when its cards are interleaved in the queue. Desktop, CLI, and Raycast all use this helper;
+it has no dependency on workspace queue types. For a single card, use
+`getBuiltinCardKey(queuedItem, cardId)` to capture the key from its snapshot.
+Later, call `resolveBuiltinCard(currentItem, { cardId, cardKey })` before displaying or
+grading it. The result includes the selected `spec` and its metadata `card`, along with the
+resolved item `type` and all generated `cards`. Selection uses the key and verifies the saved ID,
+so cloze removal or reordering cannot redirect a review. A missing key or an ID/key disagreement
+fails with `BuiltinCardNotFound`; parse and count errors retain their existing tags.
+
+Apps preserve unparseable queue entries with `cardKey: null` so they surface as recoverable load
+errors. A null key never falls back to an array position; refresh the queue after repairing such
+an item. Keys remain derived from content, with no Markdown format change.
+
 Build locally with `bun run build`. From the repository root, `bun run pack:libraries`
 creates installable archives and `bun run check:packages` verifies them in an isolated Node consumer.

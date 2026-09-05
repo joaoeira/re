@@ -70,7 +70,7 @@ const renderReviewSession = async (options?: {
               {
                 deckPath: REVIEW_DECK_PATH,
                 cardId: "qa-card",
-                cardIndex: 0,
+                cardKey: "main",
                 deckName: "deck",
               },
             ],

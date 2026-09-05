@@ -12,7 +12,6 @@ export interface QueueItem {
   readonly relativePath: string;
   readonly item: Item;
   readonly card: ItemMetadata;
-  readonly cardIndex: number;
   readonly filePosition: number;
   readonly category: "new" | "due";
   readonly dueDate: Date | null;
@@ -291,8 +290,7 @@ export const ReviewQueueBuilderLive = Layer.effect(
             const relativePath = pathService.relative(rootPath, deckPath);
 
             for (const item of file.items) {
-              for (let cardIndex = 0; cardIndex < item.cards.length; cardIndex++) {
-                const card = item.cards[cardIndex]!;
+              for (const card of item.cards) {
                 if (card.state === State.New) {
                   allItems.push({
                     deckPath,
@@ -300,7 +298,6 @@ export const ReviewQueueBuilderLive = Layer.effect(
                     relativePath,
                     item,
                     card,
-                    cardIndex,
                     filePosition,
                     category: "new",
                     dueDate: null,
@@ -314,7 +311,6 @@ export const ReviewQueueBuilderLive = Layer.effect(
                       relativePath,
                       item,
                       card,
-                      cardIndex,
                       filePosition,
                       category: "due",
                       dueDate,

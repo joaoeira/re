@@ -52,14 +52,14 @@ interface SessionStats {
 interface LastGradeAction {
   readonly _tag: "Grade";
   readonly undo: ReviewUndoToken;
-  readonly cardIndex: number;
+  readonly queueIndex: number;
   readonly grade: FSRSGrade;
 }
 
 interface LastDeleteAction {
   readonly _tag: "Delete";
   readonly undo: ReviewDeleteUndoToken;
-  readonly cardIndex: number;
+  readonly queueIndex: number;
   readonly removedEntries: readonly RemovedReviewQueueEntry[];
 }
 
@@ -289,7 +289,7 @@ export default function ReviewCardsCommand() {
         }
 
         setStats((current) => incrementStats(current, grade));
-        setLastAction({ _tag: "Grade", undo: result.undo, cardIndex: currentIndex, grade });
+        setLastAction({ _tag: "Grade", undo: result.undo, queueIndex: currentIndex, grade });
         void refreshReviewStatusMenu();
         advance();
       } finally {
@@ -348,7 +348,7 @@ export default function ReviewCardsCommand() {
       setLastAction({
         _tag: "Delete",
         undo: result.undo,
-        cardIndex: currentIndex,
+        queueIndex: currentIndex,
         removedEntries: removal.removedEntries,
       });
       void refreshReviewStatusMenu();
@@ -397,7 +397,7 @@ export default function ReviewCardsCommand() {
       cardGeneration.current += 1;
       setCard(undefined);
       setCardLoadError(undefined);
-      setCurrentIndex(lastAction.cardIndex);
+      setCurrentIndex(lastAction.queueIndex);
       setIsRevealed(false);
       setIsComplete(false);
       setLastAction(undefined);

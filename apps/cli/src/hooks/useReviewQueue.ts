@@ -4,9 +4,9 @@ import {
   ReviewQueueService,
   AppLive,
   type ReviewQueueSelection,
-  type ReviewQueue,
   type DeckTreeNode,
 } from "../services";
+import { prepareReviewQueue, type ReviewQueue } from "../lib/review-queue";
 
 export interface UseReviewQueueResult {
   loading: boolean;
@@ -75,7 +75,8 @@ export function useReviewQueue(
     const program = Effect.gen(function* () {
       const queueService = yield* ReviewQueueService;
       const now = new Date();
-      return yield* queueService.buildQueue(selection, tree, rootPath, now);
+      const queue = yield* queueService.buildQueue(selection, tree, rootPath, now);
+      return yield* prepareReviewQueue(queue);
     }).pipe(Effect.provide(AppLive));
 
     const fiber = Effect.runFork(program);

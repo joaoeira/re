@@ -1,4 +1,4 @@
-import { RouterProvider, createHashHistory, createRouter } from "@tanstack/react-router";
+import { RouterProvider, createMemoryHistory, createRouter } from "@tanstack/react-router";
 import { expect, it, describe, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 
@@ -33,10 +33,11 @@ const renderEditorApp = async (
   hashPath = "#/editor",
 ) => {
   mockDesktopApi(invoke);
-  window.location.hash = hashPath;
-
   const stores = createStores();
-  const router = createRouter({ routeTree, history: createHashHistory() });
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: [hashPath.slice(1)] }),
+  });
   const screen = await renderWithIpcProviders(
     <StoresProvider stores={stores}>
       <RouterProvider router={router} />
@@ -93,6 +94,56 @@ const selectDeckOption = async (relativePath: string) => {
 };
 
 describe("EditorRoot", () => {
+  it("shows the reset warning and returns to the normal save button after recovery", async () => {
+    const deckPath = DEFAULT_FORGE_DECKS[0]!.absolutePath;
+    const invoke = vi.fn().mockImplementation(async (method: string) => {
+      if (method === "GetSettings") return forgeSettingsSuccess(FORGE_WORKSPACE_ROOT_PATH);
+      if (method === "ScanDecks") {
+        return {
+          type: "success",
+          data: { rootPath: FORGE_WORKSPACE_ROOT_PATH, decks: DEFAULT_FORGE_DECKS },
+        };
+      }
+      if (method === "GetItemForEdit") {
+        return {
+          type: "success",
+          data: {
+            content: "{{c1::Paris}} is in France.",
+            cardType: "cloze",
+            cardIds: ["old"],
+            requiresSchedulingReset: true,
+          },
+        };
+      }
+      if (method === "CheckDuplicates") {
+        return { type: "success", data: { isDuplicate: false } };
+      }
+      if (method === "ReplaceItem") {
+        return { type: "success", data: { cardIds: ["fresh"] } };
+      }
+      return { type: "failure", error: { code: "UNKNOWN_METHOD", message: method } };
+    });
+    const params = new URLSearchParams({ mode: "edit", deckPath, cardId: "old" });
+    await renderEditorApp(invoke, `#/editor?${params}`);
+
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("Saving will reset the learning data for this item.");
+    await userEvent.click(page.getByRole("button", { name: /Reset learning data and save/ }));
+    await expect
+      .poll(() => invoke.mock.calls.filter(([method]) => method === "ReplaceItem"))
+      .toEqual([
+        [
+          "ReplaceItem",
+          expect.objectContaining({ deckPath, cardId: "old", resetScheduling: true }),
+        ],
+      ]);
+
+    const save = page.getByRole("button", { name: /^Save/ });
+    await expect.element(save).toBeVisible();
+    expect(page.getByRole("alert").query()).toBeNull();
+  });
+
   it("creates a deck from the editor combobox and selects it", async () => {
     let decks = [...DEFAULT_FORGE_DECKS];
     const invoke = vi.fn().mockImplementation(async (method: string, payload?: unknown) => {

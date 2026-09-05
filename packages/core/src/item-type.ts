@@ -1,4 +1,5 @@
-import { Data, Effect, Schema, type ParseResult } from "effect";
+import { Data, Effect, Option, Schema, type ParseResult } from "effect";
+import type { Item } from "./types.js";
 
 export const GradeSchema = Schema.Literal(0, 1, 2, 3);
 export type Grade = typeof GradeSchema.Type;
@@ -23,6 +24,8 @@ export class ContentParseError extends Data.TaggedError("ContentParseError")<{
 }> {}
 
 export interface CardSpec<Response, GradeError = never> {
+  /** Stable identity within the item, independent of position and rendered text. */
+  readonly key: string;
   readonly prompt: string;
   readonly reveal: string;
   readonly cardType: string;
@@ -44,6 +47,7 @@ export class ResponseValidationError extends Data.TaggedError("ResponseValidatio
 
 /** A card that validates an unknown response before invoking its typed grader. */
 export interface EvaluableCardSpec<GradeError = never> {
+  readonly key: string;
   readonly prompt: string;
   readonly reveal: string;
   readonly cardType: string;
@@ -70,6 +74,7 @@ export const adaptItemType = <Content, Response, GradeError>(
       Effect.map((parsed) =>
         type.cards(parsed).map(
           (card): EvaluableCardSpec<GradeError> => ({
+            key: card.key,
             prompt: card.prompt,
             reveal: card.reveal,
             cardType: card.cardType,
@@ -97,7 +102,9 @@ export const manualCardSpec = (
   prompt: string,
   reveal: string,
   cardType: string,
+  key: string,
 ): CardSpec<Grade, never> => ({
+  key,
   prompt,
   reveal,
   cardType,
@@ -108,7 +115,11 @@ export const manualCardSpec = (
 export class NoMatchingTypeError extends Data.TaggedError("NoMatchingTypeError")<{
   readonly raw: string;
   readonly triedTypes: ReadonlyArray<string>;
-}> {}
+}> {
+  override get message(): string {
+    return `No registered item type could parse this content (tried: ${this.triedTypes.join(", ") || "none"}).`;
+  }
+}
 
 export interface InferredCards<GradeError = never> {
   readonly cards: ReadonlyArray<EvaluableCardSpec<GradeError>>;
@@ -116,6 +127,79 @@ export interface InferredCards<GradeError = never> {
 
 type ItemTypeGradeError<Type> =
   Type extends EvaluableItemType<infer GradeError> ? GradeError : never;
+
+export interface ItemTypeMatch<GradeError = never> {
+  readonly type: EvaluableItemType<GradeError>;
+  readonly cards: ReadonlyArray<EvaluableCardSpec<GradeError>>;
+}
+
+export interface ParseableItemType {
+  readonly name: string;
+  readonly cardCount: number;
+}
+
+export class ItemCardCountMismatch extends Data.TaggedError("ItemCardCountMismatch")<{
+  readonly metadataCount: number;
+  readonly parseableTypes: readonly [ParseableItemType, ...ParseableItemType[]];
+}> {
+  override get message(): string {
+    const counts = this.parseableTypes.map((type) => `${type.name}: ${type.cardCount}`).join(", ");
+    return `Item has ${this.metadataCount} metadata record(s), but its content generates a different number of cards (${counts}).`;
+  }
+}
+
+/**
+ * Match saved content using its metadata count. Returns every matching type in
+ * input order so the caller can apply an explicit policy for ambiguous content.
+ * Count mismatches retain parseable types and their expected counts for repair.
+ */
+export function matchItemTypes<Types extends ReadonlyArray<EvaluableItemType<unknown>>>(
+  types: Types,
+  item: Item,
+): Effect.Effect<
+  readonly [
+    ItemTypeMatch<ItemTypeGradeError<Types[number]>>,
+    ...ItemTypeMatch<ItemTypeGradeError<Types[number]>>[],
+  ],
+  NoMatchingTypeError | ItemCardCountMismatch
+>;
+export function matchItemTypes(
+  types: ReadonlyArray<EvaluableItemType<unknown>>,
+  item: Item,
+): Effect.Effect<
+  readonly [ItemTypeMatch<unknown>, ...ItemTypeMatch<unknown>[]],
+  NoMatchingTypeError | ItemCardCountMismatch
+> {
+  return Effect.gen(function* () {
+    const matches: ItemTypeMatch<unknown>[] = [];
+    const parseableTypes: ParseableItemType[] = [];
+
+    for (const type of types) {
+      const cards = yield* type.parseCards(item.content).pipe(Effect.option);
+      if (Option.isNone(cards)) continue;
+
+      parseableTypes.push({ name: type.name, cardCount: cards.value.length });
+      if (cards.value.length === item.cards.length) {
+        matches.push({ type, cards: cards.value });
+      }
+    }
+
+    const [first, ...rest] = matches;
+    if (first) return [first, ...rest] as const;
+
+    const [parseable, ...otherParseable] = parseableTypes;
+    if (parseable) {
+      return yield* new ItemCardCountMismatch({
+        metadataCount: item.cards.length,
+        parseableTypes: [parseable, ...otherParseable],
+      });
+    }
+    return yield* new NoMatchingTypeError({
+      raw: item.content,
+      triedTypes: types.map((type) => type.name),
+    });
+  });
+}
 
 /**
  * Discover cards using the first matching parser, preserving all registered grading errors.

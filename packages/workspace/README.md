@@ -24,15 +24,32 @@ const deck = await Effect.runPromise(
 );
 ```
 
-For `appendItem` and `replaceItem`, pass a type adapted with `adaptItemType` from `@re/core`
+For `appendItem`, `replaceItem`, and `modifyItem`, pass a type adapted with `adaptItemType` from `@re/core`
 (for example, `adaptItemType(QAType)`). Workspace uses its `parseCards` operation to validate
-the content and ensure that the number of metadata records matches the generated cards.
+the content, ensure that metadata and generated card counts match, and reject duplicate card keys.
 Writing content does not evaluate responses or run graders.
+
+`modifyItem(deckPath, cardId, change, itemType)` reads the current item, runs the Effect-returning
+`change(current)` callback, validates the result, and saves it while holding the deck lock.
+It returns the saved item after the write completes. If another item follows, it adds a trailing
+newline so the next metadata line remains parseable. A failing callback leaves the file
+byte-for-byte unchanged and preserves the callback's typed error. `replaceItem` is a thin wrapper
+for replacements that do not depend on the current item.
+
+Prepare new content before calling `modifyItem`; read the old keys and reconcile metadata inside
+its callback, where concurrent reviews cannot intervene. For a type change, create fresh metadata
+instead of matching keys from different namespaces. For an explicit repair request, check whether
+the current item still needs repair inside the callback before returning fresh metadata. If another
+edit already repaired it, reconcile normally so its healthy learning data survives.
+
+The callback must not call another mutation on the same deck: the lock is not reentrant and
+such a call would deadlock. Keep it focused on computing the replacement. External side effects
+inside the callback are not rolled back if later validation or saving fails.
 
 ## Concurrent writes
 
 Reuse one `DeckManager` instance for operations that may overlap. Its content edits
-(`updateCardMetadata`, `replaceItem`, `appendItem`, `removeItem`, and `restoreItem`)
+(`updateCardMetadata`, `modifyItem`, `replaceItem`, `appendItem`, `removeItem`, and `restoreItem`)
 each hold a per-deck lock across reading, changing, and saving the file. Concurrent
 edits to different items therefore preserve one another's changes. Unrelated decks
 can be edited concurrently, including while an item type is validating content.
@@ -58,6 +75,11 @@ Markdown files and honors the workspace's `.reignore`. Image hashing requires We
 in the Node runtimes exercised by the consumer check.
 
 ## Review queues and deck errors
+
+`QueueItem` identifies the saved card through `card.id` and includes its item snapshot. It no
+longer exposes `cardIndex`; `filePosition` is only an ordering hint within the snapshot. Apps
+capture generated keys using their item-type resolver and carry those keys in review references.
+The workspace package does not depend on built-in item types.
 
 `ReviewQueueBuilder.buildQueue` returns usable cards alongside recoverable deck-loading errors:
 

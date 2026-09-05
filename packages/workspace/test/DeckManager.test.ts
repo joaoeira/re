@@ -53,6 +53,7 @@ const twoSidedType = adaptItemType({
       prompt: "",
       reveal: "",
       cardType: "basic",
+      key: "basic",
       responseSchema: Schema.asSchema(Schema.Unknown),
       grade: () => Effect.succeed(0 as Grade),
     },
@@ -79,6 +80,7 @@ const twoCardType = adaptItemType({
       prompt: "",
       reveal: "",
       cardType: "forward",
+      key: "forward",
       responseSchema: Schema.asSchema(Schema.Unknown),
       grade: () => Effect.succeed(0 as Grade),
     },
@@ -86,6 +88,7 @@ const twoCardType = adaptItemType({
       prompt: "",
       reveal: "",
       cardType: "reverse",
+      key: "reverse",
       responseSchema: Schema.asSchema(Schema.Unknown),
       grade: () => Effect.succeed(0 as Grade),
     },
@@ -317,6 +320,39 @@ describe("DeckManager.updateCardMetadata", () => {
     if (Either.isLeft(result)) {
       expect(result.left).toBeInstanceOf(DeckNotFound);
     }
+  });
+});
+
+describe("DeckManager.modifyItem", () => {
+  it("rejects duplicate generated keys without changing the saved deck", async () => {
+    const original = singleCardItem("existing", "Question\n---\nAnswer\n");
+    const duplicateKeyType = {
+      ...twoCardType,
+      parseCards: (content: string) =>
+        twoCardType
+          .parseCards(content)
+          .pipe(Effect.map((cards) => cards.map((card) => ({ ...card, key: "shared" })))),
+    };
+    const { promise, store } = runEither(
+      { entryTypes: {}, directories: {}, fileContents: { "/deck.md": original } },
+      (manager) =>
+        manager.modifyItem(
+          "/deck.md",
+          "existing",
+          () =>
+            Effect.succeed({
+              content: "Updated question\n---\nUpdated answer",
+              cards: [meta("first"), meta("second")],
+            }),
+          duplicateKeyType,
+        ),
+    );
+
+    expect(await promise).toMatchObject({
+      _tag: "Left",
+      left: { _tag: "ItemValidationError", message: "Duplicate generated card key: shared" },
+    });
+    expect(store["/deck.md"]).toBe(original);
   });
 });
 

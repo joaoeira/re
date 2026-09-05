@@ -1,13 +1,7 @@
 import path from "node:path";
 
-import {
-  adaptItemType,
-  createMetadata,
-  hasClozeDeletion,
-  type Item,
-  type ItemMetadata,
-} from "@re/core";
-import { ClozeType, QAType } from "@re/item-types";
+import { adaptItemType, createMetadata, reconcileCards, type Item } from "@re/core";
+import { ClozeType, QAType, resolveBuiltinItem } from "@re/item-types";
 import { DeckManager, importDeckImageAssetFromBytes, scanDecks } from "@re/workspace";
 import type { FileSystem, Path } from "@effect/platform";
 import { Effect, Either, Option } from "effect";
@@ -17,7 +11,6 @@ import type { EditorWindowParams } from "@main/editor-window";
 import { findCardLocationById } from "@main/card-location";
 import {
   AppEventPublisherService,
-  DeckWriteCoordinatorService,
   DuplicateIndexInvalidationService,
   EditorWindowManagerService,
   SettingsRepositoryService,
@@ -78,68 +71,12 @@ const normalizeDuplicateContent = (content: string): string => content.trim();
 const duplicateKey = (cardType: EditorCardType, content: string): string =>
   `${cardType}:${normalizeDuplicateContent(content)}`;
 
-const ensureTrailingNewline = (content: string): string =>
-  content.endsWith("\n") ? content : `${content}\n`;
-
 const MAX_IMPORTED_IMAGE_BYTES = 10 * 1024 * 1024;
 
-const uniqueClozeIndices = (
-  content: string,
-): Effect.Effect<readonly number[], EditorOperationError> =>
-  ClozeType.parse(content).pipe(
-    Effect.map((parsed) => {
-      const indices: number[] = [];
-      let last: number | null = null;
-
-      for (const deletion of parsed.deletions) {
-        if (deletion.index !== last) {
-          indices.push(deletion.index);
-          last = deletion.index;
-        }
-      }
-
-      return indices;
-    }),
-    Effect.mapError(toEditorError),
+const detectEditorCardType = (item: Item) =>
+  resolveBuiltinItem(item).pipe(
+    Effect.map(({ type }): EditorCardType => (type.name === "cloze" ? "cloze" : "qa")),
   );
-
-const detectEditorCardType = (item: Item): Effect.Effect<EditorCardType, EditorOperationError> =>
-  Effect.gen(function* () {
-    const qaResult = yield* Effect.either(QAType.parse(item.content));
-    const clozeResult = yield* Effect.either(ClozeType.parse(item.content));
-
-    const qaCards = Either.isRight(qaResult) ? QAType.cards(qaResult.right).length : -1;
-    const clozeCards = Either.isRight(clozeResult) ? ClozeType.cards(clozeResult.right).length : -1;
-
-    const qaMatches = qaCards === item.cards.length;
-    const clozeMatches = clozeCards === item.cards.length;
-
-    if (qaMatches && !clozeMatches) {
-      return "qa";
-    }
-
-    if (clozeMatches && !qaMatches) {
-      return "cloze";
-    }
-
-    if (qaMatches && clozeMatches) {
-      return hasClozeDeletion(item.content) ? "cloze" : "qa";
-    }
-
-    if (Either.isRight(clozeResult) && !Either.isRight(qaResult)) {
-      return "cloze";
-    }
-
-    if (Either.isRight(qaResult) && !Either.isRight(clozeResult)) {
-      return "qa";
-    }
-
-    return yield* Effect.fail(
-      new EditorOperationError({
-        message: "Unable to determine card type for existing item.",
-      }),
-    );
-  });
 
 const hasCardIdOverlap = (
   cardIds: readonly string[],
@@ -169,7 +106,6 @@ export const createEditorHandlers = () =>
     const settingsRepository = yield* SettingsRepositoryService;
     const appEventPublisher = yield* AppEventPublisherService;
     const editorWindowManager = yield* EditorWindowManagerService;
-    const deckWriteCoordinator = yield* DeckWriteCoordinatorService;
     const duplicateIndexInvalidation = yield* DuplicateIndexInvalidationService;
     const publish = appEventPublisher.publish;
     const openEditorWindow = editorWindowManager.openEditorWindow;
@@ -281,10 +217,7 @@ export const createEditorHandlers = () =>
           const cards = Array.from({ length: cardCount }, () => createMetadata());
 
           const deckManager = yield* DeckManager;
-          yield* deckWriteCoordinator.withDeckLock(
-            deckPath,
-            deckManager.appendItem(deckPath, { cards, content }, itemType),
-          );
+          yield* deckManager.appendItem(deckPath, { cards, content }, itemType);
 
           markDuplicateIndexDirty();
 
@@ -292,7 +225,7 @@ export const createEditorHandlers = () =>
             cardIds: cards.map((card) => card.id),
           };
         }).pipe(Effect.mapError(toEditorError)),
-      ReplaceItem: ({ deckPath, cardId, content, cardType }) =>
+      ReplaceItem: ({ deckPath, cardId, content, cardType, resetScheduling }) =>
         Effect.gen(function* () {
           yield* validateDeckAccessAs(
             settingsRepository,
@@ -301,68 +234,40 @@ export const createEditorHandlers = () =>
           );
 
           const newItemType = resolveEditorItemType(cardType);
-          const expectedNewCardCount = yield* parseEditorContent(cardType, content);
-
+          const newCards = yield* newItemType.parseCards(content);
           const deckManager = yield* DeckManager;
-          const mergedMetadata = yield* deckWriteCoordinator.withDeckLock(
+          const saved = yield* deckManager.modifyItem(
             deckPath,
-            Effect.gen(function* () {
-              const parsedDeck = yield* deckManager.readDeck(deckPath);
-              const location = findCardLocationById(parsedDeck, cardId);
-
-              if (!location) {
-                return yield* Effect.fail(
-                  new EditorOperationError({
-                    message: `Card not found: ${cardId}`,
-                  }),
+            cardId,
+            (current) =>
+              Effect.gen(function* () {
+                const previous = yield* resolveBuiltinItem(current);
+                if (previous.type.name !== newItemType.name) {
+                  return { content, cards: newCards.map(() => createMetadata()) };
+                }
+                const matches = yield* reconcileCards(
+                  { keys: previous.cards.map((card) => card.key), cards: current.cards },
+                  newCards.map((card) => card.key),
                 );
-              }
-
-              const oldItem = location.item;
-              const oldCardType = yield* detectEditorCardType(oldItem);
-
-              let nextMergedMetadata: readonly ItemMetadata[];
-
-              if (oldCardType !== cardType) {
-                nextMergedMetadata = Array.from({ length: expectedNewCardCount }, () =>
-                  createMetadata(),
-                );
-              } else if (cardType === "qa") {
-                nextMergedMetadata = [oldItem.cards[0] ?? createMetadata()];
-              } else {
-                const oldIndices = yield* uniqueClozeIndices(oldItem.content);
-                const newIndices = yield* uniqueClozeIndices(content);
-                const metadataByIndex = new Map<number, ItemMetadata>();
-
-                oldIndices.forEach((index, indexPosition) => {
-                  const metadata = oldItem.cards[indexPosition];
-                  if (metadata) {
-                    metadataByIndex.set(index, metadata);
-                  }
-                });
-
-                nextMergedMetadata = newIndices.map(
-                  (index) => metadataByIndex.get(index) ?? createMetadata(),
-                );
-              }
-
-              const nextContent = ensureTrailingNewline(content);
-              yield* deckManager.replaceItem(
-                deckPath,
-                cardId,
-                { cards: nextMergedMetadata, content: nextContent },
-                newItemType,
-              );
-
-              return nextMergedMetadata;
-            }),
+                return {
+                  content,
+                  cards: matches.map((match) => Option.getOrElse(match, createMetadata)),
+                };
+              }).pipe(
+                Effect.catchTag("ItemCardCountMismatch", (error) =>
+                  resetScheduling
+                    ? Effect.sync(() => ({ content, cards: newCards.map(() => createMetadata()) }))
+                    : Effect.fail(error),
+                ),
+              ),
+            newItemType,
           );
 
           markDuplicateIndexDirty();
 
           yield* publish(CardEdited, { deckPath, cardId });
 
-          return { cardIds: mergedMetadata.map((card) => card.id) };
+          return { cardIds: saved.cards.map((card) => card.id) };
         }).pipe(Effect.mapError(toEditorError)),
       GetItemForEdit: ({ deckPath, cardId }) =>
         Effect.gen(function* () {
@@ -384,11 +289,20 @@ export const createEditorHandlers = () =>
             );
           }
 
-          const itemCardType = yield* detectEditorCardType(location.item);
+          const detected = yield* detectEditorCardType(location.item).pipe(
+            Effect.map((cardType) => ({ cardType, requiresSchedulingReset: false })),
+            Effect.catchTag("ItemCardCountMismatch", (error) =>
+              Effect.succeed({
+                cardType:
+                  error.parseableTypes[0].name === "cloze" ? ("cloze" as const) : ("qa" as const),
+                requiresSchedulingReset: true,
+              }),
+            ),
+          );
 
           return {
             content: location.item.content,
-            cardType: itemCardType,
+            ...detected,
             cardIds: location.item.cards.map((card) => card.id),
           };
         }).pipe(Effect.mapError(toEditorError)),
@@ -440,12 +354,9 @@ export const createEditorHandlers = () =>
               (m) => new EditorOperationError({ message: m }),
             );
 
-            yield* deckWriteCoordinator.withDeckLock(
-              deckPath,
-              Effect.forEach(cardIds, (cardId) => deckManager.removeItem(deckPath, cardId), {
-                concurrency: 1,
-              }),
-            );
+            yield* Effect.forEach(cardIds, (cardId) => deckManager.removeItem(deckPath, cardId), {
+              concurrency: 1,
+            });
           }
 
           markDuplicateIndexDirty();

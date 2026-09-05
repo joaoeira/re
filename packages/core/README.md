@@ -94,8 +94,9 @@ Two concrete examples pass structural validation but cannot retain their meaning
 ## Discovering and evaluating cards
 
 Use `adaptItemType` to register types with different content and response shapes, then call
-`inferCards` to discover ready-to-use cards. The first matching parser wins. Each card exposes
-`prompt`, `reveal`, `cardType`, and `evaluate(response)`. Evaluation decodes an unknown response
+`inferCards` to discover ready-to-use cards from unsaved content. The first matching parser wins.
+For saved items, use `matchItemTypes(types, item)` so the metadata count participates in selection.
+Each card exposes `key`, `prompt`, `reveal`, `cardType`, and `evaluate(response)`. Evaluation decodes an unknown response
 with the card's schema before invoking its grader, which can run synchronously or asynchronously.
 
 ```ts
@@ -115,6 +116,7 @@ const VocabularyType: ItemType<{ readonly answer: string }, string> = {
         }),
   cards: ({ answer }) => [
     {
+      key: "main",
       prompt: "Type the answer",
       reveal: answer,
       cardType: "vocabulary",
@@ -145,13 +147,42 @@ Apps collect responses, display pending states, and pass successful grades to th
 Provide any services required by a grader within its implementation; the existing `CardSpec`
 contract exposes an Effect with no outstanding service requirements.
 
-Direct use of a known `ItemType` retains its precise content and response types. Use `inferCards`
-for discovery across a collection: it keeps parsing and card construction together so consumers
+Direct use of a known `ItemType` retains its precise content and response types. Discovery
+keeps parsing and card construction together so consumers
 never need to pass unknown parsed content back into a type-specific implementation. Pass an
 adapted item type to workspace's `appendItem` and `replaceItem` methods as well; they validate
 content and card counts through `parseCards` without evaluating any responses.
 The isolated scheduler consumer exercises mixed built-in
 types and an externally defined asynchronous grader through validation and scheduling.
+
+## Saved item selection and editing
+
+`matchItemTypes(types, item)` returns every type that parses the content and generates exactly
+`item.cards.length` cards, in registration order. Callers choose their ambiguity policy;
+`@re/item-types` supplies `resolveBuiltinItem` for the built-in cloze-first policy. If no type
+parses, selection fails with `NoMatchingTypeError`. If parsers succeed but none fits the count,
+`ItemCardCountMismatch` includes `metadataCount` and nonempty `parseableTypes` entries with
+`name` and `cardCount`, allowing an app to offer repair. Parser defects propagate.
+
+Every `CardSpec` requires a stable `key`, which `adaptItemType` preserves on `EvaluableCardSpec`.
+Keys must be unique within an item and stable across edits that preserve that card's identity;
+do not derive them from array positions or rendered text. Keys belong to a type's namespace,
+so callers must handle a type change separately. `manualCardSpec(prompt, reveal, cardType, key)`
+requires the key as its fourth argument. Keys are derived from content, not stored in Markdown.
+
+`reconcileCards({ keys, cards }, nextKeys)` is pure: it returns an `Either` containing metadata
+options in the new key order. `Some` preserves the entire old metadata record, including its ID,
+learning state, dates, and numeric spelling. `None` represents a new card; callers create its
+metadata with `Option.getOrElse(createMetadata)`. Removed keys disappear. Duplicate keys on
+either side fail with `DuplicateCardKey`; differing old key and metadata counts fail with
+`ReconcileCardCountMismatch`. The matcher neither generates IDs nor guesses through corruption.
+Use it inside `DeckManager.modifyItem` to match against metadata read under the write lock.
+
+Review references pair the saved card ID with its generated key. Apps capture the key from the
+queued snapshot, then resolve it against current content and verify that it still belongs to
+that ID. Removing an earlier cloze can shift the array without changing the intended card;
+removing the target or assigning its key to another ID fails instead of selecting a neighbor.
+`@re/item-types` provides `getBuiltinCardKey` and `resolveBuiltinCard` for this workflow.
 
 Build locally with `bun run build`. From the repository root, `bun run pack:libraries`
 creates installable archives and `bun run check:packages` verifies them in an isolated Node consumer.

@@ -89,11 +89,12 @@ type DesktopReviewSessionInput = {
   readonly loadCard: (input: {
     deckPath: string;
     cardId: string;
-    cardIndex: number;
+    cardKey: string | null;
   }) => Promise<CardContent>;
   readonly scheduleReview: (input: {
     deckPath: string;
     cardId: string;
+    cardKey: string | null;
     grade: FSRSGrade;
   }) => Promise<{
     reviewEntryId: number | null;
@@ -134,7 +135,7 @@ const loadCardActor = fromPromise(
     return input.loadCard({
       deckPath: input.queueItem.deckPath,
       cardId: input.queueItem.cardId,
-      cardIndex: input.queueItem.cardIndex,
+      cardKey: input.queueItem.cardKey,
     });
   },
 );
@@ -153,6 +154,7 @@ const gradingActor = fromPromise(
     const scheduleResult = await input.scheduleReview({
       deckPath: input.queueItem.deckPath,
       cardId: input.queueItem.cardId,
+      cardKey: input.queueItem.cardKey,
       grade: input.grade,
     });
 

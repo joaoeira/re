@@ -50,6 +50,8 @@ export const ReplaceItem = rpc(
     cardId: Schema.String,
     content: Schema.String,
     cardType: EditorCardTypeSchema,
+    // Allows recovery only if the current item still has mismatched card counts at save time.
+    resetScheduling: Schema.optional(Schema.Boolean),
   }),
   Schema.Struct({
     cardIds: Schema.Array(Schema.String),
@@ -67,6 +69,7 @@ export const GetItemForEdit = rpc(
     content: Schema.String,
     cardType: EditorCardTypeSchema,
     cardIds: Schema.Array(Schema.String),
+    requiresSchedulingReset: Schema.Boolean,
   }),
   EditorOperationError,
 );

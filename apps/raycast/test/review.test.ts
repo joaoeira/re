@@ -31,7 +31,7 @@ const reference: ReviewCardReference = {
   deckName: "computing",
   relativePath: "computing.md",
   cardId: "effect-card",
-  cardIndex: 0,
+  cardKey: "main",
 };
 
 const makeLayer = (service: Partial<ReviewStoreService>): Layer.Layer<ReviewStoreService> =>

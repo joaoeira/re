@@ -1,10 +1,10 @@
 import { setup, assign, fromPromise } from "xstate";
 import { Effect, Runtime } from "effect";
-import type { QueueItem } from "@re/workspace";
+import type { ReviewQueueItem as QueueItem } from "../lib/review-queue";
 import { Scheduler, type FSRSGrade, type ScheduleResult } from "@re/scheduler";
 import { DeckManager } from "@re/workspace";
 import type { ReviewLogEntry } from "../services/ReviewLogEntry";
-import { getCardSpec } from "../lib/getCardSpec";
+import { loadReviewCard } from "../lib/getCardSpec";
 
 interface GradingResult {
   schedulerLog: ScheduleResult["schedulerLog"];
@@ -104,10 +104,10 @@ const gradingActor = fromPromise(
       const scheduler = yield* Scheduler;
       const deckManager = yield* DeckManager;
 
-      const cardSpec = yield* getCardSpec(queueItem);
-      const evaluatedGrade = yield* cardSpec.evaluate(grade);
+      const current = yield* loadReviewCard(queueItem);
+      const evaluatedGrade = yield* current.spec.evaluate(grade);
       const scheduleResult = yield* scheduler.scheduleReview(
-        queueItem.card,
+        current.card,
         evaluatedGrade,
         new Date(),
       );

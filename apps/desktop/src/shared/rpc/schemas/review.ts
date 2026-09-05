@@ -110,7 +110,7 @@ const NullableDateFromStringSchema = Schema.Union(StrictDateFromStringSchema, Sc
 export const LightQueueItemSchema = Schema.Struct({
   deckPath: Schema.String,
   cardId: Schema.String,
-  cardIndex: NonNegativeIntSchema,
+  cardKey: Schema.NullOr(Schema.String),
   deckName: Schema.String,
 });
 
@@ -119,7 +119,7 @@ export type LightQueueItem = typeof LightQueueItemSchema.Type;
 export const ReviewCardRefSchema = Schema.Struct({
   deckPath: Schema.String,
   cardId: Schema.String,
-  cardIndex: NonNegativeIntSchema,
+  cardKey: Schema.NullOr(Schema.String),
 });
 
 export type ReviewCardRef = typeof ReviewCardRefSchema.Type;
@@ -158,18 +158,10 @@ export class CardContentReadError extends Schema.TaggedError<CardContentReadErro
   message: Schema.String,
 }) {}
 
-export class CardContentIndexOutOfBoundsError extends Schema.TaggedError<CardContentIndexOutOfBoundsError>(
-  "@re/desktop/rpc/CardContentIndexOutOfBoundsError",
-)("card_index_out_of_bounds", {
-  cardIndex: NonNegativeIntSchema,
-  availableCards: NonNegativeIntSchema,
-}) {}
-
 export const CardContentErrorSchema = Schema.Union(
   CardContentNotFoundError,
   CardContentReadError,
   CardContentParseError,
-  CardContentIndexOutOfBoundsError,
 );
 
 export type CardContentError = typeof CardContentErrorSchema.Type;
@@ -217,7 +209,7 @@ export type ReviewAssistantSourceCardError = typeof ReviewAssistantSourceCardErr
 export const ReviewGeneratePermutationsInputSchema = Schema.Struct({
   deckPath: Schema.String,
   cardId: Schema.String,
-  cardIndex: NonNegativeIntSchema,
+  cardKey: Schema.NullOr(Schema.String),
   instruction: Schema.optional(Schema.String),
   model: Schema.optional(ModelIdSchema),
 });

@@ -59,6 +59,16 @@ export function EditorRoot({ search }: EditorRootProps) {
 
             {context.isDuplicate && <DuplicateWarning deckPath={context.duplicateDeckPath} />}
 
+            {context.requiresSchedulingReset && (
+              <p
+                role="alert"
+                className="rounded-md border border-border p-3 text-sm text-muted-foreground"
+              >
+                This item's saved learning data doesn't match its cards. Saving will reset the
+                learning data for this item.
+              </p>
+            )}
+
             <EditorField
               label={isCloze ? "Text" : "Front"}
               content={context.frontContent}
@@ -139,7 +149,13 @@ export function EditorRoot({ search }: EditorRootProps) {
             }}
             className="gap-2 hover:border-foreground disabled:opacity-30"
           >
-            <span className="text-xs">{context.mode === "edit" ? "Save" : "Add card"}</span>
+            <span className="text-xs">
+              {context.requiresSchedulingReset
+                ? "Reset learning data and save"
+                : context.mode === "edit"
+                  ? "Save"
+                  : "Add card"}
+            </span>
             <kbd className="border border-border px-1 py-0.5 text-[10px] text-muted-foreground/60">
               ⌘⏎
             </kbd>
