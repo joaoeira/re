@@ -66,7 +66,7 @@ title: My Flashcards
 Q1
 ---
 A1
-<!--@ item2 5.2 4.3 2 0 2025-01-04T10:30:00Z-->
+<!--@ item2 5.2 4.3 2 0 2025-01-04T10:30:00Z 2025-01-09T15:18:00.000Z-->
 Q2
 ---
 A2
@@ -89,7 +89,7 @@ A2
       assert.strictEqual(item2.cards[0]!.difficulty.value, 4.3);
       assert.strictEqual(item2.cards[0]!.state, 2);
       assert.ok(item2.cards[0]!.lastReview instanceof Date);
-      assert.strictEqual(item2.cards[0]!.due, null);
+      assert.ok(item2.cards[0]!.due instanceof Date);
     }),
   );
 
@@ -172,7 +172,7 @@ Content without trailing newline`;
 
   it.scoped("preserves numeric precision", () =>
     Effect.gen(function* () {
-      const content = `<!--@ abc123 5.20 4.30 2 0 2025-01-04T10:30:00Z-->
+      const content = `<!--@ abc123 5.20 4.30 2 0 2025-01-04T10:30:00Z 2025-01-09T15:18:00.000Z-->
 Content
 `;
       const result = yield* parseFile(content);
@@ -215,7 +215,7 @@ Content
 
   it.scoped("fails on timestamp without timezone", () =>
     Effect.gen(function* () {
-      const content = `<!--@ abc123 0 0 0 0 2025-01-04T10:30:00-->
+      const content = `<!--@ abc123 0 0 0 0 2025-01-04T10:30:00 2025-01-09T10:30:00.000Z-->
 Content
 `;
       const error = yield* parseFile(content).pipe(Effect.flip);

@@ -270,7 +270,7 @@ describe("DeckManager.updateCardMetadata", () => {
   });
 
   it("preserves other cards in the same item", async () => {
-    const multiCard = `<!--@ mc-a 0 0 0 0-->\n<!--@ mc-b 0 0 2 0 2025-01-01T00:00:00.000Z-->\nShared\n---\nAnswer\n`;
+    const multiCard = `<!--@ mc-a 0 0 0 0-->\n<!--@ mc-b 0 0 2 0 2025-01-01T00:00:00.000Z 2025-01-01T00:00:00.000Z-->\nShared\n---\nAnswer\n`;
     const config: MockFileSystemConfig = {
       entryTypes: {},
       directories: {},
@@ -283,7 +283,9 @@ describe("DeckManager.updateCardMetadata", () => {
 
     await promise;
     expect(store["/deck.md"]).toContain("<!--@ mc-a 9 0 0 0-->");
-    expect(store["/deck.md"]).toContain("<!--@ mc-b 0 0 2 0 2025-01-01T00:00:00.000Z-->");
+    expect(store["/deck.md"]).toContain(
+      "<!--@ mc-b 0 0 2 0 2025-01-01T00:00:00.000Z 2025-01-01T00:00:00.000Z-->",
+    );
   });
 
   it("fails with CardNotFound for nonexistent ID", async () => {

@@ -41,7 +41,7 @@ A1
 
   it.scoped("preserves numeric precision", () =>
     Effect.gen(function* () {
-      const original = `<!--@ abc123 5.20 4.30 2 0 2025-01-04T10:30:00.000Z-->
+      const original = `<!--@ abc123 5.20 4.30 2 0 2025-01-04T10:30:00.000Z 2025-01-09T15:18:00.000Z-->
 Content
 `;
       const parsed = yield* parseFile(original);
@@ -54,11 +54,11 @@ Content
   it.scoped("canonicalizes timestamps to UTC", () =>
     Effect.gen(function* () {
       // Input with +02:00 offset
-      const original = `<!--@ abc123 0 0 2 0 2025-01-04T12:30:00+02:00-->
+      const original = `<!--@ abc123 0 0 2 0 2025-01-04T12:30:00+02:00 2025-01-04T10:30:00.000Z-->
 Content
 `;
       // Expected output with UTC
-      const expected = `<!--@ abc123 0 0 2 0 2025-01-04T10:30:00.000Z-->
+      const expected = `<!--@ abc123 0 0 2 0 2025-01-04T10:30:00.000Z 2025-01-04T10:30:00.000Z-->
 Content
 `;
       const parsed = yield* parseFile(original);
@@ -74,7 +74,7 @@ Content
 Q1
 ---
 A1
-<!--@ item2 5.2 4.3 2 0 2025-01-04T10:30:00.000Z-->
+<!--@ item2 5.2 4.3 2 0 2025-01-04T10:30:00.000Z 2025-01-09T15:18:00.000Z-->
 Q2
 ---
 A2

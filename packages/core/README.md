@@ -31,18 +31,23 @@ import { Effect } from "effect";
 import { parseMetadata, serializeMetadata } from "@re/core";
 
 const metadata = Effect.runSync(
-  parseMetadata("<!--@ imported-card 5.20 4.30 2 0 2025-01-04T10:30:00+02:00-->"),
+  parseMetadata(
+    "<!--@ imported-card 5.20 4.30 2 0 2025-01-04T10:30:00+02:00 2025-01-09T10:30:00+02:00-->",
+  ),
 );
 
 serializeMetadata(metadata);
-// <!--@ imported-card 5.20 4.30 2 0 2025-01-04T08:30:00.000Z-->
+// <!--@ imported-card 5.20 4.30 2 0 2025-01-04T08:30:00.000Z 2025-01-09T08:30:00.000Z-->
 ```
 
-The parser supports the same five-, six-, and seven-field layouts as `parseFile`, but requires
+The parser supports the same five- and seven-field layouts as `parseFile`, but requires
 the first closing `-->` to end the record. The file parser retains its more permissive line
 matching, which can absorb an embedded closing delimiter into an ID. Numeric spelling is
 preserved, and parsed timestamps become `Date` objects. A malformed comment or
 field count fails with `InvalidMetadataFormat`; invalid field values fail with `InvalidFieldValue`.
+The five-field layout has no timestamps; the seven-field layout includes both `lastReview`
+and `due`. A record with only a last-review timestamp is rejected. `serializeMetadata`
+requires both timestamps or neither and throws `RangeError` for an incomplete pair.
 
 ## Validating in-memory models
 
@@ -81,8 +86,8 @@ validating an object is not a guarantee that arbitrary metadata can round-trip t
 
 Two concrete examples pass structural validation but cannot retain their meaning in Markdown:
 
-- Metadata with `due` set and `lastReview: null`: the positional format cannot express a due
-  date without a last-review timestamp, so serialization omits the due date.
+- Metadata with only one of `lastReview` and `due` set: serialization rejects the incomplete
+  timestamp pair with `RangeError`.
 - An item with `cards: []`: serialization writes its content without a metadata separator.
   Parsing again merges that content into the preceding item or the file preamble.
 

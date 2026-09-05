@@ -11,7 +11,7 @@ Cards are stored in markdown files with metadata in HTML comments:
 title: My Flashcards
 ---
 
-<!--@ abc123 5.2 4.3 2 0 2025-01-04T10:30:00.000Z-->
+<!--@ abc123 5.2 4.3 2 0 2025-01-04T10:30:00.000Z 2025-01-09T10:30:00.000Z-->
 
 ## What is the capital of France?
 
@@ -24,16 +24,18 @@ Paris
 4
 ```
 
-Metadata format: `<!--@ <id> <stability> <difficulty> <state> <steps> [lastReview]-->`
+Metadata format: `<!--@ <id> <stability> <difficulty> <state> <steps> [lastReview due]-->`.
+The timestamps must either both be present or both be omitted.
 
-| Field      | Type     | Description                                         |
-| ---------- | -------- | --------------------------------------------------- |
-| id         | string   | Unique identifier (nanoid)                          |
-| stability  | number   | FSRS stability parameter                            |
-| difficulty | number   | FSRS difficulty parameter                           |
-| state      | 0-3      | 0=New, 1=Learning, 2=Review, 3=Relearning           |
-| steps      | number   | Learning steps completed                            |
-| lastReview | ISO 8601 | Last review timestamp (optional, requires timezone) |
+| Field      | Type     | Description                                                       |
+| ---------- | -------- | ----------------------------------------------------------------- |
+| id         | string   | Unique identifier (nanoid)                                        |
+| stability  | number   | FSRS stability parameter                                          |
+| difficulty | number   | FSRS difficulty parameter                                         |
+| state      | 0-3      | 0=New, 1=Learning, 2=Review, 3=Relearning                         |
+| steps      | number   | Learning steps completed                                          |
+| lastReview | ISO 8601 | Last review timestamp (paired with due, requires timezone)        |
+| due        | ISO 8601 | Next review timestamp (paired with lastReview, requires timezone) |
 
 ## Installation
 
@@ -69,6 +71,7 @@ const updated = {
                   ...card,
                   state: State.Review,
                   lastReview: new Date(),
+                  due: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
                 }
               : card,
           ),

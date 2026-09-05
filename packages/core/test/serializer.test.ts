@@ -18,7 +18,7 @@ describe("serializeMetadata", () => {
     assert.strictEqual(result, "<!--@ abc123 0 0 0 0-->");
   });
 
-  it("serializes legacy reviewed item metadata without due", () => {
+  it("rejects incomplete timestamp pairs instead of emitting an unreadable or lossy record", () => {
     const metadata: ItemMetadata = {
       id: "abc123" as ItemId,
       stability: { value: 5.2, raw: "5.20" },
@@ -29,8 +29,11 @@ describe("serializeMetadata", () => {
       due: null,
     };
 
-    const result = serializeMetadata(metadata);
-    assert.strictEqual(result, "<!--@ abc123 5.20 4.30 2 0 2025-01-04T10:30:00.000Z-->");
+    assert.throws(() => serializeMetadata(metadata), RangeError);
+    assert.throws(
+      () => serializeMetadata({ ...metadata, lastReview: null, due: metadata.lastReview }),
+      RangeError,
+    );
   });
 
   it("serializes reviewed item metadata with due", () => {

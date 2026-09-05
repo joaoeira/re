@@ -81,7 +81,7 @@ A1
 <!--@ multi1 0 0 0 0-->
 <!--@ multi2 0 0 0 0-->
 The [sun] rises in the [east].
-<!--@ single2 5.2 4.3 2 0 2025-01-04T10:30:00Z-->
+<!--@ single2 5.2 4.3 2 0 2025-01-04T10:30:00Z 2025-01-09T15:18:00.000Z-->
 Regular flashcard Q2
 ---
 A2
@@ -109,7 +109,7 @@ A2
     it.scoped("preserves individual card metadata in multi-card item", () =>
       Effect.gen(function* () {
         const content = `<!--@ card1 1.5 2.5 1 0-->
-<!--@ card2 5.2 4.3 2 1 2025-01-04T10:30:00Z-->
+<!--@ card2 5.2 4.3 2 1 2025-01-04T10:30:00Z 2025-01-09T15:18:00.000Z-->
 Shared content
 `;
         const result = yield* parseFile(content);
@@ -274,7 +274,7 @@ Content
   describe("round-trip", () => {
     it.scoped("round-trips multi-card items byte-perfect", () =>
       Effect.gen(function* () {
-        const original = `<!--@ card1 5.20 4.30 2 1 2025-01-04T10:30:00.000Z-->
+        const original = `<!--@ card1 5.20 4.30 2 1 2025-01-04T10:30:00.000Z 2025-01-09T15:18:00.000Z-->
 <!--@ card2 1.50 2.50 0 0-->
 The atomic number of [carbon] is [6].
 `;
@@ -306,7 +306,7 @@ Water
 The atomic number of [carbon] is [6].
 
 <!--@ cloze2-paris 2.5 3.5 1 0-->
-<!--@ cloze2-france 5.0 4.0 2 1 2025-01-04T10:30:00.000Z-->
+<!--@ cloze2-france 5.0 4.0 2 1 2025-01-04T10:30:00.000Z 2025-01-09T10:30:00.000Z-->
 [Paris] is the capital of [France].
 
 <!--@ q2 0 0 0 0-->

@@ -21,7 +21,7 @@ What is 2+2?
 4
 `;
 
-const dueCardContent = `<!--@ due456 5 4.5 2 0 2025-01-01T00:00:00Z-->
+const dueCardContent = `<!--@ due456 5 4.5 2 0 2025-01-01T00:00:00Z 2025-01-06T00:00:00.000Z-->
 What is the capital?
 ---
 Paris
@@ -37,12 +37,12 @@ New card 2
 ---
 Answer 2
 
-<!--@ card3 5 4.5 2 0 2025-01-01T00:00:00Z-->
+<!--@ card3 5 4.5 2 0 2025-01-01T00:00:00Z 2025-01-06T00:00:00.000Z-->
 Due card 1
 ---
 Answer 3
 
-<!--@ card4 3 4.5 2 0 2025-01-01T00:00:00Z-->
+<!--@ card4 3 4.5 2 0 2025-01-01T00:00:00Z 2025-01-04T00:00:00.000Z-->
 Due card 2 (more overdue)
 ---
 Answer 4

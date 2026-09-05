@@ -50,4 +50,13 @@ describe("parseMetadata", () => {
       expect(valueError).toMatchObject({ _tag: "InvalidFieldValue", line: 1 });
     }),
   );
+
+  it.effect("rejects a review timestamp without a due timestamp", () =>
+    Effect.gen(function* () {
+      const error = yield* parseMetadata(
+        "<!--@ incomplete-review 5 4 2 0 2025-01-04T10:30:00Z-->",
+      ).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "InvalidMetadataFormat", line: 1 });
+    }),
+  );
 });

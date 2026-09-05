@@ -2,9 +2,6 @@ import { fsrs, createEmptyCard, type Card, type Grade as FSRSGradeType } from "t
 import { Context, Data, Effect, Layer } from "effect";
 import { State, numericField, type ItemMetadata } from "@re/core";
 
-const LEARNING_STEPS = [1, 10] as const;
-const RELEARNING_STEPS = [10] as const;
-
 export type FSRSGrade = 0 | 1 | 2 | 3;
 
 const gradeToRating = (grade: FSRSGrade): FSRSGradeType => (grade + 1) as FSRSGradeType;
@@ -31,36 +28,8 @@ export class ScheduleError extends Data.TaggedError("ScheduleError")<{
   readonly cardId: string;
 }> {}
 
-/**
- * Compute due date based on card state.
- * Uses stored metadata due when available, otherwise falls back to legacy reconstruction.
- */
-export const computeDueDate = (card: ItemMetadata): Date | null => {
-  if (card.due !== null) {
-    return card.due;
-  }
-
-  if (card.state === State.New || !card.lastReview) {
-    return null;
-  }
-
-  if (card.state === State.Review) {
-    const intervalMs = card.stability.value * 24 * 60 * 60 * 1000;
-    return new Date(card.lastReview.getTime() + intervalMs);
-  }
-
-  if (card.state === State.Learning) {
-    const stepMinutes = LEARNING_STEPS[card.learningSteps] ?? LEARNING_STEPS[0];
-    return new Date(card.lastReview.getTime() + stepMinutes * 60 * 1000);
-  }
-
-  if (card.state === State.Relearning) {
-    const stepMinutes = RELEARNING_STEPS[card.learningSteps] ?? RELEARNING_STEPS[0];
-    return new Date(card.lastReview.getTime() + stepMinutes * 60 * 1000);
-  }
-
-  return null;
-};
+/** Return the stored due date, or null when no review has been scheduled. */
+export const computeDueDate = (card: ItemMetadata): Date | null => card.due;
 
 export const isCardDue = (card: ItemMetadata, now: Date): boolean => {
   if (card.state === State.New) return false;
@@ -100,11 +69,15 @@ export const itemMetadataToFSRSCard = (card: ItemMetadata, now: Date): Card => {
     return createEmptyCard(now);
   }
 
-  const due = computeDueDate(card) ?? now;
+  if (card.due === null || card.lastReview === null) {
+    throw new RangeError("Reviewed cards require both lastReview and due timestamps");
+  }
+
+  const due = card.due;
   const elapsed_days = computeElapsedDays(card, now);
   const scheduled_days = computeScheduledDays(card);
 
-  const base = {
+  return {
     due,
     stability: card.stability.value,
     difficulty: card.difficulty.value,
@@ -114,16 +87,8 @@ export const itemMetadataToFSRSCard = (card: ItemMetadata, now: Date): Card => {
     reps: 0,
     lapses: 0,
     state: card.state,
+    last_review: card.lastReview,
   };
-
-  if (card.lastReview) {
-    return {
-      ...base,
-      last_review: card.lastReview,
-    };
-  }
-
-  return base;
 };
 
 export const fsrsCardToItemMetadata = (

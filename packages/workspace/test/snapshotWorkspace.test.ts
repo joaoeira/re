@@ -98,23 +98,23 @@ New prompt
 ---
 New answer
 
-<!--@ learning-a 1 2 1 0 2025-01-01T00:00:00Z-->
+<!--@ learning-a 1 2 1 0 2025-01-01T00:00:00Z 2025-01-01T00:10:00.000Z-->
 Learning prompt
 ---
 Learning answer
 
-<!--@ review-a 5 4 2 0 2025-01-01T00:00:00Z-->
+<!--@ review-a 5 4 2 0 2025-01-01T00:00:00Z 2025-01-06T00:00:00.000Z-->
 Review prompt
 ---
 Review answer
 
-<!--@ relearn-a 2 3 3 0 2025-01-01T00:00:00Z-->
+<!--@ relearn-a 2 3 3 0 2025-01-01T00:00:00Z 2025-01-01T00:10:00.000Z-->
 Relearn prompt
 ---
 Relearn answer
 
 <!--@ multi-one 0 0 0 0-->
-<!--@ multi-two 0 0 2 0 2025-01-01T00:00:00Z-->
+<!--@ multi-two 0 0 2 0 2025-01-01T00:00:00Z 2025-01-01T00:00:00.000Z-->
 Shared prompt
 ---
 Shared answer
@@ -212,14 +212,14 @@ Shared answer
     }
   });
 
-  it("counts due cards using stored due and legacy fallback semantics", async () => {
+  it("counts due cards using stored due timestamps", async () => {
     const dueDeck = `<!--@ due-eq 5 4 2 0 2025-01-01T00:00:00Z 2025-01-10T00:00:00Z-->
 Due exactly at boundary
 ---
 Answer
 
-<!--@ due-fallback 2 4 2 0 2025-01-08T00:00:00Z-->
-Due from legacy fallback
+<!--@ due-earlier 2 4 2 0 2025-01-08T00:00:00Z 2025-01-09T00:00:00.000Z-->
+Already due
 ---
 Answer
 
@@ -361,7 +361,7 @@ Bad format card`,
     const bad = result.decks[0]!;
     expect(bad.status).toBe("parse_error");
     if (bad.status === "parse_error") {
-      expect(bad.message).toContain("Invalid metadata at line 1: Expected 5-7 fields, got 4");
+      expect(bad.message).toContain("Invalid metadata at line 1: Expected 5 or 7 fields, got 4");
     }
   });
 

@@ -25,8 +25,9 @@ Grades are `0` (Again), `1` (Hard), `2` (Good), and `3` (Easy). `SchedulerLive` 
 default `ts-fsrs` configuration. The `Scheduler` interface is exported explicitly for
 consumers that provide their own implementation.
 
-`computeDueDate`, `isCardDue`, and `resolveDueDateIfDue` prefer the stored due date, with
-legacy reconstruction when it is absent. New cards are not counted as due.
+`computeDueDate`, `isCardDue`, and `resolveDueDateIfDue` use the stored due date. Cards without
+a due date and new cards are not counted as due. Scheduling an already-reviewed card requires
+both `lastReview` and `due`; missing timestamps fail with `ScheduleError`.
 Scheduling failures use the tagged `ScheduleError` error. Conversion helpers and the
 `FSRSGrade`, `ScheduleResult`, and `SchedulerLog` types are also exported.
 

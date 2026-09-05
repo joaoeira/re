@@ -4,8 +4,13 @@ import type { ItemMetadata, ParsedFile } from "../types.js";
  * Serialize ItemMetadata to a metadata line string.
  * Uses the preserved `raw` string for numeric fields to maintain precision.
  * Timestamps are canonicalized to UTC via toISOString().
+ * Both timestamps must be present or both null; an incomplete pair throws RangeError.
  */
 export const serializeMetadata = (m: ItemMetadata): string => {
+  if ((m.lastReview === null) !== (m.due === null)) {
+    throw new RangeError("Metadata requires both lastReview and due, or neither timestamp");
+  }
+
   const parts = [
     m.id,
     m.stability.raw,
@@ -14,11 +19,8 @@ export const serializeMetadata = (m: ItemMetadata): string => {
     m.learningSteps.toString(),
   ];
 
-  if (m.lastReview !== null) {
-    parts.push(m.lastReview.toISOString());
-    if (m.due !== null) {
-      parts.push(m.due.toISOString());
-    }
+  if (m.lastReview !== null && m.due !== null) {
+    parts.push(m.lastReview.toISOString(), m.due.toISOString());
   }
 
   return `<!--@ ${parts.join(" ")}-->`;

@@ -16,31 +16,17 @@ const parseMetadataLine = (
 ): Effect.Effect<ItemMetadata, MetadataParseError> => {
   const tokens = inner.trim().split(/\s+/);
 
-  if (tokens.length < 5 || tokens.length > 7) {
+  if (tokens.length !== 5 && tokens.length !== 7) {
     return Effect.fail(
       new InvalidMetadataFormat({
         line: lineNumber,
         raw: inner,
-        reason: `Expected 5-7 fields, got ${tokens.length}`,
+        reason: `Expected 5 or 7 fields, got ${tokens.length}`,
       }),
     );
   }
 
-  const [idRaw, stabilityRaw, difficultyRaw, stateRaw, stepsRaw, reviewOrDueRaw, dueRaw] = tokens;
-
-  const parseLastReview = (): Effect.Effect<Date | null, unknown> => {
-    if (tokens.length === 5) {
-      return Effect.succeed(null);
-    }
-    return Schema.decodeUnknown(LastReviewFromString)(reviewOrDueRaw!);
-  };
-
-  const parseDue = (): Effect.Effect<Date | null, unknown> => {
-    if (tokens.length !== 7) {
-      return Effect.succeed(null);
-    }
-    return Schema.decodeUnknown(LastReviewFromString)(dueRaw!);
-  };
+  const [idRaw, stabilityRaw, difficultyRaw, stateRaw, stepsRaw, lastReviewRaw, dueRaw] = tokens;
 
   return Effect.all({
     id: Schema.decodeUnknown(ItemIdSchema)(idRaw!),
@@ -48,8 +34,14 @@ const parseMetadataLine = (
     difficulty: Schema.decodeUnknown(NumericFieldFromString)(difficultyRaw!),
     state: Schema.decodeUnknown(StateFromString)(stateRaw!),
     learningSteps: Schema.decodeUnknown(LearningStepsFromString)(stepsRaw!),
-    lastReview: parseLastReview(),
-    due: parseDue(),
+    lastReview:
+      tokens.length === 7
+        ? Schema.decodeUnknown(LastReviewFromString)(lastReviewRaw!)
+        : Effect.succeed(null),
+    due:
+      tokens.length === 7
+        ? Schema.decodeUnknown(LastReviewFromString)(dueRaw!)
+        : Effect.succeed(null),
   }).pipe(
     Effect.mapError((parseError) => {
       // Extract field info from the error if possible

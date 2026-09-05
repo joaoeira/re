@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 
 import { adaptItemType, inferCards } from "@re/core";
 import { ClozeType, QAType, type QAContent } from "@re/item-types";
-import { Scheduler, computeDueDate } from "@re/scheduler";
+import { Scheduler } from "@re/scheduler";
 import { DeckManager, ReviewQueueBuilder, resolveDeckImagePath } from "@re/workspace";
 import { Path } from "@effect/platform";
 import type { FileSystem } from "@effect/platform";
@@ -512,7 +512,7 @@ export const createReviewHandlers = () =>
 
               return {
                 previousCard: cardLocation.card,
-                previousDue: cardLocation.card.due ?? computeDueDate(cardLocation.card),
+                previousDue: cardLocation.card.due,
                 nextCard: scheduled.updatedCard,
                 expectedCurrentCardFingerprint: toMetadataFingerprint(scheduled.updatedCard),
                 previousCardFingerprint: toMetadataFingerprint(cardLocation.card),
