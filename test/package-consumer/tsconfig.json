@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    // Effect platform's declarations reference Transferable and other web types.
+    "lib": ["ES2022", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "types": ["node"],
+    "rootDir": ".",
+    "outDir": "dist"
+  },
+  "include": ["index.ts"]
+}

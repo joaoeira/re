@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import type { ItemId } from "../types";
+import type { ItemId } from "../types.js";
 
 export const ItemIdSchema: Schema.Schema<ItemId, string> = Schema.String.pipe(
   Schema.nonEmptyString(),

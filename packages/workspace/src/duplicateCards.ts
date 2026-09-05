@@ -2,8 +2,8 @@ import { FileSystem, Path } from "@effect/platform";
 import type { ParsedFile } from "@re/core";
 import { Effect } from "effect";
 
-import { DeckManager } from "./DeckManager";
-import { scanDecks, type ScanDecksError, type ScanDecksOptions } from "./scanDecks";
+import { DeckManager } from "./DeckManager.js";
+import { scanDecks, type ScanDecksError, type ScanDecksOptions } from "./scanDecks.js";
 
 export interface CardLocation {
   readonly filePath: string;

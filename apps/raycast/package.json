@@ -16,7 +16,12 @@
     "dev": "ray develop",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "predev": "bun run --cwd ../.. build:libraries",
+    "pretest": "bun run --cwd ../.. build:libraries",
+    "pretest:watch": "bun run --cwd ../.. build:libraries",
+    "pretypecheck": "bun run --cwd ../.. build:libraries",
+    "prebuild": "bun run --cwd ../.. build:libraries"
   },
   "dependencies": {
     "@effect/platform": "^0.94.5",

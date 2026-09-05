@@ -1,26 +1,47 @@
 {
   "name": "@re/core",
   "version": "0.0.1",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "src/**/*.ts",
+    "README.md"
+  ],
   "type": "module",
-  "main": "src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
   },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "bench": "vitest bench",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -b tsconfig.build.json",
+    "prepack": "bun run build",
+    "pretest": "bun run build",
+    "pretest:watch": "bun run build",
+    "pretypecheck": "bun run build"
   },
   "dependencies": {
-    "@effect/schema": "0.69.0",
-    "effect": "3.19.18",
     "nanoid": "^5.1.6"
   },
   "devDependencies": {
+    "@effect/schema": "0.69.0",
     "@effect/vitest": "^0.27.0",
     "@types/bun": "latest",
+    "effect": "3.19.18",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
+  },
+  "peerDependencies": {
+    "@effect/schema": "^0.69.0",
+    "effect": "^3.19.18"
   }
 }

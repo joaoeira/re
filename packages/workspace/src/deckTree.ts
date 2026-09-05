@@ -1,4 +1,4 @@
-import type { DeckSnapshot, DeckStateCounts } from "./snapshotWorkspace";
+import type { DeckSnapshot, DeckStateCounts } from "./snapshotWorkspace.js";
 
 export type DeckTreeLeaf = {
   readonly kind: "leaf";

@@ -204,6 +204,26 @@ For typical review sessions (< 10k cards), full file writes on each card update 
 
 ## Development
 
+Library entry points resolve to built ESM JavaScript and TypeScript declarations in each
+package's `dist/` directory. `bun install` builds them during repository preparation; app
+development, test, and typecheck scripts also build their library dependencies first.
+
+```bash
+bun run build:libraries               # Incremental builds in dependency order
+bun run watch:libraries               # Run alongside an app for library development
+bun run pack:libraries                # Clean build and inspected .tgz files in dist/packages/
+bun run check:packages                # Build, pack, install outside the workspace, compile, run
+```
+
+Use `pack:libraries` to produce installable archives with resolved workspace dependency
+versions. Packages include declaration maps and their sources for editor navigation.
+
+`check:packages` installs those archives into a temporary directory, checks TypeScript
+declarations, and runs ESM and CommonJS consumers against a newer compatible Effect version.
+It rejects duplicate Effect installations and exercises deck parsing, editing, and scheduling.
+It requires Node/npm, Bun, `tar`, and registry access; temporary files are removed afterward.
+To reproduce a specific dependency combination, set `RE_CONSUMER_EFFECT_VERSION=3.19.19`.
+
 ```bash
 bun install                          # Install all workspace dependencies
 bun run test                         # Run tests in all packages

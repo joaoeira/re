@@ -1,6 +1,6 @@
-export { parseFile } from "./parser/index";
-export { serializeFile, serializeMetadata } from "./serializer/index";
-export { generateId, createMetadata, createMetadataWithId, numericField } from "./create";
+export { parseFile } from "./parser/index.js";
+export { serializeFile, serializeMetadata } from "./serializer/index.js";
+export { generateId, createMetadata, createMetadataWithId, numericField } from "./create.js";
 export {
   hasClozeDeletion,
   nextClozeDeletionIndex,
@@ -11,25 +11,25 @@ export {
   ClozeSyntaxReasonSchema,
   ClozeSyntaxIssue,
   ClozeSyntaxError,
-} from "./cloze";
-export type { ClozeSyntaxMatch, ClozeReplacerContext, ClozeSyntaxReason } from "./cloze";
+} from "./cloze.js";
+export type { ClozeSyntaxMatch, ClozeReplacerContext, ClozeSyntaxReason } from "./cloze.js";
 
-export type { Item, ItemMetadata, ParsedFile, NumericField, ItemId } from "./types";
-export { State } from "./types";
+export type { Item, ItemMetadata, ParsedFile, NumericField, ItemId } from "./types.js";
+export { State } from "./types.js";
 
-export type { MetadataParseError } from "./errors";
+export type { MetadataParseError } from "./errors.js";
 export {
   ParseError,
   InvalidMetadataFormat,
   InvalidFieldValue,
   MetadataParseErrorSchema,
-} from "./errors";
+} from "./errors.js";
 
-export { ItemIdSchema, isItemId } from "./schema/index";
-export { StateFromString, StateSchema } from "./schema/index";
-export { NumericFieldFromString, NumericFieldSchema } from "./schema/index";
-export { LearningStepsFromString } from "./schema/index";
-export { LastReviewFromString } from "./schema/index";
+export { ItemIdSchema, isItemId } from "./schema/index.js";
+export { StateFromString, StateSchema } from "./schema/index.js";
+export { NumericFieldFromString, NumericFieldSchema } from "./schema/index.js";
+export { LearningStepsFromString } from "./schema/index.js";
+export { LastReviewFromString } from "./schema/index.js";
 
 export type {
   CardSpec,
@@ -39,11 +39,11 @@ export type {
   Grade,
   InferredType,
   ContentParseDiagnostic,
-} from "./item-type";
+} from "./item-type.js";
 export {
   GradeSchema,
   ContentParseError,
   NoMatchingTypeError,
   manualCardSpec,
   inferType,
-} from "./item-type";
+} from "./item-type.js";

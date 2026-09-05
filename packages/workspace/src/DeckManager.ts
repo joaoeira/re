@@ -11,7 +11,7 @@ import {
 } from "@re/core";
 import { Context, Effect, Layer, Option } from "effect";
 
-import { formatMetadataParseError } from "./snapshotWorkspace";
+import { formatMetadataParseError } from "./snapshotWorkspace.js";
 
 export class DeckNotFound extends Schema.TaggedError<DeckNotFound>("@re/workspace/DeckNotFound")(
   "DeckNotFound",

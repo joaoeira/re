@@ -1,14 +1,14 @@
 import { Effect, Schema } from "effect";
-import type { Item, ItemMetadata, ParsedFile } from "../types";
-import { InvalidFieldValue, InvalidMetadataFormat, type MetadataParseError } from "../errors";
+import type { Item, ItemMetadata, ParsedFile } from "../types.js";
+import { InvalidFieldValue, InvalidMetadataFormat, type MetadataParseError } from "../errors.js";
 import {
   ItemIdSchema,
   NumericFieldFromString,
   StateFromString,
   LearningStepsFromString,
   LastReviewFromString,
-} from "../schema/index";
-import { METADATA_LINE_PATTERN } from "./patterns";
+} from "../schema/index.js";
+import { METADATA_LINE_PATTERN } from "./patterns.js";
 
 const parseMetadataLine = (
   inner: string,

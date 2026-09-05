@@ -12,7 +12,11 @@
     "check-duplicates": "bun run src/check-duplicates.ts",
     "test": "bun x vitest",
     "test:watch": "bun x vitest --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "predev": "bun run --cwd ../.. build:libraries",
+    "pretest": "bun run --cwd ../.. build:libraries",
+    "pretest:watch": "bun run --cwd ../.. build:libraries",
+    "pretypecheck": "bun run --cwd ../.. build:libraries"
   },
   "dependencies": {
     "@effect/platform": "^0.94.5",

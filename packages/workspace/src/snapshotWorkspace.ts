@@ -3,14 +3,14 @@ import { Schema } from "@effect/schema";
 import { parseFile, State, type MetadataParseError, type ParsedFile } from "@re/core";
 import { Effect } from "effect";
 
-import { isCardDue } from "./scheduler";
+import { isCardDue } from "./scheduler.js";
 import {
   scanDecks,
   ScanDecksErrorSchema,
   type DeckEntry,
   type ScanDecksError,
   type ScanDecksOptions,
-} from "./scanDecks";
+} from "./scanDecks.js";
 
 export const DeckStateCountsSchema = Schema.Struct({
   new: Schema.Number,

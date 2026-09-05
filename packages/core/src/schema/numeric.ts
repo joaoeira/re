@@ -1,5 +1,5 @@
 import { ParseResult, Schema } from "effect";
-import type { NumericField } from "../types";
+import type { NumericField } from "../types.js";
 
 /**
  * Matches: "0", "5", "5.2", "5.20", "0.123"

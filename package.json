@@ -7,7 +7,7 @@
   ],
   "type": "module",
   "scripts": {
-    "prepare": "effect-language-service patch",
+    "prepare": "effect-language-service patch && bun run build:libraries",
     "test": "bun run --filter '*' test",
     "test:watch": "bun run --filter '*' test:watch",
     "typecheck": "bun run --filter '*' typecheck",
@@ -24,7 +24,11 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt --write .",
-    "fmt:check": "oxfmt --check ."
+    "fmt:check": "oxfmt --check .",
+    "build:libraries": "tsc -b tsconfig.build.json",
+    "watch:libraries": "tsc -b tsconfig.build.json --watch",
+    "pack:libraries": "node scripts/pack-libraries.mjs",
+    "check:packages": "node scripts/check-packages.mjs"
   },
   "devDependencies": {
     "@effect/language-service": "^0.64.1",

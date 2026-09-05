@@ -12,7 +12,7 @@ export {
   type ScanDecksOptions,
   type ScanDecksResult,
   type ScanDecksError,
-} from "./scanDecks";
+} from "./scanDecks.js";
 
 export {
   ResolveDeckImagePathReasonSchema,
@@ -22,7 +22,7 @@ export {
   resolveDeckImagePath,
   type ResolveDeckImagePathReason,
   type ResolvedDeckImagePath,
-} from "./imagePaths";
+} from "./imagePaths.js";
 
 export {
   WORKSPACE_INTERNAL_DIRECTORY_NAME,
@@ -39,7 +39,7 @@ export {
   type InvalidWorkspaceImageAssetReason,
   type ImportDeckImageAssetOperation,
   type ImportedDeckImageAsset,
-} from "./imageAssets";
+} from "./imageAssets.js";
 
 export {
   snapshotWorkspace,
@@ -55,7 +55,7 @@ export {
   type SnapshotWorkspaceOptions,
   type SnapshotWorkspaceResult,
   type SnapshotWorkspaceError,
-} from "./snapshotWorkspace";
+} from "./snapshotWorkspace.js";
 
 export {
   buildDeckTree,
@@ -64,7 +64,7 @@ export {
   type DeckTreeGroup,
   type DeckTreeNode,
   type FlatDeckRow,
-} from "./deckTree";
+} from "./deckTree.js";
 
 export {
   DeckManager,
@@ -84,7 +84,7 @@ export {
   type WriteError,
   type DeckLifecycleError,
   type RemovedDeckItem,
-} from "./DeckManager";
+} from "./DeckManager.js";
 
 export {
   extractCardLocations,
@@ -93,7 +93,7 @@ export {
   type CardLocation,
   type DuplicateMap,
   type WorkspaceDuplicateResult,
-} from "./duplicateCards";
+} from "./duplicateCards.js";
 
 export {
   ReviewQueueBuilder,
@@ -125,7 +125,7 @@ export {
   type ReviewQueueOrder,
   type ReviewQueueSelection,
   type WithinGroupOrder,
-} from "./reviewQueue";
+} from "./reviewQueue.js";
 
 export {
   Scheduler,
@@ -141,4 +141,4 @@ export {
   computeScheduledDays,
   itemMetadataToFSRSCard,
   fsrsCardToItemMetadata,
-} from "./scheduler";
+} from "./scheduler.js";

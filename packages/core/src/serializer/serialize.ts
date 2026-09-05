@@ -1,4 +1,4 @@
-import type { ItemMetadata, ParsedFile } from "../types";
+import type { ItemMetadata, ParsedFile } from "../types.js";
 
 /**
  * Serialize ItemMetadata to a metadata line string.

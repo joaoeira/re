@@ -1,2 +1,2 @@
-export { QAType, QAContent } from "./qa";
-export { ClozeType, ClozeContent, ClozeDeletion } from "./cloze";
+export { QAType, QAContent } from "./qa.js";
+export { ClozeType, ClozeContent, ClozeDeletion } from "./cloze.js";

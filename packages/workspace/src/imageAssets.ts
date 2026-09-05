@@ -2,7 +2,7 @@ import { FileSystem, Path } from "@effect/platform";
 import type { PlatformError } from "@effect/platform/Error";
 import { Effect, Schema } from "effect";
 
-import { isPathWithinRoot } from "./imagePaths";
+import { isPathWithinRoot } from "./imagePaths.js";
 
 export const WORKSPACE_INTERNAL_DIRECTORY_NAME = ".re";
 export const WORKSPACE_IMAGE_ASSETS_DIRECTORY_NAME = "assets";

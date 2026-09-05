@@ -2,9 +2,9 @@ import { Path } from "@effect/platform";
 import { type Item, type ItemMetadata, State } from "@re/core";
 import { Array as Arr, Chunk, Context, Effect, Layer, Order, Random } from "effect";
 
-import { DeckManager } from "./DeckManager";
-import type { DeckTreeNode } from "./deckTree";
-import { resolveDueDateIfDue } from "./scheduler";
+import { DeckManager } from "./DeckManager.js";
+import type { DeckTreeNode } from "./deckTree.js";
+import { resolveDueDateIfDue } from "./scheduler.js";
 
 export interface QueueItem {
   readonly deckPath: string;

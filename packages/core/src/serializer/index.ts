@@ -1,1 +1,1 @@
-export { serializeFile, serializeMetadata } from "./serialize";
+export { serializeFile, serializeMetadata } from "./serialize.js";

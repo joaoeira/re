@@ -1,0 +1,15 @@
+{
+  "name": "re-package-consumer",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@effect/platform": "^0.94.5",
+    "@effect/platform-node": "0.104.0",
+    "@effect/schema": "^0.69.0",
+    "effect": "^3.19.19"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.17",
+    "typescript": "5.9.3"
+  }
+}

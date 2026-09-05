@@ -1,0 +1,47 @@
+name: Library packages
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "packages/**"
+      - "scripts/**"
+      - "test/package-consumer/**"
+      - "tsconfig*.json"
+      - "package.json"
+      - "bun.lock"
+      - "apps/*/package.json"
+      - ".github/workflows/library-packages.yml"
+  push:
+    branches: [master]
+    paths:
+      - "packages/**"
+      - "scripts/**"
+      - "test/package-consumer/**"
+      - "tsconfig*.json"
+      - "package.json"
+      - "bun.lock"
+      - "apps/*/package.json"
+      - ".github/workflows/library-packages.yml"
+
+jobs:
+  consumer:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22, 24]
+        effect: ["3.19.19", "^3.19.19"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.21
+      - run: bun install --frozen-lockfile
+      - run: bun run --filter '@re/core' --filter '@re/types' --filter '@re/workspace' test
+      - run: bun run --filter '@re/core' --filter '@re/types' --filter '@re/workspace' typecheck
+      - run: bun run check:packages
+        env:
+          RE_CONSUMER_EFFECT_VERSION: ${{ matrix.effect }}
