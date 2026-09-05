@@ -1,4 +1,4 @@
-export { parseFile } from "./parser/index.js";
+export { parseFile, parseMetadata } from "./parser/index.js";
 export { serializeFile, serializeMetadata } from "./serializer/index.js";
 export { generateId, createMetadata, createMetadataWithId, numericField } from "./create.js";
 export {
@@ -26,6 +26,7 @@ export {
 } from "./errors.js";
 
 export { ItemIdSchema, isItemId } from "./schema/index.js";
+export { ItemMetadataSchema, ItemSchema, ParsedFileSchema } from "./schema/index.js";
 export { StateFromString, StateSchema } from "./schema/index.js";
 export { NumericFieldFromString, NumericFieldSchema } from "./schema/index.js";
 export { LearningStepsFromString } from "./schema/index.js";

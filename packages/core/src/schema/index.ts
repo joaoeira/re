@@ -1,4 +1,5 @@
-export { ItemIdSchema, isItemId } from "./metadata.js";
+export { ItemIdSchema, isItemId, ItemMetadataSchema } from "./metadata.js";
+export { ItemSchema, ParsedFileSchema } from "./item.js";
 export { NumericFieldFromString, NumericFieldSchema } from "./numeric.js";
 export { StateFromString, StateSchema } from "./state.js";
 export { LearningStepsFromString } from "./learning-steps.js";

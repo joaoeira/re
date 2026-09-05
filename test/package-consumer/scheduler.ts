@@ -7,9 +7,16 @@ import {
   ContentParseError,
   createMetadata,
   inferCards,
+  ItemMetadataSchema,
+  ItemSchema,
   parseFile,
+  parseMetadata,
+  ParsedFileSchema,
   serializeFile,
+  serializeMetadata,
   type Grade,
+  type Item,
+  type ItemMetadata,
   type ItemType,
   type ParsedFile,
   type ResponseValidationError,
@@ -49,10 +56,21 @@ assert.equal(scheduled.schedulerLog.rating, 2);
 assert.deepEqual(scheduled.schedulerLog.previousCard, card);
 assert.equal(card.lastReview, null);
 
-const stored: ParsedFile = {
-  preamble: "# Geography\n\n",
-  items: [{ content, cards: [scheduled.updatedCard] }],
-};
+// Import a standalone metadata record and validate the in-memory models using
+// the installed public schemas before storing the resulting deck.
+const stored: ParsedFile = Effect.runSync(
+  Effect.gen(function* () {
+    const metadata: ItemMetadata = yield* parseMetadata(
+      serializeMetadata(scheduled.updatedCard),
+    ).pipe(Effect.flatMap(Schema.decodeUnknown(ItemMetadataSchema)));
+    assert.deepEqual(metadata, scheduled.updatedCard);
+    const item: Item = yield* Schema.decodeUnknown(ItemSchema)({ content, cards: [metadata] });
+    return yield* Schema.decodeUnknown(ParsedFileSchema)({
+      preamble: "# Geography\n\n",
+      items: [item],
+    });
+  }),
+);
 const restored = Effect.runSync(parseFile(serializeFile(stored)));
 assert.deepEqual(restored, stored);
 const restoredCard = restored.items[0]?.cards[0];
@@ -122,5 +140,5 @@ await Effect.runPromise(
   }).pipe(Effect.provide(SchedulerLive)),
 );
 console.log(
-  "Passed: built-in and custom async grading, scheduling, metadata round-trip, due dates, and subsequent review without a filesystem layer.",
+  "Passed: built-in and custom async grading, scheduling, standalone metadata import, model validation, metadata round-trip, due dates, and subsequent review without a filesystem layer.",
 );

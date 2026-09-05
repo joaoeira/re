@@ -64,6 +64,28 @@ const parseMetadataLine = (
   );
 };
 
+/**
+ * Parse one complete metadata comment, optionally terminated by LF or CRLF.
+ * Additional content or lines are rejected. Diagnostic positions are relative
+ * to this record (line 1); field decoding is shared with parseFile.
+ */
+export const parseMetadata = (content: string): Effect.Effect<ItemMetadata, MetadataParseError> => {
+  const line = content.replace(/\r?\n$/, "");
+  const match = METADATA_LINE_PATTERN.exec(line);
+
+  // A greedy line match can absorb a second comment into the ID. The first
+  // closing delimiter must end the record.
+  if (!match || line.indexOf("-->") !== line.length - 3) {
+    return new InvalidMetadataFormat({
+      line: 1,
+      raw: content,
+      reason: "Expected exactly one complete metadata comment",
+    });
+  }
+
+  return parseMetadataLine(match[1]!, 1);
+};
+
 interface LineInfo {
   readonly lineNumber: number; // 1-based
   readonly content: string;
