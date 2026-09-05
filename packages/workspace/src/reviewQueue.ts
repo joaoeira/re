@@ -2,7 +2,7 @@ import { Path } from "@effect/platform";
 import { type Item, type ItemMetadata, State } from "@re/core";
 import { Array as Arr, Chunk, Context, Effect, Layer, Order, Random } from "effect";
 
-import { DeckManager } from "./DeckManager.js";
+import { DeckManager, type ReadError } from "./DeckManager.js";
 import type { DeckTreeNode } from "./deckTree.js";
 import { resolveDueDateIfDue } from "@re/scheduler";
 
@@ -22,6 +22,8 @@ export interface ReviewQueue {
   readonly items: readonly QueueItem[];
   readonly totalNew: number;
   readonly totalDue: number;
+  /** Recoverable deck-loading failures in input order, unaffected by card filters or limits. */
+  readonly deckErrors: readonly ReadError[];
 }
 
 export type ReviewQueueOrder = "default" | "due-first" | "new-first";
@@ -241,6 +243,8 @@ export interface ReviewQueueBuilder {
    * Contract for `deckPaths`:
    * - absolute paths are expected
    * - caller order is preserved (no deduplication)
+   * - recoverable read/parse failures are returned in deckErrors; other decks still contribute cards
+   * - defects and interruption propagate through Effect rather than becoming deckErrors
    */
   readonly buildQueue: (input: {
     readonly deckPaths: readonly string[];
@@ -271,11 +275,15 @@ export const ReviewQueueBuilderLive = Layer.effect(
           );
 
           const allItems: QueueItem[] = [];
+          const deckErrors: ReadError[] = [];
 
           let filePosition = 0;
           for (let i = 0; i < deckPaths.length; i++) {
             const result = results[i]!;
-            if (result._tag === "Left") continue;
+            if (result._tag === "Left") {
+              deckErrors.push(result.left);
+              continue;
+            }
 
             const deckPath = deckPaths[i]!;
             const file = result.right;
@@ -335,6 +343,7 @@ export const ReviewQueueBuilderLive = Layer.effect(
             items: limitedItems,
             totalNew: countCategory(limitedItems, "new"),
             totalDue: countCategory(limitedItems, "due"),
+            deckErrors,
           };
         }),
     };

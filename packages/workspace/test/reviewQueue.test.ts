@@ -1,11 +1,13 @@
 import { FileSystem, Path } from "@effect/platform";
 import { SystemError } from "@effect/platform/Error";
 import { State, numericField, type ItemId } from "@re/core";
-import { Effect, Layer, Random } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Random } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
+  DeckManager,
   DeckManagerLive,
+  DeckReadError,
   DEFAULT_REVIEW_QUEUE_OPTIONS,
   DueFirstByDueDateSpec,
   NewFirstByDueDateSpec,
@@ -122,6 +124,8 @@ const MockFileSystem = FileSystem.layerNoop({
     if (path === "/decks/gaps-a.md") return Effect.succeed(gapsAContent);
     if (path === "/decks/gaps-b.md") return Effect.succeed(gapsBContent);
     if (path === "/decks/shuffled.md") return Effect.succeed(shuffledContent);
+    if (path === "/decks/broken.md") return Effect.succeed("<!--@ bad metadata-->\n");
+    if (path === "/decks/empty.md") return Effect.succeed("# No cards yet\n");
     return Effect.fail(
       new SystemError({
         reason: "NotFound",
@@ -141,9 +145,12 @@ const IdentityOrderingStrategy = Layer.succeed(QueueOrderingStrategy, {
   order: (items) => Effect.succeed(items),
 });
 
-const BuilderLayer = (orderingLayer: Layer.Layer<QueueOrderingStrategy>) =>
+const BuilderLayer = (
+  orderingLayer: Layer.Layer<QueueOrderingStrategy>,
+  deckManagerLayer: Layer.Layer<DeckManager> = MockDeckManager,
+) =>
   ReviewQueueBuilderLive.pipe(
-    Layer.provide(Layer.mergeAll(MockDeckManager, orderingLayer, Path.layer)),
+    Layer.provide(Layer.mergeAll(deckManagerLayer, orderingLayer, Path.layer)),
   );
 
 const runQueue = (input: {
@@ -164,15 +171,101 @@ const runQueue = (input: {
   }).pipe(Effect.provide(input.layer), Effect.runPromise);
 
 describe("ReviewQueueBuilder", () => {
-  it("builds queue from deck paths and soft-skips unreadable decks", async () => {
-    const result = await runQueue({
-      deckPaths: ["/decks/new.md", "/decks/missing.md", "/decks/due.md"],
+  it("reports every deck failure in input order while filtering and limiting usable cards", async () => {
+    const result = await Effect.gen(function* () {
+      const decks = yield* DeckManager;
+      const delayedDecks = Layer.succeed(DeckManager, {
+        ...decks,
+        readDeck: (deckPath) =>
+          deckPath === "/decks/blocked.md"
+            ? Effect.yieldNow().pipe(
+                Effect.zipRight(new DeckReadError({ deckPath, message: "Deck is locked" })),
+              )
+            : decks.readDeck(deckPath),
+      });
+
+      return yield* Effect.gen(function* () {
+        const builder = yield* ReviewQueueBuilder;
+        return yield* builder.buildQueue({
+          deckPaths: [
+            "/decks/blocked.md",
+            "/decks/mixed.md",
+            "/decks/missing.md",
+            "/decks/broken.md",
+            "/decks/missing.md",
+            "/decks/empty.md",
+          ],
+          rootPath: "/decks",
+          now: NOW,
+          options: {
+            ...DEFAULT_REVIEW_QUEUE_OPTIONS,
+            includeNew: false,
+            cardLimit: 1,
+            order: "due-first",
+          },
+        });
+      }).pipe(Effect.provide(BuilderLayer(IdentityOrderingStrategy, delayedDecks)));
+    }).pipe(Effect.provide(MockDeckManager), Effect.runPromise);
+
+    expect(result.items.map((item) => item.card.id)).toEqual(["card4"]);
+    expect(result.totalNew).toBe(0);
+    expect(result.totalDue).toBe(1);
+    expect(result.deckErrors).toMatchObject([
+      { _tag: "DeckReadError", deckPath: "/decks/blocked.md", message: "Deck is locked" },
+      { _tag: "DeckNotFound", deckPath: "/decks/missing.md" },
+      { _tag: "DeckParseError", deckPath: "/decks/broken.md" },
+      { _tag: "DeckNotFound", deckPath: "/decks/missing.md" },
+    ]);
+  });
+
+  it("distinguishes an empty deck from failed reads, even with a zero card limit", async () => {
+    const empty = await runQueue({
+      deckPaths: ["/decks/empty.md"],
       layer: BuilderLayer(IdentityOrderingStrategy),
     });
+    const failed = await runQueue({
+      deckPaths: ["/decks/missing.md"],
+      layer: BuilderLayer(IdentityOrderingStrategy),
+      options: { ...DEFAULT_REVIEW_QUEUE_OPTIONS, cardLimit: 0 },
+    });
 
-    expect(result.totalNew).toBe(1);
-    expect(result.totalDue).toBe(1);
-    expect(result.items.length).toBe(2);
+    expect(empty.items).toEqual([]);
+    expect(empty.deckErrors).toEqual([]);
+    expect(failed.items).toEqual([]);
+    expect(failed.deckErrors).toMatchObject([
+      { _tag: "DeckNotFound", deckPath: "/decks/missing.md" },
+    ]);
+  });
+
+  it("propagates defects and interruption instead of reporting successful partial queues", async () => {
+    const defect = new Error("Filesystem implementation failed");
+    for (const [kind, failure] of [
+      ["defect", Effect.die(defect)],
+      ["interruption", Effect.interrupt],
+    ] as const) {
+      const decks = DeckManagerLive.pipe(
+        Layer.provide(
+          Layer.merge(FileSystem.layerNoop({ readFileString: () => failure }), Path.layer),
+        ),
+      );
+      const exit = await Effect.gen(function* () {
+        const builder = yield* ReviewQueueBuilder;
+        return yield* builder.buildQueue({
+          deckPaths: ["/decks/unavailable.md"],
+          rootPath: "/decks",
+          now: NOW,
+        });
+      }).pipe(Effect.provide(BuilderLayer(IdentityOrderingStrategy, decks)), Effect.runPromiseExit);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        if (kind === "interruption") {
+          expect(Exit.isInterrupted(exit)).toBe(true);
+        } else {
+          expect(Option.getOrUndefined(Cause.dieOption(exit.cause))).toBe(defect);
+        }
+      }
+    }
   });
 
   it("keeps output stable with caller deckPaths order and does not deduplicate", async () => {

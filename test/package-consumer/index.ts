@@ -28,6 +28,7 @@ import {
   ReviewQueueBuilderLive,
   scanDecks,
   snapshotWorkspace,
+  type ReadError,
 } from "@re/workspace";
 
 // Public imports must resolve to installed JavaScript, never a workspace source file.
@@ -80,6 +81,7 @@ const QueueLive = ReviewQueueBuilderLive.pipe(
 const ConsumerLive = Layer.mergeAll(DeckLive, QueueLive, SchedulerLive);
 const rootPath = await mkdtemp(path.join(tmpdir(), "re-consumer-decks-"));
 const deckPath = path.join(rootPath, "geography.md");
+const missingDeckPath = path.join(rootPath, "missing.md");
 const reviewedAt = new Date("2026-01-01T12:00:00.000Z");
 try {
   await Effect.runPromise(
@@ -90,12 +92,6 @@ try {
       yield* decks.createDeck(deckPath, { initialContent: serialized });
       const loaded = yield* decks.readDeck(deckPath);
       assert.deepEqual(loaded, source);
-
-      const missing = yield* decks.readDeck(path.join(rootPath, "missing.md")).pipe(
-        Effect.as(false),
-        Effect.catchTag("DeckNotFound", () => Effect.succeed(true)),
-      );
-      assert.equal(missing, true, "Tagged errors must remain usable by consumers");
 
       yield* decks.appendItem(
         deckPath,
@@ -119,16 +115,27 @@ try {
       const deck = snapshot.decks[0];
       assert.ok(deck?.status === "ok");
       assert.equal(deck.totalCards, 3);
-      const queue = yield* queues.buildQueue({ deckPaths: [deckPath], rootPath, now: reviewedAt });
+      const queue = yield* queues.buildQueue({
+        deckPaths: [deckPath, missingDeckPath],
+        rootPath,
+        now: reviewedAt,
+      });
       assert.equal(queue.totalNew, 2);
       assert.equal(queue.totalDue, 0);
+      const deckErrors: readonly ReadError[] = queue.deckErrors;
+      assert.equal(deckErrors.length, 1);
+      // Apps can turn a partial result into a typed failure using their own policy.
+      const missing = yield* Effect.fail(deckErrors[0]!).pipe(
+        Effect.catchTag("DeckNotFound", (error) => Effect.succeed(error.deckPath)),
+      );
+      assert.equal(missing, missingDeckPath, "Queue errors must retain their tags and deck paths");
     }).pipe(Effect.provide(ConsumerLive)),
   );
   // Independently read the bytes written by the library.
   const persisted = Effect.runSync(parseFile(await readFile(deckPath, "utf8")));
   assert.equal(persisted.items[0]?.cards[0]?.lastReview?.toISOString(), reviewedAt.toISOString());
   console.log(
-    "Passed: public imports, declarations, schema composition, round-trip, Q&A, cloze, scheduling, tagged errors, deck writes, scan, snapshot, queue.",
+    "Passed: public imports, declarations, schema composition, round-trip, Q&A, cloze, scheduling, tagged errors, deck writes, scan, snapshot, and partial queues with recoverable deck errors.",
   );
 } finally {
   await rm(rootPath, { recursive: true, force: true });

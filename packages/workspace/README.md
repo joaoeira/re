@@ -34,5 +34,54 @@ package. Workspace uses its due-date helpers for snapshots and review queues. Di
 Markdown files and honors the workspace's `.reignore`. Image hashing requires Web Crypto, available
 in the Node runtimes exercised by the consumer check.
 
+## Review queues and deck errors
+
+`ReviewQueueBuilder.buildQueue` returns usable cards alongside recoverable deck-loading errors:
+
+```ts
+interface ReviewQueue {
+  readonly items: readonly QueueItem[];
+  readonly totalNew: number;
+  readonly totalDue: number;
+  readonly deckErrors: readonly ReadError[];
+}
+```
+
+`ReadError` is the existing union of `DeckNotFound`, `DeckReadError`, and `DeckParseError`.
+Every error includes `deckPath`; read and parse errors also carry a descriptive `message`.
+Successful decks continue to contribute cards when another deck fails. `deckErrors` preserves
+the input path order, including repeated failed paths, regardless of read completion order.
+It is unaffected by category filters, card ordering, or card limits, including a limit of zero.
+`totalNew` and `totalDue` count only cards in the final `items` array.
+
+Empty decks and decks with no eligible cards do not produce errors. An empty queue with
+nonempty `deckErrors` is an incomplete result, so an app should report those failures rather
+than treating it as confirmation that the selected decks are up to date. Defects and
+interruption propagate through Effect; they are never converted into deck errors.
+The selection-based `ReviewQueueService` returns the same result type.
+
+Apps choose whether to show failures alongside available cards or require every deck to load:
+
+```ts
+import { Effect } from "effect";
+import { ReviewQueueBuilder } from "@re/workspace";
+
+const prepareReview = Effect.gen(function* () {
+  const builder = yield* ReviewQueueBuilder;
+  const queue = yield* builder.buildQueue({
+    deckPaths: ["/decks/geography.md", "/decks/chemistry.md"],
+    rootPath: "/decks",
+    now: new Date(),
+  });
+
+  // This app requires every selected deck. Other apps can display all errors
+  // and offer queue.items for review instead.
+  if (queue.deckErrors.length > 0) {
+    return yield* Effect.fail(queue.deckErrors[0]!);
+  }
+  return queue;
+});
+```
+
 Build locally with `bun run build`. From the repository root, `bun run pack:libraries`
 creates installable archives and `bun run check:packages` verifies them in an isolated Node consumer.
