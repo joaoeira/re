@@ -29,6 +29,7 @@
     "@raycast/api": "1.104.24",
     "@re/core": "workspace:*",
     "@re/item-types": "workspace:*",
+    "@re/scheduler": "workspace:*",
     "@re/workspace": "workspace:*",
     "effect": "3.19.18",
     "remark-math": "^6.0.0",

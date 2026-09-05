@@ -15,7 +15,7 @@ export {
   computeScheduledDays,
   itemMetadataToFSRSCard,
   fsrsCardToItemMetadata,
-} from "@re/workspace";
+} from "@re/scheduler";
 export { type ReviewLogEntry } from "./ReviewLogEntry";
 export { DeckManager, DeckManagerLive } from "@re/workspace";
 export { buildDeckTree, type DeckTreeNode } from "@re/workspace";

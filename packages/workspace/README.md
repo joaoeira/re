@@ -1,7 +1,7 @@
 # @re/workspace
 
-Filesystem deck management, discovery, snapshots, image assets, review queues, and FSRS
-scheduling for Markdown spaced repetition workspaces. The package exports ESM JavaScript
+Filesystem deck management, discovery, snapshots, image assets, and review queues
+for Markdown spaced repetition workspaces. The package exports ESM JavaScript
 and TypeScript declarations and uses Effect services.
 
 Callers supply the filesystem and path implementations. For example, a Node application
@@ -24,8 +24,9 @@ const deck = await Effect.runPromise(
 );
 ```
 
-Scheduling is available through `Scheduler` and `SchedulerLive`. Discovery uses Markdown
-files and honors the workspace's `.reignore`. Image hashing requires Web Crypto, available
+Scheduling is provided by `@re/scheduler`; import `Scheduler` and `SchedulerLive` from that
+package. Workspace uses its due-date helpers for snapshots and review queues. Discovery uses
+Markdown files and honors the workspace's `.reignore`. Image hashing requires Web Crypto, available
 in the Node runtimes exercised by the consumer check.
 
 Build locally with `bun run build`. From the repository root, `bun run pack:libraries`

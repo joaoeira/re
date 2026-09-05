@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/core/tsconfig.build.json" },
     { "path": "./packages/item-types/tsconfig.build.json" },
+    { "path": "./packages/scheduler/tsconfig.build.json" },
     { "path": "./packages/workspace/tsconfig.build.json" }
   ]
 }

@@ -17,6 +17,7 @@ import {
   type ParsedFile,
 } from "@re/core";
 import { ClozeType, QAContent, QAType } from "@re/item-types";
+import { Scheduler, SchedulerLive } from "@re/scheduler";
 import {
   DeckManager,
   DeckManagerLive,
@@ -24,14 +25,12 @@ import {
   NewFirstOrderingStrategy,
   ReviewQueueBuilder,
   ReviewQueueBuilderLive,
-  Scheduler,
-  SchedulerLive,
   scanDecks,
   snapshotWorkspace,
 } from "@re/workspace";
 
 // Public imports must resolve to installed JavaScript, never a workspace source file.
-for (const name of ["core", "item-types", "workspace"]) {
+for (const name of ["core", "item-types", "scheduler", "workspace"]) {
   assert.equal(
     fileURLToPath(import.meta.resolve(`@re/${name}`)),
     path.resolve("node_modules/@re", name, "dist/index.js"),

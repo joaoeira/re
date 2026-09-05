@@ -1,4 +1,4 @@
-import type { SchedulerLog } from "@re/workspace";
+import type { SchedulerLog } from "@re/scheduler";
 
 export interface ReviewLogEntry extends SchedulerLog {
   readonly queueIndex: number;

@@ -2,12 +2,8 @@ import { FileSystem } from "@effect/platform";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { parseFile, State } from "@re/core";
-import {
-  DeckManagerLive,
-  ReviewQueueBuilderLive,
-  SchedulerLive,
-  ShuffledOrderingStrategy,
-} from "@re/workspace";
+import { SchedulerLive } from "@re/scheduler";
+import { DeckManagerLive, ReviewQueueBuilderLive, ShuffledOrderingStrategy } from "@re/workspace";
 import { Effect, Layer } from "effect";
 
 import { ReviewStore, ReviewStoreLive } from "../src/review-store";

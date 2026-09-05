@@ -13,7 +13,7 @@ import {
   showToast,
   useNavigation,
 } from "@raycast/api";
-import type { FSRSGrade } from "@re/workspace";
+import type { FSRSGrade } from "@re/scheduler";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {

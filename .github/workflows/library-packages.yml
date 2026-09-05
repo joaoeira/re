@@ -40,8 +40,8 @@ jobs:
         with:
           bun-version: 1.2.21
       - run: bun install --frozen-lockfile
-      - run: bun run --filter '@re/core' --filter '@re/item-types' --filter '@re/workspace' test
-      - run: bun run --filter '@re/core' --filter '@re/item-types' --filter '@re/workspace' typecheck
+      - run: bun run --filter '@re/core' --filter '@re/item-types' --filter '@re/scheduler' --filter '@re/workspace' test
+      - run: bun run --filter '@re/core' --filter '@re/item-types' --filter '@re/scheduler' --filter '@re/workspace' typecheck
       - run: bun run check:packages
         env:
           RE_CONSUMER_EFFECT_VERSION: ${{ matrix.effect }}

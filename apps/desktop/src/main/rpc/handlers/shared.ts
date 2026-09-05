@@ -1,12 +1,8 @@
 import path from "node:path";
 
 import { FileSystem } from "@effect/platform";
-import {
-  DeckManagerLive,
-  ReviewQueueBuilderLive,
-  SchedulerLive,
-  ShuffledOrderingStrategy,
-} from "@re/workspace";
+import { SchedulerLive } from "@re/scheduler";
+import { DeckManagerLive, ReviewQueueBuilderLive, ShuffledOrderingStrategy } from "@re/workspace";
 import { Effect, Layer } from "effect";
 import type { RpcHandlerContext } from "electron-effect-rpc/types";
 

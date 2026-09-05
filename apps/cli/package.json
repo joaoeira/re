@@ -25,6 +25,7 @@
     "@opentui/react": "^0.1.67",
     "@re/core": "workspace:*",
     "@re/item-types": "workspace:*",
+    "@re/scheduler": "workspace:*",
     "@re/workspace": "workspace:*",
     "@xstate/react": "^6.0.0",
     "effect": "3.19.18",

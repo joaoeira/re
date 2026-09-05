@@ -42,6 +42,7 @@
     "@openrouter/ai-sdk-provider": "^2.3.0",
     "@re/core": "workspace:*",
     "@re/item-types": "workspace:*",
+    "@re/scheduler": "workspace:*",
     "@re/workspace": "workspace:*",
     "@silk-hq/components": "0.9.12",
     "@tanstack/react-query": "^5.90.21",

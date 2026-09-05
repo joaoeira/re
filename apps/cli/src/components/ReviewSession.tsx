@@ -13,7 +13,8 @@ import { getCardSpec } from "../lib/getCardSpec";
 import { themeColors as theme } from "../ThemeContext";
 import type { QueueItem } from "@re/workspace";
 import type { UntypedCardSpec } from "@re/core";
-import { DeckManager, DeckManagerLive, Scheduler, SchedulerLive } from "@re/workspace";
+import { Scheduler, SchedulerLive } from "@re/scheduler";
+import { DeckManager, DeckManagerLive } from "@re/workspace";
 import { Loading } from "./Spinner";
 
 interface ReviewSessionProps {

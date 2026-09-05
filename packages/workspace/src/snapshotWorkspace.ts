@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 import { parseFile, State, type MetadataParseError, type ParsedFile } from "@re/core";
 import { Effect } from "effect";
 
-import { isCardDue } from "./scheduler.js";
+import { isCardDue } from "@re/scheduler";
 import {
   scanDecks,
   ScanDecksErrorSchema,

@@ -1,4 +1,4 @@
-import type { FSRSGrade } from "@re/workspace";
+import type { FSRSGrade } from "@re/scheduler";
 import { Effect } from "effect";
 
 import {

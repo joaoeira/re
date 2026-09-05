@@ -6,20 +6,17 @@ import { pathToFileURL } from "node:url";
 
 import { libraries, packLibraries, repoRoot, run } from "./pack-libraries.mjs";
 
-const scratch = await mkdtemp(path.join(tmpdir(), "re-package-consumer-"));
-try {
-  const relative = path.relative(await realpath(repoRoot), await realpath(scratch));
-  assert.ok(
-    relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative),
-    "Consumer must be outside the repository",
-  );
-  const archives = await packLibraries(path.join(scratch, "archives"));
-  const consumer = path.join(scratch, "consumer");
+const checkConsumer = async ({ archives, consumer, withWorkspace }) => {
+  const includedLibraries = withWorkspace ? libraries : ["core", "item-types", "scheduler"];
   await mkdir(consumer);
   // Never copy a local node_modules, lockfile, or stale compiled fixture into the consumer.
   for (const filename of ["package.json", "tsconfig.json", "index.ts", "commonjs.cjs"]) {
     await copyFile(
-      path.join(repoRoot, "test/package-consumer", filename),
+      path.join(
+        repoRoot,
+        "test/package-consumer",
+        filename === "index.ts" && !withWorkspace ? "scheduler.ts" : filename,
+      ),
       path.join(consumer, filename),
     );
   }
@@ -27,8 +24,13 @@ try {
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   manifest.dependencies.effect =
     process.env.RE_CONSUMER_EFFECT_VERSION ?? manifest.dependencies.effect;
-  for (const [name, archive] of Object.entries(archives)) {
-    manifest.dependencies[name] = pathToFileURL(archive).href;
+  if (!withWorkspace) {
+    delete manifest.dependencies["@effect/platform"];
+    delete manifest.dependencies["@effect/platform-node"];
+  }
+  for (const library of includedLibraries) {
+    const name = `@re/${library}`;
+    manifest.dependencies[name] = pathToFileURL(archives[name]).href;
   }
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
@@ -45,8 +47,20 @@ try {
       /(?:^|\/)node_modules\/@effect\/schema$/,
       "The consumer must not install the legacy Schema package",
     );
+    if (!withWorkspace) {
+      assert.doesNotMatch(
+        installedPath,
+        /(?:^|\/)node_modules\/(?:@re\/workspace|@effect\/platform(?:-[^/]+)?|ignore)$/,
+        "Scheduling must install without workspace or filesystem platform dependencies",
+      );
+    }
   }
-  for (const name of ["effect", "@effect/platform"]) {
+  if (!withWorkspace) {
+    console.log(
+      "Verified scheduler installation has no workspace or filesystem platform dependencies.",
+    );
+  }
+  for (const name of withWorkspace ? ["effect", "@effect/platform"] : ["effect"]) {
     const installations = await Promise.all(
       (await run("npm", ["ls", name, "--all", "--parseable"], consumer, env))
         .split("\n")
@@ -64,7 +78,7 @@ try {
   console.log(
     `Verified shared Effect ${installedEffect.version} (consumer range: ${manifest.dependencies.effect}).`,
   );
-  for (const library of libraries) {
+  for (const library of includedLibraries) {
     const installed = path.join(consumer, "node_modules/@re", library);
     assert.equal(
       await realpath(installed),
@@ -98,6 +112,28 @@ try {
   console.log(await run(process.execPath, ["dist/index.js"], consumer, env));
   console.log("Running the CommonJS consumer in native Node...");
   console.log(await run(process.execPath, ["commonjs.cjs"], consumer, env));
+};
+
+const scratch = await mkdtemp(path.join(tmpdir(), "re-package-consumer-"));
+try {
+  const relative = path.relative(await realpath(repoRoot), await realpath(scratch));
+  assert.ok(
+    relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative),
+    "Consumer must be outside the repository",
+  );
+  const archives = await packLibraries(path.join(scratch, "archives"));
+  console.log("Checking the scheduler consumer...");
+  await checkConsumer({
+    archives,
+    consumer: path.join(scratch, "scheduler-consumer"),
+    withWorkspace: false,
+  });
+  console.log("Checking the workspace consumer...");
+  await checkConsumer({
+    archives,
+    consumer: path.join(scratch, "workspace-consumer"),
+    withWorkspace: true,
+  });
   console.log("Independent package consumption passed.");
 } catch (error) {
   console.error(error.message);

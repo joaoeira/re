@@ -1,8 +1,8 @@
 import { setup, assign, fromPromise } from "xstate";
 import { Effect, Runtime } from "effect";
 import type { QueueItem } from "@re/workspace";
-import type { FSRSGrade, ScheduleResult } from "@re/workspace";
-import { DeckManager, Scheduler } from "@re/workspace";
+import { Scheduler, type FSRSGrade, type ScheduleResult } from "@re/scheduler";
+import { DeckManager } from "@re/workspace";
 import type { ReviewLogEntry } from "../services/ReviewLogEntry";
 
 interface GradingResult {

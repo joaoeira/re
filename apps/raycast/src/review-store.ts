@@ -1,13 +1,12 @@
 import { FileSystem, Path } from "@effect/platform";
 import { inferType, type Item, type ItemMetadata, type UntypedItemType } from "@re/core";
 import { ClozeType, QAType } from "@re/item-types";
+import { Scheduler, type FSRSGrade } from "@re/scheduler";
 import {
   DeckManager,
   ReviewQueueBuilder,
-  Scheduler,
   snapshotWorkspace,
   toScanDecksErrorMessage,
-  type FSRSGrade,
   type RemovedDeckItem,
 } from "@re/workspace";
 import { Context, Data, Effect, Layer } from "effect";

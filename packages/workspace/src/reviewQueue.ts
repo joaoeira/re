@@ -4,7 +4,7 @@ import { Array as Arr, Chunk, Context, Effect, Layer, Order, Random } from "effe
 
 import { DeckManager } from "./DeckManager.js";
 import type { DeckTreeNode } from "./deckTree.js";
-import { resolveDueDateIfDue } from "./scheduler.js";
+import { resolveDueDateIfDue } from "@re/scheduler";
 
 export interface QueueItem {
   readonly deckPath: string;

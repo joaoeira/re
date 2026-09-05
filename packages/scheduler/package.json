@@ -1,6 +1,7 @@
 {
-  "name": "@re/workspace",
+  "name": "@re/scheduler",
   "version": "0.0.1",
+  "description": "FSRS scheduling for re items, independent of workspace storage",
   "files": [
     "dist/**/*.js",
     "dist/**/*.d.ts",
@@ -22,7 +23,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "bench:snapshot": "bun scripts/bench-snapshot.ts",
     "build": "tsc -b tsconfig.build.json",
     "prepack": "bun run build",
     "pretest": "bun run build",
@@ -31,20 +31,15 @@
   },
   "dependencies": {
     "@re/core": "workspace:*",
-    "@re/scheduler": "workspace:*",
-    "ignore": "^5.3.2"
+    "ts-fsrs": "^5.2.3"
   },
   "devDependencies": {
-    "@effect/platform": "^0.94.5",
-    "@effect/platform-node-shared": "^0.57.0",
     "@effect/vitest": "^0.27.0",
-    "@types/bun": "latest",
     "effect": "3.19.18",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   },
   "peerDependencies": {
-    "@effect/platform": "^0.94.5",
     "effect": "^3.19.18"
   }
 }

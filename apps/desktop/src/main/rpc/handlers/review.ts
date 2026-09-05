@@ -3,13 +3,8 @@ import { randomUUID } from "node:crypto";
 
 import { inferType } from "@re/core";
 import { ClozeType, QAType, type QAContent } from "@re/item-types";
-import {
-  DeckManager,
-  ReviewQueueBuilder,
-  Scheduler,
-  computeDueDate,
-  resolveDeckImagePath,
-} from "@re/workspace";
+import { Scheduler, computeDueDate } from "@re/scheduler";
+import { DeckManager, ReviewQueueBuilder, resolveDeckImagePath } from "@re/workspace";
 import { Path } from "@effect/platform";
 import type { FileSystem } from "@effect/platform";
 import { Effect, Exit } from "effect";

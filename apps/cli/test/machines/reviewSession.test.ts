@@ -3,7 +3,8 @@ import { createActor, fromPromise, waitFor } from "xstate";
 import { reviewSessionMachine } from "../../src/machines/reviewSession";
 import { State, numericField, generateId } from "@re/core";
 import type { ItemMetadata, ItemId, Item } from "@re/core";
-import type { QueueItem, FSRSGrade } from "@re/workspace";
+import type { FSRSGrade } from "@re/scheduler";
+import type { QueueItem } from "@re/workspace";
 import type { ReviewLogEntry } from "../../src/services/ReviewLogEntry";
 
 const makeCard = (state: number, stability: number, lastReview: Date | null): ItemMetadata => ({

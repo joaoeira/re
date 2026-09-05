@@ -218,9 +218,11 @@ bun run check:packages                # Build, pack, install outside the workspa
 Use `pack:libraries` to produce installable archives with resolved workspace dependency
 versions. Packages include declaration maps and their sources for editor navigation.
 
-`check:packages` installs those archives into a temporary directory, checks TypeScript
+`check:packages` installs those archives into separate temporary directories, checks TypeScript
 declarations, and runs ESM and CommonJS consumers against a newer compatible Effect version.
-It rejects duplicate Effect installations and exercises deck parsing, editing, and scheduling.
+The scheduler consumer uses `@re/core`, `@re/item-types`, and `@re/scheduler` and rejects
+workspace and filesystem platform dependencies. The complete workspace consumer also exercises
+deck persistence, discovery, snapshots, and review queues. Both reject duplicate Effect installations.
 It requires Node/npm, Bun, `tar`, and registry access; temporary files are removed afterward.
 To reproduce a specific dependency combination, set `RE_CONSUMER_EFFECT_VERSION=3.19.19`.
 

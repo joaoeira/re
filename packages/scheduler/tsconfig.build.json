@@ -1,14 +1,10 @@
 {
   "extends": "../../tsconfig.library.json",
   "compilerOptions": {
-    "lib": ["ES2022", "DOM"],
     "rootDir": "src",
     "outDir": "dist",
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
-  "references": [
-    { "path": "../core/tsconfig.build.json" },
-    { "path": "../scheduler/tsconfig.build.json" }
-  ],
+  "references": [{ "path": "../core/tsconfig.build.json" }],
   "include": ["src/**/*.ts"]
 }

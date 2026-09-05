@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Effect } from "effect";
-import { Scheduler, SchedulerLive } from "@re/workspace";
+import { Scheduler, SchedulerLive } from "@re/scheduler";
 import { State, numericField, generateId } from "@re/core";
 import type { ItemMetadata, ItemId } from "@re/core";
 

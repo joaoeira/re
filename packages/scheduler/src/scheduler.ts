@@ -150,7 +150,7 @@ export interface Scheduler {
   ) => Effect.Effect<ScheduleResult, ScheduleError>;
 }
 
-export const Scheduler = Context.GenericTag<Scheduler>("@re/workspace/Scheduler");
+export const Scheduler = Context.GenericTag<Scheduler>("@re/scheduler/Scheduler");
 
 export const SchedulerLive = Layer.succeed(Scheduler, {
   isDue: (card, now) => isCardDue(card, now),
