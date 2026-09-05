@@ -29,6 +29,29 @@ For `appendItem` and `replaceItem`, pass a type adapted with `adaptItemType` fro
 the content and ensure that the number of metadata records matches the generated cards.
 Writing content does not evaluate responses or run graders.
 
+## Concurrent writes
+
+Reuse one `DeckManager` instance for operations that may overlap. Its content edits
+(`updateCardMetadata`, `replaceItem`, `appendItem`, `removeItem`, and `restoreItem`)
+each hold a per-deck lock across reading, changing, and saving the file. Concurrent
+edits to different items therefore preserve one another's changes. Unrelated decks
+can be edited concurrently, including while an item type is validating content.
+Create, delete, and rename share those locks; rename acquires both paths in a
+consistent order. An earlier save finishes before a waiting delete or rename.
+
+Content saves use a unique temporary file beside the deck and atomically rename
+it into place. A failed or interrupted save cleans up its temporary file. An
+interruption before the rename leaves the original deck intact; once the rename
+starts, it finishes before the lock is released, so cancellation can still leave
+the completed edit on disk.
+
+Locks belong to the service instance and use normalized absolute paths. They do
+not coordinate separate instances, other processes, external editors, or symlink
+aliases. A separate `readDeck` followed by an update is not a transaction. Replacing
+the same item with stale content can still overwrite a newer replacement; the
+later replacement wins. Apps that coordinate several calls as one workflow still
+need their own coordination around that workflow.
+
 Scheduling is provided by `@re/scheduler`; import `Scheduler` and `SchedulerLive` from that
 package. Workspace uses its due-date helpers for snapshots and review queues. Discovery uses
 Markdown files and honors the workspace's `.reignore`. Image hashing requires Web Crypto, available

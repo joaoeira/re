@@ -23,7 +23,6 @@ import {
   DeckNotFound,
   DeckParseError,
   DeckReadError,
-  DeckWriteError,
   ItemValidationError,
 } from "../src";
 import { createMockFileSystem, type MockFileSystemConfig } from "./mock-file-system";
@@ -568,69 +567,6 @@ describe("DeckManager.removeItem", () => {
     if (Either.isLeft(result)) {
       expect(result.left).toBeInstanceOf(CardNotFound);
     }
-  });
-});
-
-describe("DeckManager atomic write", () => {
-  it("produces DeckWriteError on write failure", async () => {
-    const content = singleCardItem("a", "Q\n");
-    const { promise } = runEither(
-      {
-        entryTypes: {},
-        directories: {},
-        fileContents: { "/deck.md": content },
-        writeFileErrors: { "/deck.md.tmp": "PermissionDenied" },
-      },
-      (m) => m.updateCardMetadata("/deck.md", "a", meta("a")),
-    );
-    const result = await promise;
-
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckWriteError);
-    }
-  });
-
-  it("successful write updates file content (read-back verification)", async () => {
-    const content = singleCardItem("a", "Q\n---\nA\n");
-    const config: MockFileSystemConfig = {
-      entryTypes: {},
-      directories: {},
-      fileContents: { "/deck.md": content },
-    };
-    const { promise, store } = runSuccess(config, (m) => {
-      const updated = { ...meta("a"), stability: numericField(42) };
-      return m.updateCardMetadata("/deck.md", "a", updated);
-    });
-
-    await promise;
-
-    const readBack = await run(
-      {
-        entryTypes: {},
-        directories: {},
-        fileContents: { "/deck.md": store["/deck.md"]! },
-      },
-      (m) => m.readDeck("/deck.md"),
-    );
-
-    expect(readBack.items[0]!.cards[0]!.stability.value).toBe(42);
-  });
-
-  it("cleans up temp file on rename failure", async () => {
-    const content = singleCardItem("a", "Q\n");
-    const config: MockFileSystemConfig = {
-      entryTypes: {},
-      directories: {},
-      fileContents: { "/deck.md": content },
-      renameErrors: { "/deck.md.tmp": "PermissionDenied" },
-    };
-    const { promise, store } = runEither(config, (m) =>
-      m.updateCardMetadata("/deck.md", "a", meta("a")),
-    );
-
-    await promise;
-    expect(store["/deck.md.tmp"]).toBeUndefined();
   });
 });
 

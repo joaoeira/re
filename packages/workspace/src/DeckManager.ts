@@ -174,6 +174,20 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
+      const lockFor = yield* Effect.cachedFunction((_deckPath: string) => Effect.makeSemaphore(1));
+
+      const withDeckLocks = <A, E, R>(
+        deckPaths: readonly string[],
+        operation: Effect.Effect<A, E, R>,
+      ): Effect.Effect<A, E, R> =>
+        Effect.gen(function* () {
+          // Rename must acquire both paths in the same order as other renames.
+          const keys = [...new Set(deckPaths.map((deckPath) => path.resolve(deckPath)))].sort();
+          // Initializing a cached lock must finish even if its first caller is cancelled.
+          const locks = yield* Effect.forEach(keys, lockFor).pipe(Effect.uninterruptible);
+          return yield* locks.reduceRight((effect, lock) => lock.withPermits(1)(effect), operation);
+        });
+
       const readAndParse = (deckPath: string): Effect.Effect<ParsedFile, ReadError> =>
         fs.readFileString(deckPath).pipe(
           Effect.mapError((error): ReadError => {
@@ -211,20 +225,40 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
       const atomicWrite = (
         deckPath: string,
         content: string,
-      ): Effect.Effect<void, DeckWriteError> => {
-        const tmpPath = `${deckPath}.tmp`;
-        return fs.writeFileString(tmpPath, content).pipe(
-          Effect.flatMap(() => fs.rename(tmpPath, deckPath)),
-          Effect.catchAll((error) =>
-            fs.remove(tmpPath).pipe(
-              Effect.ignore,
-              Effect.flatMap(() =>
-                Effect.fail(new DeckWriteError({ deckPath, message: String(error) })),
-              ),
-            ),
-          ),
+      ): Effect.Effect<void, DeckWriteError> =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const tmpPath = yield* fs.makeTempFileScoped({
+              directory: path.dirname(deckPath),
+              prefix: ".re-write-",
+              suffix: ".tmp",
+            });
+            yield* fs.writeFileString(tmpPath, content);
+            // A rename cannot be cancelled once the OS starts it. Keep the lock
+            // until it finishes, before cleaning up the temporary file.
+            yield* fs.rename(tmpPath, deckPath).pipe(Effect.uninterruptible);
+          }),
+        ).pipe(
+          Effect.mapError((error) => new DeckWriteError({ deckPath, message: String(error) })),
         );
-      };
+
+      const modifyDeck = <A, E, R>(
+        deckPath: string,
+        change: (
+          current: ParsedFile,
+        ) => Effect.Effect<{ readonly file: ParsedFile; readonly result: A }, E, R>,
+      ): Effect.Effect<A, WriteError | E, R> =>
+        Effect.suspend(() => {
+          const filePath = path.resolve(deckPath);
+          return withDeckLocks(
+            [filePath],
+            readAndParse(filePath).pipe(
+              Effect.flatMap(change),
+              Effect.tap(({ file }) => atomicWrite(filePath, serializeFile(file))),
+              Effect.map(({ result }) => result),
+            ),
+          );
+        });
 
       const validateItemCardCount = (
         item: { readonly cards: readonly ItemMetadata[]; readonly content: string },
@@ -376,171 +410,185 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
         readDeck: readAndParse,
 
         updateCardMetadata: (deckPath, cardId, metadata) =>
-          Effect.gen(function* () {
-            const parsed = yield* readAndParse(deckPath);
-            const { itemIndex, cardIndex } = yield* findItemByCardId(parsed, cardId, deckPath);
+          modifyDeck(deckPath, (parsed) =>
+            Effect.gen(function* () {
+              const { itemIndex, cardIndex } = yield* findItemByCardId(parsed, cardId, deckPath);
 
-            const updatedItems = parsed.items.map((item, idx) => {
-              if (idx !== itemIndex) return item;
-              const updatedCards = item.cards.map((card, cIdx) =>
-                cIdx === cardIndex ? metadata : card,
-              );
-              return { ...item, cards: updatedCards };
-            });
+              const items = parsed.items.map((item, idx) => {
+                if (idx !== itemIndex) return item;
+                const cards = item.cards.map((card, cIdx) =>
+                  cIdx === cardIndex ? metadata : card,
+                );
+                return { ...item, cards };
+              });
 
-            const serialized = serializeFile({ ...parsed, items: updatedItems });
-            yield* atomicWrite(deckPath, serialized);
-          }),
+              return { file: { ...parsed, items }, result: undefined };
+            }),
+          ),
 
         replaceItem: (deckPath, cardId, newItem, itemType) =>
-          Effect.gen(function* () {
-            const parsed = yield* readAndParse(deckPath);
-            const { itemIndex } = yield* findItemByCardId(parsed, cardId, deckPath);
-            yield* validateItemCardCount(newItem, itemType, deckPath);
+          modifyDeck(deckPath, (parsed) =>
+            Effect.gen(function* () {
+              const { itemIndex } = yield* findItemByCardId(parsed, cardId, deckPath);
+              yield* validateItemCardCount(newItem, itemType, deckPath);
 
-            const updatedItems = parsed.items.map((item, idx) => {
-              if (idx !== itemIndex) return item;
-              if (idx === parsed.items.length - 1 || newItem.content.endsWith("\n")) {
-                return newItem;
-              }
+              const items = parsed.items.map((item, idx) => {
+                if (idx !== itemIndex) return item;
+                if (idx === parsed.items.length - 1 || newItem.content.endsWith("\n")) {
+                  return newItem;
+                }
 
-              return {
-                ...newItem,
-                content: newItem.content + "\n",
-              };
-            });
+                return {
+                  ...newItem,
+                  content: newItem.content + "\n",
+                };
+              });
 
-            const serialized = serializeFile({ ...parsed, items: updatedItems });
-            yield* atomicWrite(deckPath, serialized);
-          }),
+              return { file: { ...parsed, items }, result: undefined };
+            }),
+          ),
 
         appendItem: (deckPath, item, itemType) =>
-          Effect.gen(function* () {
-            const parsed = yield* readAndParse(deckPath);
-            yield* validateItemCardCount(item, itemType, deckPath);
+          modifyDeck(deckPath, (parsed) =>
+            Effect.gen(function* () {
+              yield* validateItemCardCount(item, itemType, deckPath);
 
-            let { preamble, items } = parsed;
+              let { preamble, items } = parsed;
 
-            if (items.length > 0) {
-              const lastItem = items[items.length - 1]!;
-              if (lastItem.content.length > 0 && !lastItem.content.endsWith("\n\n")) {
-                const fixedItems = [...items];
-                const trimmed = lastItem.content.replace(/\n*$/, "");
-                fixedItems[fixedItems.length - 1] = {
-                  ...lastItem,
-                  content: trimmed + "\n\n",
-                };
-                items = fixedItems;
+              if (items.length > 0) {
+                const lastItem = items[items.length - 1]!;
+                if (lastItem.content.length > 0 && !lastItem.content.endsWith("\n\n")) {
+                  const fixedItems = [...items];
+                  const trimmed = lastItem.content.replace(/\n*$/, "");
+                  fixedItems[fixedItems.length - 1] = {
+                    ...lastItem,
+                    content: trimmed + "\n\n",
+                  };
+                  items = fixedItems;
+                }
+              } else if (preamble.length > 0 && !preamble.endsWith("\n\n")) {
+                preamble = preamble.replace(/\n*$/, "") + "\n\n";
               }
-            } else if (preamble.length > 0 && !preamble.endsWith("\n\n")) {
-              preamble = preamble.replace(/\n*$/, "") + "\n\n";
-            }
 
-            const updatedItems = [...items, item];
-            const serialized = serializeFile({ preamble, items: updatedItems });
-            yield* atomicWrite(deckPath, serialized);
-          }),
+              return { file: { preamble, items: [...items, item] }, result: undefined };
+            }),
+          ),
 
         removeItem: (deckPath, cardId) =>
-          Effect.gen(function* () {
-            const parsed = yield* readAndParse(deckPath);
-            const { itemIndex } = yield* findItemByCardId(parsed, cardId, deckPath);
-            const item = parsed.items[itemIndex]!;
+          modifyDeck(deckPath, (parsed) =>
+            Effect.gen(function* () {
+              const { itemIndex } = yield* findItemByCardId(parsed, cardId, deckPath);
+              const item = parsed.items[itemIndex]!;
 
-            const updatedItems = parsed.items.filter((_, idx) => idx !== itemIndex);
-            const serialized = serializeFile({ ...parsed, items: updatedItems });
-            yield* atomicWrite(deckPath, serialized);
-            return { itemIndex, item } satisfies RemovedDeckItem;
-          }),
+              return {
+                file: {
+                  ...parsed,
+                  items: parsed.items.filter((_, idx) => idx !== itemIndex),
+                },
+                result: { itemIndex, item } satisfies RemovedDeckItem,
+              };
+            }),
+          ),
 
         restoreItem: (deckPath, removed) =>
-          Effect.gen(function* () {
-            const parsed = yield* readAndParse(deckPath);
-            const updatedItems = [...parsed.items];
-            updatedItems.splice(removed.itemIndex, 0, removed.item);
-
-            const serialized = serializeFile({ ...parsed, items: updatedItems });
-            yield* atomicWrite(deckPath, serialized);
-          }),
+          modifyDeck(deckPath, (parsed) =>
+            Effect.sync(() => {
+              const items = [...parsed.items];
+              items.splice(removed.itemIndex, 0, removed.item);
+              return { file: { ...parsed, items }, result: undefined };
+            }),
+          ),
 
         createDeck: (deckPath, options) =>
           Effect.gen(function* () {
             const resolvedPath = yield* validateDeckPath(deckPath);
-            yield* ensureParentDirectory(resolvedPath, "create", options?.createParents);
+            return yield* withDeckLocks(
+              [resolvedPath],
+              Effect.gen(function* () {
+                yield* ensureParentDirectory(resolvedPath, "create", options?.createParents);
 
-            const exists = yield* statMaybe(resolvedPath, "create", { deckPath: resolvedPath });
+                const exists = yield* statMaybe(resolvedPath, "create", { deckPath: resolvedPath });
 
-            if (Option.isSome(exists)) {
-              return yield* new DeckAlreadyExists({ deckPath: resolvedPath });
-            }
+                if (Option.isSome(exists)) {
+                  return yield* new DeckAlreadyExists({ deckPath: resolvedPath });
+                }
 
-            yield* fs
-              .writeFileString(resolvedPath, options?.initialContent ?? "", {
-                flag: "wx",
-              })
-              .pipe(
-                Effect.catchAll(
-                  (
-                    error: PlatformError,
-                  ): Effect.Effect<never, DeckAlreadyExists | DeckFileOperationError> => {
-                    if (error._tag === "SystemError" && error.reason === "AlreadyExists") {
-                      return Effect.fail(new DeckAlreadyExists({ deckPath: resolvedPath }));
-                    }
+                yield* fs
+                  .writeFileString(resolvedPath, options?.initialContent ?? "", {
+                    flag: "wx",
+                  })
+                  .pipe(
+                    Effect.uninterruptible,
+                    Effect.catchAll(
+                      (
+                        error: PlatformError,
+                      ): Effect.Effect<never, DeckAlreadyExists | DeckFileOperationError> => {
+                        if (error._tag === "SystemError" && error.reason === "AlreadyExists") {
+                          return Effect.fail(new DeckAlreadyExists({ deckPath: resolvedPath }));
+                        }
 
-                    return Effect.fail(
-                      operationError("create", error, {
-                        deckPath: resolvedPath,
-                      }),
-                    );
-                  },
-                ),
-              );
+                        return Effect.fail(
+                          operationError("create", error, {
+                            deckPath: resolvedPath,
+                          }),
+                        );
+                      },
+                    ),
+                  );
+              }),
+            );
           }),
 
         deleteDeck: (deckPath) =>
           Effect.gen(function* () {
             const resolvedPath = yield* validateDeckPath(deckPath);
 
-            const info = yield* fs.stat(resolvedPath).pipe(
-              Effect.catchAll(
-                (
-                  error: PlatformError,
-                ): Effect.Effect<never, DeckFileNotFound | DeckFileOperationError> => {
-                  if (error._tag === "SystemError" && error.reason === "NotFound") {
-                    return Effect.fail(new DeckFileNotFound({ deckPath: resolvedPath }));
-                  }
+            return yield* withDeckLocks(
+              [resolvedPath],
+              Effect.gen(function* () {
+                const info = yield* fs.stat(resolvedPath).pipe(
+                  Effect.catchAll(
+                    (
+                      error: PlatformError,
+                    ): Effect.Effect<never, DeckFileNotFound | DeckFileOperationError> => {
+                      if (error._tag === "SystemError" && error.reason === "NotFound") {
+                        return Effect.fail(new DeckFileNotFound({ deckPath: resolvedPath }));
+                      }
 
-                  return Effect.fail(
-                    operationError("delete", error, {
-                      deckPath: resolvedPath,
-                    }),
-                  );
-                },
-              ),
-            );
+                      return Effect.fail(
+                        operationError("delete", error, {
+                          deckPath: resolvedPath,
+                        }),
+                      );
+                    },
+                  ),
+                );
 
-            if (info.type !== "File") {
-              return yield* operationError("delete", `Path is not a file: ${resolvedPath}`, {
-                deckPath: resolvedPath,
-              });
-            }
+                if (info.type !== "File") {
+                  return yield* operationError("delete", `Path is not a file: ${resolvedPath}`, {
+                    deckPath: resolvedPath,
+                  });
+                }
 
-            yield* fs.remove(resolvedPath, { force: false, recursive: false }).pipe(
-              Effect.catchAll(
-                (
-                  error: PlatformError,
-                ): Effect.Effect<never, DeckFileNotFound | DeckFileOperationError> => {
-                  if (error._tag === "SystemError" && error.reason === "NotFound") {
-                    return Effect.fail(new DeckFileNotFound({ deckPath: resolvedPath }));
-                  }
+                yield* fs.remove(resolvedPath, { force: false, recursive: false }).pipe(
+                  Effect.uninterruptible,
+                  Effect.catchAll(
+                    (
+                      error: PlatformError,
+                    ): Effect.Effect<never, DeckFileNotFound | DeckFileOperationError> => {
+                      if (error._tag === "SystemError" && error.reason === "NotFound") {
+                        return Effect.fail(new DeckFileNotFound({ deckPath: resolvedPath }));
+                      }
 
-                  return Effect.fail(
-                    operationError("delete", error, {
-                      deckPath: resolvedPath,
-                    }),
-                  );
-                },
-              ),
+                      return Effect.fail(
+                        operationError("delete", error, {
+                          deckPath: resolvedPath,
+                        }),
+                      );
+                    },
+                  ),
+                );
+              }),
             );
           }),
 
@@ -549,100 +597,106 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
             const fromResolvedPath = yield* validateDeckPath(fromDeckPath);
             const toResolvedPath = yield* validateDeckPath(toDeckPath);
 
-            const fromInfo = yield* fs.stat(fromResolvedPath).pipe(
-              Effect.catchAll(
-                (
-                  error: PlatformError,
-                ): Effect.Effect<never, DeckFileNotFound | DeckFileOperationError> => {
-                  if (error._tag === "SystemError" && error.reason === "NotFound") {
-                    return Effect.fail(new DeckFileNotFound({ deckPath: fromResolvedPath }));
-                  }
+            return yield* withDeckLocks(
+              [fromResolvedPath, toResolvedPath],
+              Effect.gen(function* () {
+                const fromInfo = yield* fs.stat(fromResolvedPath).pipe(
+                  Effect.catchAll(
+                    (
+                      error: PlatformError,
+                    ): Effect.Effect<never, DeckFileNotFound | DeckFileOperationError> => {
+                      if (error._tag === "SystemError" && error.reason === "NotFound") {
+                        return Effect.fail(new DeckFileNotFound({ deckPath: fromResolvedPath }));
+                      }
 
-                  return Effect.fail(
-                    operationError("rename", error, {
+                      return Effect.fail(
+                        operationError("rename", error, {
+                          fromPath: fromResolvedPath,
+                          toPath: toResolvedPath,
+                        }),
+                      );
+                    },
+                  ),
+                );
+
+                if (fromInfo.type !== "File") {
+                  return yield* operationError(
+                    "rename",
+                    `Source path is not a file: ${fromResolvedPath}`,
+                    {
                       fromPath: fromResolvedPath,
                       toPath: toResolvedPath,
-                    }),
+                    },
                   );
-                },
-              ),
-            );
+                }
 
-            if (fromInfo.type !== "File") {
-              return yield* operationError(
-                "rename",
-                `Source path is not a file: ${fromResolvedPath}`,
-                {
+                if (fromResolvedPath === toResolvedPath) {
+                  return;
+                }
+
+                yield* ensureParentDirectory(toResolvedPath, "rename", options?.createParents);
+
+                const destinationInfo = yield* statMaybe(toResolvedPath, "rename", {
                   fromPath: fromResolvedPath,
                   toPath: toResolvedPath,
-                },
-              );
-            }
+                });
 
-            if (fromResolvedPath === toResolvedPath) {
-              return;
-            }
+                if (Option.isSome(destinationInfo)) {
+                  return yield* new DeckAlreadyExists({ deckPath: toResolvedPath });
+                }
 
-            yield* ensureParentDirectory(toResolvedPath, "rename", options?.createParents);
+                // NOTE: On POSIX, rename(2) can overwrite destination atomically.
+                // This pre-check + lock strategy prevents in-process races only.
+                yield* fs.rename(fromResolvedPath, toResolvedPath).pipe(
+                  Effect.uninterruptible,
+                  Effect.catchAll(
+                    (
+                      error: PlatformError,
+                    ): Effect.Effect<
+                      never,
+                      DeckAlreadyExists | DeckFileNotFound | DeckFileOperationError
+                    > =>
+                      Effect.gen(function* () {
+                        if (error._tag === "SystemError" && error.reason === "AlreadyExists") {
+                          return yield* new DeckAlreadyExists({ deckPath: toResolvedPath });
+                        }
 
-            const destinationInfo = yield* statMaybe(toResolvedPath, "rename", {
-              fromPath: fromResolvedPath,
-              toPath: toResolvedPath,
-            });
+                        if (error._tag === "SystemError" && error.reason === "NotFound") {
+                          const sourceExists = yield* fs.stat(fromResolvedPath).pipe(
+                            Effect.as(true),
+                            Effect.catchAll(
+                              (
+                                sourceError: PlatformError,
+                              ): Effect.Effect<boolean, DeckFileOperationError> => {
+                                if (
+                                  sourceError._tag === "SystemError" &&
+                                  sourceError.reason === "NotFound"
+                                ) {
+                                  return Effect.succeed(false);
+                                }
 
-            if (Option.isSome(destinationInfo)) {
-              return yield* new DeckAlreadyExists({ deckPath: toResolvedPath });
-            }
+                                return Effect.fail(
+                                  operationError("rename", sourceError, {
+                                    fromPath: fromResolvedPath,
+                                    toPath: toResolvedPath,
+                                  }),
+                                );
+                              },
+                            ),
+                          );
+                          if (!sourceExists) {
+                            return yield* new DeckFileNotFound({ deckPath: fromResolvedPath });
+                          }
+                        }
 
-            // NOTE: On POSIX, rename(2) can overwrite destination atomically.
-            // This pre-check + lock strategy prevents in-process races only.
-            yield* fs.rename(fromResolvedPath, toResolvedPath).pipe(
-              Effect.catchAll(
-                (
-                  error: PlatformError,
-                ): Effect.Effect<
-                  never,
-                  DeckAlreadyExists | DeckFileNotFound | DeckFileOperationError
-                > =>
-                  Effect.gen(function* () {
-                    if (error._tag === "SystemError" && error.reason === "AlreadyExists") {
-                      return yield* new DeckAlreadyExists({ deckPath: toResolvedPath });
-                    }
-
-                    if (error._tag === "SystemError" && error.reason === "NotFound") {
-                      const sourceExists = yield* fs.stat(fromResolvedPath).pipe(
-                        Effect.as(true),
-                        Effect.catchAll(
-                          (
-                            sourceError: PlatformError,
-                          ): Effect.Effect<boolean, DeckFileOperationError> => {
-                            if (
-                              sourceError._tag === "SystemError" &&
-                              sourceError.reason === "NotFound"
-                            ) {
-                              return Effect.succeed(false);
-                            }
-
-                            return Effect.fail(
-                              operationError("rename", sourceError, {
-                                fromPath: fromResolvedPath,
-                                toPath: toResolvedPath,
-                              }),
-                            );
-                          },
-                        ),
-                      );
-                      if (!sourceExists) {
-                        return yield* new DeckFileNotFound({ deckPath: fromResolvedPath });
-                      }
-                    }
-
-                    return yield* operationError("rename", error, {
-                      fromPath: fromResolvedPath,
-                      toPath: toResolvedPath,
-                    });
-                  }),
-              ),
+                        return yield* operationError("rename", error, {
+                          fromPath: fromResolvedPath,
+                          toPath: toResolvedPath,
+                        });
+                      }),
+                  ),
+                );
+              }),
             );
           }),
       });

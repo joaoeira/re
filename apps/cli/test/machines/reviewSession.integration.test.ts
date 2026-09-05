@@ -24,7 +24,20 @@ const createFixture = (cardIndex: number) => {
     dueDate: null,
   };
   const files = new Map([[queueItem.deckPath, serializeFile({ preamble: "", items: [item] })]]);
+  let nextTempFile = 0;
   const fileSystem = FileSystem.makeNoop({
+    makeTempFileScoped: () =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          const path = `/temp-${nextTempFile++}`;
+          files.set(path, "");
+          return path;
+        }),
+        (path) =>
+          Effect.sync(() => {
+            files.delete(path);
+          }),
+      ),
     readFileString: (path) => Effect.sync(() => files.get(path)!),
     writeFileString: (path, content) =>
       Effect.sync(() => {

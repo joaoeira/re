@@ -59,8 +59,25 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
   const bytesStore: Record<string, Uint8Array> = { ...config.fileBytes };
   const textEncoder = new TextEncoder();
   const textDecoder = new TextDecoder();
+  let nextTempFile = 0;
 
   const layer = FileSystem.layerNoop({
+    makeTempFileScoped: (options) =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          const targetPath = `${options?.directory ?? "/tmp"}/${options?.prefix ?? ""}${nextTempFile++}${options?.suffix ?? ""}`;
+          store[targetPath] = "";
+          entryTypes[targetPath] = "File";
+          return targetPath;
+        }),
+        (targetPath) =>
+          Effect.sync(() => {
+            delete store[targetPath];
+            delete bytesStore[targetPath];
+            delete entryTypes[targetPath];
+          }),
+      ),
+
     readDirectory: (targetPath) =>
       Effect.gen(function* () {
         const forced = config.readDirectoryErrors?.[targetPath];
