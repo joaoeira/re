@@ -33,7 +33,7 @@ Review needs the same class of outcome, but with different semantics:
 
 1. Add a review-scoped command workflow opened by `cmd+k` on macOS and `ctrl+k` on other platforms.
 2. Keep review session grading, undo, and queue progression behavior unchanged.
-3. Reuse canonical card content definitions from `@re/types` rather than inventing a third source-card model.
+3. Reuse canonical card content definitions from `@re/item-types` rather than inventing a third source-card model.
 4. Avoid forge repository coupling entirely.
 5. Make the architecture extendable to future review assistant actions and future non-QA card support.
 6. Keep generated permutations ephemeral for v1.
@@ -53,12 +53,12 @@ Review needs the same class of outcome, but with different semantics:
 The assistant feature should be split across two domains:
 
 - **Review domain** owns card identity, current-card lifecycle, keyboard integration, panel state, and interaction with the active review session.
-- **Type domain (`@re/types`)** owns canonical parsed card content.
+- **Item type domain (`@re/item-types`)** owns canonical parsed card content.
 
 This means the new design should use:
 
 - review identity from the existing review RPC layer
-- canonical parsed content from `QAContent`, `ClozeContent`, and `ClozeDeletion` in `@re/types`
+- canonical parsed content from `QAContent`, `ClozeContent`, and `ClozeDeletion` in `@re/item-types`
 
 It should **not** use:
 
@@ -86,12 +86,12 @@ No new persistence or deck indexing is required to address the current card.
 
 ### Canonical content
 
-Canonical content definitions already exist in `@re/types`:
+Canonical content definitions already exist in `@re/item-types`:
 
-- [`packages/types/src/qa.ts`](../packages/types/src/qa.ts)
+- [`packages/item-types/src/qa.ts`](../packages/item-types/src/qa.ts)
   - `QAContent`
   - `QAType`
-- [`packages/types/src/cloze.ts`](../packages/types/src/cloze.ts)
+- [`packages/item-types/src/cloze.ts`](../packages/item-types/src/cloze.ts)
   - `ClozeContent`
   - `ClozeDeletion`
   - `ClozeType`
@@ -118,7 +118,7 @@ The public review assistant schema should be **QA-only in v1**.
 
 This is the correct compromise between correctness and transport safety:
 
-- it reuses canonical source content from `@re/types`
+- it reuses canonical source content from `@re/item-types`
 - it avoids prematurely exposing cloze transport semantics before cloze generation exists
 - it avoids pushing `Option<string>` from `ClozeContent` across the RPC boundary before schema compatibility is proven
 
@@ -133,7 +133,7 @@ export const ReviewAssistantQaSourceCardSchema = Schema.Struct({
 
 This shape does three important things:
 
-1. It reuses canonical schemas from `@re/types`.
+1. It reuses canonical schemas from `@re/item-types`.
 2. It makes the v1 support boundary explicit instead of implying nonexistent cloze support.
 3. It avoids a transport design that would later need to be broken once cloze semantics are clarified.
 
@@ -145,7 +145,7 @@ When cloze support is eventually added, the public review assistant schema shoul
 
 ### Schema composition
 
-Desktop RPC schemas and `@re/types` use Effect's built-in Schema implementation. Import canonical schemas directly from `@re/types`; no compatibility adapter is needed. The isolated package consumer verifies composition with `effect/Schema`, including tagged errors from core and workspace.
+Desktop RPC schemas and `@re/item-types` use Effect's built-in Schema implementation. Import canonical schemas directly from `@re/item-types`; no compatibility adapter is needed. The isolated package consumer verifies composition with `effect/Schema`, including tagged errors from core and workspace.
 
 ## Recommended RPC Surface
 
@@ -908,7 +908,7 @@ Implement this as a **review assistant feature**, not a forge transplant.
 The correct data split is:
 
 - review types for current-card identity and session lifecycle
-- `@re/types` for canonical card content
+- `@re/item-types` for canonical card content
 
 The correct user-flow split is:
 

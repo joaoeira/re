@@ -1,12 +1,12 @@
-# @re/types
+# @re/item-types
 
-Standard Q&A and cloze card implementations for `@re/core`. This package contains runtime
-parsers and card generation as well as TypeScript declarations. It exports ESM JavaScript
-and uses Effect for parsing and grading.
+Built-in Q&A and cloze item types for re. This package implements the `ItemType` contract
+from `@re/core`, with runtime parsers and card generation as well as TypeScript declarations.
+It exports ESM JavaScript and uses Effect for parsing and grading.
 
 ```ts
 import { Effect } from "effect";
-import { QAType, ClozeType } from "@re/types";
+import { QAType, ClozeType } from "@re/item-types";
 
 const qa = Effect.runSync(QAType.parse("Capital of France?\n---\nParis"));
 const qaCards = QAType.cards(qa);

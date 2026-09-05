@@ -1,6 +1,6 @@
 import { FileSystem, Path } from "@effect/platform";
 import { inferType, type Item, type ItemMetadata, type UntypedItemType } from "@re/core";
-import { ClozeType, QAType } from "@re/types";
+import { ClozeType, QAType } from "@re/item-types";
 import {
   DeckManager,
   ReviewQueueBuilder,

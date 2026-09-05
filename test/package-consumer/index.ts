@@ -16,7 +16,7 @@ import {
   type Item,
   type ParsedFile,
 } from "@re/core";
-import { ClozeType, QAContent, QAType } from "@re/types";
+import { ClozeType, QAContent, QAType } from "@re/item-types";
 import {
   DeckManager,
   DeckManagerLive,
@@ -31,7 +31,7 @@ import {
 } from "@re/workspace";
 
 // Public imports must resolve to installed JavaScript, never a workspace source file.
-for (const name of ["core", "types", "workspace"]) {
+for (const name of ["core", "item-types", "workspace"]) {
   assert.equal(
     fileURLToPath(import.meta.resolve(`@re/${name}`)),
     path.resolve("node_modules/@re", name, "dist/index.js"),

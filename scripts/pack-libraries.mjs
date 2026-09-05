@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 
 const exec = promisify(execFile);
 export const repoRoot = fileURLToPath(new URL("../", import.meta.url));
-export const libraries = ["core", "types", "workspace"];
+export const libraries = ["core", "item-types", "workspace"];
 
 export const run = async (command, args, cwd = repoRoot, env = process.env) => {
   try {

@@ -1,5 +1,6 @@
 {
-  "name": "@re/types",
+  "name": "@re/item-types",
+  "description": "Built-in Q&A and cloze item types for re",
   "version": "0.0.1",
   "files": [
     "dist/**/*.js",

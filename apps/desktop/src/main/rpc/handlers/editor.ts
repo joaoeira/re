@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import { createMetadata, hasClozeDeletion, type Item, type ItemMetadata } from "@re/core";
-import { ClozeType, QAType } from "@re/types";
+import { ClozeType, QAType } from "@re/item-types";
 import { DeckManager, importDeckImageAssetFromBytes, scanDecks } from "@re/workspace";
 import type { FileSystem, Path } from "@effect/platform";
 import { Effect, Either, Option } from "effect";

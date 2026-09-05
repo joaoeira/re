@@ -18,7 +18,7 @@ const parsed = Effect.runSync(parseFile(markdown));
 Content and preamble are preserved; metadata is serialized canonically. Each item can contain
 multiple cards sharing one content block. The package also exports card-type contracts and
 cloze syntax helpers. Filesystem operations belong to `@re/workspace`; standard card types
-are provided by `@re/types`.
+are provided by `@re/item-types`.
 
 Build locally with `bun run build`. From the repository root, `bun run pack:libraries`
 creates installable archives and `bun run check:packages` verifies them in an isolated Node consumer.

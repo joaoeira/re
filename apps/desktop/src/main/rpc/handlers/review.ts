@@ -2,7 +2,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { inferType } from "@re/core";
-import { ClozeType, QAType, type QAContent } from "@re/types";
+import { ClozeType, QAType, type QAContent } from "@re/item-types";
 import {
   DeckManager,
   ReviewQueueBuilder,

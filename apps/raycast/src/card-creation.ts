@@ -4,7 +4,7 @@ import {
   type ItemMetadata,
   type UntypedItemType,
 } from "@re/core";
-import { ClozeType, QAType } from "@re/types";
+import { ClozeType, QAType } from "@re/item-types";
 import { toScanDecksErrorMessage, type DeckEntry } from "@re/workspace";
 import { Data, Effect } from "effect";
 

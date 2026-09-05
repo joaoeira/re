@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const { Effect } = require("effect");
 const { createMetadata, parseFile, serializeFile } = require("@re/core");
-const { QAType, ClozeType } = require("@re/types");
+const { QAType, ClozeType } = require("@re/item-types");
 const { Scheduler, SchedulerLive } = require("@re/workspace");
 
 const card = createMetadata();

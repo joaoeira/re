@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { inferType, type UntypedCardSpec, type UntypedItemType } from "@re/core";
-import { QAType, ClozeType } from "@re/types";
+import { QAType, ClozeType } from "@re/item-types";
 import type { QueueItem } from "@re/workspace";
 
 const itemTypes: ReadonlyArray<UntypedItemType> = [QAType, ClozeType];

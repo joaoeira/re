@@ -1,7 +1,7 @@
 import * as ParseResult from "effect/ParseResult";
 import * as Schema from "effect/Schema";
 import type { ItemId } from "@re/core";
-import type { QAContent as QaContent } from "@re/types";
+import type { QAContent as QaContent } from "@re/item-types";
 
 import { ModelIdSchema } from "./ai";
 

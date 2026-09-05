@@ -1,5 +1,5 @@
 import { createMetadata } from "@re/core";
-import { ClozeType, QAType } from "@re/types";
+import { ClozeType, QAType } from "@re/item-types";
 import { DeckManager } from "@re/workspace";
 import { Cause, Effect, Option } from "effect";
 import type { Implementations } from "electron-effect-rpc/types";
