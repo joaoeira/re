@@ -12,7 +12,7 @@ import { Header, Footer, ErrorDisplay } from "./ui";
 import { getCardSpec } from "../lib/getCardSpec";
 import { themeColors as theme } from "../ThemeContext";
 import type { QueueItem } from "@re/workspace";
-import type { UntypedCardSpec } from "@re/core";
+import type { EvaluableCardSpec } from "@re/core";
 import { Scheduler, SchedulerLive } from "@re/scheduler";
 import { DeckManager, DeckManagerLive } from "@re/workspace";
 import { Loading } from "./Spinner";
@@ -114,7 +114,7 @@ function ReviewSessionInner({
     input: { queue, runtime },
   });
 
-  const [cardSpec, setCardSpec] = useState<UntypedCardSpec | null>(null);
+  const [cardSpec, setCardSpec] = useState<EvaluableCardSpec | null>(null);
   const [cardError, setCardError] = useState<string | null>(null);
 
   const currentIndex = state.context.currentIndex;

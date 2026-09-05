@@ -34,10 +34,7 @@ export { LastReviewFromString } from "./schema/index.js";
 export type {
   CardSpec,
   ItemType,
-  UntypedCardSpec,
-  UntypedItemType,
   Grade,
-  InferredType,
   ContentParseDiagnostic,
   EvaluableCardSpec,
   EvaluableItemType,
@@ -48,7 +45,6 @@ export {
   ContentParseError,
   NoMatchingTypeError,
   manualCardSpec,
-  inferType,
   ResponseValidationError,
   adaptItemType,
   inferCards,

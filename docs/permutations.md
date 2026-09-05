@@ -139,7 +139,7 @@ This shape does three important things:
 
 ### Internal cloze note
 
-Internally, the review handler should still detect cloze items with `inferType([QAType, ClozeType])`. That is necessary so the system can fail with `assistant_unsupported_card_type` instead of collapsing cloze into a generic parse error.
+Internally, the review handler should still detect cloze items with `inferCards([adaptItemType(QAType), adaptItemType(ClozeType)], content)`. That is necessary so the system can fail with `assistant_unsupported_card_type` instead of collapsing cloze into a generic parse error.
 
 When cloze support is eventually added, the public review assistant schema should not expose raw `ClozeContent` unchanged unless the transport behavior of `Option<string>` has been explicitly validated. The safer design is a dedicated transport schema with JSON-safe fields and a resolved target deletion identity.
 
@@ -361,7 +361,7 @@ Implementation outline:
 
 1. Validate deck access the same way `GetCardContent` already does.
 2. Read the deck and locate the current item with `findCardLocationById`.
-3. Parse the underlying item content with `inferType([QAType, ClozeType])`.
+3. Parse the underlying item content with `inferCards([adaptItemType(QAType), adaptItemType(ClozeType)], content)`.
 4. Resolve a QA source-card if the parsed item is QA.
 5. If the parsed item is cloze, fail with `assistant_unsupported_card_type`.
 6. Implement `GetReviewAssistantSourceCard` on top of that resolver.

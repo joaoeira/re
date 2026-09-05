@@ -8,6 +8,7 @@ import * as NodePath from "@effect/platform-node/NodePath";
 import { Effect, Layer } from "effect";
 import * as Schema from "effect/Schema";
 import {
+  adaptItemType,
   createMetadata,
   InvalidMetadataFormat,
   MetadataParseErrorSchema,
@@ -99,7 +100,7 @@ try {
       yield* decks.appendItem(
         deckPath,
         { content: clozeContent, cards: ClozeType.cards(cloze).map(() => createMetadata()) },
-        ClozeType,
+        adaptItemType(ClozeType),
       );
       const scheduled = yield* scheduler.scheduleReview(qaMetadata, 2, reviewedAt);
       assert.ok(scheduled.updatedCard.due instanceof Date);

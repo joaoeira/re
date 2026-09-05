@@ -4,6 +4,7 @@ import type { QueueItem } from "@re/workspace";
 import { Scheduler, type FSRSGrade, type ScheduleResult } from "@re/scheduler";
 import { DeckManager } from "@re/workspace";
 import type { ReviewLogEntry } from "../services/ReviewLogEntry";
+import { getCardSpec } from "../lib/getCardSpec";
 
 interface GradingResult {
   schedulerLog: ScheduleResult["schedulerLog"];
@@ -103,7 +104,13 @@ const gradingActor = fromPromise(
       const scheduler = yield* Scheduler;
       const deckManager = yield* DeckManager;
 
-      const scheduleResult = yield* scheduler.scheduleReview(queueItem.card, grade, new Date());
+      const cardSpec = yield* getCardSpec(queueItem);
+      const evaluatedGrade = yield* cardSpec.evaluate(grade);
+      const scheduleResult = yield* scheduler.scheduleReview(
+        queueItem.card,
+        evaluatedGrade,
+        new Date(),
+      );
 
       yield* deckManager.updateCardMetadata(
         queueItem.deckPath,

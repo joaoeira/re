@@ -1,5 +1,11 @@
 import { FileSystem, Path } from "@effect/platform";
-import { inferType, type Item, type ItemMetadata, type UntypedItemType } from "@re/core";
+import {
+  adaptItemType,
+  inferCards,
+  type Item,
+  type ItemMetadata,
+  type EvaluableItemType,
+} from "@re/core";
 import { ClozeType, QAType } from "@re/item-types";
 import { Scheduler, type FSRSGrade } from "@re/scheduler";
 import {
@@ -138,13 +144,13 @@ export interface ReviewStore {
 
 export const ReviewStore = Context.GenericTag<ReviewStore>("@re/raycast/ReviewStore");
 
-const itemTypes = [QAType, ClozeType] as const;
+const itemTypes = [adaptItemType(QAType), adaptItemType(ClozeType)] as const;
 const QA_SEPARATOR = "\n---\n";
 
 interface PreparedReviewEdit {
   readonly cardType: "qa" | "cloze";
   readonly content: string;
-  readonly itemType: UntypedItemType;
+  readonly itemType: EvaluableItemType;
   readonly clozeIndices: readonly number[];
 }
 
@@ -194,7 +200,7 @@ const prepareReviewEdit = Effect.fn("ReviewStore.prepareEdit")(function* (draft:
     return {
       cardType: "qa",
       content,
-      itemType: QAType as UntypedItemType,
+      itemType: adaptItemType(QAType),
       clozeIndices: [],
     } satisfies PreparedReviewEdit;
   }
@@ -219,7 +225,7 @@ const prepareReviewEdit = Effect.fn("ReviewStore.prepareEdit")(function* (draft:
   return {
     cardType: "cloze",
     content: draft.content,
-    itemType: ClozeType as UntypedItemType,
+    itemType: adaptItemType(ClozeType),
     clozeIndices: [...new Set(parsed.deletions.map((deletion) => deletion.index))],
   } satisfies PreparedReviewEdit;
 });
@@ -346,7 +352,7 @@ export const ReviewStoreLive: Layer.Layer<
         });
       }
 
-      const inferred = yield* inferType(itemTypes, found.item.content).pipe(
+      const inferred = yield* inferCards(itemTypes, found.item.content).pipe(
         Effect.mapError(
           () =>
             new ReviewCardLoadError({
@@ -356,7 +362,7 @@ export const ReviewStoreLive: Layer.Layer<
             }),
         ),
       );
-      const cardSpec = inferred.type.cards(inferred.content)[found.cardIndex];
+      const cardSpec = inferred.cards[found.cardIndex];
 
       if (cardSpec === undefined || (cardSpec.cardType !== "qa" && cardSpec.cardType !== "cloze")) {
         return yield* new ReviewCardLoadError({
@@ -460,7 +466,7 @@ export const ReviewStoreLive: Layer.Layer<
         });
       }
 
-      const original = yield* inferType(itemTypes, found.item.content).pipe(
+      const original = yield* inferCards(itemTypes, found.item.content).pipe(
         Effect.mapError(
           () =>
             new ReviewEditError({
@@ -471,7 +477,7 @@ export const ReviewStoreLive: Layer.Layer<
         ),
       );
 
-      if (original.type.name !== prepared.itemType.name) {
+      if (original.cards[found.cardIndex]?.cardType !== prepared.cardType) {
         return yield* new ReviewEditError({
           deckPath: reference.deckPath,
           cardId: reference.cardId,
@@ -606,7 +612,35 @@ export const ReviewStoreLive: Layer.Layer<
         });
       }
 
-      const scheduled = yield* scheduler.scheduleReview(found.card, grade, now).pipe(
+      const { cards } = yield* inferCards(itemTypes, found.item.content).pipe(
+        Effect.mapError(
+          () =>
+            new ReviewGradeError({
+              deckPath: reference.deckPath,
+              cardId: reference.cardId,
+              message: "The card content is not valid Q&A or cloze content.",
+            }),
+        ),
+      );
+      const cardSpec = cards[found.cardIndex];
+      if (!cardSpec) {
+        return yield* new ReviewGradeError({
+          deckPath: reference.deckPath,
+          cardId: reference.cardId,
+          message: "The card content no longer matches its scheduling metadata.",
+        });
+      }
+      const evaluatedGrade = yield* cardSpec.evaluate(grade).pipe(
+        Effect.mapError(
+          (error) =>
+            new ReviewGradeError({
+              deckPath: reference.deckPath,
+              cardId: reference.cardId,
+              message: error.message,
+            }),
+        ),
+      );
+      const scheduled = yield* scheduler.scheduleReview(found.card, evaluatedGrade, now).pipe(
         Effect.mapError(
           (error) =>
             new ReviewGradeError({

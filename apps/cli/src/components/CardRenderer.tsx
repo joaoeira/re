@@ -1,4 +1,4 @@
-import type { UntypedCardSpec } from "@re/core";
+import type { EvaluableCardSpec } from "@re/core";
 import type { QueueItem } from "@re/workspace";
 import { useTheme } from "../ThemeContext";
 import { Panel, Hint } from "./ui";
@@ -7,7 +7,7 @@ import { Match } from "effect";
 
 interface CardRendererProps {
   queueItem: QueueItem;
-  cardSpec: UntypedCardSpec;
+  cardSpec: Pick<EvaluableCardSpec, "prompt" | "reveal" | "cardType">;
   isRevealed: boolean;
 }
 

@@ -64,6 +64,37 @@ const createReviewPromptRuntime = (
   }) as ForgePromptRuntime;
 
 describe("review handlers", () => {
+  it("rejects a missing generated card without saving metadata or review history", async () => {
+    const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-stale-review-"));
+    const deckPath = path.join(rootPath, "cloze.md");
+    const source =
+      "<!--@ first-card 0 0 0 0-->\n<!--@ removed-card 0 0 0 0-->\nOnly {{c1::Paris}} remains.\n";
+    let recordedReviews = 0;
+    try {
+      await fs.writeFile(deckPath, source);
+      const handlers = await createHandlersWithOverrides(path.join(rootPath, "settings.json"), {
+        analyticsRepository: {
+          ...createNoopReviewAnalyticsRepository(),
+          recordSchedule: () =>
+            Effect.sync(() => {
+              recordedReviews += 1;
+              return recordedReviews;
+            }),
+        },
+      });
+      await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath }));
+      const error = await Effect.runPromise(
+        handlers.ScheduleReview({ deckPath, cardId: "removed-card", grade: 2 }).pipe(Effect.flip),
+      );
+
+      expect(error._tag).toBe("review_operation_error");
+      expect(await fs.readFile(deckPath, "utf8")).toBe(source);
+      expect(recordedReviews).toBe(0);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+    }
+  });
+
   it("rewrites relative image markdown to file URLs for review content", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-image-"));
     const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-review-settings-"));

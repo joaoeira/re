@@ -1,5 +1,5 @@
 import { FileSystem, Path } from "@effect/platform";
-import type { ItemMetadata, UntypedItemType } from "@re/core";
+import type { ItemMetadata, EvaluableItemType } from "@re/core";
 import {
   DeckManager,
   importDeckImageAssetFromBytes,
@@ -24,7 +24,7 @@ export interface DeckStore {
       readonly cards: readonly ItemMetadata[];
       readonly content: string;
     },
-    itemType: UntypedItemType,
+    itemType: EvaluableItemType,
   ) => Effect.Effect<void, WriteError | ItemValidationError>;
   readonly importImageFromBytes: (
     workspacePath: string,

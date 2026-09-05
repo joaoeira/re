@@ -1,6 +1,12 @@
 import path from "node:path";
 
-import { createMetadata, hasClozeDeletion, type Item, type ItemMetadata } from "@re/core";
+import {
+  adaptItemType,
+  createMetadata,
+  hasClozeDeletion,
+  type Item,
+  type ItemMetadata,
+} from "@re/core";
 import { ClozeType, QAType } from "@re/item-types";
 import { DeckManager, importDeckImageAssetFromBytes, scanDecks } from "@re/workspace";
 import type { FileSystem, Path } from "@effect/platform";
@@ -43,7 +49,7 @@ const toEditorError = (error: unknown): EditorOperationError =>
   new EditorOperationError({ message: toErrorMessage(error) });
 
 const resolveEditorItemType = (cardType: EditorCardType) =>
-  cardType === "qa" ? QAType : ClozeType;
+  cardType === "qa" ? adaptItemType(QAType) : adaptItemType(ClozeType);
 
 type EditorItemType<TParsed> = {
   readonly parse: (content: string) => Effect.Effect<TParsed, unknown>;

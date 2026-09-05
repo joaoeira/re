@@ -74,10 +74,12 @@ Apps collect responses, display pending states, and pass successful grades to th
 Provide any services required by a grader within its implementation; the existing `CardSpec`
 contract exposes an Effect with no outstanding service requirements.
 
-Direct use of a known `ItemType` retains its precise content and response types. The existing
-`inferType` API remains available for presentation-only discovery; `inferCards` keeps parsing
-and card construction together so consumers never need to pass unknown parsed content back
-into a type-specific implementation. The isolated scheduler consumer exercises mixed built-in
+Direct use of a known `ItemType` retains its precise content and response types. Use `inferCards`
+for discovery across a collection: it keeps parsing and card construction together so consumers
+never need to pass unknown parsed content back into a type-specific implementation. Pass an
+adapted item type to workspace's `appendItem` and `replaceItem` methods as well; they validate
+content and card counts through `parseCards` without evaluating any responses.
+The isolated scheduler consumer exercises mixed built-in
 types and an externally defined asynchronous grader through validation and scheduling.
 
 Build locally with `bun run build`. From the repository root, `bun run pack:libraries`

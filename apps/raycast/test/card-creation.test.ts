@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import type { ItemMetadata, UntypedItemType } from "@re/core";
+import type { ItemMetadata, EvaluableItemType } from "@re/core";
 import {
   DeckNotFound,
   type DeckEntry,
@@ -22,7 +22,7 @@ interface AppendCall {
     readonly cards: readonly ItemMetadata[];
     readonly content: string;
   };
-  readonly itemType: UntypedItemType;
+  readonly itemType: EvaluableItemType;
 }
 
 const createTestLayer = (options?: {

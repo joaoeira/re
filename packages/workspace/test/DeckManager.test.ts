@@ -1,5 +1,6 @@
 import { Path } from "@effect/platform";
 import {
+  adaptItemType,
   createMetadataWithId,
   numericField,
   type Grade,
@@ -33,7 +34,7 @@ const singleCardItem = (id: string, content: string): string => `${makeCard(id)}
 
 const meta = (id: string) => createMetadataWithId(id as ItemId);
 
-const twoSidedType: ItemType<{ front: string; back: string }> = {
+const twoSidedType = adaptItemType({
   name: "two-sided",
   parse: (content) => {
     const parts = content.split("---\n");
@@ -57,9 +58,9 @@ const twoSidedType: ItemType<{ front: string; back: string }> = {
       grade: () => Effect.succeed(0 as Grade),
     },
   ],
-};
+} satisfies ItemType<{ front: string; back: string }>);
 
-const twoCardType: ItemType<{ front: string; back: string }> = {
+const twoCardType = adaptItemType({
   name: "two-card",
   parse: (content) => {
     const parts = content.split("---\n");
@@ -90,7 +91,7 @@ const twoCardType: ItemType<{ front: string; back: string }> = {
       grade: () => Effect.succeed(0 as Grade),
     },
   ],
-};
+} satisfies ItemType<{ front: string; back: string }>);
 
 const buildLayer = (config: MockFileSystemConfig) => {
   const mock = createMockFileSystem(config);

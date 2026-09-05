@@ -42,8 +42,7 @@ const prepareCardPreview = Effect.fn("Raycast.prepareCardPreview")(function* (
   input: CardPreviewInput,
 ) {
   const prepared = yield* prepareCard(input);
-  const parsedContent = yield* prepared.itemType.parse(prepared.content);
-  const cardSpecs = prepared.itemType.cards(parsedContent);
+  const cardSpecs = yield* prepared.itemType.parseCards(prepared.content);
 
   const cards = yield* Effect.forEach(cardSpecs, (cardSpec) =>
     Effect.all({
@@ -55,9 +54,7 @@ const prepareCardPreview = Effect.fn("Raycast.prepareCardPreview")(function* (
         { rootPath: input.workspacePath, deckPath: prepared.deckPath },
         cardSpec.reveal,
       ),
-    }).pipe(
-      Effect.map(({ prompt, reveal }): PreviewCard => ({ prompt, reveal })),
-    ),
+    }).pipe(Effect.map(({ prompt, reveal }): PreviewCard => ({ prompt, reveal }))),
   );
 
   return cards;

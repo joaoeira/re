@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import type { ItemMetadata, UntypedItemType } from "@re/core";
+import type { ItemMetadata, EvaluableItemType } from "@re/core";
 import type { ImportedDeckImageAsset } from "@re/workspace";
 import { Effect, Layer } from "effect";
 
@@ -52,7 +52,7 @@ const createTestLayer = (options?: {
           readonly cards: readonly ItemMetadata[];
           readonly content: string;
         },
-        _itemType: UntypedItemType,
+        _itemType: EvaluableItemType,
       ) => Effect.void,
       importImageFromBytes: (workspacePath, deckPath, bytes, extension) => {
         options?.onImport?.({ workspacePath, deckPath, bytes, extension });

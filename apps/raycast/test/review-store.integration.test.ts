@@ -238,6 +238,35 @@ Success, expected errors, and requirements.
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
+  it.scoped("rejects a missing generated card without changing the deck", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
+      const deckPath = `${workspacePath}/cloze.md`;
+      const source =
+        "<!--@ first-card 0 0 0 0-->\n<!--@ removed-card 0 0 0 0-->\nOnly {{c1::Paris}} remains.\n";
+      yield* fileSystem.writeFileString(deckPath, source);
+      const reviews = yield* ReviewStore;
+      const error = yield* reviews
+        .gradeCard(
+          {
+            deckPath,
+            deckName: "cloze",
+            relativePath: "cloze.md",
+            cardId: "removed-card",
+            cardIndex: 1,
+          },
+          2,
+          new Date("2026-08-13T12:00:00Z"),
+        )
+        .pipe(Effect.flip);
+
+      expect(error._tag).toBe("ReviewGradeError");
+      expect(error.cardId).toBe("removed-card");
+      expect(yield* fileSystem.readFileString(deckPath)).toBe(source);
+    }).pipe(Effect.provide(TestWithPlatformLive)),
+  );
+
   it.scoped("undoes a grade by restoring the card's exact previous schedule", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

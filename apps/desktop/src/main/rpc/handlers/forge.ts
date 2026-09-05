@@ -1,4 +1,4 @@
-import { createMetadata } from "@re/core";
+import { adaptItemType, createMetadata } from "@re/core";
 import { ClozeType, QAType } from "@re/item-types";
 import { DeckManager } from "@re/workspace";
 import { Cause, Effect, Option } from "effect";
@@ -1048,8 +1048,7 @@ export const createForgeHandlers = () =>
               model: input.model,
             });
 
-            const finalStatus =
-              detailOutcome.status === "extracted" ? "topics_extracted" : "error";
+            const finalStatus = detailOutcome.status === "extracted" ? "topics_extracted" : "error";
             const finalErrorMessage =
               finalStatus === "error"
                 ? (detailOutcome.errorMessage ?? "Topic extraction failed.")
@@ -2023,7 +2022,7 @@ export const createForgeHandlers = () =>
             cardType === "qa"
               ? yield* QAType.parse(content).pipe(Effect.map((p) => QAType.cards(p).length))
               : yield* ClozeType.parse(content).pipe(Effect.map((p) => ClozeType.cards(p).length));
-          const itemType = cardType === "qa" ? QAType : ClozeType;
+          const itemType = cardType === "qa" ? adaptItemType(QAType) : adaptItemType(ClozeType);
           const cards = Array.from({ length: cardCount }, () => createMetadata());
 
           const deckManager = yield* DeckManager;

@@ -6,7 +6,7 @@ import {
   serializeFile,
   type Item,
   type ItemMetadata,
-  type UntypedItemType,
+  type EvaluableItemType,
   type ParsedFile,
 } from "@re/core";
 import { Context, Effect, Layer, Option } from "effect";
@@ -122,13 +122,13 @@ export interface DeckManager {
     deckPath: string,
     cardId: string,
     newItem: { readonly cards: readonly ItemMetadata[]; readonly content: string },
-    itemType: UntypedItemType,
+    itemType: EvaluableItemType<unknown>,
   ) => Effect.Effect<void, WriteError | CardNotFound | ItemValidationError>;
 
   readonly appendItem: (
     deckPath: string,
     item: { readonly cards: readonly ItemMetadata[]; readonly content: string },
-    itemType: UntypedItemType,
+    itemType: EvaluableItemType<unknown>,
   ) => Effect.Effect<void, WriteError | ItemValidationError>;
 
   readonly removeItem: (
@@ -228,10 +228,10 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
 
       const validateItemCardCount = (
         item: { readonly cards: readonly ItemMetadata[]; readonly content: string },
-        itemType: UntypedItemType,
+        itemType: EvaluableItemType<unknown>,
         deckPath: string,
       ): Effect.Effect<void, ItemValidationError> =>
-        itemType.parse(item.content).pipe(
+        itemType.parseCards(item.content).pipe(
           Effect.mapError(
             (error) =>
               new ItemValidationError({
@@ -239,8 +239,8 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
                 message: `Content parse failed for type "${itemType.name}": ${error.message}`,
               }),
           ),
-          Effect.flatMap((parsed) => {
-            const expectedCards = itemType.cards(parsed).length;
+          Effect.flatMap((cards) => {
+            const expectedCards = cards.length;
             if (expectedCards !== item.cards.length) {
               return Effect.fail(
                 new ItemValidationError({

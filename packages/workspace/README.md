@@ -24,6 +24,11 @@ const deck = await Effect.runPromise(
 );
 ```
 
+For `appendItem` and `replaceItem`, pass a type adapted with `adaptItemType` from `@re/core`
+(for example, `adaptItemType(QAType)`). Workspace uses its `parseCards` operation to validate
+the content and ensure that the number of metadata records matches the generated cards.
+Writing content does not evaluate responses or run graders.
+
 Scheduling is provided by `@re/scheduler`; import `Scheduler` and `SchedulerLive` from that
 package. Workspace uses its due-date helpers for snapshots and review queues. Discovery uses
 Markdown files and honors the workspace's `.reignore`. Image hashing requires Web Crypto, available

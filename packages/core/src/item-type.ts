@@ -36,18 +36,6 @@ export interface ItemType<Content, Response = unknown, GradeError = never> {
   cards(content: Content): ReadonlyArray<CardSpec<Response, GradeError>>;
 }
 
-export interface UntypedCardSpec {
-  readonly prompt: string;
-  readonly reveal: string;
-  readonly cardType: string;
-}
-
-export interface UntypedItemType {
-  readonly name: string;
-  readonly parse: (content: string) => Effect.Effect<unknown, ContentParseError>;
-  cards(content: unknown): ReadonlyArray<UntypedCardSpec>;
-}
-
 export class ResponseValidationError extends Data.TaggedError("ResponseValidationError")<{
   readonly cardType: string;
   readonly message: string;
@@ -55,7 +43,10 @@ export class ResponseValidationError extends Data.TaggedError("ResponseValidatio
 }> {}
 
 /** A card that validates an unknown response before invoking its typed grader. */
-export interface EvaluableCardSpec<GradeError = never> extends UntypedCardSpec {
+export interface EvaluableCardSpec<GradeError = never> {
+  readonly prompt: string;
+  readonly reveal: string;
+  readonly cardType: string;
   readonly evaluate: (
     response: unknown,
   ) => Effect.Effect<Grade, ResponseValidationError | GradeError>;
@@ -156,31 +147,3 @@ export function inferCards(
 
   return tryNext(0);
 }
-
-export interface InferredType {
-  readonly type: UntypedItemType;
-  readonly content: unknown;
-}
-
-/** Try each type's parser in order until one succeeds. */
-export const inferType = (
-  types: ReadonlyArray<UntypedItemType>,
-  content: string,
-): Effect.Effect<InferredType, NoMatchingTypeError> => {
-  const tryNext = (
-    index: number,
-    tried: string[],
-  ): Effect.Effect<InferredType, NoMatchingTypeError> => {
-    if (index >= types.length) {
-      return Effect.fail(new NoMatchingTypeError({ raw: content, triedTypes: tried }));
-    }
-
-    const type = types[index]!;
-    return type.parse(content).pipe(
-      Effect.map((parsed) => ({ type, content: parsed })),
-      Effect.catchTag("ContentParseError", () => tryNext(index + 1, [...tried, type.name])),
-    );
-  };
-
-  return tryNext(0, []);
-};

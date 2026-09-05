@@ -1,7 +1,7 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-import { inferType } from "@re/core";
+import { adaptItemType, inferCards } from "@re/core";
 import { ClozeType, QAType, type QAContent } from "@re/item-types";
 import { Scheduler, computeDueDate } from "@re/scheduler";
 import { DeckManager, ReviewQueueBuilder, resolveDeckImagePath } from "@re/workspace";
@@ -45,7 +45,7 @@ import {
   validateRequestedRootPathAs,
 } from "./shared";
 
-const reviewItemTypes = [QAType, ClozeType] as const;
+const reviewItemTypes = [adaptItemType(QAType), adaptItemType(ClozeType)] as const;
 const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
 
 type ReviewHandlerKeys =
@@ -195,11 +195,11 @@ const loadResolvedReviewCard = (options: {
       );
     }
 
-    const inferred = yield* inferType(reviewItemTypes, found.item.content).pipe(
+    const inferred = yield* inferCards(reviewItemTypes, found.item.content).pipe(
       Effect.mapError((error) => new CardContentParseError({ message: error.message })),
     );
 
-    const cards = inferred.type.cards(inferred.content);
+    const cards = inferred.cards;
     const cardSpec = cards[options.cardIndex];
 
     if (!cardSpec) {
@@ -236,28 +236,23 @@ const loadResolvedReviewCard = (options: {
       cardType: cardSpec.cardType,
     };
 
-    if (inferred.type === QAType) {
+    if (cardSpec.cardType === "qa") {
+      const qaContent = yield* QAType.parse(found.item.content).pipe(
+        Effect.mapError((error) => new CardContentParseError({ message: error.message })),
+      );
       return {
         rootPath,
         cardType: "qa",
         cardSpec: renderedCardSpec,
-        qaContent: inferred.content as QAContent,
+        qaContent,
       };
     }
 
-    if (inferred.type === ClozeType) {
-      return {
-        rootPath,
-        cardType: "cloze",
-        cardSpec: renderedCardSpec,
-      };
-    }
-
-    return yield* Effect.fail(
-      new CardContentParseError({
-        message: `Unsupported inferred type: ${inferred.type.name}`,
-      }),
-    );
+    return {
+      rootPath,
+      cardType: "cloze",
+      cardSpec: renderedCardSpec,
+    };
   });
 
 const resolveReviewAssistantQaSourceCard = (options: {
@@ -480,8 +475,27 @@ export const createReviewHandlers = () =>
                 );
               }
 
+              const { cards } = yield* inferCards(reviewItemTypes, cardLocation.item.content).pipe(
+                Effect.mapError(
+                  () =>
+                    new ReviewOperationError({
+                      message: "The card content is not valid Q&A or cloze content.",
+                    }),
+                ),
+              );
+              const cardSpec = cards[cardLocation.cardIndex];
+              if (!cardSpec) {
+                return yield* new ReviewOperationError({
+                  message: "The card content no longer matches its scheduling metadata.",
+                });
+              }
+              const evaluatedGrade = yield* cardSpec
+                .evaluate(grade)
+                .pipe(
+                  Effect.mapError((error) => new ReviewOperationError({ message: error.message })),
+                );
               const scheduled = yield* scheduler
-                .scheduleReview(cardLocation.card, grade, reviewedAt)
+                .scheduleReview(cardLocation.card, evaluatedGrade, reviewedAt)
                 .pipe(
                   Effect.mapError((error) => new ReviewOperationError({ message: error.message })),
                 );
@@ -502,7 +516,7 @@ export const createReviewHandlers = () =>
                 nextCard: scheduled.updatedCard,
                 expectedCurrentCardFingerprint: toMetadataFingerprint(scheduled.updatedCard),
                 previousCardFingerprint: toMetadataFingerprint(cardLocation.card),
-                grade,
+                grade: evaluatedGrade,
                 previousState: scheduled.schedulerLog.previousState,
                 nextState: scheduled.updatedCard.state,
                 previousStability: cardLocation.card.stability.value,
