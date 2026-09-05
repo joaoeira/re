@@ -1,6 +1,10 @@
 export {
   Scheduler,
   SchedulerLive,
+  makeScheduler,
+  makeSchedulerLayer,
+  SchedulerConfigError,
+  type FSRSOptions,
   ScheduleError,
   type FSRSGrade,
   type ScheduleResult,

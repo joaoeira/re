@@ -25,10 +25,14 @@ import { ClozeType, QAType } from "@re/item-types";
 import {
   Scheduler,
   SchedulerLive,
+  makeScheduler,
+  makeSchedulerLayer,
   computeDueDate,
   isCardDue,
   resolveDueDateIfDue,
   type ScheduleResult,
+  type SchedulerConfigError,
+  type FSRSOptions,
 } from "@re/scheduler";
 
 for (const name of ["core", "item-types", "scheduler"]) {
@@ -44,12 +48,17 @@ const cardSpec = QAType.cards(Effect.runSync(QAType.parse(content)))[0];
 assert.ok(cardSpec);
 const card = createMetadata();
 const reviewedAt = new Date("2026-01-01T12:00:00.000Z");
+const options: FSRSOptions = {
+  request_retention: 0.95,
+  maximum_interval: 365,
+  learning_steps: ["2m", "15m"],
+};
 const scheduled: ScheduleResult = Effect.runSync(
   Effect.gen(function* () {
     const scheduler = yield* Scheduler;
     const grade = yield* cardSpec.grade(2);
     return yield* scheduler.scheduleReview(card, grade, reviewedAt);
-  }).pipe(Effect.provide(SchedulerLive)),
+  }).pipe(Effect.provide(makeSchedulerLayer(options))),
 );
 assert.equal(scheduled.updatedCard.id, card.id);
 assert.equal(scheduled.schedulerLog.rating, 2);
@@ -80,11 +89,12 @@ assert.equal(isCardDue(restoredCard, restoredCard.due), true);
 assert.deepEqual(resolveDueDateIfDue(restoredCard, restoredCard.due), restoredCard.due);
 
 const nextReviewedAt = restoredCard.due;
+const configured: Effect.Effect<Scheduler, SchedulerConfigError> = makeScheduler(options);
 const next = Effect.runSync(
   Effect.gen(function* () {
-    const scheduler = yield* Scheduler;
+    const scheduler = yield* configured;
     return yield* scheduler.scheduleReview(restoredCard, 2, nextReviewedAt);
-  }).pipe(Effect.provide(SchedulerLive)),
+  }),
 );
 assert.equal(next.updatedCard.id, card.id);
 assert.deepEqual(next.updatedCard.lastReview, restoredCard.due);
@@ -140,5 +150,5 @@ await Effect.runPromise(
   }).pipe(Effect.provide(SchedulerLive)),
 );
 console.log(
-  "Passed: built-in and custom async grading, scheduling, standalone metadata import, model validation, metadata round-trip, due dates, and subsequent review without a filesystem layer.",
+  "Passed: built-in and custom async grading, configured scheduling through factories and layers, standalone metadata import, model validation, metadata round-trip, due dates, and subsequent review without a filesystem layer.",
 );

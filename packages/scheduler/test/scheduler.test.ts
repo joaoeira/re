@@ -73,7 +73,7 @@ describe("Scheduler", () => {
     }).pipe(Effect.provide(SchedulerLive), Effect.runPromise);
   });
 
-  it("persists fsrs-computed due when scheduling a review", async () => {
+  it("schedules a new card graded Good for the default ten-minute learning step", async () => {
     const now = new Date("2025-01-10T12:00:00Z");
     const card = makeCard({
       state: State.New,
@@ -87,8 +87,7 @@ describe("Scheduler", () => {
     }).pipe(Effect.provide(SchedulerLive), Effect.runPromise);
 
     expect(result.updatedCard.lastReview?.toISOString()).toBe(now.toISOString());
-    expect(result.updatedCard.due).not.toBeNull();
-    expect(result.updatedCard.due!.getTime()).toBeGreaterThanOrEqual(now.getTime());
+    expect(result.updatedCard.due?.toISOString()).toBe("2025-01-10T12:10:00.000Z");
   });
 
   it("round-trips scheduled due through serializer and parser", async () => {
