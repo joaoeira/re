@@ -1,5 +1,5 @@
 import { Path } from "@effect/platform";
-import { resolveDeckImagePath } from "@simbyotic/re-workspace";
+import { resolveDeckImagePath } from "@simbyotic/re/workspace";
 import type { Nodes } from "mdast";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";

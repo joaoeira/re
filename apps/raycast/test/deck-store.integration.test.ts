@@ -1,7 +1,7 @@
 import { FileSystem } from "@effect/platform";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { DeckManagerLive } from "@simbyotic/re-workspace";
+import { DeckManagerLive } from "@simbyotic/re/workspace";
 import { Effect, Layer } from "effect";
 
 import { createCardForUi, loadDecksForUi } from "../src/card-creation";

@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { tmpdir } from "node:os";
 
-import type { SnapshotWorkspaceResult } from "@simbyotic/re-workspace";
+import type { SnapshotWorkspaceResult } from "@simbyotic/re/workspace";
 import { Deferred, Effect, FiberId, Runtime } from "effect";
 import { describe, expect, it } from "vitest";
 

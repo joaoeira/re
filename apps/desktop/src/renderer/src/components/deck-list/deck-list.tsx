@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useSelector } from "@xstate/store-react";
-import { buildDeckTree, flattenDeckTree, type DeckSnapshot } from "@simbyotic/re-workspace";
+import { buildDeckTree, flattenDeckTree, type DeckSnapshot } from "@simbyotic/re/workspace";
 import { useDeckListStore } from "@shared/state/stores-context";
 import { collectGroupDeckDescendants } from "@shared/lib/deckTreeSelectors";
 import { DeckRow } from "./deck-row";

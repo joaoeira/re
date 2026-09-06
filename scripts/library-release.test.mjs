@@ -7,7 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
-import { libraries, repoRoot, run } from "./pack-libraries.mjs";
+import { repoRoot, run } from "./pack-library.mjs";
 
 const exec = promisify(execFile);
 const temporary = async (t) => {
@@ -16,15 +16,15 @@ const temporary = async (t) => {
   return directory;
 };
 
-test("preparing one library change versions the whole set, writes changelogs, and updates app pins without versioning apps", async (t) => {
+test("preparing a release writes its changelog and updates both app pins without versioning apps", async (t) => {
   const directory = await temporary(t);
   for (const file of [
     "package.json",
     "bun.lock",
     ".changeset/config.json",
-    "scripts/pack-libraries.mjs",
+    "scripts/pack-library.mjs",
     "scripts/prepare-library-release.mjs",
-    ...libraries.map((name) => `packages/${name}/package.json`),
+    "packages/re/package.json",
     "apps/desktop/package.json",
     "apps/raycast/package.json",
   ]) {
@@ -50,7 +50,7 @@ test("preparing one library change versions the whole set, writes changelogs, an
     directory,
   );
   const original = JSON.parse(
-    await readFile(path.join(directory, "packages/core/package.json"), "utf8"),
+    await readFile(path.join(directory, "packages/re/package.json"), "utf8"),
   );
   const [major, minor, patch] = original.version.split(".").map(Number);
   const expected = `${major}.${minor}.${patch + 1}`;
@@ -59,26 +59,24 @@ test("preparing one library change versions the whole set, writes changelogs, an
     `---\n"${original.name}": patch\n---\n\nPreserve card data when updating a deck.\n`,
   );
   await run(process.execPath, ["scripts/prepare-library-release.mjs"], directory);
-  for (const library of libraries) {
-    const manifest = JSON.parse(
-      await readFile(path.join(directory, "packages", library, "package.json"), "utf8"),
+  const manifest = JSON.parse(
+    await readFile(path.join(directory, "packages", "re", "package.json"), "utf8"),
+  );
+  assert.equal(manifest.version, expected);
+  assert.ok(
+    (await readFile(path.join(directory, "packages", "re", "CHANGELOG.md"), "utf8")).includes(
+      `## ${expected}`,
+    ),
+  );
+  for (const app of ["desktop", "raycast"]) {
+    const consumer = JSON.parse(
+      await readFile(path.join(directory, "apps", app, "package.json"), "utf8"),
     );
-    assert.equal(manifest.version, expected);
-    assert.ok(
-      (await readFile(path.join(directory, "packages", library, "CHANGELOG.md"), "utf8")).includes(
-        `## ${expected}`,
-      ),
+    const before = JSON.parse(
+      await readFile(path.join(repoRoot, "apps", app, "package.json"), "utf8"),
     );
-    for (const app of ["desktop", "raycast"]) {
-      const consumer = JSON.parse(
-        await readFile(path.join(directory, "apps", app, "package.json"), "utf8"),
-      );
-      const before = JSON.parse(
-        await readFile(path.join(repoRoot, "apps", app, "package.json"), "utf8"),
-      );
-      assert.equal(consumer.dependencies[manifest.name], expected);
-      assert.equal(consumer.version, before.version);
-    }
+    assert.equal(consumer.dependencies[manifest.name], expected);
+    assert.equal(consumer.version, before.version);
   }
   // A subsequent frozen install must accept the lockfile produced by preparation.
   await run(
@@ -92,43 +90,36 @@ const releaseFixture = async (t) => {
   const directory = await temporary(t);
   const source = path.join(directory, "source");
   await mkdir(path.join(source, "package"), { recursive: true });
-  const packages = [];
-  for (const library of libraries) {
-    const manifest = JSON.parse(
-      await readFile(path.join(repoRoot, "packages", library, "package.json"), "utf8"),
-    );
-    await writeFile(path.join(source, "package/package.json"), JSON.stringify(manifest));
-    const archive = `${library}.tgz`;
-    await run("tar", ["-czf", path.join(directory, archive), "package"], source);
-    packages.push({
+  const manifest = JSON.parse(
+    await readFile(path.join(repoRoot, "packages/re/package.json"), "utf8"),
+  );
+  await writeFile(path.join(source, "package/package.json"), JSON.stringify(manifest));
+  const archive = "re.tgz";
+  await run("tar", ["-czf", path.join(directory, archive), "package"], source);
+  await writeFile(
+    path.join(directory, "release.json"),
+    JSON.stringify({
       name: manifest.name,
       version: manifest.version,
+      commit: await run("git", ["rev-parse", "HEAD"]),
+      dirty: true,
       archive,
       integrity: `sha512-${createHash("sha512")
         .update(await readFile(path.join(directory, archive)))
         .digest("base64")}`,
-    });
-  }
-  await writeFile(
-    path.join(directory, "release.json"),
-    JSON.stringify({
-      version: packages[0].version,
-      commit: await run("git", ["rev-parse", "HEAD"]),
-      dirty: true,
-      packages,
     }),
   );
-  return { directory, source, packages };
+  return { directory, source, archive };
 };
 
 test("dry run rejects a valid archive whose contents changed after verification", async (t) => {
-  const { directory, source, packages } = await releaseFixture(t);
-  const manifest = await readFile(path.join(repoRoot, "packages/core/package.json"));
+  const { directory, source, archive } = await releaseFixture(t);
+  const manifest = await readFile(path.join(repoRoot, "packages/re/package.json"));
   await writeFile(path.join(source, "package/package.json"), manifest);
   await writeFile(path.join(source, "package/unverified.txt"), "not part of the checked release");
-  await run("tar", ["-czf", path.join(directory, packages[0].archive), "package"], source);
+  await run("tar", ["-czf", path.join(directory, archive), "package"], source);
   await assert.rejects(
-    exec(process.execPath, ["scripts/publish-libraries.mjs", "--dry-run", directory], {
+    exec(process.execPath, ["scripts/publish-library.mjs", "--dry-run", directory], {
       cwd: repoRoot,
     }),
     (error) => {
@@ -141,7 +132,7 @@ test("dry run rejects a valid archive whose contents changed after verification"
 test("real publishing rejects artifacts built from uncommitted source before contacting the registry", async (t) => {
   const { directory } = await releaseFixture(t);
   await assert.rejects(
-    exec(process.execPath, ["scripts/publish-libraries.mjs", "--publish", directory], {
+    exec(process.execPath, ["scripts/publish-library.mjs", "--publish", directory], {
       cwd: repoRoot,
     }),
     (error) => {

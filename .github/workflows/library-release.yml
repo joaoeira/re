@@ -1,9 +1,9 @@
-name: Release libraries
+name: Release re package
 
 on:
   workflow_dispatch:
   push:
-    tags: ["libraries-v*"]
+    tags: ["re-v*"]
 
 permissions:
   contents: read
@@ -29,8 +29,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         run: git merge-base --is-ancestor HEAD origin/master
       - run: bun install --frozen-lockfile
-      - run: bun run --filter '@simbyotic/re-*' test
-      - run: bun run --filter '@simbyotic/re-*' typecheck
+      - run: bun run --filter '@simbyotic/re' test
+      - run: bun run --filter '@simbyotic/re' typecheck
       - run: bun run release:check
       - run: bun run test:release
       - run: bun run release:dry-run
@@ -41,7 +41,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/libraries-v') && vars.NPM_TRUSTED_PUBLISHING == 'true'
+    if: startsWith(github.ref, 'refs/tags/re-v') && vars.NPM_TRUSTED_PUBLISHING == 'true'
     needs: verify
     runs-on: ubuntu-latest
     environment: npm
@@ -58,4 +58,4 @@ jobs:
         with:
           name: library-release
           path: dist/library-release/
-      - run: node scripts/publish-libraries.mjs --publish
+      - run: node scripts/publish-library.mjs --publish

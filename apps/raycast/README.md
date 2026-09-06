@@ -54,7 +54,7 @@ workflow installs from the lockfile, runs these checks, and uploads `dist/`.
 
 While the app remains in the monorepo, use `bun run raycast:dev`, `raycast:test`,
 `raycast:typecheck`, and `raycast:build` from the repository root. Those wrappers build the
-libraries before running the app's local commands. Run `bun run watch:libraries` alongside
+libraries before running the app's local commands. Run `bun run watch:library` alongside
 development when changing library source.
 
 From the monorepo root, `bun run check:raycast` copies this app outside the workspace, installs

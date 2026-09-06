@@ -13,7 +13,7 @@ import {
   REGEX_INLINE_MATH_DOLLARS_ESCAPED,
 } from "@benrbray/prosemirror-math";
 import katex from "katex";
-import { replaceClozeDeletions } from "@simbyotic/re-core";
+import { replaceClozeDeletions } from "@simbyotic/re/core";
 
 const preprocessClozeForKatex = (tex: string): string =>
   replaceClozeDeletions(tex, (d) => `[${d.hidden}]`);

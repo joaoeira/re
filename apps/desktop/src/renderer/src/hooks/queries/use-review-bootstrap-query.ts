@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
 
-import { mapScanDecksErrorToError } from "@simbyotic/re-workspace";
+import { mapScanDecksErrorToError } from "@simbyotic/re/workspace";
 import { mapSettingsErrorToError } from "@shared/settings";
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";

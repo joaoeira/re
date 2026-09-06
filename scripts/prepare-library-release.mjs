@@ -1,18 +1,10 @@
 import { readFile, writeFile, access } from "node:fs/promises";
 import path from "node:path";
 
-import { libraries, repoRoot, run } from "./pack-libraries.mjs";
+import { packageDirectory, packageName, repoRoot, run } from "./pack-library.mjs";
 
 console.log(await run("bun", ["x", "--no-install", "changeset", "version"]));
-const versions = new Map();
-for (const library of libraries) {
-  const manifest = JSON.parse(
-    await readFile(path.join(repoRoot, "packages", library, "package.json"), "utf8"),
-  );
-  versions.set(manifest.name, manifest.version);
-}
-if (new Set(versions.values()).size !== 1)
-  throw new Error("The libraries must share one release version");
+const release = JSON.parse(await readFile(path.join(packageDirectory, "package.json"), "utf8"));
 // Until extraction, keep each app consuming the workspace version. This does not
 // version or publish the apps themselves.
 for (const app of ["desktop", "raycast"]) {
@@ -28,12 +20,10 @@ for (const app of ["desktop", "raycast"]) {
   )
     continue;
   const manifest = JSON.parse(await readFile(filename, "utf8"));
-  for (const [name, version] of versions) {
-    if (manifest.dependencies?.[name]) manifest.dependencies[name] = version;
-  }
+  if (manifest.dependencies?.[packageName]) manifest.dependencies[packageName] = release.version;
   await writeFile(filename, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 console.log(await run("bun", ["install", "--lockfile-only", "--ignore-scripts"]));
 console.log(
-  `Prepared library release ${[...versions.values()][0]}. Review and commit the version, changelog, and lockfile changes.`,
+  `Prepared library release ${release.version}. Review and commit the version, changelog, and lockfile changes.`,
 );

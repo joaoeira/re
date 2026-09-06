@@ -1,12 +1,7 @@
 # Library changesets
 
-Run `bun run changeset` when a change affects a library's public behavior. Select the
-relevant library, choose a semantic-version bump, and explain the caller-visible change.
-Commit the generated Markdown file alongside the implementation.
+Run `bun run changeset` when a change affects the public behavior of `@simbyotic/re`. Choose a semantic-version bump and explain the caller-visible change. Commit the generated Markdown file with the implementation.
 
-The four `@simbyotic/re-*` libraries form one fixed release group. Preparing a release
-bumps all four to the same version and generates their changelogs. The desktop and Raycast
-apps are private npm packages and are not part of this release group.
+There is one published package, version, and changelog. The desktop and Raycast apps are private packages; release preparation updates their library dependency without changing their own versions.
 
-See [the release guide](../docs/library-releases.md) for preparation, verification,
-first-publication setup, and the GitHub Actions publishing workflow.
+See [the release guide](../docs/library-releases.md) for preparation, verification, and the GitHub Actions publishing workflow.

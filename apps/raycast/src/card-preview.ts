@@ -1,5 +1,5 @@
 import { Path } from "@effect/platform";
-import { ContentParseError } from "@simbyotic/re-core";
+import { ContentParseError } from "@simbyotic/re/core";
 import { Effect } from "effect";
 
 import {

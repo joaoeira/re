@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Effect } from "effect";
 
-import { mapScanDecksErrorToError } from "@simbyotic/re-workspace";
+import { mapScanDecksErrorToError } from "@simbyotic/re/workspace";
 import { WorkspaceSnapshotChanged } from "@shared/rpc/contracts";
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";

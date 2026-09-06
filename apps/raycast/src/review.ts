@@ -1,4 +1,4 @@
-import type { FSRSGrade } from "@simbyotic/re-scheduler";
+import type { FSRSGrade } from "@simbyotic/re/scheduler";
 import { Effect } from "effect";
 
 import {

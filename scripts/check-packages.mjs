@@ -4,10 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { libraries, packLibraries, repoRoot, run } from "./pack-libraries.mjs";
+import { packageName, packLibrary, repoRoot, run } from "./pack-library.mjs";
 
-const checkConsumer = async ({ archives, consumer, withWorkspace }) => {
-  const includedLibraries = withWorkspace ? libraries : ["core", "item-types", "scheduler"];
+const checkConsumer = async ({ archive, consumer, withWorkspace }) => {
   await mkdir(consumer);
   // Never copy a local node_modules, lockfile, or stale compiled fixture into the consumer.
   for (const filename of ["package.json", "tsconfig.json", "index.ts", "commonjs.cjs"]) {
@@ -28,10 +27,7 @@ const checkConsumer = async ({ archives, consumer, withWorkspace }) => {
     delete manifest.dependencies["@effect/platform"];
     delete manifest.dependencies["@effect/platform-node"];
   }
-  for (const library of includedLibraries) {
-    const name = `@simbyotic/re-${library}`;
-    manifest.dependencies[name] = pathToFileURL(archives[name]).href;
-  }
+  manifest.dependencies[packageName] = pathToFileURL(archive).href;
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
   // Avoid injected loaders or resolution paths masking broken published JavaScript.
@@ -50,15 +46,13 @@ const checkConsumer = async ({ archives, consumer, withWorkspace }) => {
     if (!withWorkspace) {
       assert.doesNotMatch(
         installedPath,
-        /(?:^|\/)node_modules\/(?:@simbyotic\/re-workspace|@effect\/platform(?:-[^/]+)?|ignore)$/,
-        "Scheduling must install without workspace or filesystem platform dependencies",
+        /(?:^|\/)node_modules\/@effect\/platform(?:-[^/]+)?$/,
+        "Scheduling must install without filesystem platform dependencies",
       );
     }
   }
   if (!withWorkspace) {
-    console.log(
-      "Verified scheduler installation has no workspace or filesystem platform dependencies.",
-    );
+    console.log("Verified scheduler installation has no filesystem platform dependencies.");
   }
   for (const name of withWorkspace ? ["effect", "@effect/platform"] : ["effect"]) {
     const installations = await Promise.all(
@@ -78,13 +72,11 @@ const checkConsumer = async ({ archives, consumer, withWorkspace }) => {
   console.log(
     `Verified shared Effect ${installedEffect.version} (consumer range: ${manifest.dependencies.effect}).`,
   );
-  for (const library of includedLibraries) {
-    const installed = path.join(consumer, "node_modules/@simbyotic", `re-${library}`);
-    assert.equal(
-      await realpath(installed),
-      path.join(await realpath(consumer), "node_modules/@simbyotic", `re-${library}`),
-    );
-  }
+  const installed = path.join(consumer, "node_modules", packageName);
+  assert.equal(
+    await realpath(installed),
+    path.join(await realpath(consumer), "node_modules", packageName),
+  );
   console.log("Compiling the external TypeScript consumer (NodeNext)...");
   await run(
     process.execPath,
@@ -114,7 +106,7 @@ const checkConsumer = async ({ archives, consumer, withWorkspace }) => {
   console.log(await run(process.execPath, ["commonjs.cjs"], consumer, env));
 };
 
-export const checkPackages = async (archives) => {
+export const checkPackages = async (archive) => {
   const scratch = await mkdtemp(path.join(tmpdir(), "re-package-consumer-"));
   try {
     const relative = path.relative(await realpath(repoRoot), await realpath(scratch));
@@ -122,16 +114,16 @@ export const checkPackages = async (archives) => {
       relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative),
       "Consumer must be outside the repository",
     );
-    archives ??= await packLibraries(path.join(scratch, "archives"));
+    archive ??= await packLibrary(path.join(scratch, "archives"));
     console.log("Checking the scheduler consumer...");
     await checkConsumer({
-      archives,
+      archive,
       consumer: path.join(scratch, "scheduler-consumer"),
       withWorkspace: false,
     });
     console.log("Checking the workspace consumer...");
     await checkConsumer({
-      archives,
+      archive,
       consumer: path.join(scratch, "workspace-consumer"),
       withWorkspace: true,
     });

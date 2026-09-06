@@ -1,8 +1,8 @@
 import { assign, fromPromise, raise, setup, type SnapshotFrom } from "xstate";
 
 import type { Option } from "effect";
-import type { ScanDecksResult } from "@simbyotic/re-workspace";
-import { hasClozeDeletion } from "@simbyotic/re-core";
+import type { ScanDecksResult } from "@simbyotic/re/workspace";
+import { hasClozeDeletion } from "@simbyotic/re/core";
 
 import {
   buildEditorContent,

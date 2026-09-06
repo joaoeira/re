@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { Cause, Effect, Exit } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
-import { parseFile } from "@simbyotic/re-core";
+import { parseFile } from "@simbyotic/re/core";
 
 import {
   makeInMemoryForgeSessionRepository,
@@ -3115,7 +3115,9 @@ describe("forge handlers", () => {
     const { handlers, repository, dispose } = await setupHandlers({ promptRuntime });
 
     try {
-      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-angles-cache.pdf"));
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-angles-cache.pdf"),
+      );
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
           { text: "ground truth", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
@@ -3154,7 +3156,9 @@ describe("forge handlers", () => {
     const { handlers, repository, dispose } = await setupHandlers({ promptRuntime });
 
     try {
-      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-angles-models.pdf"));
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-angles-models.pdf"),
+      );
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
           { text: "ground truth", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
@@ -3186,7 +3190,9 @@ describe("forge handlers", () => {
     const { handlers, repository, dispose } = await setupHandlers({ promptRuntime });
 
     try {
-      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-angles-fail.pdf"));
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-angles-fail.pdf"),
+      );
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
           { text: "ground truth", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },
@@ -3228,7 +3234,9 @@ describe("forge handlers", () => {
     const { handlers, repository, dispose } = await setupHandlers({ promptRuntime });
 
     try {
-      const created = await Effect.runPromise(createPdfSession(handlers, "/tmp/forge-angles-get.pdf"));
+      const created = await Effect.runPromise(
+        createPdfSession(handlers, "/tmp/forge-angles-get.pdf"),
+      );
       await Effect.runPromise(
         repository.saveChunks(created.session.id, [
           { text: "ground truth", sequenceOrder: 0, pageBoundaries: [{ offset: 0, page: 1 }] },

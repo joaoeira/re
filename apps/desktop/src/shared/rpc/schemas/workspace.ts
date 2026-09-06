@@ -4,7 +4,7 @@ import {
   DeckFileNotFound,
   DeckFileOperationError,
   InvalidDeckPath,
-} from "@simbyotic/re-workspace";
+} from "@simbyotic/re/workspace";
 
 export class WorkspaceRootPathNotConfiguredError extends Schema.TaggedError<WorkspaceRootPathNotConfiguredError>(
   "@re/desktop/rpc/WorkspaceRootPathNotConfiguredError",

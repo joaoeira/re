@@ -6,7 +6,7 @@ import { Cause, Effect, Exit } from "effect";
 import type { IpcMainHandle } from "electron-effect-rpc/types";
 import { describe, expect, it, vi } from "vitest";
 
-import { parseFile } from "@simbyotic/re-core";
+import { parseFile } from "@simbyotic/re/core";
 import type { AppContract } from "@shared/rpc/contracts";
 
 import { createHandlersWithOverrides } from "./helpers";

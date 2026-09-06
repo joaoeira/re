@@ -1,49 +1,44 @@
-# Releasing the shared libraries
+# Releasing @simbyotic/re
 
-The public npm packages are `@simbyotic/re-core`, `@simbyotic/re-item-types`,
-`@simbyotic/re-scheduler`, and `@simbyotic/re-workspace`. They share one version through
-Changesets' fixed group. The authenticated npm account is `simbyotic`; npm's `@re` scope
-is already in use, and npm reported that the `joaoeira` organization name is unavailable.
+`@simbyotic/re` is the single public npm package. Its `core`, `item-types`, `scheduler`, and `workspace` subpath exports share one version and changelog. Both apps depend on that one version.
 
 ## Record and prepare a release
 
-For a public behavior change, run `bun run changeset` and commit the generated release note
-with the implementation. Describe the effect on callers, including migration instructions
-for breaking changes. Use patch for compatible fixes, minor for compatible additions,
-and major for breaking changes once the packages reach 1.0. Before 1.0, use a minor bump
-for breaking changes and state that explicitly in the release note.
+Run `bun run changeset` for changes to public behavior. Select `@simbyotic/re`, choose the version bump, and describe the effect on callers. Commit the generated release note with the implementation. Use patch for compatible fixes and minor for compatible additions. Before 1.0, use a minor bump for breaking changes and include migration instructions; after 1.0, breaking changes require a major bump.
 
-Run `bun run release:version` to consume pending changesets, version all four libraries,
-generate package changelogs, and refresh `bun.lock`. While the apps remain in this repository,
-the command also updates their exact library dependency versions so Bun continues linking
-the workspace packages. It does not change the apps' versions or publish them.
+Run `bun run release:version` to consume pending changesets, update the package version and changelog, and refresh `bun.lock`. While the apps remain in this repository, it also updates their single exact `@simbyotic/re` dependency. It does not version or publish the apps.
 
-Review and commit those changes on `master`, then verify the release:
+Review and commit the result on `master`, then verify:
 
 ```bash
 bun install --frozen-lockfile
-bun run --filter '@simbyotic/re-*' test
-bun run --filter '@simbyotic/re-*' typecheck
+bun run --filter '@simbyotic/re' test
+bun run --filter '@simbyotic/re' typecheck
 bun run release:check
 bun run test:release
 bun run release:dry-run
 ```
 
-`release:check` makes a clean library build and packs the four archives once. It installs
-those exact files into external npm consumers, checks both TypeScript resolution modes,
-and executes ESM and CommonJS consumers. It writes the archives and `release.json` to
-`dist/library-release/`, including their SHA-512 integrity values and source commit.
-A dry run uploads nothing. Real publishing rejects changed archives, uncommitted source,
-a different checkout commit, and inconsistent versions or package identities.
+`release:check` makes a clean build and packs one archive. It installs that exact archive into external npm consumers, checks NodeNext and bundler TypeScript resolution, and executes ESM and CommonJS consumers. One consumer has no `@effect/platform` installation, verifying that core and scheduling remain usable without the optional workspace peer.
 
-## First publication and npm setup
+The archive and `release.json` are written to `dist/library-release/` with SHA-512 integrity and the source commit. Publishing rejects changed archives, uncommitted source, a different checkout commit, and inconsistent package identities or versions.
 
-Use Node 24 and npm 11.5.1 or newer. Authenticate as `simbyotic` with `npm login`, then
-publish the already verified archives with `bun run release:publish`. npm may require
-interactive two-factor authorization. Do not paste credentials into repository files.
+## Publish
 
-Trusted publishing requires each package to exist first. After the initial publication,
-configure each package's npm Trusted Publisher with:
+After the version commit is on `master`, create and push an annotated tag matching the package version. For version 0.2.1:
+
+```bash
+git tag -a re-v0.2.1 -m 'Release @simbyotic/re 0.2.1'
+git push origin master re-v0.2.1
+```
+
+`.github/workflows/library-release.yml` runs the tests, typechecks, external-consumer checks, release-tool tests, and a publish dry run. Its publish job downloads the verified archive and publishes it without rebuilding or repacking. A manual workflow dispatch runs verification only.
+
+If a publish job fails after uploading, rerun that failed job. It accepts an existing version only if npm's integrity matches the verified archive. A conflicting version fails. Do not move release tags or reuse a version for changed content.
+
+## Trusted publishing setup
+
+The npm Trusted Publisher for `@simbyotic/re` uses:
 
 | Field                | Value                 |
 | -------------------- | --------------------- |
@@ -54,37 +49,8 @@ configure each package's npm Trusted Publisher with:
 | Environment          | `npm`                 |
 | Permission           | Publish               |
 
-After configuring all four packages, set the GitHub repository Actions variable
-`NPM_TRUSTED_PUBLISHING` to `true`. Until then, release tags run verification and retain
-the artifacts, but skip automatic publication. This supports the first-publication bootstrap.
+The repository Actions variable `NPM_TRUSTED_PUBLISHING=true` enables the publish job. The workflow uses GitHub OIDC and requires no long-lived npm write token. The public repository metadata lets npm attach provenance to CI publications.
 
-The npm account must have two-factor authentication enabled. The workflow uses GitHub's
-OIDC identity; it does not need a long-lived npm write token. The package repository metadata
-points to this public repository so npm can attach provenance when publishing through CI.
-See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) and
-[npm trust](https://docs.npmjs.com/cli/v11/commands/npm-trust/).
+A new package must exist before configuring its Trusted Publisher. For initial setup, leave the gate disabled, download the verified tag workflow artifact into `dist/library-release/` in a clean checkout of that tag, authenticate as `simbyotic` with `npm login`, and run `bun run release:publish`. Use Node 24 and npm 11.5.1 or newer. Complete npm's two-factor authorization when prompted, configure the Trusted Publisher, then enable the gate.
 
-## Publish subsequent releases
-
-After the version commit is on `master`, create and push an annotated tag matching all
-four package versions. For version 0.1.1, for example:
-
-```bash
-git tag -a libraries-v0.1.1 -m 'Release libraries 0.1.1'
-git push origin master libraries-v0.1.1
-```
-
-The tag starts `.github/workflows/library-release.yml`. Verification runs library tests,
-typechecks, external-consumer checks, release-tool tests, and a publish dry run. The publish
-job downloads the verified artifacts and publishes them in dependency order: core, item-types,
-scheduler, workspace. It never rebuilds or repacks them. A manually dispatched workflow runs
-verification only and does not publish.
-
-npm cannot atomically publish four packages. If publication stops midway, rerun the failed
-publish job so it reuses the same verified artifact. The publisher checks every existing
-version before writing anything and skips it only when its registry integrity matches the
-archive. A conflicting existing version fails the release. Do not move an existing release
-tag or overwrite a package version; prepare a new version when content must change.
-
-The apps adopt releases through explicit dependency updates and their own CI. Moving those
-apps into separate repositories and removing their temporary vendor archives is a separate step.
+See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) and [npm trust](https://docs.npmjs.com/cli/v11/commands/npm-trust/).

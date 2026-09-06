@@ -1,11 +1,11 @@
 import { describe, expect, it } from "@effect/vitest";
-import type { ItemMetadata, EvaluableItemType } from "@simbyotic/re-core";
+import type { ItemMetadata, EvaluableItemType } from "@simbyotic/re/core";
 import {
   DeckNotFound,
   type DeckEntry,
   type ItemValidationError,
   type WriteError,
-} from "@simbyotic/re-workspace";
+} from "@simbyotic/re/workspace";
 import { Effect, Layer } from "effect";
 
 import {

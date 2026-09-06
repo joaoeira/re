@@ -20,8 +20,8 @@ import {
   type ItemType,
   type ParsedFile,
   type ResponseValidationError,
-} from "@simbyotic/re-core";
-import { ClozeType, QAType } from "@simbyotic/re-item-types";
+} from "@simbyotic/re/core";
+import { ClozeType, QAType } from "@simbyotic/re/item-types";
 import {
   Scheduler,
   SchedulerLive,
@@ -33,12 +33,12 @@ import {
   type ScheduleResult,
   type SchedulerConfigError,
   type FSRSOptions,
-} from "@simbyotic/re-scheduler";
+} from "@simbyotic/re/scheduler";
 
 for (const name of ["core", "item-types", "scheduler"]) {
   assert.equal(
-    fileURLToPath(import.meta.resolve(`@simbyotic/re-${name}`)),
-    path.resolve("node_modules/@simbyotic", `re-${name}`, "dist/index.js"),
+    fileURLToPath(import.meta.resolve(`@simbyotic/re/${name}`)),
+    path.resolve("node_modules/@simbyotic/re/dist", name, "index.js"),
   );
 }
 

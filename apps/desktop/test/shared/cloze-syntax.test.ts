@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { nextClozeDeletionIndex, parseClozeDeletions, replaceClozeDeletions } from "@simbyotic/re-core";
+import {
+  nextClozeDeletionIndex,
+  parseClozeDeletions,
+  replaceClozeDeletions,
+} from "@simbyotic/re/core";
 
 describe("shared cloze syntax helpers", () => {
   it("computes next index from open cloze markers while typing", () => {

@@ -237,7 +237,7 @@ Put domain error-to-message logic next to domain error definitions and export re
 
 - settings: `@shared/settings` (`toSettingsErrorMessage`, `mapSettingsErrorToError`)
 - secrets: `@shared/secrets` (`toSecretStoreErrorMessage`, `mapSecretStoreErrorToError`)
-- workspace scan/snapshot: `@simbyotic/re-workspace` (`toScanDecksErrorMessage`, `mapScanDecksErrorToError`)
+- workspace scan/snapshot: `@simbyotic/re/workspace` (`toScanDecksErrorMessage`, `mapScanDecksErrorToError`)
 
 Do not duplicate formatter `switch` statements across hooks.
 

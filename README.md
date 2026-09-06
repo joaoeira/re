@@ -42,14 +42,14 @@ The timestamps must either both be present or both be omitted.
 ## Installation
 
 ```bash
-bun add @simbyotic/re-core
+bun add @simbyotic/re effect
 ```
 
 ## Usage
 
 ```typescript
 import { Effect } from "effect";
-import { parseFile, serializeFile, createMetadata, State } from "@simbyotic/re-core";
+import { parseFile, serializeFile, createMetadata, State } from "@simbyotic/re/core";
 
 // Parse a file
 const content = await Bun.file("cards.md").text();
@@ -174,7 +174,7 @@ This parses as one item with two cards sharing the same content.
 All parse errors are tagged for pattern matching:
 
 ```typescript
-import { ParseError, InvalidMetadataFormat, InvalidFieldValue } from "@simbyotic/re-core";
+import { ParseError, InvalidMetadataFormat, InvalidFieldValue } from "@simbyotic/re/core";
 
 Effect.runSync(
   parseFile(content).pipe(
@@ -209,26 +209,26 @@ For typical review sessions (< 10k cards), full file writes on each card update 
 
 ## Development
 
-Library entry points resolve to built ESM JavaScript and TypeScript declarations in each
-package's `dist/` directory. `bun install` builds them during repository preparation; app
+The `@simbyotic/re` subpath exports resolve to built ESM JavaScript and TypeScript declarations
+in `packages/re/dist/`. `bun install` builds them during repository preparation; app
 development, test, and typecheck scripts also build their library dependencies first.
 
 ```bash
-bun run build:libraries               # Incremental builds in dependency order
-bun run watch:libraries               # Run alongside an app for library development
-bun run pack:libraries                # Clean build and inspected .tgz files in dist/packages/
+bun run build:library               # Incremental library build
+bun run watch:library               # Run alongside an app for library development
+bun run pack:library                # Clean build and inspected .tgz archive in dist/packages/
 bun run check:packages                # Build, pack, install outside the workspace, compile, run
 bun run check:raycast                 # Install, test, and build Raycast outside the workspace
 bun run check:desktop                 # Verify standalone desktop installation, tests, and packaging
 ```
 
-Use `pack:libraries` to produce installable archives with resolved workspace dependency
-versions. Packages include declaration maps and their sources for editor navigation.
+Use `pack:library` to produce one installable archive. The package includes declaration maps
+and sources for editor navigation.
 
-`check:packages` installs those archives into separate temporary directories, checks TypeScript
+`check:packages` installs that archive into separate temporary directories, checks TypeScript
 declarations, and runs ESM and CommonJS consumers against a newer compatible Effect version.
-The scheduler consumer uses `@simbyotic/re-core`, `@simbyotic/re-item-types`, and `@simbyotic/re-scheduler` and rejects
-workspace and filesystem platform dependencies. The complete workspace consumer also exercises
+The scheduler consumer uses `@simbyotic/re/core`, `@simbyotic/re/item-types`, and `@simbyotic/re/scheduler` and rejects
+filesystem platform dependencies. The complete workspace consumer also exercises
 deck persistence, discovery, snapshots, and review queues. Both reject duplicate Effect installations.
 It requires Node/npm, Bun, `tar`, and registry access; temporary files are removed afterward.
 To reproduce a specific dependency combination, set `RE_CONSUMER_EFFECT_VERSION=3.19.19`.
@@ -239,7 +239,7 @@ bun run test                         # Run tests in all packages
 bun run typecheck                    # Type check all packages
 
 # Or run commands in a specific package
-cd packages/core
+cd packages/re
 bun run test        # Run tests
 bun run test:watch  # Watch mode
 bun run bench       # Run benchmarks
@@ -248,6 +248,6 @@ bun run typecheck   # Type check
 
 ## Library releases
 
-The four shared libraries are released together as `@simbyotic/re-*`. See the
+The shared modules are released as one package, `@simbyotic/re`. See the
 [library release guide](docs/library-releases.md) for Changesets, verified archives,
 and npm publishing.

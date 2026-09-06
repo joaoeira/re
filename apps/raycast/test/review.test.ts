@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { createMetadataWithId, type ItemId } from "@simbyotic/re-core";
+import { createMetadataWithId, type ItemId } from "@simbyotic/re/core";
 import { Effect, Layer } from "effect";
 
 import {

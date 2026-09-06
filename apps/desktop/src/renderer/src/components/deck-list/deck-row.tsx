@@ -4,7 +4,7 @@ import { useSelector } from "@xstate/store-react";
 import { useDeckListStore, useDeckSelectionStore } from "@shared/state/stores-context";
 import { cn } from "@shared/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { DeckTreeNode } from "@simbyotic/re-workspace";
+import type { DeckTreeNode } from "@simbyotic/re/workspace";
 import { DeckInlineMetrics } from "./deck-inline-metrics";
 
 type DeckRowProps = {

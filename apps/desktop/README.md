@@ -1,6 +1,6 @@
 # @re/desktop
 
-Electron desktop app for **re**, a spaced repetition flashcard system backed by plain markdown files. The app provides deck management, FSRS-based review sessions, an AI card generation pipeline (Forge), a rich card editor, and review analytics. It sits on top of `@simbyotic/re-core` (card format) and `@simbyotic/re-workspace` (workspace scanning), with an Effect-based main process and a React renderer connected through typed IPC contracts.
+Electron desktop app for **re**, a spaced repetition flashcard system backed by plain markdown files. The app provides deck management, FSRS-based review sessions, an AI card generation pipeline (Forge), a rich card editor, and review analytics. It sits on top of `@simbyotic/re/core` (card format) and `@simbyotic/re/workspace` (workspace scanning), with an Effect-based main process and a React renderer connected through typed IPC contracts.
 
 ## Features
 
@@ -132,7 +132,7 @@ and relaunches the previous version.
 While the app remains in this monorepo, use `bun run desktop:dev`, `desktop:test`,
 `desktop:typecheck`, `desktop:build`, `desktop:package`, or `desktop:install` from the root.
 These wrappers build the shared libraries before invoking the app's own commands.
-Run `bun run watch:libraries` alongside development when editing library source.
+Run `bun run watch:library` alongside development when editing library source.
 
 `bun run check:desktop` installs an isolated copy outside the workspace, verifies native
 SQLite, runs unit and browser tests, builds platform installers, and smoke-tests the packaged payload. To retain a standalone
@@ -191,4 +191,4 @@ Both main and editor windows run with `contextIsolation: true`, `sandbox: true`,
 
 ## Card format
 
-This app reads and writes the markdown card format defined by `@simbyotic/re-core`. The installed `@simbyotic/re-core` package includes the card format documentation in its README.
+This app reads and writes the markdown card format defined by `@simbyotic/re/core`. The installed `@simbyotic/re` package includes the card format documentation in `docs/core.md`.

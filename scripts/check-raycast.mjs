@@ -13,7 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { packLibraries, repoRoot, run } from "./pack-libraries.mjs";
+import { packageName, packLibrary, repoRoot, run } from "./pack-library.mjs";
 
 const args = process.argv.slice(2);
 assert.ok(
@@ -54,24 +54,22 @@ try {
     await copyFile(source, target);
   }
 
-  const archives = await packLibraries(path.join(app, "vendor"));
+  const archive = await packLibrary(path.join(app, "vendor"));
   const manifestPath = path.join(app, "package.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  for (const [name, archive] of Object.entries(archives)) {
-    const library = JSON.parse(await run("tar", ["-xOf", archive, "package/package.json"]));
-    assert.equal(
-      manifest.dependencies[name],
-      library.version,
-      `${name} must declare the version delivered by this export`,
-    );
-    manifest.dependencies[name] = `file:vendor/${path.basename(archive)}`;
-  }
+  const library = JSON.parse(await run("tar", ["-xOf", archive, "package/package.json"]));
+  assert.equal(
+    manifest.dependencies[packageName],
+    library.version,
+    `${packageName} must declare the version delivered by this export`,
+  );
+  manifest.dependencies[packageName] = `file:vendor/${path.basename(archive)}`;
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
   const env = { ...process.env };
   delete env.NODE_PATH;
   delete env.NODE_OPTIONS;
-  console.log("Installing Raycast and its library archives outside the monorepo...");
+  console.log("Installing Raycast and its library archive outside the monorepo...");
   console.log(
     await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], app, env),
   );
@@ -90,7 +88,7 @@ try {
       );
     }
   }
-  for (const name of Object.keys(archives)) {
+  for (const name of [packageName]) {
     const installed = path.join(app, "node_modules", name);
     assert.equal(await realpath(installed), installed, `${name} must be installed, not linked`);
   }

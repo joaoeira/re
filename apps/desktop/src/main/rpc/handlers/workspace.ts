@@ -1,13 +1,13 @@
 import path from "node:path";
 
-import { parseFile } from "@simbyotic/re-core";
+import { parseFile } from "@simbyotic/re/core";
 import {
   DeckFileOperationError,
   DeckManager,
   InvalidDeckPath,
   scanDecks,
   snapshotWorkspace,
-} from "@simbyotic/re-workspace";
+} from "@simbyotic/re/workspace";
 import { Effect } from "effect";
 import type { FileSystem, Path } from "@effect/platform";
 import type { Implementations } from "electron-effect-rpc/types";

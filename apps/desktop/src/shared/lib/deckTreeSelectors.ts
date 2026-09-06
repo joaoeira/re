@@ -1,4 +1,4 @@
-import { buildDeckTree } from "@simbyotic/re-workspace";
+import { buildDeckTree } from "@simbyotic/re/workspace";
 
 export type CheckedState = boolean | "indeterminate";
 

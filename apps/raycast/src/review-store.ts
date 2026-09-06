@@ -6,21 +6,21 @@ import {
   type Item,
   type ItemMetadata,
   type EvaluableItemType,
-} from "@simbyotic/re-core";
+} from "@simbyotic/re/core";
 import {
   ClozeType,
   QAType,
   annotateBuiltinCardKeys,
   resolveBuiltinCard,
-} from "@simbyotic/re-item-types";
-import { Scheduler, type FSRSGrade } from "@simbyotic/re-scheduler";
+} from "@simbyotic/re/item-types";
+import { Scheduler, type FSRSGrade } from "@simbyotic/re/scheduler";
 import {
   DeckManager,
   ReviewQueueBuilder,
   snapshotWorkspace,
   toScanDecksErrorMessage,
   type RemovedDeckItem,
-} from "@simbyotic/re-workspace";
+} from "@simbyotic/re/workspace";
 import { Context, Data, Effect, Layer, Option } from "effect";
 
 import { prepareMarkdownForRaycast } from "./raycast-markdown";

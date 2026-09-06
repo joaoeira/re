@@ -1,0 +1,539 @@
+import { Effect, Option } from "effect";
+import { describe, it, assert } from "@effect/vitest";
+import { ClozeType } from "../../src/item-types/cloze";
+import { ContentParseError } from "../../src/core/index.js";
+
+describe("ClozeType", () => {
+  describe("parse", () => {
+    it.scoped("parses single cloze deletion", () =>
+      Effect.gen(function* () {
+        const content = "The {{c1::capital}} of France is Paris.";
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.text, content);
+        assert.strictEqual(result.deletions.length, 1);
+        assert.strictEqual(result.deletions[0]!.index, 1);
+        assert.strictEqual(result.deletions[0]!.hidden, "capital");
+      }),
+    );
+
+    it.scoped("parses multiple cloze deletions", () =>
+      Effect.gen(function* () {
+        const content = "The {{c1::capital}} of {{c2::France}} is Paris.";
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.deletions.length, 2);
+        assert.strictEqual(result.deletions[0]!.index, 1);
+        assert.strictEqual(result.deletions[0]!.hidden, "capital");
+        assert.strictEqual(result.deletions[1]!.index, 2);
+        assert.strictEqual(result.deletions[1]!.hidden, "France");
+      }),
+    );
+
+    it.scoped("sorts deletions by index", () =>
+      Effect.gen(function* () {
+        const content = "{{c3::third}} {{c1::first}} {{c2::second}}";
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.deletions[0]!.index, 1);
+        assert.strictEqual(result.deletions[0]!.hidden, "first");
+        assert.strictEqual(result.deletions[1]!.index, 2);
+        assert.strictEqual(result.deletions[1]!.hidden, "second");
+        assert.strictEqual(result.deletions[2]!.index, 3);
+        assert.strictEqual(result.deletions[2]!.hidden, "third");
+      }),
+    );
+
+    it.scoped("captures start and end positions", () =>
+      Effect.gen(function* () {
+        const content = "The {{c1::capital}} of France.";
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.deletions[0]!.start, 4);
+        assert.strictEqual(result.deletions[0]!.end, 19);
+      }),
+    );
+
+    it.scoped("fails when no cloze deletions found", () =>
+      Effect.gen(function* () {
+        const content = "This is plain text without any cloze deletions.";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.ok(error instanceof ContentParseError);
+        assert.strictEqual(error.type, "cloze");
+        assert.ok(error.message.includes("No cloze deletions"));
+        assert.strictEqual(error.reason, undefined);
+      }),
+    );
+
+    it.scoped("does not treat arbitrary {{...}} text as a cloze syntax error", () =>
+      Effect.gen(function* () {
+        const content = "See {{capital}} of France.";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.ok(error instanceof ContentParseError);
+        assert.ok(error.message.includes("No cloze deletions"));
+        assert.strictEqual(error.reason, undefined);
+      }),
+    );
+
+    it.scoped("fails on an unclosed cloze with structured diagnostics", () =>
+      Effect.gen(function* () {
+        const content = "start {{c3::unfinished";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.ok(error instanceof ContentParseError);
+        assert.strictEqual(error.reason, "unclosed");
+        assert.strictEqual(error.start, content.indexOf("{{c3::"));
+        assert.strictEqual(error.end, content.length);
+        assert.strictEqual(error.fragment, "{{c3::unfinished");
+        assert.ok(error.message.includes("Unclosed cloze deletion"));
+        assert.strictEqual(error.issues?.[0]?.reason, "unclosed");
+      }),
+    );
+
+    it.scoped("fails on a missing index", () =>
+      Effect.gen(function* () {
+        const content = "{{c::answer}}";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.strictEqual(error.reason, "missing_index");
+        assert.strictEqual(error.start, 0);
+        assert.strictEqual(error.fragment, "{{c::");
+      }),
+    );
+
+    it.scoped("fails on a malformed index", () =>
+      Effect.gen(function* () {
+        const content = "{{c1a::answer}}";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.strictEqual(error.reason, "malformed_index");
+        assert.strictEqual(error.start, 0);
+        assert.strictEqual(error.fragment, "{{c1a::");
+      }),
+    );
+
+    it.scoped("fails on a non-digit cloze index that includes ::", () =>
+      Effect.gen(function* () {
+        for (const content of ["{{c-1::answer}}", "{{cx::answer}}", "{{c_1::answer}}"]) {
+          const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+          assert.strictEqual(error.reason, "malformed_index");
+          assert.strictEqual(error.start, 0);
+          assert.ok(error.fragment?.endsWith("::"));
+        }
+      }),
+    );
+
+    it.scoped("fails on a missing :: separator", () =>
+      Effect.gen(function* () {
+        const content = "{{c1:answer}}";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.strictEqual(error.reason, "missing_separator");
+        assert.strictEqual(error.start, 0);
+        assert.strictEqual(error.fragment, "{{c1:");
+      }),
+    );
+
+    it.scoped("fails on unbalanced braces inside a cloze", () =>
+      Effect.gen(function* () {
+        const content = "{{c1::a}b}}";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.strictEqual(error.reason, "unbalanced_braces");
+        assert.strictEqual(error.start, 0);
+        assert.strictEqual(error.fragment, "{{c1::a}");
+      }),
+    );
+
+    it.scoped("fails when a malformed cloze appears next to a valid cloze", () =>
+      Effect.gen(function* () {
+        const content = "The {{c1::Paris}} is {{c2::unfinished";
+        const error = yield* ClozeType.parse(content).pipe(Effect.flip);
+
+        assert.strictEqual(error.reason, "unclosed");
+        assert.strictEqual(error.start, content.indexOf("{{c2::"));
+        assert.ok(error.fragment?.includes("{{c2::unfinished"));
+      }),
+    );
+
+    it.scoped("allows index zero", () =>
+      Effect.gen(function* () {
+        const result = yield* ClozeType.parse("The {{c0::answer}}.");
+
+        assert.strictEqual(result.deletions[0]!.index, 0);
+        assert.strictEqual(result.deletions[0]!.hidden, "answer");
+      }),
+    );
+
+    it.scoped("allows duplicate cloze indices", () =>
+      Effect.gen(function* () {
+        const content = "{{c1::first}} and {{c1::second}}";
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.deletions.length, 2);
+        assert.strictEqual(result.deletions[0]!.index, 1);
+        assert.strictEqual(result.deletions[1]!.index, 1);
+      }),
+    );
+
+    it.scoped("handles empty hidden text", () =>
+      Effect.gen(function* () {
+        const content = "Fill in: {{c1::}}";
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.deletions[0]!.hidden, "");
+      }),
+    );
+
+    it.scoped("handles multi-line content", () =>
+      Effect.gen(function* () {
+        const content = `Line 1: {{c1::answer1}}
+Line 2: {{c2::answer2}}`;
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.deletions.length, 2);
+      }),
+    );
+
+    it.scoped("parses cloze deletion with hint", () =>
+      Effect.gen(function* () {
+        const content = "The {{c1::Paris::capital city}} is beautiful.";
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.deletions.length, 1);
+        assert.strictEqual(result.deletions[0]!.index, 1);
+        assert.strictEqual(result.deletions[0]!.hidden, "Paris");
+        assert.ok(Option.isSome(result.deletions[0]!.hint));
+        assert.strictEqual(Option.getOrNull(result.deletions[0]!.hint), "capital city");
+      }),
+    );
+
+    it.scoped("parses cloze without hint as Option.none", () =>
+      Effect.gen(function* () {
+        const content = "The {{c1::capital}} of France.";
+        const result = yield* ClozeType.parse(content);
+
+        assert.ok(Option.isNone(result.deletions[0]!.hint));
+      }),
+    );
+
+    it.scoped("treats empty hint as Option.none", () =>
+      Effect.gen(function* () {
+        const content = "The {{c1::Paris::}} is beautiful.";
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.deletions[0]!.hidden, "Paris");
+        assert.ok(Option.isNone(result.deletions[0]!.hint));
+      }),
+    );
+
+    it.scoped("parses mixed clozes with and without hints", () =>
+      Effect.gen(function* () {
+        const content = "{{c1::Paris::capital}} of {{c2::France}}";
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.deletions.length, 2);
+        assert.ok(Option.isSome(result.deletions[0]!.hint));
+        assert.strictEqual(Option.getOrNull(result.deletions[0]!.hint), "capital");
+        assert.ok(Option.isNone(result.deletions[1]!.hint));
+      }),
+    );
+
+    it.scoped("parses content containing markdown images without interpreting them", () =>
+      Effect.gen(function* () {
+        const content = `![Mitochondrion](../../.re/assets/mitochondrion.png)
+The {{c1::mitochondrion}} produces ATP.`;
+        const result = yield* ClozeType.parse(content);
+
+        assert.strictEqual(result.text, content);
+        assert.strictEqual(result.deletions.length, 1);
+        assert.strictEqual(result.deletions[0]!.hidden, "mitochondrion");
+      }),
+    );
+  });
+
+  describe("cards", () => {
+    it.effect("returns one card per deletion", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("{{c1::a}} and {{c2::b}} and {{c3::c}}");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 3);
+      }),
+    );
+
+    it.effect("card order matches cloze index order", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("{{c3::third}} {{c1::first}} {{c2::second}}");
+        const cards = ClozeType.cards(content);
+
+        // Cards should be ordered by index (c1, c2, c3)
+        assert.ok(cards[0]!.prompt.includes("**[...]**")); // c1 hidden
+        assert.ok(cards[0]!.prompt.includes("second")); // c2 visible
+        assert.ok(cards[0]!.prompt.includes("third")); // c3 visible
+      }),
+    );
+
+    it.effect("duplicate indices share a single card", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("{{c1::first}} and {{c1::second}}");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "**[...]** and **[...]**");
+        assert.strictEqual(cards[0]!.reveal, "**first** and **second**");
+      }),
+    );
+
+    it.effect("prompt hides target and shows others", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("The {{c1::capital}} of {{c2::France}} is Paris.");
+        const cards = ClozeType.cards(content);
+
+        // Card 0 (c1): capital hidden, France visible
+        assert.strictEqual(cards[0]!.prompt, "The **[...]** of France is Paris.");
+
+        // Card 1 (c2): capital visible, France hidden
+        assert.strictEqual(cards[1]!.prompt, "The capital of **[...]** is Paris.");
+      }),
+    );
+
+    it.effect("reveal bolds the target cloze for each card", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("The {{c1::capital}} of {{c2::France}} is Paris.");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards[0]!.reveal, "The **capital** of France is Paris.");
+        assert.strictEqual(cards[1]!.reveal, "The capital of **France** is Paris.");
+      }),
+    );
+
+    it.effect("card grade function returns response unchanged", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("{{c1::test}}");
+        const cards = ClozeType.cards(content);
+        const card = cards[0]!;
+
+        const grade2 = yield* card.grade(2);
+        assert.strictEqual(grade2, 2);
+      }),
+    );
+
+    it.effect("single deletion card", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("The answer is {{c1::42}}.");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "The answer is **[...]**.");
+        assert.strictEqual(cards[0]!.reveal, "The answer is **42**.");
+      }),
+    );
+
+    it.effect("prompt shows hint instead of [...] when provided", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("The {{c1::Paris::capital city}} is beautiful.");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "The **[capital city]** is beautiful.");
+        assert.strictEqual(cards[0]!.reveal, "The **Paris** is beautiful.");
+      }),
+    );
+
+    it.effect("mixed hints and no hints in same content", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("{{c1::Paris::capital}} of {{c2::France}}");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 2);
+        // Card 0 (c1): shows [capital] for Paris, France visible
+        assert.strictEqual(cards[0]!.prompt, "**[capital]** of France");
+        // Card 1 (c2): Paris visible, shows [...] for France
+        assert.strictEqual(cards[1]!.prompt, "Paris of **[...]**");
+      }),
+    );
+
+    it.effect("reveal strips hints and bolds target cloze", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse(
+          "The {{c1::capital::hint1}} of {{c2::France::hint2}} is Paris.",
+        );
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards[0]!.reveal, "The **capital** of France is Paris.");
+        assert.strictEqual(cards[1]!.reveal, "The capital of **France** is Paris.");
+      }),
+    );
+
+    it.effect("duplicate indices with hints share a single card", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("{{c1::first::hint1}} and {{c1::second::hint2}}");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "**[hint1]** and **[hint2]**");
+        assert.strictEqual(cards[0]!.reveal, "**first** and **second**");
+      }),
+    );
+
+    it.effect("cards preserve markdown image syntax while transforming cloze text", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse(`![Mitochondrion](../../.re/assets/mitochondrion.png)
+The {{c1::mitochondrion}} produces ATP.`);
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(
+          cards[0]!.prompt,
+          "![Mitochondrion](../../.re/assets/mitochondrion.png)\nThe **[...]** produces ATP.",
+        );
+        assert.strictEqual(
+          cards[0]!.reveal,
+          "![Mitochondrion](../../.re/assets/mitochondrion.png)\nThe **mitochondrion** produces ATP.",
+        );
+      }),
+    );
+  });
+
+  describe("cards with LaTeX", () => {
+    it.effect("cloze inside inline math produces LaTeX prompt placeholder", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("$E = {{c1::mc^2}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "$E = \\text{[\\ldots]}$");
+        assert.strictEqual(cards[0]!.reveal, "$E = \\boldsymbol{mc^2}$");
+      }),
+    );
+
+    it.effect("cloze inside display math produces LaTeX prompt placeholder", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("$$E = {{c1::mc^2}}$$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "$$E = \\text{[\\ldots]}$$");
+        assert.strictEqual(cards[0]!.reveal, "$$E = \\boldsymbol{mc^2}$$");
+      }),
+    );
+
+    it.effect("cloze with braces inside math", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("$E = {{c1::mc^{2}}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "$E = \\text{[\\ldots]}$");
+        assert.strictEqual(cards[0]!.reveal, "$E = \\boldsymbol{mc^{2}}$");
+      }),
+    );
+
+    it.effect("cloze with fraction inside math", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("$x = {{c1::\\frac{a}{b}}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "$x = \\text{[\\ldots]}$");
+        assert.strictEqual(cards[0]!.reveal, "$x = \\boldsymbol{\\frac{a}{b}}$");
+      }),
+    );
+
+    it.effect("cloze with hint inside math uses LaTeX hint", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("$F = {{c1::ma::Newton}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "$F = \\text{[Newton]}$");
+        assert.strictEqual(cards[0]!.reveal, "$F = \\boldsymbol{ma}$");
+      }),
+    );
+
+    it.effect("mixed math and non-math clozes in same content", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("The {{c1::energy}} equation is $E = {{c2::mc^2}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 2);
+
+        assert.strictEqual(cards[0]!.prompt, "The **[...]** equation is $E = mc^2$");
+        assert.strictEqual(cards[0]!.reveal, "The **energy** equation is $E = mc^2$");
+
+        assert.strictEqual(cards[1]!.prompt, "The energy equation is $E = \\text{[\\ldots]}$");
+        assert.strictEqual(cards[1]!.reveal, "The energy equation is $E = \\boldsymbol{mc^2}$");
+      }),
+    );
+
+    it.effect("multiple clozes inside same math expression", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("${{c1::a}} + {{c2::b}} = c$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 2);
+
+        assert.strictEqual(cards[0]!.prompt, "$\\text{[\\ldots]} + b = c$");
+        assert.strictEqual(cards[0]!.reveal, "$\\boldsymbol{a} + b = c$");
+
+        assert.strictEqual(cards[1]!.prompt, "$a + \\text{[\\ldots]} = c$");
+        assert.strictEqual(cards[1]!.reveal, "$a + \\boldsymbol{b} = c$");
+      }),
+    );
+
+    it.effect("cloze outside math still uses markdown bold", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("The answer is {{c1::42}}.");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards[0]!.prompt, "The answer is **[...]**.");
+        assert.strictEqual(cards[0]!.reveal, "The answer is **42**.");
+      }),
+    );
+
+    it.effect("duplicate indices inside math share a single card", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("${{c1::x}} = {{c1::y}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "$\\text{[\\ldots]} = \\text{[\\ldots]}$");
+        assert.strictEqual(cards[0]!.reveal, "$\\boldsymbol{x} = \\boldsymbol{y}$");
+      }),
+    );
+
+    it.effect("hint with TeX-special characters is escaped in math prompt", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("$F = {{c1::ma::mass_1}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 1);
+        assert.strictEqual(cards[0]!.prompt, "$F = \\text{[mass\\_1]}$");
+        assert.strictEqual(cards[0]!.reveal, "$F = \\boldsymbol{ma}$");
+      }),
+    );
+
+    it.effect("reveal with \\frac stays in math mode (no \\textbf)", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("$x = {{c1::\\frac{a}{b}}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards[0]!.reveal, "$x = \\boldsymbol{\\frac{a}{b}}$");
+      }),
+    );
+
+    it.effect("cloze with $ in body does not poison math detection", () =>
+      Effect.gen(function* () {
+        const content = yield* ClozeType.parse("Price is {{c1::$5}} and $x = {{c2::2}}$");
+        const cards = ClozeType.cards(content);
+
+        assert.strictEqual(cards.length, 2);
+        assert.strictEqual(cards[0]!.prompt, "Price is **[...]** and $x = 2$");
+        assert.strictEqual(cards[1]!.prompt, "Price is $5 and $x = \\text{[\\ldots]}$");
+      }),
+    );
+  });
+});

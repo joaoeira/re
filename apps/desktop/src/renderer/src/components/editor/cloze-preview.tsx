@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { parseClozeDeletions } from "@simbyotic/re-core";
+import { parseClozeDeletions } from "@simbyotic/re/core";
 
 type ClozePreviewProps = {
   readonly content: string;

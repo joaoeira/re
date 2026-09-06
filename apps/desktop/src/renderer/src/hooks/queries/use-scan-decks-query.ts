@@ -1,7 +1,7 @@
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
 
-import { mapScanDecksErrorToError } from "@simbyotic/re-workspace";
+import { mapScanDecksErrorToError } from "@simbyotic/re/workspace";
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";

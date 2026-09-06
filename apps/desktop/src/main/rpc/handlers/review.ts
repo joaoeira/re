@@ -6,9 +6,9 @@ import {
   resolveBuiltinCard,
   QAType,
   type QAContent,
-} from "@simbyotic/re-item-types";
-import { Scheduler } from "@simbyotic/re-scheduler";
-import { DeckManager, ReviewQueueBuilder, resolveDeckImagePath } from "@simbyotic/re-workspace";
+} from "@simbyotic/re/item-types";
+import { Scheduler } from "@simbyotic/re/scheduler";
+import { DeckManager, ReviewQueueBuilder, resolveDeckImagePath } from "@simbyotic/re/workspace";
 import { Path } from "@effect/platform";
 import type { FileSystem } from "@effect/platform";
 import { Effect, Exit } from "effect";

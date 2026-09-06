@@ -4,9 +4,9 @@ import {
   createMetadata,
   type ItemMetadata,
   type EvaluableItemType,
-} from "@simbyotic/re-core";
-import { ClozeType, QAType } from "@simbyotic/re-item-types";
-import { toScanDecksErrorMessage, type DeckEntry } from "@simbyotic/re-workspace";
+} from "@simbyotic/re/core";
+import { ClozeType, QAType } from "@simbyotic/re/item-types";
+import { toScanDecksErrorMessage, type DeckEntry } from "@simbyotic/re/workspace";
 import { Data, Effect } from "effect";
 
 import { DeckStore } from "./deck-store";

@@ -1,6 +1,6 @@
-import { adaptItemType, createMetadata } from "@simbyotic/re-core";
-import { ClozeType, QAType } from "@simbyotic/re-item-types";
-import { DeckManager } from "@simbyotic/re-workspace";
+import { adaptItemType, createMetadata } from "@simbyotic/re/core";
+import { ClozeType, QAType } from "@simbyotic/re/item-types";
+import { DeckManager } from "@simbyotic/re/workspace";
 import { Cause, Effect, Option } from "effect";
 import type { Implementations } from "electron-effect-rpc/types";
 

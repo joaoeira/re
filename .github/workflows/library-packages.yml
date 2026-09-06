@@ -44,8 +44,8 @@ jobs:
         with:
           bun-version: 1.2.21
       - run: bun install --frozen-lockfile
-      - run: bun run --filter '@simbyotic/re-core' --filter '@simbyotic/re-item-types' --filter '@simbyotic/re-scheduler' --filter '@simbyotic/re-workspace' test
-      - run: bun run --filter '@simbyotic/re-core' --filter '@simbyotic/re-item-types' --filter '@simbyotic/re-scheduler' --filter '@simbyotic/re-workspace' typecheck
+      - run: bun run --filter '@simbyotic/re' test
+      - run: bun run --filter '@simbyotic/re' typecheck
       - run: bun run check:packages
         env:
           RE_CONSUMER_EFFECT_VERSION: ${{ matrix.effect }}
