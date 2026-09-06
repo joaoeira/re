@@ -24,22 +24,19 @@ export interface ResolvedBuiltinItem extends ItemTypeMatch {
   readonly cards: readonly BuiltinCardSpec[];
 }
 
+const isBuiltinCardType = (name: string): name is BuiltinCardSpec["cardType"] =>
+  name === "qa" || name === "cloze";
+
 export const resolveBuiltinItem = (
   item: Item,
 ): Effect.Effect<ResolvedBuiltinItem, NoMatchingTypeError | ItemCardCountMismatch> =>
   matchItemTypes(builtinTypes, item).pipe(
-    Effect.flatMap(([match]) =>
-      Effect.gen(function* () {
-        const cards = yield* Effect.forEach(match.cards, (spec): Effect.Effect<BuiltinCardSpec> => {
-          const cardType = spec.cardType;
-          if (cardType !== "qa" && cardType !== "cloze") {
-            return Effect.dieMessage(`Unexpected built-in card type: ${cardType}`);
-          }
-          return Effect.succeed({ ...spec, cardType });
-        });
-        return { ...match, cards };
-      }),
-    ),
+    Effect.flatMap(([match]) => {
+      const cardType = match.type.name;
+      return isBuiltinCardType(cardType)
+        ? Effect.succeed({ ...match, cards: match.cards.map((spec) => ({ ...spec, cardType })) })
+        : Effect.dieMessage(`Unexpected built-in item type: ${cardType}`);
+    }),
   );
 
 export class BuiltinCardNotFound extends Data.TaggedError("BuiltinCardNotFound")<{

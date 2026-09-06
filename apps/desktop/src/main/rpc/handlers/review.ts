@@ -9,6 +9,7 @@ import {
   resolveDeckImagePath,
   prepareBuiltinReviewQueue,
   gradeBuiltinCard,
+  toReadErrorMessage,
 } from "@simbyotic/re/workspace";
 import { Path } from "@effect/platform";
 import type { FileSystem } from "@effect/platform";
@@ -376,7 +377,7 @@ export const createReviewHandlers = () =>
               message:
                 issue.kind === "card"
                   ? `Card ${issue.cardId}: ${issue.error.message}`
-                  : issue.error.message,
+                  : toReadErrorMessage(issue.error),
             })),
           };
         }).pipe(Effect.mapError((e) => new ReviewOperationError({ message: toErrorMessage(e) }))),
