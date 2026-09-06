@@ -2,6 +2,8 @@
 
 Metadata utilities for spaced repetition flashcard files. Parse, serialize, and manipulate markdown files with embedded scheduling metadata.
 
+The applications are [desktop](apps/desktop) and [Raycast](apps/raycast). The CLI application has been retired and removed from this repository.
+
 ## Format
 
 Cards are stored in markdown files with metadata in HTML comments:

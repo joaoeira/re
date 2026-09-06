@@ -22,8 +22,8 @@ Q&A generates the key `main`. Cloze generates keys from the actual deletion indi
 `c3`, etc.), preserving identity when another deletion is removed or the text is edited.
 
 Use `resolveBuiltinItem(item)` to interpret saved items. It checks generated card counts
-against the saved metadata, then prefers cloze when both cloze and Q&A fit. Desktop editing
-and review, CLI review, and Raycast review and editing use this same rule. Use `inferCards`
+against the saved metadata, then prefers cloze when both cloze and Q&A fit. Desktop and Raycast
+use this same rule for editing and review. Use `inferCards`
 from `@re/core` only for unsaved content that has no metadata count yet.
 
 Desktop can open a count-mismatched item using the first parseable type and offer an explicit
@@ -36,7 +36,7 @@ For a review queue, call `annotateBuiltinCardKeys(entries)`. It accepts entries 
 returns `{ items, errors }`, preserves valid entries' order and other fields, and adds a string `cardKey`.
 Unresolvable entries are excluded, with one error per invalid item containing an entry that identifies
 its location. It resolves each shared item snapshot
-once, even when its cards are interleaved in the queue. Desktop, CLI, and Raycast all use this helper;
+once, even when its cards are interleaved in the queue. Desktop and Raycast use this helper;
 it has no dependency on workspace queue types.
 Later, call `resolveBuiltinCard(currentItem, { cardId, cardKey })` before displaying or
 grading it. The result includes the selected `spec` and its metadata `card`, along with the
