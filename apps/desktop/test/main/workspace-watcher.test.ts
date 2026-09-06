@@ -12,6 +12,7 @@ const runtime = Runtime.defaultRuntime;
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+// start() forks watcher initialization; allow registration before exercising file events.
 const SETTLE_MS = 800;
 
 describe("workspace watcher", () => {
@@ -21,24 +22,25 @@ describe("workspace watcher", () => {
     try {
       await fs.writeFile(path.join(rootPath, "existing.md"), "# existing", "utf8");
 
-      const published = Deferred.unsafeMake<SnapshotWorkspaceResult>(FiberId.none);
+      let snapshot: SnapshotWorkspaceResult | undefined;
       const watcher = createWorkspaceWatcher({
-        publish: (snapshot) => Deferred.succeed(published, snapshot),
+        publish: (next) => {
+          snapshot = next;
+          return Effect.void;
+        },
         runtime,
       });
 
       watcher.start(rootPath);
+      await wait(SETTLE_MS);
 
       await fs.writeFile(path.join(rootPath, "new-deck.md"), "# new deck", "utf8");
 
-      const snapshot = await Effect.runPromise(
-        Deferred.await(published).pipe(Effect.timeout("5 seconds")),
-      );
-
-      expect(snapshot.rootPath).toBe(rootPath);
-      const deckNames = snapshot.decks.map((d) => d.name).sort();
-      expect(deckNames).toContain("existing");
-      expect(deckNames).toContain("new-deck");
+      // A buffered event for existing.md can publish before the new file's event.
+      await expect
+        .poll(() => snapshot?.decks.map((deck) => deck.name), { timeout: 5000 })
+        .toEqual(expect.arrayContaining(["existing", "new-deck"]));
+      expect(snapshot!.rootPath).toBe(rootPath);
 
       watcher.stop();
     } finally {
@@ -62,6 +64,7 @@ describe("workspace watcher", () => {
       });
 
       watcher.start(rootPath);
+      await wait(SETTLE_MS);
 
       await fs.writeFile(path.join(rootPath, "notes.txt"), "not a deck", "utf8");
       await fs.writeFile(path.join(rootPath, "image.png"), "fake image", "utf8");
@@ -99,6 +102,7 @@ describe("workspace watcher", () => {
       });
 
       watcher.start(rootPath);
+      await wait(SETTLE_MS);
 
       for (let i = 0; i < 5; i++) {
         await fs.writeFile(path.join(rootPath, `deck-${i}.md`), `# deck ${i}`, "utf8");
@@ -156,6 +160,7 @@ describe("workspace watcher", () => {
 
       watcher.start(rootA);
       watcher.start(rootB);
+      await wait(SETTLE_MS);
 
       await fs.writeFile(path.join(rootA, "a.md"), "# a", "utf8");
       await fs.writeFile(path.join(rootB, "b.md"), "# b", "utf8");
@@ -179,21 +184,21 @@ describe("workspace watcher", () => {
     try {
       await fs.writeFile(path.join(rootPath, "deck.md"), "# deck", "utf8");
 
-      const published = Deferred.unsafeMake<SnapshotWorkspaceResult>(FiberId.none);
+      let snapshot: SnapshotWorkspaceResult | undefined;
       const watcher = createWorkspaceWatcher({
-        publish: (snapshot) => Deferred.succeed(published, snapshot),
+        publish: (next) => {
+          snapshot = next;
+          return Effect.void;
+        },
         runtime,
       });
 
       watcher.start(rootPath);
+      await wait(SETTLE_MS);
 
       await fs.writeFile(path.join(rootPath, ".reignore"), "deck.md\n", "utf8");
 
-      const snapshot = await Effect.runPromise(
-        Deferred.await(published).pipe(Effect.timeout("5 seconds")),
-      );
-
-      expect(snapshot.decks).toHaveLength(0);
+      await expect.poll(() => snapshot?.decks, { timeout: 5000 }).toEqual([]);
 
       watcher.stop();
     } finally {
