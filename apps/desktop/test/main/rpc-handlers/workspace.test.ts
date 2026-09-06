@@ -342,7 +342,7 @@ Answer
     }
   });
 
-  it("renames a deck file through workspace handlers", async () => {
+  it("completes a deck rename to a new path", async () => {
     const rootPath = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-rename-deck-"));
     const workspacePath = path.join(rootPath, "workspace");
     const settingsFilePath = path.join(rootPath, "settings.json");
@@ -357,10 +357,17 @@ Answer
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath: workspacePath }));
 
       const result = await Effect.runPromise(
-        handlers.RenameDeck({
-          fromRelativePath,
-          toRelativePath,
-        }),
+        handlers
+          .RenameDeck({
+            fromRelativePath,
+            toRelativePath,
+          })
+          .pipe(
+            Effect.timeoutFail({
+              duration: "3 seconds",
+              onTimeout: () => new Error("Rename deadlocked while acquiring the deck locks."),
+            }),
+          ),
       );
 
       expect(result.absolutePath).toBe(path.join(workspacePath, toRelativePath));

@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import type { Implementations } from "electron-effect-rpc/types";
 
 import {
-  DeckWriteCoordinatorService,
+  GitSyncCoordinatorService,
   DuplicateIndexInvalidationService,
   SettingsRepositoryService,
 } from "@main/di";
@@ -19,7 +19,7 @@ type GitHandlerKeys = "GetGitSyncSnapshot" | "RunGitSync";
 export const createGitHandlers = () =>
   Effect.gen(function* () {
     const settingsRepository = yield* SettingsRepositoryService;
-    const mutationCoordinator = yield* DeckWriteCoordinatorService;
+    const gitSyncCoordinator = yield* GitSyncCoordinatorService;
     const duplicateIndexInvalidation = yield* DuplicateIndexInvalidationService;
     const fileSystem = yield* FileSystem.FileSystem;
     const commandExecutor = yield* CommandExecutor.CommandExecutor;
@@ -28,7 +28,7 @@ export const createGitHandlers = () =>
       fileSystem,
       gitCommandRunner,
       settingsRepository,
-      mutationCoordinator,
+      gitSyncCoordinator,
       duplicateIndexInvalidation,
     });
 

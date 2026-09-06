@@ -10,8 +10,8 @@ import type { ForgeSessionRepository } from "@main/forge/services/forge-session-
 import type { ChunkService } from "@main/forge/services/chunk-service";
 import type { ForgePromptRuntime } from "@main/forge/services/prompt-runtime";
 import type { PdfExtractor } from "@main/forge/services/pdf-extractor";
-import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
-import { NoOpDeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
+import type { GitSyncCoordinator } from "@main/git/sync-coordinator";
+import { createGitSyncCoordinator } from "@main/git/sync-coordinator";
 import { NodeServicesLive } from "@main/effect/node-services";
 import { makeAppRpcHandlersEffect } from "@main/rpc/handlers";
 import type { SecretStore } from "@main/secrets/secret-store";
@@ -93,7 +93,7 @@ export const defaultHandlers = bindTestContext(
           settingsRepository: stubSettingsRepository,
           secretStore: stubSecretStore,
           analyticsRepository: createNoopReviewAnalyticsRepository(),
-          deckWriteCoordinator: NoOpDeckWriteCoordinator,
+          gitSyncCoordinator: createGitSyncCoordinator(),
           publish: noOpPublish,
           watcher: stubWatcher,
           openEditorWindow: () => undefined,
@@ -110,7 +110,7 @@ export type HandlerTestOverrides = {
   readonly publish?: IpcMainHandle<AppContract>["publish"] | undefined;
   readonly openEditorWindow?: ((params: EditorWindowParams) => void) | undefined;
   readonly analyticsRepository?: ReviewAnalyticsRepository | undefined;
-  readonly deckWriteCoordinator?: DeckWriteCoordinator | undefined;
+  readonly gitSyncCoordinator?: GitSyncCoordinator | undefined;
   readonly settingsRepository?: SettingsRepository | undefined;
   readonly secretStore?: SecretStore | undefined;
   readonly forgeSessionRepository?: ForgeSessionRepository | undefined;
@@ -137,7 +137,7 @@ export const createHandlersWithOverrides = async (
           secretStore: overrides.secretStore ?? stubSecretStore,
           analyticsRepository:
             overrides.analyticsRepository ?? createNoopReviewAnalyticsRepository(),
-          deckWriteCoordinator: overrides.deckWriteCoordinator ?? NoOpDeckWriteCoordinator,
+          gitSyncCoordinator: overrides.gitSyncCoordinator ?? createGitSyncCoordinator(),
           publish: overrides.publish ?? noOpPublish,
           watcher: overrides.watcher ?? stubWatcher,
           openEditorWindow: overrides.openEditorWindow ?? (() => undefined),

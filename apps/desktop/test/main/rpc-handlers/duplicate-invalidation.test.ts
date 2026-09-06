@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { createNoopReviewAnalyticsRepository } from "@main/analytics";
 import { MainAppBridgeLive } from "@main/di";
 import { NodeServicesLive } from "@main/effect/node-services";
-import { NoOpDeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
+import { createGitSyncCoordinator } from "@main/git/sync-coordinator";
 import { makeAppRpcHandlersEffect } from "@main/rpc/handlers";
 import { makeSettingsRepository } from "@main/settings/repository";
 
@@ -43,7 +43,7 @@ Answer
               settingsRepository,
               secretStore: stubSecretStore,
               analyticsRepository: createNoopReviewAnalyticsRepository(),
-              deckWriteCoordinator: NoOpDeckWriteCoordinator,
+              gitSyncCoordinator: createGitSyncCoordinator(),
             }),
           ),
         ),

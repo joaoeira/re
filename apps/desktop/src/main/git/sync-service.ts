@@ -5,7 +5,7 @@ import { Effect } from "effect";
 
 import type { DuplicateIndexInvalidationService } from "@main/di/services/DuplicateIndexInvalidationService";
 import type { SettingsRepository } from "@main/settings/repository";
-import type { WorkspaceMutationCoordinator } from "@main/workspace/workspace-mutation-coordinator";
+import type { GitSyncCoordinator } from "@main/git/sync-coordinator";
 import { toErrorMessage } from "@main/utils/format";
 import {
   GitBinaryNotAvailableError,
@@ -40,7 +40,7 @@ type GitSyncServiceDependencies = {
   readonly fileSystem: FileSystem.FileSystem;
   readonly gitCommandRunner: GitCommandRunner;
   readonly settingsRepository: SettingsRepository;
-  readonly mutationCoordinator: WorkspaceMutationCoordinator;
+  readonly gitSyncCoordinator: GitSyncCoordinator;
   readonly duplicateIndexInvalidation: DuplicateIndexInvalidationService;
 };
 
@@ -163,7 +163,7 @@ export const makeGitSyncService = ({
   fileSystem,
   gitCommandRunner,
   settingsRepository,
-  mutationCoordinator,
+  gitSyncCoordinator,
   duplicateIndexInvalidation,
 }: GitSyncServiceDependencies): GitSyncService => {
   const canonicalizeRootPath = (rootPath: string): Effect.Effect<string> =>
@@ -561,8 +561,7 @@ export const makeGitSyncService = ({
       const rootPath = yield* requireConfiguredRoot(input.rootPath);
       const initialSnapshot = yield* requireSyncableSnapshot(rootPath);
 
-      const commitPhase = yield* mutationCoordinator.withWorkspaceLock(
-        rootPath,
+      const commitPhase = yield* gitSyncCoordinator.withLock(
         Effect.gen(function* () {
           const lockedSnapshot = yield* requireSyncableSnapshot(rootPath);
           // Editor saves can have an atomic-write temporary file present during staging.
@@ -609,8 +608,7 @@ export const makeGitSyncService = ({
       const fetchResult = yield* runGit(rootPath, fetchArgs);
       yield* expectExitCodes(fetchArgs, fetchResult, [0]);
 
-      const integrationPhase = yield* mutationCoordinator.withWorkspaceLock(
-        rootPath,
+      const integrationPhase = yield* gitSyncCoordinator.withLock(
         Effect.gen(function* () {
           const lockedSnapshot = yield* requireSyncableSnapshot(rootPath);
 

@@ -82,6 +82,13 @@ src/
 
 `test/` mirrors the `src/` structure, with shared renderer helpers in `test/renderer/render-with-providers.tsx`.
 
+All RPC handlers share one `DeckManager`, which owns deck mutation locks. Handlers must not
+wrap rename in another lock: `renameDeck` already acquires both paths and handles same-path
+renames. `GitSyncCoordinator` guards only Git's commit and integration phases; it does not
+block deck saves or compensation reads. Sync excludes temporary deck files from staging and
+requires a retry when the workspace changes during fetch. Handler tests use the real Git
+coordinator by default.
+
 ## Getting started
 
 | Requirement | Notes                                                |

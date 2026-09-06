@@ -27,7 +27,7 @@ import {
   AiModelCatalogServiceLive,
   AiClientServiceFromSecretStoreLive,
   ChunkServiceLive,
-  DeckWriteCoordinatorServiceLive,
+  GitSyncCoordinatorServiceLive,
   DuplicateIndexInvalidationService,
   EditorWindowManagerService,
   ForgePromptRuntimeServiceLive,
@@ -46,10 +46,7 @@ import {
 } from "@main/di";
 import { NodeServicesLive } from "@main/effect/node-services";
 import { AiModelCatalogRepositoryLive } from "@main/ai/model-catalog-repository";
-import {
-  createDeckWriteCoordinator,
-  type DeckWriteCoordinator,
-} from "@main/rpc/deck-write-coordinator";
+import { createGitSyncCoordinator } from "@main/git/sync-coordinator";
 import { AppRpcHandlersServiceFromEffectLive } from "@main/rpc/handlers";
 import { HandlerServicesLive } from "@main/rpc/handlers/shared";
 import { makeSecretStore } from "@main/secrets";
@@ -101,7 +98,6 @@ let analyticsRuntime:
   | ReturnType<typeof createSqliteReviewAnalyticsRuntimeBundle>["runtime"]
   | null = null;
 let analyticsRepository: ReviewAnalyticsRepository = createNoopReviewAnalyticsRepository();
-let deckWriteCoordinator: DeckWriteCoordinator = createDeckWriteCoordinator();
 
 let replayTimer: ReturnType<typeof setInterval> | null = null;
 let startupComplete = false;
@@ -246,7 +242,7 @@ const replayTask = createSingleFlightTask(async () => {
 
   try {
     await Effect.runPromise(
-      replayPendingCompensationIntents(analyticsRepository, deckWriteCoordinator).pipe(
+      replayPendingCompensationIntents(analyticsRepository).pipe(
         Effect.provide(HandlerServicesLive),
       ),
     );
@@ -326,7 +322,7 @@ if (!gotSingleInstanceLock) {
     .whenReady()
     .then(async () => {
       log("app ready");
-      deckWriteCoordinator = createDeckWriteCoordinator();
+      const gitSyncCoordinator = createGitSyncCoordinator();
 
       const userDataPath = app.getPath("userData");
       const settingsFilePath = path.join(userDataPath, "settings.json");
@@ -386,7 +382,7 @@ if (!gotSingleInstanceLock) {
         aiModelCatalogLayer,
         aiClientLayer,
         AnalyticsRepositoryServiceLive(analyticsRepository),
-        DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
+        GitSyncCoordinatorServiceLive(gitSyncCoordinator),
         forgeSessionRepositoryLayer,
         promptModelResolverLayer,
         ForgePromptRuntimeServiceLive.pipe(

@@ -3,7 +3,6 @@ import type { DeckManager as DeckManagerService } from "@re/workspace";
 import { Either, Effect, Exit } from "effect";
 
 import { findCardLocationById } from "@main/card-location";
-import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import { toErrorMessage } from "@main/utils/format";
 import { toMetadataFingerprint } from "./fingerprint";
 
@@ -18,7 +17,6 @@ type FingerprintReadResult =
 
 export const replayPendingCompensationIntents = (
   analyticsRepository: ReviewAnalyticsRepository,
-  deckWriteCoordinator: DeckWriteCoordinator,
 ): Effect.Effect<void, never, DeckManagerService> =>
   Effect.gen(function* () {
     if (!analyticsRepository.enabled) {
@@ -31,23 +29,20 @@ export const replayPendingCompensationIntents = (
     for (const intent of intents) {
       yield* analyticsRepository.noteReplayAttempt();
 
-      const currentFingerprintResult = yield* deckWriteCoordinator.withDeckLock(
-        intent.deckPath,
-        Effect.gen(function* () {
-          const parsed = yield* deckManager.readDeck(intent.deckPath);
-          const located = findCardLocationById(parsed, intent.cardId);
-          if (!located) {
-            return null;
-          }
-          return toMetadataFingerprint(located.card);
-        }).pipe(
-          Effect.either,
-          Effect.map(
-            (result): FingerprintReadResult =>
-              Either.isLeft(result)
-                ? { ok: false as const, message: toErrorMessage(result.left) }
-                : { ok: true as const, fingerprint: result.right },
-          ),
+      const currentFingerprintResult = yield* Effect.gen(function* () {
+        const parsed = yield* deckManager.readDeck(intent.deckPath);
+        const located = findCardLocationById(parsed, intent.cardId);
+        if (!located) {
+          return null;
+        }
+        return toMetadataFingerprint(located.card);
+      }).pipe(
+        Effect.either,
+        Effect.map(
+          (result): FingerprintReadResult =>
+            Either.isLeft(result)
+              ? { ok: false as const, message: toErrorMessage(result.left) }
+              : { ok: true as const, fingerprint: result.right },
         ),
       );
 

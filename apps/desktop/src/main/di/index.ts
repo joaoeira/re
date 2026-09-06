@@ -18,9 +18,9 @@ export {
 } from "./services/AppEventPublisherService";
 export { AppRpcHandlersService } from "./services/AppRpcHandlersService";
 export {
-  DeckWriteCoordinatorService,
-  DeckWriteCoordinatorServiceLive,
-} from "./services/DeckWriteCoordinatorService";
+  GitSyncCoordinatorService,
+  GitSyncCoordinatorServiceLive,
+} from "./services/GitSyncCoordinatorService";
 export { ChunkService, ChunkServiceLive } from "./services/ChunkService";
 export {
   ForgeSessionRepositoryService,

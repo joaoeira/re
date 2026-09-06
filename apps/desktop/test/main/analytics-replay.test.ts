@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { replayPendingCompensationIntents } from "@main/analytics/replay";
 import type { CompensationIntent, ReviewAnalyticsRepository } from "@main/analytics/types";
-import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import { toMetadataFingerprint } from "@main/analytics/fingerprint";
 import { DeckManager, type DeckManager as DeckManagerService } from "@re/workspace";
 
@@ -77,15 +76,6 @@ describe("analytics replay", () => {
       noteReplayFailure,
     });
 
-    const withDeckLock = vi.fn();
-    const coordinator: DeckWriteCoordinator = {
-      withDeckLock: (deckPath, effect) => {
-        withDeckLock(deckPath);
-        return effect;
-      },
-      withWorkspaceLock: (_rootPath, effect) => effect,
-    };
-
     const deckManager: DeckManagerService = {
       modifyCardMetadata: () => Effect.die("Unexpected modifyCardMetadata"),
       modifyItem: () => Effect.die("Unexpected item edit in analytics replay"),
@@ -114,12 +104,11 @@ describe("analytics replay", () => {
     };
 
     await Effect.runPromise(
-      replayPendingCompensationIntents(repository, coordinator).pipe(
+      replayPendingCompensationIntents(repository).pipe(
         Effect.provide(Layer.succeed(DeckManager, deckManager)),
       ),
     );
 
-    expect(withDeckLock).toHaveBeenCalledTimes(1);
     expect(compensateUndo).toHaveBeenCalledTimes(1);
     expect(markIntentCompleted).toHaveBeenCalledTimes(1);
     expect(noteReplayAttempt).toHaveBeenCalledTimes(1);
@@ -148,11 +137,6 @@ describe("analytics replay", () => {
       noteReplayFailure,
     });
 
-    const coordinator: DeckWriteCoordinator = {
-      withDeckLock: (_deckPath, effect) => effect,
-      withWorkspaceLock: (_rootPath, effect) => effect,
-    };
-
     const deckManager: DeckManagerService = {
       modifyCardMetadata: () => Effect.die("Unexpected modifyCardMetadata"),
       modifyItem: () => Effect.die("Unexpected item edit in analytics replay"),
@@ -176,7 +160,7 @@ describe("analytics replay", () => {
     };
 
     await Effect.runPromise(
-      replayPendingCompensationIntents(repository, coordinator).pipe(
+      replayPendingCompensationIntents(repository).pipe(
         Effect.provide(Layer.succeed(DeckManager, deckManager)),
       ),
     );

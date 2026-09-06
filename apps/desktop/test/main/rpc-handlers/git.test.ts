@@ -4,6 +4,14 @@ import * as path from "node:path";
 import { tmpdir } from "node:os";
 
 import { Effect } from "effect";
+import { FileSystem } from "@effect/platform";
+import * as CommandExecutor from "@effect/platform/CommandExecutor";
+import { NodeServicesLive } from "@main/effect/node-services";
+import { makeGitCommandRunner } from "@main/git/command-runner";
+import { makeGitSyncService } from "@main/git/sync-service";
+import { createGitSyncCoordinator } from "@main/git/sync-coordinator";
+import { makeSettingsRepository } from "@main/settings/repository";
+import { makeDuplicateIndexInvalidationBridgeService } from "@main/di/services/DuplicateIndexInvalidationService";
 import { describe, expect, it } from "vitest";
 
 import { createHandlersWithOverrides } from "./helpers";
@@ -99,6 +107,86 @@ describe("git handlers", () => {
     }
   });
 
+  it(
+    "requests retry when an editor save changes the workspace during fetch",
+    { timeout: 15_000 },
+    async () => {
+      const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-git-settings-"));
+      const { workspacePath, remotePath } = await seedRemoteRepository();
+      const deckPath = path.join(workspacePath, "cards.md");
+      try {
+        const settingsRepository = await Effect.runPromise(
+          makeSettingsRepository({
+            settingsFilePath: path.join(settingsRoot, "settings.json"),
+          }).pipe(Effect.provide(NodeServicesLive)),
+        );
+        const gitSyncCoordinator = createGitSyncCoordinator();
+        const handlers = await createHandlersWithOverrides(
+          path.join(settingsRoot, "settings.json"),
+          {
+            settingsRepository,
+            gitSyncCoordinator,
+          },
+        );
+        await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath: workspacePath }));
+        const originalRemoteHead = runBareGit(remotePath, ["rev-parse", "refs/heads/master"]);
+        await fs.appendFile(deckPath, "Before fetch\n");
+        let editDuringFetch = true;
+        const syncService = await Effect.runPromise(
+          Effect.gen(function* () {
+            const fileSystem = yield* FileSystem.FileSystem;
+            const commandExecutor = yield* CommandExecutor.CommandExecutor;
+            const runner = makeGitCommandRunner({ commandExecutor });
+            return makeGitSyncService({
+              fileSystem,
+              settingsRepository,
+              gitSyncCoordinator,
+              duplicateIndexInvalidation: makeDuplicateIndexInvalidationBridgeService(),
+              gitCommandRunner: {
+                run: (input) =>
+                  Effect.gen(function* () {
+                    if (input.args[0] === "fetch" && editDuringFetch) {
+                      editDuringFetch = false;
+                      yield* handlers
+                        .AppendItem({
+                          deckPath,
+                          cardType: "qa",
+                          content: "Saved during fetch\n---\nAnswer",
+                        })
+                        .pipe(Effect.orDie);
+                    }
+                    return yield* runner.run(input);
+                  }),
+              },
+            });
+          }).pipe(Effect.provide(NodeServicesLive)),
+        );
+
+        const result = await Effect.runPromise(
+          syncService.sync({ rootPath: workspacePath }).pipe(Effect.either),
+        );
+        expect(result).toMatchObject({
+          _tag: "Left",
+          left: {
+            _tag: "GitSyncNotReadyError",
+            message: "Workspace changed while sync was fetching remote updates. Retry sync.",
+          },
+        });
+        expect(await fs.readFile(deckPath, "utf8")).toContain("Saved during fetch");
+        expect(runBareGit(remotePath, ["rev-parse", "refs/heads/master"])).toBe(originalRemoteHead);
+        const retry = await Effect.runPromise(syncService.sync({ rootPath: workspacePath }));
+        expect(retry.pushed).toBe(true);
+        expect(runBareGit(remotePath, ["show", "refs/heads/master:cards.md"])).toContain(
+          "Saved during fetch",
+        );
+      } finally {
+        await fs.rm(workspacePath, { recursive: true, force: true });
+        await fs.rm(remotePath, { recursive: true, force: true });
+        await fs.rm(settingsRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("commits user files without staging unfinished deck writes", { timeout: 15_000 }, async () => {
     const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-git-settings-"));
     const { workspacePath, remotePath } = await seedRemoteRepository();
@@ -130,7 +218,7 @@ describe("git handlers", () => {
   });
 
   it(
-    "commits local changes and pushes them to the tracked remote branch",
+    "completes two concurrent syncs with one commit pushed to the remote",
     { timeout: 15_000 },
     async () => {
       const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-git-settings-"));
@@ -144,11 +232,20 @@ describe("git handlers", () => {
         const handlers = await createHandlersWithOverrides(settingsFilePath);
         await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath: workspacePath }));
 
-        const result = await Effect.runPromise(handlers.RunGitSync({ rootPath: workspacePath }));
+        const initialHead = runGit(workspacePath, ["rev-parse", "HEAD"]);
+        const results = await Effect.runPromise(
+          Effect.all(
+            [
+              handlers.RunGitSync({ rootPath: workspacePath }),
+              handlers.RunGitSync({ rootPath: workspacePath }),
+            ],
+            { concurrency: "unbounded" },
+          ),
+        );
 
-        expect(result.createdCommit).toBe(true);
-        expect(result.pushed).toBe(true);
-        expect(result.snapshot._tag).toBe("GitSyncReady");
+        expect(results.filter((result) => result.createdCommit)).toHaveLength(1);
+        expect(results.every((result) => result.snapshot._tag === "GitSyncReady")).toBe(true);
+        expect(runGit(workspacePath, ["rev-list", "--count", `${initialHead}..HEAD`])).toBe("1");
 
         const workspaceHead = runGit(workspacePath, ["rev-parse", "HEAD"]);
         const remoteHead = runBareGit(remotePath, ["rev-parse", "refs/heads/master"]);

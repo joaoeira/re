@@ -7,7 +7,6 @@ import type { Implementations } from "electron-effect-rpc/types";
 import {
   AppEventPublisherService,
   ChunkService,
-  DeckWriteCoordinatorService,
   ForgePromptRuntimeService,
   ForgeSourceResolverService,
   ForgeSessionRepositoryService,
@@ -335,7 +334,6 @@ export const createForgeHandlers = () =>
     const forgePromptRuntime = yield* ForgePromptRuntimeService;
     const topicGroundingTextResolver = yield* TopicGroundingTextResolverService;
     const appEventPublisher = yield* AppEventPublisherService;
-    const deckWriteCoordinator = yield* DeckWriteCoordinatorService;
     const deckManager = yield* DeckManager;
     const derivationGenerationLocks = new Set<string>();
 
@@ -2026,10 +2024,7 @@ export const createForgeHandlers = () =>
           const itemType = cardType === "qa" ? adaptItemType(QAType) : adaptItemType(ClozeType);
           const cards = Array.from({ length: cardCount }, () => createMetadata());
 
-          yield* deckWriteCoordinator.withDeckLock(
-            deckPath,
-            deckManager.appendItem(deckPath, { cards, content }, itemType),
-          );
+          yield* deckManager.appendItem(deckPath, { cards, content }, itemType);
 
           if (typeof sourceCardId === "number" && cardType === "qa") {
             yield* forgeSessionRepository.markCardAddedToDeck(sourceCardId).pipe(

@@ -384,14 +384,14 @@ That keeps `GetCardContent`, `GetReviewAssistantSourceCard`, and `ReviewGenerate
 
 ### Concurrency and write safety
 
-Concurrent append and grading operations are already serialized at the deck-write layer. Both:
+The handler bundle captures one shared `DeckManager`. `AppendItem` calls `appendItem`, and
+`ScheduleReview` resolves, evaluates, and schedules inside `modifyCardMetadata`; both operations
+hold the same per-deck lock through the save. Rename delegates directly to `renameDeck`, which
+acquires both path locks in order and handles a same-path rename.
 
-- `AppendItem` in `apps/desktop/src/main/rpc/handlers/editor.ts`
-- `ScheduleReview` in `apps/desktop/src/main/rpc/handlers/review.ts`
-
-go through `deckWriteCoordinator.withDeckLock(...)`.
-
-This should be stated explicitly in the implementation so reviewers are not forced to infer safety from existing handler code.
+`GitSyncCoordinator` serializes only Git commit and integration phases. Deck handlers and
+compensation replay do not acquire it. Git staging excludes `.re-write-*.tmp`, and sync requests
+a retry if the workspace changes during fetch.
 
 ### Runtime service choice
 

@@ -12,11 +12,7 @@ import { Effect } from "effect";
 import type { FileSystem, Path } from "@effect/platform";
 import type { Implementations } from "electron-effect-rpc/types";
 
-import {
-  DeckWriteCoordinatorService,
-  DuplicateIndexInvalidationService,
-  SettingsRepositoryService,
-} from "@main/di";
+import { DuplicateIndexInvalidationService, SettingsRepositoryService } from "@main/di";
 import { toErrorMessage } from "@main/utils/format";
 import type { AppContract } from "@shared/rpc/contracts";
 import { WorkspaceRootPathNotConfiguredError } from "@shared/rpc/schemas/workspace";
@@ -40,7 +36,6 @@ export const createWorkspaceHandlers = () =>
   Effect.gen(function* () {
     const settingsRepository = yield* SettingsRepositoryService;
     const duplicateIndexInvalidation = yield* DuplicateIndexInvalidationService;
-    const deckWriteCoordinator = yield* DeckWriteCoordinatorService;
 
     const resolveDeckPathFromRelative = (
       rootPath: string,
@@ -159,10 +154,7 @@ export const createWorkspaceHandlers = () =>
             createOptions.initialContent = initialContent;
           }
 
-          yield* deckWriteCoordinator.withDeckLock(
-            absolutePath,
-            deckManager.createDeck(absolutePath, createOptions),
-          );
+          yield* deckManager.createDeck(absolutePath, createOptions);
 
           duplicateIndexInvalidation.markDuplicateIndexDirty();
 
@@ -174,10 +166,7 @@ export const createWorkspaceHandlers = () =>
           const absolutePath = yield* resolveDeckPathFromRelative(rootPath, relativePath);
           const deckManager = yield* DeckManager;
 
-          yield* deckWriteCoordinator.withDeckLock(
-            absolutePath,
-            deckManager.deleteDeck(absolutePath),
-          );
+          yield* deckManager.deleteDeck(absolutePath);
 
           duplicateIndexInvalidation.markDuplicateIndexDirty();
 
@@ -196,22 +185,7 @@ export const createWorkspaceHandlers = () =>
             renameOptions.createParents = createParents;
           }
 
-          const renameEffect = deckManager.renameDeck(
-            fromAbsolutePath,
-            toAbsolutePath,
-            renameOptions,
-          );
-
-          if (fromAbsolutePath === toAbsolutePath) {
-            yield* deckWriteCoordinator.withDeckLock(fromAbsolutePath, renameEffect);
-          } else {
-            const firstPath = fromAbsolutePath < toAbsolutePath ? fromAbsolutePath : toAbsolutePath;
-            const secondPath = firstPath === fromAbsolutePath ? toAbsolutePath : fromAbsolutePath;
-            yield* deckWriteCoordinator.withDeckLock(
-              firstPath,
-              deckWriteCoordinator.withDeckLock(secondPath, renameEffect),
-            );
-          }
+          yield* deckManager.renameDeck(fromAbsolutePath, toAbsolutePath, renameOptions);
 
           duplicateIndexInvalidation.markDuplicateIndexDirty();
 

@@ -17,7 +17,7 @@ import {
 } from "../services/AppEventPublisherService";
 import { AnalyticsRepositoryServiceLive } from "../services/AnalyticsRepositoryService";
 import { AiClientServiceFromSecretStoreLive } from "../services/AiClientService";
-import { DeckWriteCoordinatorServiceLive } from "../services/DeckWriteCoordinatorService";
+import { GitSyncCoordinatorServiceLive } from "../services/GitSyncCoordinatorService";
 import { ChunkServiceLive } from "../services/ChunkService";
 import { ForgeSessionRepositoryServiceLive } from "../services/ForgeSessionRepositoryService";
 import {
@@ -46,7 +46,7 @@ import {
 } from "../services/WorkspaceWatcherControlService";
 import { NodeServicesLive } from "@main/effect/node-services";
 import { HandlerServicesLive } from "@main/rpc/handlers/shared";
-import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
+import type { GitSyncCoordinator } from "@main/git/sync-coordinator";
 import type { SecretStore } from "@main/secrets/secret-store";
 import type { SettingsRepository } from "@main/settings/repository";
 import type { WorkspaceWatcher } from "@main/watcher/workspace-watcher";
@@ -55,7 +55,7 @@ type MainStaticDependencies = {
   readonly settingsRepository: SettingsRepository;
   readonly secretStore: SecretStore;
   readonly analyticsRepository: ReviewAnalyticsRepository;
-  readonly deckWriteCoordinator: DeckWriteCoordinator;
+  readonly gitSyncCoordinator: GitSyncCoordinator;
   readonly aiModelCatalog?: AiModelCatalog;
   readonly forgeSessionRepository?: ForgeSessionRepository;
   readonly forgePromptRuntime?: ForgePromptRuntime;
@@ -73,7 +73,7 @@ const MainStaticLive = ({
   settingsRepository,
   secretStore,
   analyticsRepository,
-  deckWriteCoordinator,
+  gitSyncCoordinator,
   aiModelCatalog,
   forgeSessionRepository,
   forgePromptRuntime,
@@ -112,7 +112,7 @@ const MainStaticLive = ({
     aiModelCatalogLayer,
     aiClientLayer,
     AnalyticsRepositoryServiceLive(analyticsRepository),
-    DeckWriteCoordinatorServiceLive(deckWriteCoordinator),
+    GitSyncCoordinatorServiceLive(gitSyncCoordinator),
     forgeSessionRepositoryLayer,
     promptModelResolverLayer,
     forgePromptRuntimeLayer,
@@ -137,7 +137,7 @@ export const MainAppDirectLive = ({
   settingsRepository,
   secretStore,
   analyticsRepository,
-  deckWriteCoordinator,
+  gitSyncCoordinator,
   publish,
   watcher,
   openEditorWindow,
@@ -152,7 +152,7 @@ export const MainAppDirectLive = ({
       settingsRepository,
       secretStore,
       analyticsRepository,
-      deckWriteCoordinator,
+      gitSyncCoordinator,
       ...(aiModelCatalog ? { aiModelCatalog } : {}),
       ...(forgeSessionRepository ? { forgeSessionRepository } : {}),
       ...(forgePromptRuntime ? { forgePromptRuntime } : {}),
