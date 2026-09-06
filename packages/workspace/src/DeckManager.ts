@@ -112,6 +112,21 @@ export interface RemovedDeckItem {
 export interface DeckManager {
   readonly readDeck: (deckPath: string) => Effect.Effect<ParsedFile, ReadError>;
 
+  /**
+   * Read the current card and item, compute new metadata, and save under the deck
+   * lock. Returns the callback's result only after the save succeeds. The callback
+   * must not invoke another mutation on this deck; external side effects are not
+   * rolled back if the save fails.
+   */
+  readonly modifyCardMetadata: <A, E>(
+    deckPath: string,
+    cardId: string,
+    change: (current: {
+      readonly item: Item;
+      readonly card: ItemMetadata;
+    }) => Effect.Effect<{ readonly metadata: ItemMetadata; readonly result: A }, E>,
+  ) => Effect.Effect<A, WriteError | CardNotFound | E>;
+
   readonly updateCardMetadata: (
     deckPath: string,
     cardId: string,
@@ -448,25 +463,34 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
           }),
         );
 
+      const modifyCardMetadata: DeckManager["modifyCardMetadata"] = (deckPath, cardId, change) =>
+        modifyDeck(deckPath, (parsed) =>
+          Effect.gen(function* () {
+            const { itemIndex, cardIndex } = yield* findItemByCardId(parsed, cardId, deckPath);
+            const currentItem = parsed.items[itemIndex]!;
+            const { metadata, result } = yield* change({
+              item: currentItem,
+              card: currentItem.cards[cardIndex]!,
+            });
+
+            const items = parsed.items.map((item, idx) => {
+              if (idx !== itemIndex) return item;
+              const cards = item.cards.map((card, cIdx) => (cIdx === cardIndex ? metadata : card));
+              return { ...item, cards };
+            });
+
+            return { file: { ...parsed, items }, result };
+          }),
+        );
+
       return DeckManager.of({
         readDeck: readAndParse,
         modifyItem,
+        modifyCardMetadata,
 
         updateCardMetadata: (deckPath, cardId, metadata) =>
-          modifyDeck(deckPath, (parsed) =>
-            Effect.gen(function* () {
-              const { itemIndex, cardIndex } = yield* findItemByCardId(parsed, cardId, deckPath);
-
-              const items = parsed.items.map((item, idx) => {
-                if (idx !== itemIndex) return item;
-                const cards = item.cards.map((card, cIdx) =>
-                  cIdx === cardIndex ? metadata : card,
-                );
-                return { ...item, cards };
-              });
-
-              return { file: { ...parsed, items }, result: undefined };
-            }),
+          modifyCardMetadata(deckPath, cardId, () =>
+            Effect.succeed({ metadata, result: undefined }),
           ),
 
         replaceItem: (deckPath, cardId, newItem, itemType) =>

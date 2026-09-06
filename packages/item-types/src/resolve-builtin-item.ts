@@ -30,19 +30,6 @@ export class BuiltinCardNotFound extends Data.TaggedError("BuiltinCardNotFound")
   }
 }
 
-/** Capture a generated key from the same saved snapshot as its metadata ID. */
-export const getBuiltinCardKey = (
-  item: Item,
-  cardId: string,
-): Effect.Effect<string, NoMatchingTypeError | ItemCardCountMismatch | BuiltinCardNotFound> =>
-  Effect.gen(function* () {
-    const { cards } = yield* resolveBuiltinItem(item);
-    const position = item.cards.findIndex((card) => card.id === cardId);
-    const spec = cards[position];
-    if (!spec) return yield* new BuiltinCardNotFound({ cardId, cardKey: null });
-    return spec.key;
-  });
-
 export interface AnnotatedBuiltinCards<Entry> {
   readonly items: readonly (Entry & { readonly cardKey: string })[];
   readonly errors: readonly {

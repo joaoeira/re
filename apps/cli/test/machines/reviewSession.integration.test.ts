@@ -1,10 +1,10 @@
 import { FileSystem, Path } from "@effect/platform";
 import { createMetadata, parseFile, serializeFile, State } from "@re/core";
-import { SchedulerLive } from "@re/scheduler";
-import { DeckManagerLive } from "@re/workspace";
+import { Scheduler, SchedulerLive } from "@re/scheduler";
+import { DeckManager, DeckManagerLive } from "@re/workspace";
 import { prepareReviewQueue } from "../../src/lib/review-queue";
 import { getCardSpec } from "../../src/lib/getCardSpec";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Deferred, Effect, Layer, ManagedRuntime } from "effect";
 import { describe, expect, it } from "vitest";
 import { createActor, waitFor } from "xstate";
 import { reviewSessionMachine } from "../../src/machines/reviewSession";
@@ -75,6 +75,54 @@ const createFixture = (cardIndex: number, content = "Question\n---\nAnswer\n") =
 };
 
 describe("review session persistence", () => {
+  it("grades the latest metadata after waiting to acquire the deck lock", async () => {
+    const { queueItem, runtime } = createFixture(0);
+    const base = await runtime.runPromise(DeckManager);
+    const scheduler = await runtime.runPromise(Scheduler);
+    const waiting = Effect.runSync(Deferred.make<void>());
+    const release = Effect.runSync(Deferred.make<void>());
+    const beforeWrite = <A, E>(operation: Effect.Effect<A, E>) =>
+      Deferred.succeed(waiting, undefined).pipe(
+        Effect.zipRight(Deferred.await(release)),
+        Effect.zipRight(operation),
+      );
+    const delayed: DeckManager = {
+      ...base,
+      modifyCardMetadata: (path, id, change) =>
+        beforeWrite(base.modifyCardMetadata(path, id, change)),
+      updateCardMetadata: (path, id, metadata) =>
+        beforeWrite(base.updateCardMetadata(path, id, metadata)),
+    };
+    const reviewRuntime = ManagedRuntime.make(
+      Layer.merge(SchedulerLive, Layer.succeed(DeckManager, delayed)),
+    );
+    const actor = createActor(reviewSessionMachine, {
+      input: { queue: [queueItem], runtime: await reviewRuntime.runtime() },
+    });
+    try {
+      actor.start();
+      actor.send({ type: "START" });
+      actor.send({ type: "REVEAL" });
+      actor.send({ type: "GRADE", grade: 2 });
+      await Effect.runPromise(Deferred.await(waiting));
+      const intervening = await runtime.runPromise(
+        scheduler.scheduleReview(queueItem.card, 2, new Date("2026-08-01T12:00:00Z")),
+      );
+      await runtime.runPromise(
+        base.updateCardMetadata(queueItem.deckPath, queueItem.card.id, intervening.updatedCard),
+      );
+      await Effect.runPromise(Deferred.succeed(release, undefined));
+      await waitFor(actor, (state) => state.matches("complete"));
+      expect(actor.getSnapshot().context.reviewLogStack[0]!.previousCard).toEqual(
+        intervening.updatedCard,
+      );
+    } finally {
+      actor.stop();
+      await reviewRuntime.dispose();
+      await runtime.dispose();
+    }
+  });
+
   it("loads and grades the surviving key from the current item after a cloze is removed", async () => {
     const { queueItem, files, runtime } = createFixture(1, "The {{c1::first}} and {{c3::third}}.");
     expect(queueItem.cardKey).toBe("c3");

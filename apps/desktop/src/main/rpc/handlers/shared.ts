@@ -153,11 +153,22 @@ type ProvidedHandlers<THandlers extends Record<string, Handler>> = {
 
 export const provideHandlerServices = <THandlers extends Record<string, Handler>>(
   handlers: THandlers,
-): ProvidedHandlers<THandlers> =>
-  Object.fromEntries(
-    Object.entries(handlers).map(([key, handler]) => [
-      key,
-      (input: never, context: RpcHandlerContext) =>
-        handler(input, context).pipe(Effect.provide(HandlerServicesLive)),
-    ]),
-  ) as ProvidedHandlers<THandlers>;
+): Effect.Effect<
+  ProvidedHandlers<THandlers>,
+  never,
+  Layer.Layer.Success<typeof HandlerServicesLive>
+> =>
+  Effect.context<Layer.Layer.Success<typeof HandlerServicesLive>>().pipe(
+    Effect.map(
+      (services) =>
+        // Capture the bundle's services once. Rebuilding the Layer per request
+        // would give each writer a separate DeckManager and a separate deck lock.
+        Object.fromEntries(
+          Object.entries(handlers).map(([key, handler]) => [
+            key,
+            (input: never, context: RpcHandlerContext) =>
+              handler(input, context).pipe(Effect.provide(services)),
+          ]),
+        ) as ProvidedHandlers<THandlers>,
+    ),
+  );

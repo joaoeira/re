@@ -2,7 +2,6 @@ import { Effect, Layer } from "effect";
 import type { Implementations, StreamImplementations } from "electron-effect-rpc/types";
 
 import { AppRpcHandlersService } from "@main/di";
-import { NodeServicesLive } from "@main/effect/node-services";
 import type { AppContract } from "@shared/rpc/contracts";
 
 import { createAiHandlers, createAiStreamHandlers } from "./handlers/ai";
@@ -13,6 +12,7 @@ import { createReviewHandlers } from "./handlers/review";
 import { createSecretHandlers } from "./handlers/secret";
 import { createSettingsHandlers } from "./handlers/settings";
 import { createWorkspaceHandlers } from "./handlers/workspace";
+import { HandlerServicesLive } from "./handlers/shared";
 
 export const makeAppRpcHandlersEffect = Effect.gen(function* () {
   const aiHandlers = yield* createAiHandlers();
@@ -45,5 +45,5 @@ export const makeAppRpcHandlersEffect = Effect.gen(function* () {
 
 export const AppRpcHandlersServiceFromEffectLive = Layer.effect(
   AppRpcHandlersService,
-  makeAppRpcHandlersEffect.pipe(Effect.provide(NodeServicesLive)),
-);
+  makeAppRpcHandlersEffect,
+).pipe(Layer.provide(HandlerServicesLive));

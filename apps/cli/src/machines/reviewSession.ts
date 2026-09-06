@@ -4,7 +4,7 @@ import type { ReviewQueueItem as QueueItem } from "../lib/review-queue";
 import { Scheduler, type FSRSGrade, type ScheduleResult } from "@re/scheduler";
 import { DeckManager } from "@re/workspace";
 import type { ReviewLogEntry } from "../services/ReviewLogEntry";
-import { loadReviewCard } from "../lib/getCardSpec";
+import { resolveBuiltinCard } from "@re/item-types";
 
 interface GradingResult {
   schedulerLog: ScheduleResult["schedulerLog"];
@@ -104,18 +104,19 @@ const gradingActor = fromPromise(
       const scheduler = yield* Scheduler;
       const deckManager = yield* DeckManager;
 
-      const current = yield* loadReviewCard(queueItem);
-      const evaluatedGrade = yield* current.spec.evaluate(grade);
-      const scheduleResult = yield* scheduler.scheduleReview(
-        current.card,
-        evaluatedGrade,
-        new Date(),
-      );
-
-      yield* deckManager.updateCardMetadata(
+      const scheduleResult = yield* deckManager.modifyCardMetadata(
         queueItem.deckPath,
         queueItem.card.id,
-        scheduleResult.updatedCard,
+        ({ item, card }) =>
+          Effect.gen(function* () {
+            const { spec } = yield* resolveBuiltinCard(item, {
+              cardId: queueItem.card.id,
+              cardKey: queueItem.cardKey,
+            });
+            const evaluatedGrade = yield* spec.evaluate(grade);
+            const scheduled = yield* scheduler.scheduleReview(card, evaluatedGrade, new Date());
+            return { metadata: scheduled.updatedCard, result: scheduled };
+          }),
       );
 
       return {

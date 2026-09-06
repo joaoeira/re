@@ -37,5 +37,5 @@ export const createGitHandlers = () =>
       RunGitSync: ({ rootPath }) => gitSyncService.sync({ rootPath }),
     };
 
-    return provideHandlerServices(handlers);
+    return yield* provideHandlerServices(handlers);
   });

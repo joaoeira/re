@@ -565,7 +565,8 @@ export const makeGitSyncService = ({
         rootPath,
         Effect.gen(function* () {
           const lockedSnapshot = yield* requireSyncableSnapshot(rootPath);
-          const addArgs = ["add", "-A", "."] as const;
+          // Editor saves can have an atomic-write temporary file present during staging.
+          const addArgs = ["add", "-A", "--", ".", ":(glob,exclude)**/.re-write-*.tmp"] as const;
           const addResult = yield* runGit(rootPath, addArgs);
           yield* expectExitCodes(addArgs, addResult, [0]);
 

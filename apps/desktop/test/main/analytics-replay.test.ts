@@ -87,6 +87,7 @@ describe("analytics replay", () => {
     };
 
     const deckManager: DeckManagerService = {
+      modifyCardMetadata: () => Effect.die("Unexpected modifyCardMetadata"),
       modifyItem: () => Effect.die("Unexpected item edit in analytics replay"),
       readDeck: () =>
         Effect.succeed({
@@ -153,6 +154,7 @@ describe("analytics replay", () => {
     };
 
     const deckManager: DeckManagerService = {
+      modifyCardMetadata: () => Effect.die("Unexpected modifyCardMetadata"),
       modifyItem: () => Effect.die("Unexpected item edit in analytics replay"),
       readDeck: () =>
         Effect.succeed({

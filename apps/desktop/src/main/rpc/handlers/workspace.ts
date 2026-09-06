@@ -219,5 +219,5 @@ export const createWorkspaceHandlers = () =>
         }),
     };
 
-    return provideHandlerServices(handlers);
+    return yield* provideHandlerServices(handlers);
   });

@@ -14,7 +14,7 @@ import {
   SettingsRepositoryService,
   TopicGroundingTextResolverService,
 } from "@main/di";
-import { DeckManagerServicesLive, validateDeckAccessAs } from "./shared";
+import { validateDeckAccessAs } from "./shared";
 import {
   CreateCardsPromptSpec,
   GenerateClozePromptSpec,
@@ -336,6 +336,7 @@ export const createForgeHandlers = () =>
     const topicGroundingTextResolver = yield* TopicGroundingTextResolverService;
     const appEventPublisher = yield* AppEventPublisherService;
     const deckWriteCoordinator = yield* DeckWriteCoordinatorService;
+    const deckManager = yield* DeckManager;
     const derivationGenerationLocks = new Set<string>();
 
     const setSessionErrorBestEffort = (
@@ -2025,7 +2026,6 @@ export const createForgeHandlers = () =>
           const itemType = cardType === "qa" ? adaptItemType(QAType) : adaptItemType(ClozeType);
           const cards = Array.from({ length: cardCount }, () => createMetadata());
 
-          const deckManager = yield* DeckManager;
           yield* deckWriteCoordinator.withDeckLock(
             deckPath,
             deckManager.appendItem(deckPath, { cards, content }, itemType),
@@ -2106,7 +2106,7 @@ export const createForgeHandlers = () =>
           }
 
           return { cardIds: cards.map((card) => card.id) };
-        }).pipe(Effect.provide(DeckManagerServicesLive), Effect.mapError(toForgeOperationError)),
+        }).pipe(Effect.mapError(toForgeOperationError)),
     };
 
     return handlers;

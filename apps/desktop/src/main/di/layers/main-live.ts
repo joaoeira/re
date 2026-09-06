@@ -45,6 +45,7 @@ import {
   WorkspaceWatcherControlServiceLive,
 } from "../services/WorkspaceWatcherControlService";
 import { NodeServicesLive } from "@main/effect/node-services";
+import { HandlerServicesLive } from "@main/rpc/handlers/shared";
 import type { DeckWriteCoordinator } from "@main/rpc/deck-write-coordinator";
 import type { SecretStore } from "@main/secrets/secret-store";
 import type { SettingsRepository } from "@main/settings/repository";
@@ -105,6 +106,7 @@ const MainStaticLive = ({
 
   return Layer.mergeAll(
     NodeServicesLive,
+    HandlerServicesLive,
     settingsRepositoryLayer,
     SecretStoreServiceLive(secretStore),
     aiModelCatalogLayer,

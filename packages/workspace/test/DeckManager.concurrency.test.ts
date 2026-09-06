@@ -71,6 +71,52 @@ const pauseValidation = Effect.gen(function* () {
 
 describe("DeckManager concurrent mutations", () => {
   it.scopedLive(
+    "computes metadata from the latest saved card while serializing with item edits",
+    () =>
+      Effect.gen(function* () {
+        const manager = yield* makeManager(yield* mockFs([item("a"), item("b")]));
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const increment = (pause: boolean) =>
+          manager.modifyCardMetadata("/deck.md", "a", ({ card }) =>
+            Effect.gen(function* () {
+              if (pause) {
+                yield* Deferred.succeed(entered, undefined);
+                yield* Deferred.await(release);
+              }
+              return {
+                metadata: { ...card, stability: numericField(card.stability.value + 1) },
+                result: card.stability.value,
+              };
+            }),
+          );
+        const first = yield* increment(true).pipe(Effect.forkScoped);
+        yield* Deferred.await(entered);
+        const second = yield* increment(false).pipe(Effect.forkScoped);
+        const edit = yield* manager
+          .modifyItem(
+            "/deck.md",
+            "a",
+            (current) => Effect.succeed({ ...current, content: "Edited\n" }),
+            itemType,
+          )
+          .pipe(Effect.forkScoped);
+        yield* Effect.yieldNow();
+        yield* Deferred.succeed(release, undefined);
+        expect(yield* Fiber.join(first)).toBe(0);
+        expect(yield* Fiber.join(second)).toBe(1);
+        yield* Fiber.join(edit);
+
+        const saved = yield* manager.readDeck("/deck.md");
+        expect(saved.items[0]).toMatchObject({
+          content: "Edited\n",
+          cards: [{ id: "a", stability: { value: 2 } }],
+        });
+        expect(saved.items[1]).toEqual(item("b"));
+      }).pipe(Effect.timeout("2 seconds")),
+  );
+
+  it.scopedLive(
     "preserves independent changes made concurrently through every edit operation",
     () =>
       Effect.gen(function* () {
@@ -338,10 +384,12 @@ describe("DeckManager save recovery", () => {
               return fs.rename(from, to);
             }),
         });
-        const update = manager.updateCardMetadata(deckPath, "a", {
-          ...item("a").cards[0]!,
-          stability: numericField(42),
-        });
+        const update = manager.modifyCardMetadata(deckPath, "a", ({ card }) =>
+          Effect.succeed({
+            metadata: { ...card, stability: numericField(42) },
+            result: "saved",
+          }),
+        );
         expect(yield* update.pipe(Effect.either)).toMatchObject({
           _tag: "Left",
           left: { _tag: "DeckWriteError", deckPath },
@@ -349,7 +397,7 @@ describe("DeckManager save recovery", () => {
         expect(yield* fs.readFileString(deckPath)).toBe(original);
         expect((yield* fs.readDirectory(directory)).sort()).toEqual(["deck.md", "deck.md.tmp"]);
         expect(yield* fs.readFileString(`${deckPath}.tmp`)).toBe("Other tool's file");
-        yield* update;
+        expect(yield* update).toBe("saved");
         expect((yield* manager.readDeck(deckPath)).items[0]!.cards[0]!.stability.value).toBe(42);
       }).pipe(Effect.timeout("2 seconds")),
   );

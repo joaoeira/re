@@ -99,31 +99,65 @@ describe("git handlers", () => {
     }
   });
 
-  it("commits local changes and pushes them to the tracked remote branch", { timeout: 15_000 }, async () => {
+  it("commits user files without staging unfinished deck writes", { timeout: 15_000 }, async () => {
     const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-git-settings-"));
-    const settingsFilePath = path.join(settingsRoot, "settings.json");
     const { workspacePath, remotePath } = await seedRemoteRepository();
-    const deckPath = path.join(workspacePath, "cards.md");
-
     try {
-      await fs.appendFile(deckPath, "new card\n", "utf8");
-
-      const handlers = await createHandlersWithOverrides(settingsFilePath);
+      await fs.appendFile(path.join(workspacePath, "cards.md"), "new card\n");
+      await fs.mkdir(path.join(workspacePath, "nested"));
+      await fs.writeFile(path.join(workspacePath, ".re-write-root.tmp"), "incomplete deck");
+      await fs.writeFile(
+        path.join(workspacePath, "nested/.re-write-nested.tmp"),
+        "incomplete deck",
+      );
+      await fs.writeFile(path.join(workspacePath, "notes.tmp"), "User file");
+      const handlers = await createHandlersWithOverrides(path.join(settingsRoot, "settings.json"));
       await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath: workspacePath }));
-
-      const result = await Effect.runPromise(handlers.RunGitSync({ rootPath: workspacePath }));
-
-      expect(result.createdCommit).toBe(true);
-      expect(result.pushed).toBe(true);
-      expect(result.snapshot._tag).toBe("GitSyncReady");
-
-      const workspaceHead = runGit(workspacePath, ["rev-parse", "HEAD"]);
-      const remoteHead = runBareGit(remotePath, ["rev-parse", "refs/heads/master"]);
-      expect(remoteHead).toBe(workspaceHead);
+      const result = await Effect.runPromise(
+        handlers.RunGitSync({ rootPath: workspacePath }).pipe(Effect.either),
+      );
+      expect(runGit(workspacePath, ["ls-tree", "-r", "--name-only", "HEAD"]).split("\n")).toEqual([
+        "cards.md",
+        "notes.tmp",
+      ]);
+      // The unfinished save still makes the workspace dirty; sync must request a retry.
+      expect(result).toMatchObject({ _tag: "Left", left: { _tag: "GitSyncNotReadyError" } });
     } finally {
       await fs.rm(workspacePath, { recursive: true, force: true });
       await fs.rm(remotePath, { recursive: true, force: true });
       await fs.rm(settingsRoot, { recursive: true, force: true });
     }
   });
+
+  it(
+    "commits local changes and pushes them to the tracked remote branch",
+    { timeout: 15_000 },
+    async () => {
+      const settingsRoot = await fs.mkdtemp(path.join(tmpdir(), "re-desktop-git-settings-"));
+      const settingsFilePath = path.join(settingsRoot, "settings.json");
+      const { workspacePath, remotePath } = await seedRemoteRepository();
+      const deckPath = path.join(workspacePath, "cards.md");
+
+      try {
+        await fs.appendFile(deckPath, "new card\n", "utf8");
+
+        const handlers = await createHandlersWithOverrides(settingsFilePath);
+        await Effect.runPromise(handlers.SetWorkspaceRootPath({ rootPath: workspacePath }));
+
+        const result = await Effect.runPromise(handlers.RunGitSync({ rootPath: workspacePath }));
+
+        expect(result.createdCommit).toBe(true);
+        expect(result.pushed).toBe(true);
+        expect(result.snapshot._tag).toBe("GitSyncReady");
+
+        const workspaceHead = runGit(workspacePath, ["rev-parse", "HEAD"]);
+        const remoteHead = runBareGit(remotePath, ["rev-parse", "refs/heads/master"]);
+        expect(remoteHead).toBe(workspaceHead);
+      } finally {
+        await fs.rm(workspacePath, { recursive: true, force: true });
+        await fs.rm(remotePath, { recursive: true, force: true });
+        await fs.rm(settingsRoot, { recursive: true, force: true });
+      }
+    },
+  );
 });

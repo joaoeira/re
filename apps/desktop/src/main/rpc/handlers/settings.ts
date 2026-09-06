@@ -77,5 +77,5 @@ export const createSettingsHandlers = () =>
         }),
     };
 
-    return provideHandlerServices(handlers);
+    return yield* provideHandlerServices(handlers);
   });

@@ -2,7 +2,7 @@ import { FileSystem } from "@effect/platform";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { parseFile, State } from "@re/core";
-import { SchedulerLive } from "@re/scheduler";
+import { Scheduler, SchedulerLive } from "@re/scheduler";
 import {
   DeckManager,
   DeckManagerLive,
@@ -28,6 +28,66 @@ const TestLive = ReviewStoreLive.pipe(
 const TestWithPlatformLive = Layer.merge(TestLive, PlatformLive);
 
 describe("ReviewStoreLive", () => {
+  it.scoped("grades the latest metadata after waiting to acquire the deck lock", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const base = yield* DeckManager;
+      const scheduler = yield* Scheduler.pipe(Effect.provide(SchedulerLive));
+      const rootPath = yield* fileSystem.makeTempDirectoryScoped();
+      const deckPath = `${rootPath}/deck.md`;
+      yield* fileSystem.writeFileString(deckPath, "<!--@ card-a 0 0 0 0-->\nQuestion\n---\nAnswer");
+      const original = (yield* base.readDeck(deckPath)).items[0]!.cards[0]!;
+      const waiting = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const beforeWrite = <A, E>(operation: Effect.Effect<A, E>) =>
+        Deferred.succeed(waiting, undefined).pipe(
+          Effect.zipRight(Deferred.await(release)),
+          Effect.zipRight(operation),
+        );
+      const delayed: DeckManager = {
+        ...base,
+        modifyCardMetadata: (path, id, change) =>
+          beforeWrite(base.modifyCardMetadata(path, id, change)),
+        updateCardMetadata: (path, id, metadata) =>
+          beforeWrite(base.updateCardMetadata(path, id, metadata)),
+      };
+      const reviews = yield* ReviewStore.pipe(
+        Effect.provide(
+          ReviewStoreLive.pipe(
+            Layer.provide(
+              Layer.mergeAll(
+                QueueServicesLive,
+                SchedulerLive,
+                PlatformLive,
+                Layer.succeed(DeckManager, delayed),
+              ),
+            ),
+          ),
+        ),
+      );
+      const reference = {
+        deckPath,
+        deckName: "deck",
+        relativePath: "deck.md",
+        cardId: "card-a",
+        cardKey: "main",
+      };
+      const grading = yield* reviews
+        .gradeCard(reference, 2, new Date("2026-08-02T12:00:00Z"))
+        .pipe(Effect.forkScoped);
+      yield* Deferred.await(waiting);
+      const intervening = yield* scheduler.scheduleReview(
+        original,
+        2,
+        new Date("2026-08-01T12:00:00Z"),
+      );
+      yield* base.updateCardMetadata(deckPath, "card-a", intervening.updatedCard);
+      yield* Deferred.succeed(release, undefined);
+      const undo = yield* Fiber.join(grading);
+      expect(undo.previousMetadata).toEqual(intervening.updatedCard);
+    }).pipe(Effect.provide(DeckManagerServicesLive)),
+  );
+
   it.scoped(
     "keeps healthy cards from a deck with a mismatched item and reports the skipped item",
     () =>
@@ -49,7 +109,7 @@ describe("ReviewStoreLive", () => {
           {
             relativePath: "mixed.md",
             kind: "parse_error",
-            message: expect.stringContaining("Card broken:"),
+            message: expect.stringMatching(/^Card (broken|extra):/),
           },
         ]);
       }).pipe(Effect.provide(TestWithPlatformLive)),

@@ -22,7 +22,6 @@ import {
   ClozeType,
   QAContent,
   QAType,
-  getBuiltinCardKey,
   annotateBuiltinCardKeys,
   resolveBuiltinCard,
   resolveBuiltinItem,
@@ -107,16 +106,23 @@ try {
         { content: clozeContent, cards: ClozeType.cards(cloze).map(() => createMetadata()) },
         adaptItemType(ClozeType),
       );
-      const scheduled = yield* scheduler.scheduleReview(qaMetadata, 2, reviewedAt);
+      const scheduled = yield* decks.modifyCardMetadata(deckPath, qaMetadata.id, ({ card }) =>
+        scheduler
+          .scheduleReview(card, 2, reviewedAt)
+          .pipe(Effect.map((result) => ({ metadata: result.updatedCard, result }))),
+      );
       assert.ok(scheduled.updatedCard.due instanceof Date);
-      yield* decks.updateCardMetadata(deckPath, qaMetadata.id, scheduled.updatedCard);
       const updated = yield* decks.readDeck(deckPath);
       assert.deepEqual(updated.items[0]?.cards[0], scheduled.updatedCard);
       assert.equal(updated.items[0]?.content, qaContent);
       assert.equal(updated.items[1]?.cards.length, 2);
 
       const editedContent = "Which city is France's capital?\n---\nParis";
-      const reviewKey = yield* getBuiltinCardKey(updated.items[0]!, qaMetadata.id);
+      const annotatedReview = yield* annotateBuiltinCardKeys([
+        { item: updated.items[0]!, card: scheduled.updatedCard },
+      ]);
+      assert.equal(annotatedReview.errors.length, 0);
+      const reviewKey = annotatedReview.items[0]!.cardKey;
       const nextCards = yield* adaptItemType(QAType).parseCards(editedContent);
       const edited = yield* decks.modifyItem(
         deckPath,

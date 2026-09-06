@@ -343,7 +343,7 @@ export const createReviewHandlers = () =>
     const deckWriteCoordinator = yield* DeckWriteCoordinatorService;
     const forgePromptRuntime = yield* ForgePromptRuntimeService;
 
-    return provideHandlerServices({
+    return yield* provideHandlerServices({
       BuildReviewQueue: ({ deckPaths, rootPath, options = DEFAULT_REVIEW_SESSION_OPTIONS }) =>
         Effect.gen(function* () {
           const configuredRootPath = yield* validateRequestedRootPathAs(
@@ -465,73 +465,32 @@ export const createReviewHandlers = () =>
 
           const scheduleResult = yield* deckWriteCoordinator.withDeckLock(
             deckPath,
-            Effect.gen(function* () {
-              const parsed = yield* deckManager.readDeck(deckPath).pipe(
-                Effect.catchTags({
-                  DeckNotFound: failWithReviewOperationError,
-                  DeckReadError: failWithReviewOperationError,
-                  DeckParseError: failWithReviewOperationError,
-                }),
-              );
-              const cardLocation = findCardLocationById(parsed, cardId);
-
-              if (!cardLocation) {
-                return yield* Effect.fail(
-                  new ReviewOperationError({
-                    message: `Card not found: ${cardId}`,
-                  }),
-                );
-              }
-
-              const { spec: cardSpec } = yield* resolveBuiltinCard(cardLocation.item, {
-                cardId,
-                cardKey,
-              }).pipe(
-                Effect.mapError(
-                  (error) =>
-                    new ReviewOperationError({
-                      message: error.message,
-                    }),
-                ),
-              );
-              const evaluatedGrade = yield* cardSpec
-                .evaluate(grade)
-                .pipe(
-                  Effect.mapError((error) => new ReviewOperationError({ message: error.message })),
-                );
-              const scheduled = yield* scheduler
-                .scheduleReview(cardLocation.card, evaluatedGrade, reviewedAt)
-                .pipe(
-                  Effect.mapError((error) => new ReviewOperationError({ message: error.message })),
-                );
-
-              yield* deckManager.updateCardMetadata(deckPath, cardId, scheduled.updatedCard).pipe(
-                Effect.catchTags({
-                  DeckNotFound: failWithReviewOperationError,
-                  DeckReadError: failWithReviewOperationError,
-                  DeckParseError: failWithReviewOperationError,
-                  DeckWriteError: failWithReviewOperationError,
-                  CardNotFound: failWithReviewOperationError,
-                }),
-              );
-
-              return {
-                previousCard: cardLocation.card,
-                previousDue: cardLocation.card.due,
-                nextCard: scheduled.updatedCard,
-                expectedCurrentCardFingerprint: toMetadataFingerprint(scheduled.updatedCard),
-                previousCardFingerprint: toMetadataFingerprint(cardLocation.card),
-                grade: evaluatedGrade,
-                previousState: scheduled.schedulerLog.previousState,
-                nextState: scheduled.updatedCard.state,
-                previousStability: cardLocation.card.stability.value,
-                nextStability: scheduled.updatedCard.stability.value,
-                previousDifficulty: cardLocation.card.difficulty.value,
-                nextDifficulty: scheduled.updatedCard.difficulty.value,
-                previousLearningSteps: cardLocation.card.learningSteps,
-                nextLearningSteps: scheduled.updatedCard.learningSteps,
-              };
-            }),
+            deckManager.modifyCardMetadata(deckPath, cardId, ({ item, card }) =>
+              Effect.gen(function* () {
+                const { spec } = yield* resolveBuiltinCard(item, { cardId, cardKey });
+                const evaluatedGrade = yield* spec.evaluate(grade);
+                const scheduled = yield* scheduler.scheduleReview(card, evaluatedGrade, reviewedAt);
+                return {
+                  metadata: scheduled.updatedCard,
+                  result: {
+                    previousCard: card,
+                    previousDue: card.due,
+                    nextCard: scheduled.updatedCard,
+                    expectedCurrentCardFingerprint: toMetadataFingerprint(scheduled.updatedCard),
+                    previousCardFingerprint: toMetadataFingerprint(card),
+                    grade: evaluatedGrade,
+                    previousState: scheduled.schedulerLog.previousState,
+                    nextState: scheduled.updatedCard.state,
+                    previousStability: card.stability.value,
+                    nextStability: scheduled.updatedCard.stability.value,
+                    previousDifficulty: card.difficulty.value,
+                    nextDifficulty: scheduled.updatedCard.difficulty.value,
+                    previousLearningSteps: card.learningSteps,
+                    nextLearningSteps: scheduled.updatedCard.learningSteps,
+                  },
+                };
+              }),
+            ),
           );
 
           const canonicalWorkspacePath = yield* canonicalizeWorkspacePath(configuredRootPath).pipe(
@@ -611,39 +570,24 @@ export const createReviewHandlers = () =>
           yield* deckWriteCoordinator
             .withDeckLock(
               deckPath,
-              Effect.gen(function* () {
-                const parsed = yield* deckManager.readDeck(deckPath).pipe(
-                  Effect.catchTags({
-                    DeckNotFound: failWithReviewOperationError,
-                    DeckReadError: failWithReviewOperationError,
-                    DeckParseError: failWithReviewOperationError,
+              deckManager
+                .modifyCardMetadata(deckPath, cardId, ({ card }) =>
+                  Effect.gen(function* () {
+                    const actualCurrentCardFingerprint = toMetadataFingerprint(card);
+                    if (actualCurrentCardFingerprint !== expectedCurrentCardFingerprint) {
+                      return yield* new UndoConflictError({
+                        deckPath,
+                        cardId,
+                        message:
+                          "Undo conflict detected. Card metadata changed outside this review session.",
+                        expectedCurrentCardFingerprint,
+                        actualCurrentCardFingerprint,
+                      });
+                    }
+                    return { metadata: previousCard, result: undefined };
                   }),
-                );
-                const cardLocation = findCardLocationById(parsed, cardId);
-
-                if (!cardLocation) {
-                  return yield* Effect.fail(
-                    new ReviewOperationError({
-                      message: `Card not found: ${cardId}`,
-                    }),
-                  );
-                }
-
-                const actualCurrentCardFingerprint = toMetadataFingerprint(cardLocation.card);
-                if (actualCurrentCardFingerprint !== expectedCurrentCardFingerprint) {
-                  return yield* Effect.fail(
-                    new UndoConflictError({
-                      deckPath,
-                      cardId,
-                      message:
-                        "Undo conflict detected. Card metadata changed outside this review session.",
-                      expectedCurrentCardFingerprint,
-                      actualCurrentCardFingerprint,
-                    }),
-                  );
-                }
-
-                yield* deckManager.updateCardMetadata(deckPath, cardId, previousCard).pipe(
+                )
+                .pipe(
                   Effect.catchTags({
                     DeckNotFound: failWithReviewOperationError,
                     DeckReadError: failWithReviewOperationError,
@@ -651,8 +595,7 @@ export const createReviewHandlers = () =>
                     DeckWriteError: failWithReviewOperationError,
                     CardNotFound: failWithReviewOperationError,
                   }),
-                );
-              }),
+                ),
             )
             .pipe(
               Effect.catchTag("undo_conflict", (error) =>

@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { DeckManager } from "@re/workspace";
 import type { Implementations, IpcMainHandle } from "electron-effect-rpc/types";
 
 import type { ReviewAnalyticsRepository } from "@main/analytics";
@@ -104,6 +105,7 @@ export const defaultHandlers = bindTestContext(
 );
 
 export type HandlerTestOverrides = {
+  readonly deckManager?: DeckManager;
   readonly watcher?: WorkspaceWatcher | undefined;
   readonly publish?: IpcMainHandle<AppContract>["publish"] | undefined;
   readonly openEditorWindow?: ((params: EditorWindowParams) => void) | undefined;
@@ -125,7 +127,10 @@ export const createHandlersWithOverrides = async (
     const repository =
       overrides.settingsRepository ?? (yield* makeSettingsRepository({ settingsFilePath }));
 
-    const rpc = yield* makeAppRpcHandlersEffect.pipe(
+    const makeHandlers = overrides.deckManager
+      ? makeAppRpcHandlersEffect.pipe(Effect.provideService(DeckManager, overrides.deckManager))
+      : makeAppRpcHandlersEffect;
+    const rpc = yield* makeHandlers.pipe(
       Effect.provide(
         MainAppDirectLive({
           settingsRepository: repository,

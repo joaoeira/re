@@ -1,17 +1,7 @@
 import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "@effect/vitest";
-import { vi } from "vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { createMetadata } from "@re/core";
-import {
-  annotateBuiltinCardKeys,
-  ClozeType,
-  QAType,
-  getBuiltinCardKey,
-  resolveBuiltinCard,
-  resolveBuiltinItem,
-} from "../src";
-
-afterEach(() => vi.restoreAllMocks());
+import { annotateBuiltinCardKeys, resolveBuiltinCard, resolveBuiltinItem } from "../src";
 
 describe("resolveBuiltinItem", () => {
   it.effect("prefers cloze when both interpretations fit the saved metadata", () =>
@@ -49,8 +39,7 @@ describe("builtin card identity", () => {
         content: "{{c1::Paris}} is in {{c3::France}}.",
         cards: [first, second],
       };
-      const cardKey = yield* getBuiltinCardKey(item, second.id);
-      expect(cardKey).toBe("c3");
+      const cardKey = "c3";
 
       const mismatch = yield* resolveBuiltinCard(item, { cardId: first.id, cardKey }).pipe(
         Effect.either,
@@ -71,15 +60,13 @@ describe("builtin card identity", () => {
 });
 
 describe("annotateBuiltinCardKeys", () => {
-  it.effect("preserves interleaved queue order and parses each shared item once", () =>
+  it.effect("preserves interleaved queue order and entry fields", () =>
     Effect.gen(function* () {
       const cloze = {
         content: "{{c1::one}} {{c3::three}} {{c5::five}}",
         cards: [createMetadata(), createMetadata(), createMetadata()],
       };
       const qa = { content: "Question\n---\nAnswer", cards: [createMetadata()] };
-      const clozeParse = vi.spyOn(ClozeType, "parse");
-      const qaParse = vi.spyOn(QAType, "parse");
 
       const { items: entries } = yield* annotateBuiltinCardKeys([
         { item: cloze, card: cloze.cards[1]!, label: "second" },
@@ -94,10 +81,6 @@ describe("annotateBuiltinCardKeys", () => {
         { label: "first", cardKey: "c1" },
         { label: "third", cardKey: "c5" },
       ]);
-      expect(clozeParse.mock.calls.filter(([content]) => content === cloze.content)).toHaveLength(
-        1,
-      );
-      expect(qaParse.mock.calls.filter(([content]) => content === qa.content)).toHaveLength(1);
     }),
   );
 

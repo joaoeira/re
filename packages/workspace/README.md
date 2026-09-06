@@ -42,14 +42,21 @@ instead of matching keys from different namespaces. For an explicit repair reque
 the current item still needs repair inside the callback before returning fresh metadata. If another
 edit already repaired it, reconcile normally so its healthy learning data survives.
 
-The callback must not call another mutation on the same deck: the lock is not reentrant and
+`modifyCardMetadata(deckPath, cardId, change)` provides the current `{ item, card }` under the
+same lock. Its callback returns `{ metadata, result }`; the manager saves the metadata and
+returns `result` only after the save succeeds. Grading should resolve the current card's key
+and ID, evaluate the response, and compute the schedule inside this callback. Conditional
+undo should check its expected metadata there before returning the metadata to restore.
+`updateCardMetadata` wraps this operation for unconditional metadata replacements.
+
+Neither callback may call another mutation on the same deck: the lock is not reentrant and
 such a call would deadlock. Keep it focused on computing the replacement. External side effects
 inside the callback are not rolled back if later validation or saving fails.
 
 ## Concurrent writes
 
 Reuse one `DeckManager` instance for operations that may overlap. Its content edits
-(`updateCardMetadata`, `modifyItem`, `replaceItem`, `appendItem`, `removeItem`, and `restoreItem`)
+(`modifyCardMetadata`, `updateCardMetadata`, `modifyItem`, `replaceItem`, `appendItem`, `removeItem`, and `restoreItem`)
 each hold a per-deck lock across reading, changing, and saving the file. Concurrent
 edits to different items therefore preserve one another's changes. Unrelated decks
 can be edited concurrently, including while an item type is validating content.
@@ -68,6 +75,10 @@ aliases. A separate `readDeck` followed by an update is not a transaction. Repla
 the same item with stale content can still overwrite a newer replacement; the
 later replacement wins. Apps that coordinate several calls as one workflow still
 need their own coordination around that workflow.
+
+Service lifetime matters at application boundaries: capture a shared instance when creating
+RPC handlers instead of rebuilding `DeckManagerLive` for each request. The desktop handler
+bundle does this so reviews, editor saves, and Forge writes use the same per-deck locks.
 
 Scheduling is provided by `@re/scheduler`; import `Scheduler` and `SchedulerLive` from that
 package. Workspace uses its due-date helpers for snapshots and review queues. Discovery uses

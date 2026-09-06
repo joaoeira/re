@@ -7,7 +7,6 @@ import { createRpcClient } from "electron-effect-rpc/renderer";
 import type { Implementations, RpcHandlerContext } from "electron-effect-rpc/types";
 import { expect, it, vi } from "vitest";
 
-import { provideHandlerServices } from "@main/rpc/handlers/shared";
 import { UndoReview } from "@shared/rpc/contracts/review";
 import { CreateDeck, ParseDeckPreview } from "@shared/rpc/contracts/workspace";
 
@@ -27,7 +26,7 @@ it("preserves library errors and date transformations across desktop RPC", async
       handle: (channel, listener) => listeners.set(channel, listener),
       removeHandler: (channel) => listeners.delete(channel),
     },
-    provideHandlerServices({
+    {
       ParseDeckPreview: ({ markdown }) =>
         parseFile(markdown).pipe(
           Effect.map((file) => ({
@@ -38,7 +37,7 @@ it("preserves library errors and date transformations across desktop RPC", async
       CreateDeck: ({ relativePath }) =>
         Effect.fail(new DeckAlreadyExists({ deckPath: relativePath })),
       UndoReview: undoReview,
-    } satisfies Implementations<typeof contract>),
+    } satisfies Implementations<typeof contract>,
     { runtime: Runtime.defaultRuntime },
   );
   const client = createRpcClient(contract, {

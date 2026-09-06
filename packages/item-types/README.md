@@ -37,8 +37,7 @@ returns `{ items, errors }`, preserves valid entries' order and other fields, an
 Unresolvable entries are excluded, with one error per invalid item containing an entry that identifies
 its location. It resolves each shared item snapshot
 once, even when its cards are interleaved in the queue. Desktop, CLI, and Raycast all use this helper;
-it has no dependency on workspace queue types. For a single card, use
-`getBuiltinCardKey(queuedItem, cardId)` to capture the key from its snapshot.
+it has no dependency on workspace queue types.
 Later, call `resolveBuiltinCard(currentItem, { cardId, cardKey })` before displaying or
 grading it. The result includes the selected `spec` and its metadata `card`, along with the
 resolved item `type` and all generated `cards`. Selection uses the key and verifies the saved ID,

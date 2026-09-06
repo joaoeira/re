@@ -442,5 +442,5 @@ export const createEditorHandlers = () =>
         }),
     };
 
-    return provideHandlerServices(handlers);
+    return yield* provideHandlerServices(handlers);
   });

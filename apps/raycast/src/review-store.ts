@@ -555,77 +555,24 @@ export const ReviewStoreLive: Layer.Layer<
       grade: FSRSGrade,
       now: Date,
     ) {
-      const parsed = yield* deckManager.readDeck(reference.deckPath).pipe(
-        Effect.catchTags({
-          DeckNotFound: () =>
-            Effect.fail(
-              new ReviewGradeError({
-                deckPath: reference.deckPath,
-                cardId: reference.cardId,
-                message: "The deck no longer exists.",
-              }),
+      const scheduled = yield* deckManager
+        .modifyCardMetadata(reference.deckPath, reference.cardId, ({ item, card }) =>
+          Effect.gen(function* () {
+            const { spec } = yield* resolveBuiltinCard(item, reference);
+            const evaluatedGrade = yield* spec.evaluate(grade);
+            const result = yield* scheduler.scheduleReview(card, evaluatedGrade, now);
+            return { metadata: result.updatedCard, result };
+          }).pipe(
+            Effect.mapError(
+              (error) =>
+                new ReviewGradeError({
+                  deckPath: reference.deckPath,
+                  cardId: reference.cardId,
+                  message: error.message,
+                }),
             ),
-          DeckReadError: (error) =>
-            Effect.fail(
-              new ReviewGradeError({
-                deckPath: reference.deckPath,
-                cardId: reference.cardId,
-                message: `Could not read the deck: ${error.message}`,
-              }),
-            ),
-          DeckParseError: (error) =>
-            Effect.fail(
-              new ReviewGradeError({
-                deckPath: reference.deckPath,
-                cardId: reference.cardId,
-                message: `The deck metadata is invalid: ${error.message}`,
-              }),
-            ),
-        }),
-      );
-      const found = findItemByCardId(parsed.items, reference.cardId);
-
-      if (found === null) {
-        return yield* new ReviewGradeError({
-          deckPath: reference.deckPath,
-          cardId: reference.cardId,
-          message: "The card no longer exists in its deck.",
-        });
-      }
-
-      const { spec: cardSpec } = yield* resolveBuiltinCard(found.item, reference).pipe(
-        Effect.mapError(
-          (error) =>
-            new ReviewGradeError({
-              deckPath: reference.deckPath,
-              cardId: reference.cardId,
-              message: error.message,
-            }),
-        ),
-      );
-      const evaluatedGrade = yield* cardSpec.evaluate(grade).pipe(
-        Effect.mapError(
-          (error) =>
-            new ReviewGradeError({
-              deckPath: reference.deckPath,
-              cardId: reference.cardId,
-              message: error.message,
-            }),
-        ),
-      );
-      const scheduled = yield* scheduler.scheduleReview(found.card, evaluatedGrade, now).pipe(
-        Effect.mapError(
-          (error) =>
-            new ReviewGradeError({
-              deckPath: reference.deckPath,
-              cardId: reference.cardId,
-              message: error.message,
-            }),
-        ),
-      );
-
-      yield* deckManager
-        .updateCardMetadata(reference.deckPath, reference.cardId, scheduled.updatedCard)
+          ),
+        )
         .pipe(
           Effect.catchTags({
             DeckNotFound: () =>

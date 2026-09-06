@@ -182,7 +182,7 @@ Review references pair the saved card ID with its generated key. Apps capture th
 queued snapshot, then resolve it against current content and verify that it still belongs to
 that ID. Removing an earlier cloze can shift the array without changing the intended card;
 removing the target or assigning its key to another ID fails instead of selecting a neighbor.
-`@re/item-types` provides `getBuiltinCardKey` and `resolveBuiltinCard` for this workflow.
+`@re/item-types` provides `annotateBuiltinCardKeys` and `resolveBuiltinCard` for this workflow.
 
 Build locally with `bun run build`. From the repository root, `bun run pack:libraries`
 creates installable archives and `bun run check:packages` verifies them in an isolated Node consumer.
