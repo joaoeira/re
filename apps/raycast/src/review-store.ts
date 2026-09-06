@@ -7,7 +7,12 @@ import {
   type ItemMetadata,
   type EvaluableItemType,
 } from "@simbyotic/re-core";
-import { ClozeType, QAType, annotateBuiltinCardKeys, resolveBuiltinCard } from "@simbyotic/re-item-types";
+import {
+  ClozeType,
+  QAType,
+  annotateBuiltinCardKeys,
+  resolveBuiltinCard,
+} from "@simbyotic/re-item-types";
 import { Scheduler, type FSRSGrade } from "@simbyotic/re-scheduler";
 import {
   DeckManager,
