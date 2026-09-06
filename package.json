@@ -17,10 +17,10 @@
     "desktop:build": "bun run --filter @re/desktop build",
     "desktop:package": "bun run --filter @re/desktop package",
     "desktop:install": "bun run --filter @re/desktop install:local",
-    "raycast:dev": "bun --cwd=apps/raycast run dev",
-    "raycast:test": "bun --cwd=apps/raycast run test",
-    "raycast:typecheck": "bun --cwd=apps/raycast run typecheck",
-    "raycast:build": "bun --cwd=apps/raycast run build",
+    "raycast:dev": "bun run build:libraries && bun --cwd=apps/raycast run dev",
+    "raycast:test": "bun run build:libraries && bun --cwd=apps/raycast run test",
+    "raycast:typecheck": "bun run build:libraries && bun --cwd=apps/raycast run typecheck",
+    "raycast:build": "bun run build:libraries && bun --cwd=apps/raycast run build",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt --write .",
@@ -28,7 +28,8 @@
     "build:libraries": "tsc -b tsconfig.build.json",
     "watch:libraries": "tsc -b tsconfig.build.json --watch",
     "pack:libraries": "node scripts/pack-libraries.mjs",
-    "check:packages": "node scripts/check-packages.mjs"
+    "check:packages": "node scripts/check-packages.mjs",
+    "check:raycast": "node scripts/check-raycast.mjs"
   },
   "devDependencies": {
     "@effect/language-service": "^0.64.1",

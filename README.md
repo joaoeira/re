@@ -218,6 +218,7 @@ bun run build:libraries               # Incremental builds in dependency order
 bun run watch:libraries               # Run alongside an app for library development
 bun run pack:libraries                # Clean build and inspected .tgz files in dist/packages/
 bun run check:packages                # Build, pack, install outside the workspace, compile, run
+bun run check:raycast                 # Install, test, and build Raycast outside the workspace
 ```
 
 Use `pack:libraries` to produce installable archives with resolved workspace dependency

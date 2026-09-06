@@ -4,11 +4,16 @@ Create and review Q&A and cloze cards directly in re Markdown decks.
 
 ## Setup
 
-Run the extension in development mode:
+In the standalone repository, install dependencies and run development mode:
 
 ```bash
-bun run raycast:dev
+npm ci
+npm run dev
 ```
+
+Use Node 22.22.2 or newer and Raycast on macOS. The standalone export includes library archives
+under `vendor/` and a lockfile, so installation does not require this monorepo or published
+`@re/*` packages.
 
 The first time you open **Create Card**, Raycast asks for the **Decks Folder**. Choose the
 directory that contains your re Markdown decks. The extension scans that directory recursively
@@ -33,8 +38,33 @@ minutes and after creating or grading a card.
 
 ## Development
 
+Run these commands from the standalone app directory:
+
 ```bash
-bun run raycast:test
-bun run raycast:typecheck
-bun run raycast:build
+npm run lint
+npm run fmt:check
+npm run typecheck
+npm test
+npm run build
 ```
+
+The production build writes all three commands and assets to `dist/`. It does not install the
+extension into Raycast; use `npm run dev` to run it in the host. The included GitHub Actions
+workflow installs from the lockfile, runs these checks, and uploads `dist/`.
+
+While the app remains in the monorepo, use `bun run raycast:dev`, `raycast:test`,
+`raycast:typecheck`, and `raycast:build` from the repository root. Those wrappers build the
+libraries before running the app's local commands. Run `bun run watch:libraries` alongside
+development when changing library source.
+
+From the monorepo root, `bun run check:raycast` copies this app outside the workspace, installs
+its built library archives with npm, and runs all checks plus the production build. To retain a
+standalone copy with a portable lockfile and library archives, pass a new destination:
+
+```bash
+bun run check:raycast --output dist/raycast
+```
+
+The export can become a separate repository. It refuses to overwrite an existing destination.
+When the libraries are published, replace the `file:vendor/...` dependencies with their released
+versions and regenerate the lockfile; the app's source and build commands need no changes.

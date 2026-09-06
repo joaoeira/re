@@ -1,0 +1,37 @@
+name: Raycast isolation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/raycast/**"
+      - "packages/**"
+      - "scripts/**"
+      - "tsconfig*.json"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/raycast-isolation.yml"
+  push:
+    branches: [master]
+    paths:
+      - "apps/raycast/**"
+      - "packages/**"
+      - "scripts/**"
+      - "tsconfig*.json"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/raycast-isolation.yml"
+
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.21
+      - run: bun install --frozen-lockfile
+      - run: bun run check:raycast
