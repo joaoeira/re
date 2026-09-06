@@ -1,0 +1,3 @@
+# Tools walked from this directory do not see the root .gitignore.
+.cache
+dist

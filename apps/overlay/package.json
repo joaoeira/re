@@ -1,0 +1,33 @@
+{
+  "name": "@re/overlay",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run native:build && bun src/index.ts",
+    "native:build": "bun scripts/build-gpuix.ts && mkdir -p dist && clang -shared -fobjc-arc -framework Cocoa -framework Carbon native/panel.m -o dist/libpanel.dylib",
+    "typecheck": "tsc --noEmit",
+    "build": "bun run native:build && bun scripts/build.ts",
+    "test": "bun test test"
+  },
+  "dependencies": {
+    "@effect/platform": "^0.94.5",
+    "@effect/platform-node": "0.104.0",
+    "@gpuix/react": "0.7.0",
+    "@simbyotic/re": "0.2.0",
+    "effect": "3.19.18",
+    "image-size": "^2.0.2",
+    "mathjax-full": "3.2.2",
+    "react": "19.2.3",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/mdast": "^4.0.4",
+    "@types/react": "19.0.10",
+    "typescript": "^5.9.3"
+  }
+}

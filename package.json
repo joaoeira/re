@@ -36,7 +36,9 @@
     "release:check": "node scripts/check-library-release.mjs",
     "release:dry-run": "node scripts/publish-library.mjs --dry-run",
     "release:publish": "node scripts/publish-library.mjs --publish",
-    "test:release": "node --test scripts/library-release.test.mjs"
+    "test:release": "node --test scripts/library-release.test.mjs",
+    "overlay:dev": "bun --cwd=apps/overlay run dev",
+    "overlay:build": "bun --cwd=apps/overlay run build"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.2",
@@ -47,5 +49,8 @@
     "oxfmt": "^0.33.0",
     "oxlint": "^1.55.0",
     "typescript": "^5.9.3"
+  },
+  "patchedDependencies": {
+    "@gpuix/react@0.7.0": "patches/@gpuix%2Freact@0.7.0.patch"
   }
 }
