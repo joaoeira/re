@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { describe, it, assert } from "@effect/vitest";
-import { QAType } from "../../src/item-types/qa";
+import { QAType, composeQA } from "../../src/item-types/qa";
 import { ContentParseError } from "../../src/core/index.js";
 
 describe("QAType", () => {
@@ -174,4 +174,36 @@ Answer
       }),
     );
   });
+});
+
+describe("composeQA", () => {
+  it.effect("round-trips normalized text while preserving legal separator-like lines", () =>
+    Effect.gen(function* () {
+      const content = yield* composeQA(
+        "  Question\r\n --- \r\nMore?  ",
+        "  Answer\r\n---\r\nDetails  ",
+      );
+      const parsed = yield* QAType.parse(content);
+      assert.deepStrictEqual(parsed, {
+        question: "Question\n --- \nMore?",
+        answer: "Answer\n---\nDetails",
+      });
+    }),
+  );
+  it.effect("rejects empty fields and ambiguous question separators", () =>
+    Effect.gen(function* () {
+      for (const [question, answer, field] of [
+        [" \r\n", "Answer", "question"],
+        ["Question", " \r\n", "answer"],
+        ["Question\n---", "Answer", "question"],
+        ["Question\r\n---\r\nMore", "Answer", "question"],
+        ["Question\n---  ", "Answer", "question"],
+        ["---\nQuestion", "Answer", "question"],
+      ] as const) {
+        const error = yield* composeQA(question, answer).pipe(Effect.flip);
+        assert.strictEqual(error._tag, "QAComposeError");
+        assert.strictEqual(error.field, field);
+      }
+    }),
+  );
 });

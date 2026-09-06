@@ -7,18 +7,20 @@ import {
   type ItemMetadata,
   type EvaluableItemType,
 } from "@simbyotic/re/core";
-import {
-  ClozeType,
-  QAType,
-  annotateBuiltinCardKeys,
-  resolveBuiltinCard,
-} from "@simbyotic/re/item-types";
+import { ClozeType, QAType, composeQA, resolveBuiltinCard } from "@simbyotic/re/item-types";
 import { Scheduler, type FSRSGrade } from "@simbyotic/re/scheduler";
 import {
   DeckManager,
   ReviewQueueBuilder,
   snapshotWorkspace,
   toScanDecksErrorMessage,
+  prepareBuiltinReviewQueue,
+  gradeBuiltinCard,
+  toReadErrorMessage,
+  toWriteErrorMessage,
+  type WriteError,
+  type CardNotFound,
+  type ItemValidationError,
   type RemovedDeckItem,
 } from "@simbyotic/re/workspace";
 import { Context, Data, Effect, Layer, Option } from "effect";
@@ -150,8 +152,6 @@ export interface ReviewStore {
 
 export const ReviewStore = Context.GenericTag<ReviewStore>("@re/raycast/ReviewStore");
 
-const QA_SEPARATOR = "\n---\n";
-
 interface PreparedReviewEdit {
   readonly cardType: "qa" | "cloze";
   readonly content: string;
@@ -169,29 +169,11 @@ const formatContentParseError = (error: {
 
 const prepareReviewEdit = Effect.fn("ReviewStore.prepareEdit")(function* (draft: ReviewCardDraft) {
   if (draft.cardType === "qa") {
-    const question = draft.question.trim();
-    const answer = draft.answer.trim();
-
-    if (question.length === 0) {
-      return yield* new ReviewEditValidationError({
-        field: "question",
-        message: "Enter a question.",
-      });
-    }
-    if (answer.length === 0) {
-      return yield* new ReviewEditValidationError({
-        field: "answer",
-        message: "Enter an answer.",
-      });
-    }
-    if (question.includes(QA_SEPARATOR)) {
-      return yield* new ReviewEditValidationError({
-        field: "question",
-        message: "A question cannot contain a line consisting only of ---.",
-      });
-    }
-
-    const content = `${question}${QA_SEPARATOR}${answer}`;
+    const content = yield* composeQA(draft.question, draft.answer).pipe(
+      Effect.mapError(
+        (error) => new ReviewEditValidationError({ field: error.field, message: error.message }),
+      ),
+    );
     const parsed = yield* QAType.parse(content).pipe(
       Effect.mapError(
         (error) =>
@@ -291,43 +273,38 @@ export const ReviewStoreLive: Layer.Layer<
             ],
       );
 
-      const queue = yield* queueBuilder.buildQueue({
+      const queue = yield* prepareBuiltinReviewQueue({
         deckPaths: validDeckPaths,
         rootPath: snapshot.rootPath,
         now,
-      });
+      }).pipe(Effect.provideService(ReviewQueueBuilder, queueBuilder));
 
-      const { items, errors } = yield* annotateBuiltinCardKeys(queue.items);
       return {
         rootPath: snapshot.rootPath,
-        cards: items.map(
-          (item): ReviewCardReference => ({
-            deckPath: item.deckPath,
-            deckName: item.deckName,
-            relativePath: item.relativePath,
-            cardId: item.card.id,
-            cardKey: item.cardKey,
+        cards: queue.cards.map(
+          (card): ReviewCardReference => ({
+            ...card.reference,
+            deckName: card.deckName,
+            relativePath: card.relativePath,
           }),
         ),
-        totalNew: items.filter((item) => item.category === "new").length,
-        totalDue: items.filter((item) => item.category === "due").length,
+        totalNew: queue.totalNew,
+        totalDue: queue.totalDue,
         totalCards,
         issues: [
           ...issues,
-          ...queue.deckErrors.map(
-            (error): ReviewDeckIssue => ({
-              deckPath: error.deckPath,
-              relativePath: pathService.relative(snapshot.rootPath, error.deckPath),
-              kind: "read_error",
-              message: error.message || "Deck could not be read.",
-            }),
-          ),
-          ...errors.map(
-            ({ entry, error }): ReviewDeckIssue => ({
-              deckPath: entry.deckPath,
-              relativePath: entry.relativePath,
-              kind: "parse_error",
-              message: `Card ${entry.card.id}: ${error.message}`,
+          ...queue.issues.map(
+            (issue): ReviewDeckIssue => ({
+              deckPath: issue.deckPath,
+              relativePath:
+                issue.kind === "card"
+                  ? issue.relativePath
+                  : pathService.relative(snapshot.rootPath, issue.deckPath),
+              kind: issue.kind === "card" ? "parse_error" : "read_error",
+              message:
+                issue.kind === "card"
+                  ? `Card ${issue.cardId}: ${issue.error.message}`
+                  : toReadErrorMessage(issue.error),
             }),
           ),
         ],
@@ -339,32 +316,14 @@ export const ReviewStoreLive: Layer.Layer<
       reference: ReviewCardReference,
     ) {
       const parsed = yield* deckManager.readDeck(reference.deckPath).pipe(
-        Effect.catchTags({
-          DeckNotFound: () =>
-            Effect.fail(
-              new ReviewCardLoadError({
-                deckPath: reference.deckPath,
-                cardId: reference.cardId,
-                message: "The deck no longer exists.",
-              }),
-            ),
-          DeckReadError: (error) =>
-            Effect.fail(
-              new ReviewCardLoadError({
-                deckPath: reference.deckPath,
-                cardId: reference.cardId,
-                message: `Could not read the deck: ${error.message}`,
-              }),
-            ),
-          DeckParseError: (error) =>
-            Effect.fail(
-              new ReviewCardLoadError({
-                deckPath: reference.deckPath,
-                cardId: reference.cardId,
-                message: `The deck metadata is invalid: ${error.message}`,
-              }),
-            ),
-        }),
+        Effect.mapError(
+          (error) =>
+            new ReviewCardLoadError({
+              deckPath: reference.deckPath,
+              cardId: reference.cardId,
+              message: toReadErrorMessage(error),
+            }),
+        ),
       );
       const found = findItemByCardId(parsed.items, reference.cardId);
 
@@ -386,14 +345,6 @@ export const ReviewStoreLive: Layer.Layer<
             }),
         ),
       );
-      if (cardSpec.cardType !== "qa" && cardSpec.cardType !== "cloze") {
-        return yield* new ReviewCardLoadError({
-          deckPath: reference.deckPath,
-          cardId: reference.cardId,
-          message: "The card content no longer matches its scheduling metadata.",
-        });
-      }
-
       const prepareMarkdown = (markdown: string) =>
         prepareMarkdownForRaycast(
           {
@@ -450,6 +401,14 @@ export const ReviewStoreLive: Layer.Layer<
       draft: ReviewCardDraft,
     ) {
       const prepared = yield* prepareReviewEdit(draft);
+      const mapPersistenceError = (error: WriteError | CardNotFound | ItemValidationError) =>
+        Effect.fail(
+          new ReviewEditError({
+            deckPath: reference.deckPath,
+            cardId: reference.cardId,
+            message: toWriteErrorMessage(error),
+          }),
+        );
       yield* deckManager
         .modifyItem(
           reference.deckPath,
@@ -503,54 +462,12 @@ export const ReviewStoreLive: Layer.Layer<
         )
         .pipe(
           Effect.catchTags({
-            DeckNotFound: () =>
-              Effect.fail(
-                new ReviewEditError({
-                  deckPath: reference.deckPath,
-                  cardId: reference.cardId,
-                  message: "The deck no longer exists.",
-                }),
-              ),
-            DeckReadError: (error) =>
-              Effect.fail(
-                new ReviewEditError({
-                  deckPath: reference.deckPath,
-                  cardId: reference.cardId,
-                  message: `Could not read the deck: ${error.message}`,
-                }),
-              ),
-            DeckParseError: (error) =>
-              Effect.fail(
-                new ReviewEditError({
-                  deckPath: reference.deckPath,
-                  cardId: reference.cardId,
-                  message: `The deck metadata is invalid: ${error.message}`,
-                }),
-              ),
-            DeckWriteError: (error) =>
-              Effect.fail(
-                new ReviewEditError({
-                  deckPath: reference.deckPath,
-                  cardId: reference.cardId,
-                  message: `Could not save the card: ${error.message}`,
-                }),
-              ),
-            CardNotFound: () =>
-              Effect.fail(
-                new ReviewEditError({
-                  deckPath: reference.deckPath,
-                  cardId: reference.cardId,
-                  message: "The card no longer exists in its deck.",
-                }),
-              ),
-            ItemValidationError: (error) =>
-              Effect.fail(
-                new ReviewEditError({
-                  deckPath: reference.deckPath,
-                  cardId: reference.cardId,
-                  message: error.message,
-                }),
-              ),
+            DeckNotFound: mapPersistenceError,
+            DeckReadError: mapPersistenceError,
+            DeckParseError: mapPersistenceError,
+            DeckWriteError: mapPersistenceError,
+            CardNotFound: mapPersistenceError,
+            ItemValidationError: mapPersistenceError,
           }),
         );
     });
@@ -560,72 +477,31 @@ export const ReviewStoreLive: Layer.Layer<
       grade: FSRSGrade,
       now: Date,
     ) {
-      const scheduled = yield* deckManager
-        .modifyCardMetadata(reference.deckPath, reference.cardId, ({ item, card }) =>
-          Effect.gen(function* () {
-            const { spec } = yield* resolveBuiltinCard(item, reference);
-            const evaluatedGrade = yield* spec.evaluate(grade);
-            const result = yield* scheduler.scheduleReview(card, evaluatedGrade, now);
-            return { metadata: result.updatedCard, result };
-          }).pipe(
-            Effect.mapError(
-              (error) =>
-                new ReviewGradeError({
-                  deckPath: reference.deckPath,
-                  cardId: reference.cardId,
-                  message: error.message,
-                }),
-            ),
-          ),
-        )
-        .pipe(
-          Effect.catchTags({
-            DeckNotFound: () =>
-              Effect.fail(
-                new ReviewGradeError({
-                  deckPath: reference.deckPath,
-                  cardId: reference.cardId,
-                  message: "The deck no longer exists.",
-                }),
-              ),
-            DeckReadError: (error) =>
-              Effect.fail(
-                new ReviewGradeError({
-                  deckPath: reference.deckPath,
-                  cardId: reference.cardId,
-                  message: `Could not read the deck: ${error.message}`,
-                }),
-              ),
-            DeckParseError: (error) =>
-              Effect.fail(
-                new ReviewGradeError({
-                  deckPath: reference.deckPath,
-                  cardId: reference.cardId,
-                  message: `The deck metadata is invalid: ${error.message}`,
-                }),
-              ),
-            DeckWriteError: (error) =>
-              Effect.fail(
-                new ReviewGradeError({
-                  deckPath: reference.deckPath,
-                  cardId: reference.cardId,
-                  message: `Could not write the review: ${error.message}`,
-                }),
-              ),
-            CardNotFound: () =>
-              Effect.fail(
-                new ReviewGradeError({
-                  deckPath: reference.deckPath,
-                  cardId: reference.cardId,
-                  message: "The card no longer exists in its deck.",
-                }),
-              ),
-          }),
-        );
+      const mapPersistenceError = (error: WriteError | CardNotFound) =>
+        Effect.fail(new Error(toWriteErrorMessage(error)));
+      const scheduled = yield* gradeBuiltinCard(reference, grade, now).pipe(
+        Effect.provideService(DeckManager, deckManager),
+        Effect.provideService(Scheduler, scheduler),
+        Effect.catchTags({
+          DeckNotFound: mapPersistenceError,
+          DeckReadError: mapPersistenceError,
+          DeckParseError: mapPersistenceError,
+          DeckWriteError: mapPersistenceError,
+          CardNotFound: mapPersistenceError,
+        }),
+        Effect.mapError(
+          (error) =>
+            new ReviewGradeError({
+              deckPath: reference.deckPath,
+              cardId: reference.cardId,
+              message: error.message,
+            }),
+        ),
+      );
 
       return {
         card: reference,
-        previousMetadata: scheduled.schedulerLog.previousCard,
+        previousMetadata: scheduled.previousCard,
       } satisfies ReviewUndoToken;
     });
 
@@ -633,48 +509,14 @@ export const ReviewStoreLive: Layer.Layer<
       yield* deckManager
         .updateCardMetadata(undo.card.deckPath, undo.card.cardId, undo.previousMetadata)
         .pipe(
-          Effect.catchTags({
-            DeckNotFound: () =>
-              Effect.fail(
-                new ReviewUndoError({
-                  deckPath: undo.card.deckPath,
-                  cardId: undo.card.cardId,
-                  message: "The deck no longer exists.",
-                }),
-              ),
-            DeckReadError: (error) =>
-              Effect.fail(
-                new ReviewUndoError({
-                  deckPath: undo.card.deckPath,
-                  cardId: undo.card.cardId,
-                  message: `Could not read the deck: ${error.message}`,
-                }),
-              ),
-            DeckParseError: (error) =>
-              Effect.fail(
-                new ReviewUndoError({
-                  deckPath: undo.card.deckPath,
-                  cardId: undo.card.cardId,
-                  message: `The deck metadata is invalid: ${error.message}`,
-                }),
-              ),
-            DeckWriteError: (error) =>
-              Effect.fail(
-                new ReviewUndoError({
-                  deckPath: undo.card.deckPath,
-                  cardId: undo.card.cardId,
-                  message: `Could not undo the review: ${error.message}`,
-                }),
-              ),
-            CardNotFound: () =>
-              Effect.fail(
-                new ReviewUndoError({
-                  deckPath: undo.card.deckPath,
-                  cardId: undo.card.cardId,
-                  message: "The card no longer exists in its deck.",
-                }),
-              ),
-          }),
+          Effect.mapError(
+            (error) =>
+              new ReviewUndoError({
+                deckPath: undo.card.deckPath,
+                cardId: undo.card.cardId,
+                message: toWriteErrorMessage(error),
+              }),
+          ),
         );
     });
 
@@ -682,48 +524,14 @@ export const ReviewStoreLive: Layer.Layer<
       reference: ReviewCardReference,
     ) {
       const removed = yield* deckManager.removeItem(reference.deckPath, reference.cardId).pipe(
-        Effect.catchTags({
-          DeckNotFound: () =>
-            Effect.fail(
-              new ReviewDeleteError({
-                deckPath: reference.deckPath,
-                cardId: reference.cardId,
-                message: "The deck no longer exists.",
-              }),
-            ),
-          DeckReadError: (error) =>
-            Effect.fail(
-              new ReviewDeleteError({
-                deckPath: reference.deckPath,
-                cardId: reference.cardId,
-                message: `Could not read the deck: ${error.message}`,
-              }),
-            ),
-          DeckParseError: (error) =>
-            Effect.fail(
-              new ReviewDeleteError({
-                deckPath: reference.deckPath,
-                cardId: reference.cardId,
-                message: `The deck metadata is invalid: ${error.message}`,
-              }),
-            ),
-          DeckWriteError: (error) =>
-            Effect.fail(
-              new ReviewDeleteError({
-                deckPath: reference.deckPath,
-                cardId: reference.cardId,
-                message: `Could not delete the card: ${error.message}`,
-              }),
-            ),
-          CardNotFound: () =>
-            Effect.fail(
-              new ReviewDeleteError({
-                deckPath: reference.deckPath,
-                cardId: reference.cardId,
-                message: "The card no longer exists in its deck.",
-              }),
-            ),
-        }),
+        Effect.mapError(
+          (error) =>
+            new ReviewDeleteError({
+              deckPath: reference.deckPath,
+              cardId: reference.cardId,
+              message: toWriteErrorMessage(error),
+            }),
+        ),
       );
 
       return { card: reference, removed } satisfies ReviewDeleteUndoToken;
@@ -731,40 +539,14 @@ export const ReviewStoreLive: Layer.Layer<
 
     const undoDelete = Effect.fn("ReviewStore.undoDelete")(function* (undo: ReviewDeleteUndoToken) {
       yield* deckManager.restoreItem(undo.card.deckPath, undo.removed).pipe(
-        Effect.catchTags({
-          DeckNotFound: () =>
-            Effect.fail(
-              new ReviewDeleteUndoError({
-                deckPath: undo.card.deckPath,
-                cardId: undo.card.cardId,
-                message: "The deck no longer exists.",
-              }),
-            ),
-          DeckReadError: (error) =>
-            Effect.fail(
-              new ReviewDeleteUndoError({
-                deckPath: undo.card.deckPath,
-                cardId: undo.card.cardId,
-                message: `Could not read the deck: ${error.message}`,
-              }),
-            ),
-          DeckParseError: (error) =>
-            Effect.fail(
-              new ReviewDeleteUndoError({
-                deckPath: undo.card.deckPath,
-                cardId: undo.card.cardId,
-                message: `The deck metadata is invalid: ${error.message}`,
-              }),
-            ),
-          DeckWriteError: (error) =>
-            Effect.fail(
-              new ReviewDeleteUndoError({
-                deckPath: undo.card.deckPath,
-                cardId: undo.card.cardId,
-                message: `Could not restore the deleted card: ${error.message}`,
-              }),
-            ),
-        }),
+        Effect.mapError(
+          (error) =>
+            new ReviewDeleteUndoError({
+              deckPath: undo.card.deckPath,
+              cardId: undo.card.cardId,
+              message: toWriteErrorMessage(error),
+            }),
+        ),
       );
     });
 

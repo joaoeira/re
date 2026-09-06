@@ -1,14 +1,15 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-import {
-  annotateBuiltinCardKeys,
-  resolveBuiltinCard,
-  QAType,
-  type QAContent,
-} from "@simbyotic/re/item-types";
+import { resolveBuiltinCard, QAType, type QAContent } from "@simbyotic/re/item-types";
 import { Scheduler } from "@simbyotic/re/scheduler";
-import { DeckManager, ReviewQueueBuilder, resolveDeckImagePath } from "@simbyotic/re/workspace";
+import {
+  DeckManager,
+  ReviewQueueBuilder,
+  resolveDeckImagePath,
+  prepareBuiltinReviewQueue,
+  gradeBuiltinCard,
+} from "@simbyotic/re/workspace";
 import { Path } from "@effect/platform";
 import type { FileSystem } from "@effect/platform";
 import { Effect, Exit } from "effect";
@@ -360,38 +361,23 @@ export const createReviewHandlers = () =>
             }
           }
 
-          const queueBuilder = yield* ReviewQueueBuilder;
-          const queue = yield* queueBuilder.buildQueue({
+          const queue = yield* prepareBuiltinReviewQueue({
             deckPaths,
             rootPath: configuredRootPath,
             now: new Date(),
-            options: { ...options, cardLimit: null },
+            options,
           });
-
-          const annotated = yield* annotateBuiltinCardKeys(queue.items);
-          const items =
-            options.cardLimit === null
-              ? annotated.items
-              : annotated.items.slice(0, options.cardLimit);
           return {
-            items: items.map((item) => ({
-              deckPath: item.deckPath,
-              cardId: item.card.id,
-              cardKey: item.cardKey,
-              deckName: item.deckName,
+            items: queue.cards.map((card) => ({ ...card.reference, deckName: card.deckName })),
+            totalNew: queue.totalNew,
+            totalDue: queue.totalDue,
+            deckErrors: queue.issues.map((issue) => ({
+              deckPath: issue.deckPath,
+              message:
+                issue.kind === "card"
+                  ? `Card ${issue.cardId}: ${issue.error.message}`
+                  : issue.error.message,
             })),
-            totalNew: items.filter((item) => item.category === "new").length,
-            totalDue: items.filter((item) => item.category === "due").length,
-            deckErrors: [
-              ...queue.deckErrors.map((error) => ({
-                deckPath: error.deckPath,
-                message: error.message || "Deck could not be read.",
-              })),
-              ...annotated.errors.map(({ entry, error }) => ({
-                deckPath: entry.deckPath,
-                message: `Card ${entry.card.id}: ${error.message}`,
-              })),
-            ],
           };
         }).pipe(Effect.mapError((e) => new ReviewOperationError({ message: toErrorMessage(e) }))),
       GetCardContent: ({ deckPath, cardId, cardKey }) =>
@@ -456,40 +442,29 @@ export const createReviewHandlers = () =>
             (m) => new ReviewOperationError({ message: m }),
           );
 
-          const deckManager = yield* DeckManager;
-          const scheduler = yield* Scheduler;
-
           const reviewedAt = new Date();
-
-          const scheduleResult = yield* deckManager.modifyCardMetadata(
-            deckPath,
-            cardId,
-            ({ item, card }) =>
-              Effect.gen(function* () {
-                const { spec } = yield* resolveBuiltinCard(item, { cardId, cardKey });
-                const evaluatedGrade = yield* spec.evaluate(grade);
-                const scheduled = yield* scheduler.scheduleReview(card, evaluatedGrade, reviewedAt);
-                return {
-                  metadata: scheduled.updatedCard,
-                  result: {
-                    previousCard: card,
-                    previousDue: card.due,
-                    nextCard: scheduled.updatedCard,
-                    expectedCurrentCardFingerprint: toMetadataFingerprint(scheduled.updatedCard),
-                    previousCardFingerprint: toMetadataFingerprint(card),
-                    grade: evaluatedGrade,
-                    previousState: scheduled.schedulerLog.previousState,
-                    nextState: scheduled.updatedCard.state,
-                    previousStability: card.stability.value,
-                    nextStability: scheduled.updatedCard.stability.value,
-                    previousDifficulty: card.difficulty.value,
-                    nextDifficulty: scheduled.updatedCard.difficulty.value,
-                    previousLearningSteps: card.learningSteps,
-                    nextLearningSteps: scheduled.updatedCard.learningSteps,
-                  },
-                };
-              }),
+          const scheduled = yield* gradeBuiltinCard(
+            { deckPath, cardId, cardKey },
+            grade,
+            reviewedAt,
           );
+          const card = scheduled.previousCard;
+          const scheduleResult = {
+            previousCard: card,
+            previousDue: card.due,
+            nextCard: scheduled.updatedCard,
+            expectedCurrentCardFingerprint: toMetadataFingerprint(scheduled.updatedCard),
+            previousCardFingerprint: toMetadataFingerprint(card),
+            grade: scheduled.grade,
+            previousState: scheduled.schedulerLog.previousState,
+            nextState: scheduled.updatedCard.state,
+            previousStability: card.stability.value,
+            nextStability: scheduled.updatedCard.stability.value,
+            previousDifficulty: card.difficulty.value,
+            nextDifficulty: scheduled.updatedCard.difficulty.value,
+            previousLearningSteps: card.learningSteps,
+            nextLearningSteps: scheduled.updatedCard.learningSteps,
+          };
 
           const canonicalWorkspacePath = yield* canonicalizeWorkspacePath(configuredRootPath).pipe(
             Effect.catchAll(() => Effect.succeed(configuredRootPath)),

@@ -5,7 +5,7 @@ import {
   type ItemMetadata,
   type EvaluableItemType,
 } from "@simbyotic/re/core";
-import { ClozeType, QAType } from "@simbyotic/re/item-types";
+import { ClozeType, QAType, composeQA } from "@simbyotic/re/item-types";
 import { toScanDecksErrorMessage, type DeckEntry } from "@simbyotic/re/workspace";
 import { Data, Effect } from "effect";
 
@@ -63,8 +63,6 @@ export type LoadDecksUiResult =
       readonly message: string;
     };
 
-const QA_SEPARATOR = "\n---\n";
-
 const requireText = (
   value: string,
   field: CardField,
@@ -86,19 +84,11 @@ export const prepareCard = Effect.fn("Raycast.prepareCard")(function* (input: Cr
   const parsed =
     input.cardType === "qa"
       ? yield* Effect.gen(function* () {
-          const question = (yield* requireText(
-            input.question,
-            "question",
-            "Enter a question.",
-          )).trim();
-          const answer = (yield* requireText(input.answer, "answer", "Enter an answer.")).trim();
-          if (question.includes(QA_SEPARATOR)) {
-            return yield* new CardFieldError({
-              field: "question",
-              message: "A question cannot contain a line consisting only of ---.",
-            });
-          }
-          const content = `${question}${QA_SEPARATOR}${answer}`;
+          const content = yield* composeQA(input.question, input.answer).pipe(
+            Effect.mapError(
+              (error) => new CardFieldError({ field: error.field, message: error.message }),
+            ),
+          );
           const parsedContent = yield* QAType.parse(content);
           return {
             content,

@@ -90,7 +90,7 @@ in the Node runtimes exercised by the consumer check.
 `QueueItem` identifies the saved card through `card.id` and includes its item snapshot. It no
 longer exposes `cardIndex`; `filePosition` is only an ordering hint within the snapshot. Apps
 capture generated keys using their item-type resolver and carry those keys in review references.
-The workspace module does not depend on built-in item types.
+The raw queue builder remains item-type agnostic; `prepareBuiltinReviewQueue` resolves the built-in types.
 
 `ReviewQueueBuilder.buildQueue` returns usable cards alongside recoverable deck-loading errors:
 
@@ -104,7 +104,9 @@ interface ReviewQueue {
 ```
 
 `ReadError` is the existing union of `DeckNotFound`, `DeckReadError`, and `DeckParseError`.
-Every error includes `deckPath`; read and parse errors also carry a descriptive `message`.
+Every error includes `deckPath` and a descriptive `message`. `DeckNotFound` and `CardNotFound`
+provide diagnostic message getters; `toReadErrorMessage` and `toWriteErrorMessage` provide shared
+UI wording. Underlying filesystem diagnostics may still contain absolute paths.
 Successful decks continue to contribute cards when another deck fails. `deckErrors` preserves
 the input path order, including repeated failed paths, regardless of read completion order.
 It is unaffected by category filters, card ordering, or card limits, including a limit of zero.
@@ -138,6 +140,33 @@ const prepareReview = Effect.gen(function* () {
   return queue;
 });
 ```
+
+## Built-in review operations
+
+`prepareBuiltinReviewQueue({ rootPath, deckPaths, now, options? })` requires `ReviewQueueBuilder`.
+It forwards category and ordering options, resolves each item once, and applies `cardLimit` after
+invalid cards have been skipped. The result contains `cards`, `totalNew`, `totalDue`, and `issues`;
+both counts describe the final selection.
+
+Each prepared card contains a `{ deckPath, cardId, cardKey }` reference, deck name, relative path,
+category, and `{ prompt, reveal, cardType }` content. Content is a preparation-time snapshot;
+freshness-sensitive callers should re-read through `DeckManager` and resolve the current item.
+
+Issues retain typed errors: `kind: "deck"` includes `deckPath` and a `ReadError`;
+`kind: "card"` includes `deckPath`, `relativePath`, `cardId`, and a `NoMatchingTypeError`,
+`ItemCardCountMismatch`, or `BuiltinCardNotFound`. Recoverable failures are collected in issues,
+so preparation has no typed failure channel. Defects and interruption still propagate.
+
+`gradeBuiltinCard(reference, grade, now)` requires `DeckManager | Scheduler`. It re-resolves
+identity against the current item and schedules current metadata inside the deck lock, returning
+`previousCard`, `updatedCard`, `schedulerLog`, and the evaluated `grade` only after saving.
+Its typed errors are `WriteError | CardNotFound | NoMatchingTypeError | ItemCardCountMismatch |
+BuiltinCardNotFound | ResponseValidationError | ScheduleError`.
+
+Content edits are permitted while the ID/key identity still resolves. This operation does not
+detect whether the caller displayed older content. Applications retain ownership of session state,
+undo tokens, analytics, access checks, and error presentation. Both operations are plain Effect
+functions and require no additional service layer.
 
 Build locally with `bun run build`. From the repository root, `bun run pack:library`
 creates the installable package archive and `bun run check:packages` verifies it in an isolated Node consumer.

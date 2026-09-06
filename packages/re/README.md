@@ -36,7 +36,7 @@ npm install @simbyotic/re effect @effect/platform @effect/platform-node
 
 ## Development
 
-The source modules remain separate under `src/core`, `src/item-types`, `src/scheduler`, and `src/workspace`. Core has no dependency on the other modules; item types and scheduling depend on core; workspace depends on core and scheduling. Internal imports are relative, so the package has no dependency on separately published re libraries.
+The source modules remain separate under `src/core`, `src/item-types`, `src/scheduler`, and `src/workspace`. Core has no dependency on the other modules; item types and scheduling depend on core; workspace depends on core, item types, and scheduling. Internal imports are relative, so the package has no dependency on separately published re libraries.
 
 From the repository root:
 

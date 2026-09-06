@@ -18,7 +18,11 @@ export class DeckNotFound extends Schema.TaggedError<DeckNotFound>("./index.js/D
   {
     deckPath: Schema.String,
   },
-) {}
+) {
+  override get message(): string {
+    return `Deck not found: ${this.deckPath}`;
+  }
+}
 
 export class DeckReadError extends Schema.TaggedError<DeckReadError>("./index.js/DeckReadError")(
   "DeckReadError",
@@ -50,7 +54,11 @@ export class CardNotFound extends Schema.TaggedError<CardNotFound>("./index.js/C
     deckPath: Schema.String,
     cardId: Schema.String,
   },
-) {}
+) {
+  override get message(): string {
+    return `Card ${this.cardId} not found in deck: ${this.deckPath}`;
+  }
+}
 
 export class ItemValidationError extends Schema.TaggedError<ItemValidationError>(
   "./index.js/ItemValidationError",

@@ -126,3 +126,16 @@ export {
   type ReviewQueueSelection,
   type WithinGroupOrder,
 } from "./reviewQueue.js";
+
+export {
+  prepareBuiltinReviewQueue,
+  gradeBuiltinCard,
+  type BuiltinReviewGradeError,
+  type BuiltinReviewGradeResult,
+  type ReviewCardReference,
+  type PreparedReviewCard,
+  type PreparedReviewQueue,
+  type ReviewPreparationIssue,
+} from "./builtin-review.js";
+
+export { toReadErrorMessage, toWriteErrorMessage } from "./deck-errors.js";

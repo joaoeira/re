@@ -18,6 +18,17 @@ const clozeCards = ClozeType.cards(cloze);
 Q&A content separates question and answer with a line containing `---`. Cloze content uses
 `{{c1::hidden text}}` syntax, with one card per distinct cloze index.
 
+Use `composeQA(question, answer)` to write Q&A content. It returns `Effect<string, QAComposeError>`,
+normalizes CRLF to LF, trims both fields, and rejects empty fields or standalone `---` lines in the
+normalized question. `QAComposeError.field` identifies `question` or `answer` for form validation.
+Separators in answers and interior space-padded separator-like lines are preserved.
+
+```ts
+import { composeQA } from "@simbyotic/re/item-types";
+
+const content = Effect.runSync(composeQA("Capital of France?", "Paris"));
+```
+
 Q&A generates the key `main`. Cloze generates keys from the actual deletion indices (`c1`,
 `c3`, etc.), preserving identity when another deletion is removed or the text is edited.
 
@@ -36,11 +47,12 @@ For a review queue, call `annotateBuiltinCardKeys(entries)`. It accepts entries 
 returns `{ items, errors }`, preserves valid entries' order and other fields, and adds a string `cardKey`.
 Unresolvable entries are excluded, with one error per invalid item containing an entry that identifies
 its location. It resolves each shared item snapshot
-once, even when its cards are interleaved in the queue. Desktop and Raycast use this helper;
-it has no dependency on workspace queue types.
+once, even when its cards are interleaved in the queue. It has no dependency on workspace queue types.
+For a complete built-in review queue, use `prepareBuiltinReviewQueue` from the workspace entry point,
+which shares this resolution pass and retains rendered content.
 Later, call `resolveBuiltinCard(currentItem, { cardId, cardKey })` before displaying or
 grading it. The result includes the selected `spec` and its metadata `card`, along with the
-resolved item `type` and all generated `cards`. Selection uses the key and verifies the saved ID,
+resolved item `type` and all generated `cards`. Built-in specs expose `cardType: "qa" | "cloze"`. Selection uses the key and verifies the saved ID,
 so cloze removal or reordering cannot redirect a review. A missing key or an ID/key disagreement
 fails with `BuiltinCardNotFound`; parse and count errors retain their existing tags.
 
