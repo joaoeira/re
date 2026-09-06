@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Select,
@@ -224,8 +225,8 @@ renderer.init({
   title: "re Pocket",
   width: 720,
   height: 465,
-  minWidth: 600,
-  minHeight: 465,
+  minWidth: 300,
+  minHeight: 232.5,
   titlebarTransparent: true,
   windowBackground: "blurred",
   show: false,
@@ -278,6 +279,10 @@ function App() {
   const current = reviewCards.find((card) => card.id === queue[0]);
   const currentDeckPath =
     current && "reference" in current ? current.reference.deckPath : undefined;
+  const currentDeckName = currentDeckPath
+    ? (decks.find((deck) => deck.absolutePath === currentDeckPath)?.name ??
+      basename(currentDeckPath, ".md"))
+    : "Pocket (scratch deck)";
 
   function updatePreferences(patch: Partial<Preferences>) {
     const next = { ...preferences, ...patch };
@@ -668,8 +673,17 @@ function App() {
           backgroundColor: "#00000012",
         }}
       >
-        <text style={{ color: colors.muted, fontSize: 12 }}>
-          {screen === "create" ? "Create Card" : "Review Cards"}
+        <text
+          style={{
+            color: colors.muted,
+            fontSize: 12,
+            flexShrink: 1,
+            minWidth: 0,
+            whiteSpace: "nowrap",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {screen === "create" ? "Create Card" : current ? currentDeckName : "Review Cards"}
         </text>
         <div style={{ ...row, gap: 8 }}>
           {screen === "review" && revealed && current && (
