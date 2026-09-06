@@ -1,4 +1,4 @@
-# @re/core
+# @simbyotic/re-core
 
 Parse, serialize, and create Markdown spaced repetition items and their scheduling metadata.
 The package exports ESM JavaScript and TypeScript declarations. Its asynchronous and fallible
@@ -6,7 +6,7 @@ APIs use Effect.
 
 ```ts
 import { Effect } from "effect";
-import { createMetadata, parseFile, serializeFile } from "@re/core";
+import { createMetadata, parseFile, serializeFile } from "@simbyotic/re-core";
 
 const markdown = serializeFile({
   preamble: "# Geography\n\n",
@@ -17,8 +17,8 @@ const parsed = Effect.runSync(parseFile(markdown));
 
 Content and preamble are preserved; metadata is serialized canonically. Each item can contain
 multiple cards sharing one content block. The package also exports card-type contracts and
-cloze syntax helpers. Filesystem operations belong to `@re/workspace`; standard card types
-are provided by `@re/item-types`.
+cloze syntax helpers. Filesystem operations belong to `@simbyotic/re-workspace`; standard card types
+are provided by `@simbyotic/re-item-types`.
 
 ## Parsing one metadata record
 
@@ -28,7 +28,7 @@ Both return `MetadataParseError` failures; standalone diagnostics refer to line 
 
 ```ts
 import { Effect } from "effect";
-import { parseMetadata, serializeMetadata } from "@re/core";
+import { parseMetadata, serializeMetadata } from "@simbyotic/re-core";
 
 const metadata = Effect.runSync(
   parseMetadata(
@@ -57,7 +57,7 @@ for schema composition.
 
 ```ts
 import { Effect, Schema } from "effect";
-import { createMetadata, ItemSchema, ParsedFileSchema } from "@re/core";
+import { createMetadata, ItemSchema, ParsedFileSchema } from "@simbyotic/re-core";
 
 const ImportRequest = Schema.Struct({ deckPath: Schema.String, item: ItemSchema });
 const request = Effect.runSync(
@@ -101,8 +101,8 @@ with the card's schema before invoking its grader, which can run synchronously o
 
 ```ts
 import { Effect, Schema } from "effect";
-import { adaptItemType, ContentParseError, inferCards, type ItemType } from "@re/core";
-import { ClozeType, QAType } from "@re/item-types";
+import { adaptItemType, ContentParseError, inferCards, type ItemType } from "@simbyotic/re-core";
+import { ClozeType, QAType } from "@simbyotic/re-item-types";
 
 const VocabularyType: ItemType<{ readonly answer: string }, string> = {
   name: "vocabulary",
@@ -159,7 +159,7 @@ types and an externally defined asynchronous grader through validation and sched
 
 `matchItemTypes(types, item)` returns every type that parses the content and generates exactly
 `item.cards.length` cards, in registration order. Callers choose their ambiguity policy;
-`@re/item-types` supplies `resolveBuiltinItem` for the built-in cloze-first policy. If no type
+`@simbyotic/re-item-types` supplies `resolveBuiltinItem` for the built-in cloze-first policy. If no type
 parses, selection fails with `NoMatchingTypeError`. If parsers succeed but none fits the count,
 `ItemCardCountMismatch` includes `metadataCount` and nonempty `parseableTypes` entries with
 `name` and `cardCount`, allowing an app to offer repair. Parser defects propagate.
@@ -182,7 +182,7 @@ Review references pair the saved card ID with its generated key. Apps capture th
 queued snapshot, then resolve it against current content and verify that it still belongs to
 that ID. Removing an earlier cloze can shift the array without changing the intended card;
 removing the target or assigning its key to another ID fails instead of selecting a neighbor.
-`@re/item-types` provides `annotateBuiltinCardKeys` and `resolveBuiltinCard` for this workflow.
+`@simbyotic/re-item-types` provides `annotateBuiltinCardKeys` and `resolveBuiltinCard` for this workflow.
 
 Build locally with `bun run build`. From the repository root, `bun run pack:libraries`
 creates installable archives and `bun run check:packages` verifies them in an isolated Node consumer.

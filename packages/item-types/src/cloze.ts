@@ -11,7 +11,7 @@ import {
   type ClozeSyntaxError,
   type ClozeSyntaxIssue,
   type ClozeSyntaxMatch,
-} from "@re/core";
+} from "@simbyotic/re-core";
 
 export const ClozeDeletion = Schema.Struct({
   index: Schema.Number,

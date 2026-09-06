@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { createMetadata, numericField, State, type ItemMetadata } from "@re/core";
+import { createMetadata, numericField, State, type ItemMetadata } from "@simbyotic/re-core";
 import { Effect } from "effect";
 import { default_w } from "ts-fsrs";
 import { makeScheduler, makeSchedulerLayer, Scheduler, type FSRSOptions } from "../src";

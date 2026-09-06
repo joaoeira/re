@@ -1,4 +1,4 @@
-import type { ItemMetadata } from "@re/core";
+import type { ItemMetadata } from "@simbyotic/re-core";
 
 import { toIsoOrNull } from "@main/utils/format";
 

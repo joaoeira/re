@@ -8,7 +8,7 @@ import {
   type ItemTypeMatch,
   type ItemCardCountMismatch,
   type NoMatchingTypeError,
-} from "@re/core";
+} from "@simbyotic/re-core";
 import { ClozeType } from "./cloze.js";
 import { QAType } from "./qa.js";
 

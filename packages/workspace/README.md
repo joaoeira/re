@@ -1,4 +1,4 @@
-# @re/workspace
+# @simbyotic/re-workspace
 
 Filesystem deck management, discovery, snapshots, image assets, and review queues
 for Markdown spaced repetition workspaces. The package exports ESM JavaScript
@@ -11,7 +11,7 @@ can install `@effect/platform-node` alongside this package and `effect`:
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import { Effect, Layer } from "effect";
-import { DeckManager, DeckManagerLive } from "@re/workspace";
+import { DeckManager, DeckManagerLive } from "@simbyotic/re-workspace";
 
 const platform = Layer.merge(NodeFileSystem.layer, NodePath.layer);
 const program = Effect.gen(function* () {
@@ -24,7 +24,7 @@ const deck = await Effect.runPromise(
 );
 ```
 
-For `appendItem`, `replaceItem`, and `modifyItem`, pass a type adapted with `adaptItemType` from `@re/core`
+For `appendItem`, `replaceItem`, and `modifyItem`, pass a type adapted with `adaptItemType` from `@simbyotic/re-core`
 (for example, `adaptItemType(QAType)`). Workspace uses its `parseCards` operation to validate
 the content, ensure that metadata and generated card counts match, and reject duplicate card keys.
 Writing content does not evaluate responses or run graders.
@@ -80,7 +80,7 @@ Service lifetime matters at application boundaries: capture a shared instance wh
 RPC handlers instead of rebuilding `DeckManagerLive` for each request. The desktop handler
 bundle does this so reviews, editor saves, and Forge writes use the same per-deck locks.
 
-Scheduling is provided by `@re/scheduler`; import `Scheduler` and `SchedulerLive` from that
+Scheduling is provided by `@simbyotic/re-scheduler`; import `Scheduler` and `SchedulerLive` from that
 package. Workspace uses its due-date helpers for snapshots and review queues. Discovery uses
 Markdown files and honors the workspace's `.reignore`. Image hashing requires Web Crypto, available
 in the Node runtimes exercised by the consumer check.
@@ -120,7 +120,7 @@ Apps choose whether to show failures alongside available cards or require every 
 
 ```ts
 import { Effect } from "effect";
-import { ReviewQueueBuilder } from "@re/workspace";
+import { ReviewQueueBuilder } from "@simbyotic/re-workspace";
 
 const prepareReview = Effect.gen(function* () {
   const builder = yield* ReviewQueueBuilder;

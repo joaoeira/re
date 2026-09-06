@@ -1,4 +1,4 @@
-import type { DeckEntry } from "@re/workspace";
+import type { DeckEntry } from "@simbyotic/re-workspace";
 import { DeckCombobox } from "@/components/editor/deck-combobox";
 
 type CardsFooterProps = {

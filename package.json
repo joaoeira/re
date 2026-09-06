@@ -30,9 +30,16 @@
     "pack:libraries": "node scripts/pack-libraries.mjs",
     "check:packages": "node scripts/check-packages.mjs",
     "check:raycast": "node scripts/check-raycast.mjs",
-    "check:desktop": "node scripts/check-desktop.mjs"
+    "check:desktop": "node scripts/check-desktop.mjs",
+    "changeset": "changeset",
+    "release:version": "node scripts/prepare-library-release.mjs",
+    "release:check": "node scripts/check-library-release.mjs",
+    "release:dry-run": "node scripts/publish-libraries.mjs --dry-run",
+    "release:publish": "node scripts/publish-libraries.mjs --publish",
+    "test:release": "node --test scripts/library-release.test.mjs"
   },
   "devDependencies": {
+    "@changesets/cli": "3.0.2",
     "@effect/language-service": "^0.64.1",
     "@oxlint/plugins": "^1.55.0",
     "@types/bun": "latest",

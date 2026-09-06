@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { DeckManager } from "@re/workspace";
+import { DeckManager } from "@simbyotic/re-workspace";
 import type { Implementations, IpcMainHandle } from "electron-effect-rpc/types";
 
 import type { ReviewAnalyticsRepository } from "@main/analytics";

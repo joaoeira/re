@@ -1,4 +1,4 @@
-# @re/scheduler
+# @simbyotic/re-scheduler
 
 FSRS scheduling for re items, independent of workspace storage. This package takes card
 metadata, a grade, and a review timestamp and returns updated metadata and a review log.
@@ -6,8 +6,8 @@ It exports ESM JavaScript and TypeScript declarations and uses Effect services.
 
 ```ts
 import { Effect } from "effect";
-import { createMetadata } from "@re/core";
-import { Scheduler, SchedulerLive } from "@re/scheduler";
+import { createMetadata } from "@simbyotic/re-core";
+import { Scheduler, SchedulerLive } from "@simbyotic/re-scheduler";
 
 const card = createMetadata();
 const reviewedAt = new Date("2026-01-01T12:00:00.000Z");
@@ -33,8 +33,8 @@ parameter names. Omitted settings use the installed engine's defaults.
 
 ```ts
 import { Effect } from "effect";
-import { createMetadata } from "@re/core";
-import { makeScheduler, makeSchedulerLayer, Scheduler, type FSRSOptions } from "@re/scheduler";
+import { createMetadata } from "@simbyotic/re-core";
+import { makeScheduler, makeSchedulerLayer, Scheduler, type FSRSOptions } from "@simbyotic/re-scheduler";
 
 const options = {
   request_retention: 0.95,
@@ -93,9 +93,9 @@ both `lastReview` and `due`; missing timestamps fail with `ScheduleError`.
 Scheduling failures use the tagged `ScheduleError` error. Conversion helpers and the
 `FSRSGrade`, `ScheduleResult`, and `SchedulerLog` types are also exported.
 
-This package depends on `@re/core` and `ts-fsrs`, with `effect` as a peer. It requires no
-`@re/workspace`, `@effect/platform`, or filesystem layer. Filesystem deck persistence,
-snapshots, and review queue construction are provided by `@re/workspace`.
+This package depends on `@simbyotic/re-core` and `ts-fsrs`, with `effect` as a peer. It requires no
+`@simbyotic/re-workspace`, `@effect/platform`, or filesystem layer. Filesystem deck persistence,
+snapshots, and review queue construction are provided by `@simbyotic/re-workspace`.
 
 Build locally with `bun run build`. From the repository root, `bun run pack:libraries`
 creates installable archives and `bun run check:packages` verifies isolated scheduler

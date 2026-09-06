@@ -1,6 +1,6 @@
 import { FileSystem, Path } from "@effect/platform";
 import { SystemError } from "@effect/platform/Error";
-import { State, numericField, type ItemId } from "@re/core";
+import { State, numericField, type ItemId } from "@simbyotic/re-core";
 import { Cause, Effect, Exit, Layer, Option, Random } from "effect";
 import { describe, expect, it } from "vitest";
 

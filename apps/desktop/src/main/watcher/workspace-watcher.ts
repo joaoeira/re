@@ -1,5 +1,5 @@
 import { FileSystem, Path } from "@effect/platform";
-import { snapshotWorkspace, type SnapshotWorkspaceResult } from "@re/workspace";
+import { snapshotWorkspace, type SnapshotWorkspaceResult } from "@simbyotic/re-workspace";
 import { Effect, Fiber, Runtime, Stream } from "effect";
 
 import { NodeServicesLive } from "@main/effect/node-services";

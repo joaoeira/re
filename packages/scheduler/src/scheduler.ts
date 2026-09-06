@@ -9,7 +9,7 @@ import {
   type StepUnit,
 } from "ts-fsrs";
 import { Context, Data, Effect, Layer, Schema } from "effect";
-import { State, numericField, type ItemMetadata } from "@re/core";
+import { State, numericField, type ItemMetadata } from "@simbyotic/re-core";
 
 export type FSRSGrade = 0 | 1 | 2 | 3;
 
@@ -122,7 +122,7 @@ export interface Scheduler {
   ) => Effect.Effect<ScheduleResult, ScheduleError>;
 }
 
-export const Scheduler = Context.GenericTag<Scheduler>("@re/scheduler/Scheduler");
+export const Scheduler = Context.GenericTag<Scheduler>("@simbyotic/re-scheduler/Scheduler");
 
 /** FSRS settings. Omitted fields use the installed engine's defaults. */
 export interface FSRSOptions {

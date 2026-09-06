@@ -8,19 +8,19 @@ import {
   type ItemMetadata,
   type EvaluableItemType,
   type ParsedFile,
-} from "@re/core";
+} from "@simbyotic/re-core";
 import { Context, Effect, Layer, Option } from "effect";
 
 import { formatMetadataParseError } from "./snapshotWorkspace.js";
 
-export class DeckNotFound extends Schema.TaggedError<DeckNotFound>("@re/workspace/DeckNotFound")(
+export class DeckNotFound extends Schema.TaggedError<DeckNotFound>("@simbyotic/re-workspace/DeckNotFound")(
   "DeckNotFound",
   {
     deckPath: Schema.String,
   },
 ) {}
 
-export class DeckReadError extends Schema.TaggedError<DeckReadError>("@re/workspace/DeckReadError")(
+export class DeckReadError extends Schema.TaggedError<DeckReadError>("@simbyotic/re-workspace/DeckReadError")(
   "DeckReadError",
   {
     deckPath: Schema.String,
@@ -29,20 +29,20 @@ export class DeckReadError extends Schema.TaggedError<DeckReadError>("@re/worksp
 ) {}
 
 export class DeckParseError extends Schema.TaggedError<DeckParseError>(
-  "@re/workspace/DeckParseError",
+  "@simbyotic/re-workspace/DeckParseError",
 )("DeckParseError", {
   deckPath: Schema.String,
   message: Schema.String,
 }) {}
 
 export class DeckWriteError extends Schema.TaggedError<DeckWriteError>(
-  "@re/workspace/DeckWriteError",
+  "@simbyotic/re-workspace/DeckWriteError",
 )("DeckWriteError", {
   deckPath: Schema.String,
   message: Schema.String,
 }) {}
 
-export class CardNotFound extends Schema.TaggedError<CardNotFound>("@re/workspace/CardNotFound")(
+export class CardNotFound extends Schema.TaggedError<CardNotFound>("@simbyotic/re-workspace/CardNotFound")(
   "CardNotFound",
   {
     deckPath: Schema.String,
@@ -51,7 +51,7 @@ export class CardNotFound extends Schema.TaggedError<CardNotFound>("@re/workspac
 ) {}
 
 export class ItemValidationError extends Schema.TaggedError<ItemValidationError>(
-  "@re/workspace/ItemValidationError",
+  "@simbyotic/re-workspace/ItemValidationError",
 )("ItemValidationError", {
   deckPath: Schema.String,
   message: Schema.String,
@@ -68,26 +68,26 @@ export const InvalidDeckPathReasonSchema = Schema.Literal(
 );
 
 export class InvalidDeckPath extends Schema.TaggedError<InvalidDeckPath>(
-  "@re/workspace/InvalidDeckPath",
+  "@simbyotic/re-workspace/InvalidDeckPath",
 )("InvalidDeckPath", {
   inputPath: Schema.String,
   reason: InvalidDeckPathReasonSchema,
 }) {}
 
 export class DeckAlreadyExists extends Schema.TaggedError<DeckAlreadyExists>(
-  "@re/workspace/DeckAlreadyExists",
+  "@simbyotic/re-workspace/DeckAlreadyExists",
 )("DeckAlreadyExists", {
   deckPath: Schema.String,
 }) {}
 
 export class DeckFileNotFound extends Schema.TaggedError<DeckFileNotFound>(
-  "@re/workspace/DeckFileNotFound",
+  "@simbyotic/re-workspace/DeckFileNotFound",
 )("DeckFileNotFound", {
   deckPath: Schema.String,
 }) {}
 
 export class DeckFileOperationError extends Schema.TaggedError<DeckFileOperationError>(
-  "@re/workspace/DeckFileOperationError",
+  "@simbyotic/re-workspace/DeckFileOperationError",
 )("DeckFileOperationError", {
   operation: Schema.Literal("create", "delete", "rename"),
   message: Schema.String,
@@ -193,7 +193,7 @@ export interface DeckManager {
   >;
 }
 
-export const DeckManager = Context.GenericTag<DeckManager>("@re/workspace/DeckManager");
+export const DeckManager = Context.GenericTag<DeckManager>("@simbyotic/re-workspace/DeckManager");
 
 export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSystem | Path.Path> =
   Layer.effect(

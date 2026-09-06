@@ -1,10 +1,10 @@
 import { Path } from "@effect/platform";
-import { type Item, type ItemMetadata, State } from "@re/core";
+import { type Item, type ItemMetadata, State } from "@simbyotic/re-core";
 import { Array as Arr, Chunk, Context, Effect, Layer, Order, Random } from "effect";
 
 import { DeckManager, type ReadError } from "./DeckManager.js";
 import type { DeckTreeNode } from "./deckTree.js";
-import { resolveDueDateIfDue } from "@re/scheduler";
+import { resolveDueDateIfDue } from "@simbyotic/re-scheduler";
 
 export interface QueueItem {
   readonly deckPath: string;
@@ -139,14 +139,14 @@ export interface QueueOrderSpec {
   readonly dueCardOrder: WithinGroupOrder<QueueItem>;
 }
 
-export const QueueOrderSpec = Context.GenericTag<QueueOrderSpec>("@re/workspace/QueueOrderSpec");
+export const QueueOrderSpec = Context.GenericTag<QueueOrderSpec>("@simbyotic/re-workspace/QueueOrderSpec");
 
 export interface QueueOrderingStrategy {
   readonly order: (items: readonly QueueItem[]) => Effect.Effect<readonly QueueItem[]>;
 }
 
 export const QueueOrderingStrategy = Context.GenericTag<QueueOrderingStrategy>(
-  "@re/workspace/QueueOrderingStrategy",
+  "@simbyotic/re-workspace/QueueOrderingStrategy",
 );
 
 export const QueueOrderingStrategyFromSpec = Layer.effect(
@@ -254,7 +254,7 @@ export interface ReviewQueueBuilder {
 }
 
 export const ReviewQueueBuilder = Context.GenericTag<ReviewQueueBuilder>(
-  "@re/workspace/ReviewQueueBuilder",
+  "@simbyotic/re-workspace/ReviewQueueBuilder",
 );
 
 export const ReviewQueueBuilderLive = Layer.effect(
@@ -356,7 +356,7 @@ export interface ReviewQueueService {
 }
 
 export const ReviewQueueService = Context.GenericTag<ReviewQueueService>(
-  "@re/workspace/ReviewQueueService",
+  "@simbyotic/re-workspace/ReviewQueueService",
 );
 
 export const ReviewQueueServiceLive = Layer.effect(

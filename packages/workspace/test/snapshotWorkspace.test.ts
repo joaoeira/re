@@ -1,5 +1,5 @@
 import { Path } from "@effect/platform";
-import { ParseError } from "@re/core";
+import { ParseError } from "@simbyotic/re-core";
 import { Effect, Either, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 

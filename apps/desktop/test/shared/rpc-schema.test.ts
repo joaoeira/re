@@ -1,5 +1,5 @@
-import { createMetadata, parseFile, serializeFile } from "@re/core";
-import { DeckAlreadyExists } from "@re/workspace";
+import { createMetadata, parseFile, serializeFile } from "@simbyotic/re-core";
+import { DeckAlreadyExists } from "@simbyotic/re-workspace";
 import { Effect, Runtime } from "effect";
 import { defineContract } from "electron-effect-rpc/contract";
 import { createRpcEndpoint } from "electron-effect-rpc/main";

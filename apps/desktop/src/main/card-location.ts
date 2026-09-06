@@ -1,4 +1,4 @@
-import type { Item, ParsedFile } from "@re/core";
+import type { Item, ParsedFile } from "@simbyotic/re-core";
 
 export const findCardLocationById = (
   parsed: ParsedFile,

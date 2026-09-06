@@ -1,8 +1,8 @@
 import { Path } from "@effect/platform";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
-import { SchedulerLive } from "@re/scheduler";
-import { DeckManagerLive, ReviewQueueBuilderLive, ShuffledOrderingStrategy } from "@re/workspace";
+import { SchedulerLive } from "@simbyotic/re-scheduler";
+import { DeckManagerLive, ReviewQueueBuilderLive, ShuffledOrderingStrategy } from "@simbyotic/re-workspace";
 import { Effect, Layer, ManagedRuntime } from "effect";
 
 import { ClipboardImageReader } from "./clipboard-image";

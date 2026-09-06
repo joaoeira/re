@@ -1,14 +1,14 @@
 import { FileSystem } from "@effect/platform";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { parseFile, State } from "@re/core";
-import { Scheduler, SchedulerLive } from "@re/scheduler";
+import { parseFile, State } from "@simbyotic/re-core";
+import { Scheduler, SchedulerLive } from "@simbyotic/re-scheduler";
 import {
   DeckManager,
   DeckManagerLive,
   ReviewQueueBuilderLive,
   ShuffledOrderingStrategy,
-} from "@re/workspace";
+} from "@simbyotic/re-workspace";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 
 import { ReviewStore, ReviewStoreLive } from "../src/review-store";

@@ -5,7 +5,7 @@ import {
   type ItemType,
   ContentParseError,
   manualCardSpec,
-} from "@re/core";
+} from "@simbyotic/re-core";
 
 export const QAContent = Schema.Struct({
   question: Schema.String,

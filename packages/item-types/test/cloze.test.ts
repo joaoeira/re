@@ -1,7 +1,7 @@
 import { Effect, Option } from "effect";
 import { describe, it, assert } from "@effect/vitest";
 import { ClozeType } from "../src/cloze";
-import { ContentParseError } from "@re/core";
+import { ContentParseError } from "@simbyotic/re-core";
 
 describe("ClozeType", () => {
   describe("parse", () => {

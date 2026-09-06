@@ -1,11 +1,11 @@
 import * as Schema from "effect/Schema";
-import { MetadataParseErrorSchema } from "@re/core";
+import { MetadataParseErrorSchema } from "@simbyotic/re-core";
 import {
   ScanDecksErrorSchema,
   ScanDecksResultSchema,
   SnapshotWorkspaceErrorSchema,
   SnapshotWorkspaceResultSchema,
-} from "@re/workspace";
+} from "@simbyotic/re-workspace";
 import { event, rpc } from "electron-effect-rpc/contract";
 
 import {

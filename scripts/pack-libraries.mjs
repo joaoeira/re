@@ -53,7 +53,7 @@ export const packLibraries = async (destination) => {
     for (const entry of entries) {
       assert.match(
         entry,
-        /^package\/(?:package\.json|README\.md|dist\/.+\.(?:js|d\.ts(?:\.map)?)|src\/.+\.ts)$/,
+        /^package\/(?:package\.json|(?:README|CHANGELOG)\.md|dist\/.+\.(?:js|d\.ts(?:\.map)?)|src\/.+\.ts)$/,
         `Unexpected file in ${manifest.name}: ${entry}`,
       );
       if (entry.endsWith(".js") || entry.endsWith(".ts")) {

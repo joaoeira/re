@@ -1,12 +1,12 @@
-# @re/item-types
+# @simbyotic/re-item-types
 
 Built-in Q&A and cloze item types for re. This package implements the `ItemType` contract
-from `@re/core`, with runtime parsers and card generation as well as TypeScript declarations.
+from `@simbyotic/re-core`, with runtime parsers and card generation as well as TypeScript declarations.
 It exports ESM JavaScript and uses Effect for parsing and grading.
 
 ```ts
 import { Effect } from "effect";
-import { QAType, ClozeType } from "@re/item-types";
+import { QAType, ClozeType } from "@simbyotic/re-item-types";
 
 const qa = Effect.runSync(QAType.parse("Capital of France?\n---\nParis"));
 const qaCards = QAType.cards(qa);
@@ -24,7 +24,7 @@ Q&A generates the key `main`. Cloze generates keys from the actual deletion indi
 Use `resolveBuiltinItem(item)` to interpret saved items. It checks generated card counts
 against the saved metadata, then prefers cloze when both cloze and Q&A fit. Desktop and Raycast
 use this same rule for editing and review. Use `inferCards`
-from `@re/core` only for unsaved content that has no metadata count yet.
+from `@simbyotic/re-core` only for unsaved content that has no metadata count yet.
 
 Desktop can open a count-mismatched item using the first parseable type and offer an explicit
 reset-and-save action. The save rechecks the current item under the deck lock and creates fresh IDs

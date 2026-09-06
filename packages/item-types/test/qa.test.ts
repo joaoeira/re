@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { describe, it, assert } from "@effect/vitest";
 import { QAType } from "../src/qa";
-import { ContentParseError } from "@re/core";
+import { ContentParseError } from "@simbyotic/re-core";
 
 describe("QAType", () => {
   describe("parse", () => {

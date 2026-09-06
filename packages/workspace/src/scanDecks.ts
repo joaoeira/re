@@ -27,19 +27,19 @@ export const ScanDecksResultSchema = Schema.Struct({
 export type ScanDecksResult = typeof ScanDecksResultSchema.Type;
 
 export class WorkspaceRootNotFound extends Schema.TaggedError<WorkspaceRootNotFound>(
-  "@re/workspace/WorkspaceRootNotFound",
+  "@simbyotic/re-workspace/WorkspaceRootNotFound",
 )("WorkspaceRootNotFound", {
   rootPath: Schema.String,
 }) {}
 
 export class WorkspaceRootNotDirectory extends Schema.TaggedError<WorkspaceRootNotDirectory>(
-  "@re/workspace/WorkspaceRootNotDirectory",
+  "@simbyotic/re-workspace/WorkspaceRootNotDirectory",
 )("WorkspaceRootNotDirectory", {
   rootPath: Schema.String,
 }) {}
 
 export class WorkspaceRootUnreadable extends Schema.TaggedError<WorkspaceRootUnreadable>(
-  "@re/workspace/WorkspaceRootUnreadable",
+  "@simbyotic/re-workspace/WorkspaceRootUnreadable",
 )("WorkspaceRootUnreadable", {
   rootPath: Schema.String,
   message: Schema.String,

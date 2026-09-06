@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { describe, expect, it } from "@effect/vitest";
-import { createMetadata } from "@re/core";
+import { createMetadata } from "@simbyotic/re-core";
 import { annotateBuiltinCardKeys, resolveBuiltinCard, resolveBuiltinItem } from "../src";
 
 describe("resolveBuiltinItem", () => {

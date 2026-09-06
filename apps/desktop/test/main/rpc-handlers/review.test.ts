@@ -10,7 +10,7 @@ import {
   type ReviewAnalyticsRepository,
 } from "@main/analytics";
 import type { ForgePromptRuntime } from "@main/forge/services/prompt-runtime";
-import { parseFile } from "@re/core";
+import { parseFile } from "@simbyotic/re-core";
 
 import { createHandlersWithOverrides } from "./helpers";
 

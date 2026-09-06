@@ -8,7 +8,7 @@ import {
   type EvaluableItemType,
   type Item,
   type ItemId,
-} from "@re/core";
+} from "@simbyotic/re-core";
 import { Data, Deferred, Effect, Exit, Fiber, Layer, TestClock } from "effect";
 
 import { DeckManager, DeckManagerLive } from "../src";

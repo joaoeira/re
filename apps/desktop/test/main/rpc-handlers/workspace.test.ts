@@ -12,7 +12,7 @@ import {
   DeckFileNotFound,
   InvalidDeckPath,
   WorkspaceRootNotFound as SnapshotWorkspaceRootNotFound,
-} from "@re/workspace";
+} from "@simbyotic/re-workspace";
 import { WorkspaceRootPathNotConfiguredError } from "@shared/rpc/schemas/workspace";
 import {
   DEFAULT_SETTINGS,

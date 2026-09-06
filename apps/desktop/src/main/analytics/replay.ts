@@ -1,5 +1,5 @@
-import { DeckManager } from "@re/workspace";
-import type { DeckManager as DeckManagerService } from "@re/workspace";
+import { DeckManager } from "@simbyotic/re-workspace";
+import type { DeckManager as DeckManagerService } from "@simbyotic/re-workspace";
 import { Either, Effect, Exit } from "effect";
 
 import { findCardLocationById } from "@main/card-location";

@@ -16,7 +16,7 @@ export const ResolveDeckImagePathReasonSchema = Schema.Literal(
 export type ResolveDeckImagePathReason = typeof ResolveDeckImagePathReasonSchema.Type;
 
 export class InvalidDeckImagePath extends Schema.TaggedError<InvalidDeckImagePath>(
-  "@re/workspace/InvalidDeckImagePath",
+  "@simbyotic/re-workspace/InvalidDeckImagePath",
 )("InvalidDeckImagePath", {
   rootPath: Schema.String,
   deckPath: Schema.String,

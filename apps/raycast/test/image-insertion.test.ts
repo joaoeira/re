@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
-import type { ItemMetadata, EvaluableItemType } from "@re/core";
-import type { ImportedDeckImageAsset } from "@re/workspace";
+import type { ItemMetadata, EvaluableItemType } from "@simbyotic/re-core";
+import type { ImportedDeckImageAsset } from "@simbyotic/re-workspace";
 import { Effect, Layer } from "effect";
 
 import {

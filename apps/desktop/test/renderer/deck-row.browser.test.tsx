@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 
 import { StoresProvider, createStores } from "@shared/state/stores-context";
 import { DeckRow } from "@/components/deck-list/deck-row";
-import type { DeckTreeLeaf, DeckTreeGroup } from "@re/workspace";
+import type { DeckTreeLeaf, DeckTreeGroup } from "@simbyotic/re-workspace";
 
 async function renderWithProviders(ui: React.ReactNode, stores = createStores()) {
   const rootRoute = createRootRoute({ component: () => ui });

@@ -1,5 +1,5 @@
 import { FileSystem, Path } from "@effect/platform";
-import type { ItemMetadata, EvaluableItemType } from "@re/core";
+import type { ItemMetadata, EvaluableItemType } from "@simbyotic/re-core";
 import {
   DeckManager,
   importDeckImageAssetFromBytes,
@@ -11,7 +11,7 @@ import {
   type ItemValidationError,
   type ScanDecksError,
   type WriteError,
-} from "@re/workspace";
+} from "@simbyotic/re-workspace";
 import { Context, Effect, Layer } from "effect";
 
 export interface DeckStore {

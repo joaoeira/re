@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { Cause, Effect, Exit } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
-import { parseFile } from "@re/core";
+import { parseFile } from "@simbyotic/re-core";
 
 import {
   makeInMemoryForgeSessionRepository,

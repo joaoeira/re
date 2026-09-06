@@ -2,9 +2,9 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { tmpdir } from "node:os";
 import { Deferred, Effect } from "effect";
-import { parseFile } from "@re/core";
-import { DeckManager } from "@re/workspace";
-import { Scheduler, SchedulerLive } from "@re/scheduler";
+import { parseFile } from "@simbyotic/re-core";
+import { DeckManager } from "@simbyotic/re-workspace";
+import { Scheduler, SchedulerLive } from "@simbyotic/re-scheduler";
 import { describe, expect, it } from "vitest";
 
 import { toMetadataFingerprint } from "@main/analytics/fingerprint";

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { replayPendingCompensationIntents } from "@main/analytics/replay";
 import type { CompensationIntent, ReviewAnalyticsRepository } from "@main/analytics/types";
 import { toMetadataFingerprint } from "@main/analytics/fingerprint";
-import { DeckManager, type DeckManager as DeckManagerService } from "@re/workspace";
+import { DeckManager, type DeckManager as DeckManagerService } from "@simbyotic/re-workspace";
 
 const metadata = {
   id: "card-1" as never,

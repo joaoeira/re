@@ -1,9 +1,9 @@
 import { FileSystem, Path } from "@effect/platform";
 import * as Schema from "effect/Schema";
-import { parseFile, State, type MetadataParseError, type ParsedFile } from "@re/core";
+import { parseFile, State, type MetadataParseError, type ParsedFile } from "@simbyotic/re-core";
 import { Effect } from "effect";
 
-import { isCardDue } from "@re/scheduler";
+import { isCardDue } from "@simbyotic/re-scheduler";
 import {
   scanDecks,
   ScanDecksErrorSchema,

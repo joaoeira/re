@@ -1,5 +1,5 @@
 import { Path } from "@effect/platform";
-import { resolveDeckImagePath } from "@re/workspace";
+import { resolveDeckImagePath } from "@simbyotic/re-workspace";
 import { useCallback, useEffect, useRef } from "react";
 import { useEditor, type Editor, type UseEditorOptions } from "@tiptap/react";
 import type { EditorView } from "@tiptap/pm/view";

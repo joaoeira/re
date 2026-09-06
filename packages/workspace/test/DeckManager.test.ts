@@ -7,8 +7,8 @@ import {
   type Item,
   type ItemId,
   type ItemType,
-} from "@re/core";
-import { ContentParseError } from "@re/core";
+} from "@simbyotic/re-core";
+import { ContentParseError } from "@simbyotic/re-core";
 import { Effect, Either, Layer, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 

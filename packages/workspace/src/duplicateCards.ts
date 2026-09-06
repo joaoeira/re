@@ -1,5 +1,5 @@
 import { FileSystem, Path } from "@effect/platform";
-import type { ParsedFile } from "@re/core";
+import type { ParsedFile } from "@simbyotic/re-core";
 import { Effect } from "effect";
 
 import { DeckManager } from "./DeckManager.js";

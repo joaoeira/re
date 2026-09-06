@@ -1,8 +1,8 @@
 const assert = require("node:assert/strict");
 const { Effect } = require("effect");
-const { createMetadata, parseFile, serializeFile } = require("@re/core");
-const { QAType, ClozeType } = require("@re/item-types");
-const { Scheduler, SchedulerLive } = require("@re/scheduler");
+const { createMetadata, parseFile, serializeFile } = require("@simbyotic/re-core");
+const { QAType, ClozeType } = require("@simbyotic/re-item-types");
+const { Scheduler, SchedulerLive } = require("@simbyotic/re-scheduler");
 
 const card = createMetadata();
 const content = "Capital of France?\n---\nParis\n";

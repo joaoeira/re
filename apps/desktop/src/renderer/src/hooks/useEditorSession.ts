@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Effect } from "effect";
 import { createActor, type ActorRefFrom } from "xstate";
 
-import { mapScanDecksErrorToError } from "@re/workspace";
+import { mapScanDecksErrorToError } from "@simbyotic/re-workspace";
 import { mapCreateDeckErrorToError } from "@shared/rpc/schemas/workspace";
 import { mapSettingsErrorToError } from "@shared/settings";
 import { useIpc } from "@/lib/ipc-context";

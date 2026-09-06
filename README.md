@@ -42,14 +42,14 @@ The timestamps must either both be present or both be omitted.
 ## Installation
 
 ```bash
-bun add @re/core
+bun add @simbyotic/re-core
 ```
 
 ## Usage
 
 ```typescript
 import { Effect } from "effect";
-import { parseFile, serializeFile, createMetadata, State } from "@re/core";
+import { parseFile, serializeFile, createMetadata, State } from "@simbyotic/re-core";
 
 // Parse a file
 const content = await Bun.file("cards.md").text();
@@ -174,7 +174,7 @@ This parses as one item with two cards sharing the same content.
 All parse errors are tagged for pattern matching:
 
 ```typescript
-import { ParseError, InvalidMetadataFormat, InvalidFieldValue } from "@re/core";
+import { ParseError, InvalidMetadataFormat, InvalidFieldValue } from "@simbyotic/re-core";
 
 Effect.runSync(
   parseFile(content).pipe(
@@ -227,7 +227,7 @@ versions. Packages include declaration maps and their sources for editor navigat
 
 `check:packages` installs those archives into separate temporary directories, checks TypeScript
 declarations, and runs ESM and CommonJS consumers against a newer compatible Effect version.
-The scheduler consumer uses `@re/core`, `@re/item-types`, and `@re/scheduler` and rejects
+The scheduler consumer uses `@simbyotic/re-core`, `@simbyotic/re-item-types`, and `@simbyotic/re-scheduler` and rejects
 workspace and filesystem platform dependencies. The complete workspace consumer also exercises
 deck persistence, discovery, snapshots, and review queues. Both reject duplicate Effect installations.
 It requires Node/npm, Bun, `tar`, and registry access; temporary files are removed afterward.
@@ -245,3 +245,9 @@ bun run test:watch  # Watch mode
 bun run bench       # Run benchmarks
 bun run typecheck   # Type check
 ```
+
+## Library releases
+
+The four shared libraries are released together as `@simbyotic/re-*`. See the
+[library release guide](docs/library-releases.md) for Changesets, verified archives,
+and npm publishing.

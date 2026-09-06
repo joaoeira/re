@@ -31,7 +31,7 @@ import { useForgeTopicCardsQuery } from "@/hooks/queries/use-forge-topic-cards-q
 import { useIpc } from "@/lib/ipc-context";
 import { runIpcEffect, toRpcDefectError } from "@/lib/ipc-query";
 import { queryKeys } from "@/lib/query-keys";
-import type { ScanDecksResult } from "@re/workspace";
+import type { ScanDecksResult } from "@simbyotic/re-workspace";
 import {
   mapForgeGetDerivedCardsErrorToError,
   type DerivationParentRef,

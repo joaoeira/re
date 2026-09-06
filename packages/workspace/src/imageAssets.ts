@@ -20,7 +20,7 @@ export const InvalidWorkspaceImageAssetReasonSchema = Schema.Literal(
 export type InvalidWorkspaceImageAssetReason = typeof InvalidWorkspaceImageAssetReasonSchema.Type;
 
 export class InvalidWorkspaceImageAsset extends Schema.TaggedError<InvalidWorkspaceImageAsset>(
-  "@re/workspace/InvalidWorkspaceImageAsset",
+  "@simbyotic/re-workspace/InvalidWorkspaceImageAsset",
 )("InvalidWorkspaceImageAsset", {
   rootPath: Schema.String,
   deckPath: Schema.optional(Schema.String),
@@ -38,7 +38,7 @@ export const ImportDeckImageAssetOperationSchema = Schema.Literal(
 export type ImportDeckImageAssetOperation = typeof ImportDeckImageAssetOperationSchema.Type;
 
 export class ImportDeckImageAssetOperationError extends Schema.TaggedError<ImportDeckImageAssetOperationError>(
-  "@re/workspace/ImportDeckImageAssetOperationError",
+  "@simbyotic/re-workspace/ImportDeckImageAssetOperationError",
 )("ImportDeckImageAssetOperationError", {
   operation: ImportDeckImageAssetOperationSchema,
   message: Schema.String,

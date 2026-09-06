@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { libraries, packLibraries, repoRoot, run } from "./pack-libraries.mjs";
 
@@ -29,7 +29,7 @@ const checkConsumer = async ({ archives, consumer, withWorkspace }) => {
     delete manifest.dependencies["@effect/platform-node"];
   }
   for (const library of includedLibraries) {
-    const name = `@re/${library}`;
+    const name = `@simbyotic/re-${library}`;
     manifest.dependencies[name] = pathToFileURL(archives[name]).href;
   }
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
@@ -50,7 +50,7 @@ const checkConsumer = async ({ archives, consumer, withWorkspace }) => {
     if (!withWorkspace) {
       assert.doesNotMatch(
         installedPath,
-        /(?:^|\/)node_modules\/(?:@re\/workspace|@effect\/platform(?:-[^/]+)?|ignore)$/,
+        /(?:^|\/)node_modules\/(?:@simbyotic\/re-workspace|@effect\/platform(?:-[^/]+)?|ignore)$/,
         "Scheduling must install without workspace or filesystem platform dependencies",
       );
     }
@@ -79,10 +79,10 @@ const checkConsumer = async ({ archives, consumer, withWorkspace }) => {
     `Verified shared Effect ${installedEffect.version} (consumer range: ${manifest.dependencies.effect}).`,
   );
   for (const library of includedLibraries) {
-    const installed = path.join(consumer, "node_modules/@re", library);
+    const installed = path.join(consumer, "node_modules/@simbyotic", `re-${library}`);
     assert.equal(
       await realpath(installed),
-      path.join(await realpath(consumer), "node_modules/@re", library),
+      path.join(await realpath(consumer), "node_modules/@simbyotic", `re-${library}`),
     );
   }
   console.log("Compiling the external TypeScript consumer (NodeNext)...");
@@ -114,30 +114,36 @@ const checkConsumer = async ({ archives, consumer, withWorkspace }) => {
   console.log(await run(process.execPath, ["commonjs.cjs"], consumer, env));
 };
 
-const scratch = await mkdtemp(path.join(tmpdir(), "re-package-consumer-"));
-try {
-  const relative = path.relative(await realpath(repoRoot), await realpath(scratch));
-  assert.ok(
-    relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative),
-    "Consumer must be outside the repository",
-  );
-  const archives = await packLibraries(path.join(scratch, "archives"));
-  console.log("Checking the scheduler consumer...");
-  await checkConsumer({
-    archives,
-    consumer: path.join(scratch, "scheduler-consumer"),
-    withWorkspace: false,
+export const checkPackages = async (archives) => {
+  const scratch = await mkdtemp(path.join(tmpdir(), "re-package-consumer-"));
+  try {
+    const relative = path.relative(await realpath(repoRoot), await realpath(scratch));
+    assert.ok(
+      relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative),
+      "Consumer must be outside the repository",
+    );
+    archives ??= await packLibraries(path.join(scratch, "archives"));
+    console.log("Checking the scheduler consumer...");
+    await checkConsumer({
+      archives,
+      consumer: path.join(scratch, "scheduler-consumer"),
+      withWorkspace: false,
+    });
+    console.log("Checking the workspace consumer...");
+    await checkConsumer({
+      archives,
+      consumer: path.join(scratch, "workspace-consumer"),
+      withWorkspace: true,
+    });
+    console.log("Independent package consumption passed.");
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+};
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await checkPackages().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
   });
-  console.log("Checking the workspace consumer...");
-  await checkConsumer({
-    archives,
-    consumer: path.join(scratch, "workspace-consumer"),
-    withWorkspace: true,
-  });
-  console.log("Independent package consumption passed.");
-} catch (error) {
-  console.error(error.message);
-  process.exitCode = 1;
-} finally {
-  await rm(scratch, { recursive: true, force: true });
 }

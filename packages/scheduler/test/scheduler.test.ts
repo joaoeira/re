@@ -8,7 +8,7 @@ import {
   serializeMetadata,
   type ItemId,
   type ItemMetadata,
-} from "@re/core";
+} from "@simbyotic/re-core";
 
 import { Scheduler, SchedulerLive } from "../src";
 

@@ -17,7 +17,7 @@ import {
   serializeFile,
   type Item,
   type ParsedFile,
-} from "@re/core";
+} from "@simbyotic/re-core";
 import {
   ClozeType,
   QAContent,
@@ -25,8 +25,8 @@ import {
   annotateBuiltinCardKeys,
   resolveBuiltinCard,
   resolveBuiltinItem,
-} from "@re/item-types";
-import { Scheduler, SchedulerLive } from "@re/scheduler";
+} from "@simbyotic/re-item-types";
+import { Scheduler, SchedulerLive } from "@simbyotic/re-scheduler";
 import {
   DeckManager,
   DeckManagerLive,
@@ -37,13 +37,13 @@ import {
   scanDecks,
   snapshotWorkspace,
   type ReadError,
-} from "@re/workspace";
+} from "@simbyotic/re-workspace";
 
 // Public imports must resolve to installed JavaScript, never a workspace source file.
 for (const name of ["core", "item-types", "scheduler", "workspace"]) {
   assert.equal(
-    fileURLToPath(import.meta.resolve(`@re/${name}`)),
-    path.resolve("node_modules/@re", name, "dist/index.js"),
+    fileURLToPath(import.meta.resolve(`@simbyotic/re-${name}`)),
+    path.resolve("node_modules/@simbyotic", `re-${name}`, "dist/index.js"),
   );
 }
 

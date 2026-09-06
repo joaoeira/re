@@ -1,8 +1,8 @@
 import path from "node:path";
 
-import { adaptItemType, createMetadata, reconcileCards, type Item } from "@re/core";
-import { ClozeType, QAType, resolveBuiltinItem } from "@re/item-types";
-import { DeckManager, importDeckImageAssetFromBytes, scanDecks } from "@re/workspace";
+import { adaptItemType, createMetadata, reconcileCards, type Item } from "@simbyotic/re-core";
+import { ClozeType, QAType, resolveBuiltinItem } from "@simbyotic/re-item-types";
+import { DeckManager, importDeckImageAssetFromBytes, scanDecks } from "@simbyotic/re-workspace";
 import type { FileSystem, Path } from "@effect/platform";
 import { Effect, Either, Option } from "effect";
 import type { Implementations } from "electron-effect-rpc/types";

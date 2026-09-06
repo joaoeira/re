@@ -1,6 +1,6 @@
 import { Path } from "@effect/platform";
 import { Effect, Either, Layer } from "effect";
-import { numericField, type ItemId, type ParsedFile } from "@re/core";
+import { numericField, type ItemId, type ParsedFile } from "@simbyotic/re-core";
 import { describe, expect, it } from "vitest";
 
 import {

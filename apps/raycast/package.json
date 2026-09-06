@@ -1,6 +1,8 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "re-cards",
+  "version": "0.0.0",
+  "private": true,
   "description": "Create and review cards directly in re decks",
   "categories": [
     "Productivity"
@@ -21,10 +23,10 @@
     "@effect/platform": "^0.94.5",
     "@effect/platform-node": "0.104.0",
     "@raycast/api": "1.104.24",
-    "@re/core": "0.0.1",
-    "@re/item-types": "0.0.1",
-    "@re/scheduler": "0.0.1",
-    "@re/workspace": "0.0.1",
+    "@simbyotic/re-core": "0.1.0",
+    "@simbyotic/re-item-types": "0.1.0",
+    "@simbyotic/re-scheduler": "0.1.0",
+    "@simbyotic/re-workspace": "0.1.0",
     "effect": "3.19.18",
     "react": "19.0.0",
     "remark-math": "^6.0.0",

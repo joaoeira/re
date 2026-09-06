@@ -1,6 +1,6 @@
 # @re/desktop
 
-Electron desktop app for **re**, a spaced repetition flashcard system backed by plain markdown files. The app provides deck management, FSRS-based review sessions, an AI card generation pipeline (Forge), a rich card editor, and review analytics. It sits on top of `@re/core` (card format) and `@re/workspace` (workspace scanning), with an Effect-based main process and a React renderer connected through typed IPC contracts.
+Electron desktop app for **re**, a spaced repetition flashcard system backed by plain markdown files. The app provides deck management, FSRS-based review sessions, an AI card generation pipeline (Forge), a rich card editor, and review analytics. It sits on top of `@simbyotic/re-core` (card format) and `@simbyotic/re-workspace` (workspace scanning), with an Effect-based main process and a React renderer connected through typed IPC contracts.
 
 ## Features
 
@@ -191,4 +191,4 @@ Both main and editor windows run with `contextIsolation: true`, `sandbox: true`,
 
 ## Card format
 
-This app reads and writes the markdown card format defined by `@re/core`. The installed `@re/core` package includes the card format documentation in its README.
+This app reads and writes the markdown card format defined by `@simbyotic/re-core`. The installed `@simbyotic/re-core` package includes the card format documentation in its README.

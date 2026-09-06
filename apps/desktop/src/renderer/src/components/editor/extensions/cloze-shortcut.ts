@@ -1,5 +1,5 @@
 import { Extension } from "@tiptap/react";
-import { nextClozeDeletionIndex } from "@re/core";
+import { nextClozeDeletionIndex } from "@simbyotic/re-core";
 
 import { getEditorMarkdown } from "../hooks/use-markdown-editor";
 
