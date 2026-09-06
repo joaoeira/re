@@ -181,6 +181,15 @@ export default function CreateCardCommand() {
     [clearError],
   );
 
+  const focusField = useCallback((field: ImageTargetField) => {
+    const ref = field === "question" ? questionRef : field === "answer" ? answerRef : contentRef;
+    ref.current?.focus();
+  }, []);
+  const activeField = useCallback(
+    (): ImageTargetField => (cardType === "cloze" ? "content" : imageTarget.current),
+    [cardType],
+  );
+
   const submit = useCallback(async () => {
     if (submitInFlight.current) return false;
 
@@ -234,19 +243,21 @@ export default function CreateCardCommand() {
       toast.style = Toast.Style.Success;
       toast.title = message;
       toast.message = undefined;
-      setTimeout(() => {
-        if (cardType === "qa") {
-          questionRef.current?.focus();
-        } else {
-          contentRef.current?.focus();
-        }
-      }, 0);
+      setTimeout(() => focusField(cardType === "qa" ? "question" : "content"), 0);
       return true;
     } finally {
       submitInFlight.current = false;
       setIsSubmitting(false);
     }
-  }, [answer, cardType, content, preferences.closeAfterSubmit, question, selectedDeckPath]);
+  }, [
+    answer,
+    cardType,
+    content,
+    focusField,
+    preferences.closeAfterSubmit,
+    question,
+    selectedDeckPath,
+  ]);
 
   const insertClozeTemplate = useCallback(() => {
     setContent((current) => appendNextClozeTemplate(current));
@@ -257,6 +268,7 @@ export default function CreateCardCommand() {
   const openPreview = useCallback(async () => {
     if (previewInFlight.current) return;
 
+    const fieldToRestore = activeField();
     previewInFlight.current = true;
     setIsPreparingPreview(true);
     setErrors({});
@@ -293,16 +305,33 @@ export default function CreateCardCommand() {
       }
 
       const deckName = decks.find((deck) => deck.absolutePath === selectedDeckPath)?.name ?? "Deck";
-      push(<CardPreview cards={result.cards} deckName={deckName} onCreate={submit} />);
+      let createdFromPreview = false;
+      push(
+        <CardPreview
+          cards={result.cards}
+          deckName={deckName}
+          onCreate={async () => {
+            createdFromPreview = await submit();
+            return createdFromPreview;
+          }}
+        />,
+        () => {
+          if (createdFromPreview) return;
+          // onPop runs before the form returns; defer focus until it is visible again.
+          setTimeout(() => focusField(fieldToRestore), 0);
+        },
+      );
     } finally {
       previewInFlight.current = false;
       setIsPreparingPreview(false);
     }
   }, [
+    activeField,
     answer,
     cardType,
     content,
     decks,
+    focusField,
     preferences.workspacePath,
     push,
     question,
@@ -315,7 +344,7 @@ export default function CreateCardCommand() {
 
     imageInsertInFlight.current = true;
     setIsInsertingImage(true);
-    const target = cardType === "cloze" ? "content" : imageTarget.current;
+    const target = activeField();
     const currentContent =
       target === "question" ? question : target === "answer" ? answer : content;
 
@@ -347,16 +376,10 @@ export default function CreateCardCommand() {
         return;
       }
 
-      if (target === "question") {
-        setQuestion(result.content);
-        questionRef.current?.focus();
-      } else if (target === "answer") {
-        setAnswer(result.content);
-        answerRef.current?.focus();
-      } else {
-        setContent(result.content);
-        contentRef.current?.focus();
-      }
+      if (target === "question") setQuestion(result.content);
+      else if (target === "answer") setAnswer(result.content);
+      else setContent(result.content);
+      focusField(target);
       clearError(target);
 
       toast.style = Toast.Style.Success;
@@ -367,10 +390,11 @@ export default function CreateCardCommand() {
       setIsInsertingImage(false);
     }
   }, [
+    activeField,
     answer,
-    cardType,
     clearError,
     content,
+    focusField,
     preferences.workspacePath,
     question,
     selectedDeckPath,
