@@ -1514,21 +1514,17 @@ describe("Forge cards step", () => {
     // eslint-disable-next-line @typescript-eslint/no-deprecated
     document.execCommand("insertText", false, "edited question");
 
+    // Editor setup can emit an update before the debounced edit is persisted.
     await expect
-      .poll(() => {
-        return invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeUpdateCard")
-          .length;
-      })
-      .toBeGreaterThanOrEqual(1);
-
-    const updateCall = invoke.mock.calls.findLast(
-      ([method]: unknown[]) => method === "ForgeUpdateCard",
-    ) as [string, { cardId: number; question: string; answer: string }] | undefined;
-    expect(updateCall?.[1]).toEqual({
-      cardId: 8_200,
-      question: "edited question",
-      answer: "editable answer",
-    });
+      .poll(
+        () =>
+          invoke.mock.calls.findLast(([method]: unknown[]) => method === "ForgeUpdateCard")?.[1],
+      )
+      .toEqual({
+        cardId: 8_200,
+        question: "edited question",
+        answer: "editable answer",
+      });
   });
 
   it("uses edited source card content when regenerating permutations", async () => {
