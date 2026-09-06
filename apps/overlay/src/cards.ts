@@ -6,6 +6,7 @@ export interface Card {
   readonly id: string;
   readonly question: string;
   readonly answer: string;
+  readonly cardType?: "qa" | "cloze";
   readonly lastGrade?: ReviewGrade;
 }
 
@@ -26,6 +27,7 @@ export function loadCards(): Card[] {
         typeof card.id === "string" &&
         typeof card.question === "string" &&
         typeof card.answer === "string" &&
+        (card.cardType === undefined || card.cardType === "qa" || card.cardType === "cloze") &&
         (card.lastGrade === undefined || Object.hasOwn(gradeValues, card.lastGrade)),
     )
   )

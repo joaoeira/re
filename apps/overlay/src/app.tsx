@@ -611,11 +611,11 @@ function App() {
             {current ? (
               <>
                 <CardMarkdown
-                  testId="prompt"
-                  source={current.question}
+                  testId={revealed && current.cardType === "cloze" ? "revealed-answer" : "prompt"}
+                  source={revealed && current.cardType === "cloze" ? current.answer : current.question}
                   deckPath={currentDeckPath}
                 />
-                {revealed && (
+                {revealed && current.cardType !== "cloze" && (
                   <>
                     <div style={{ height: 1, backgroundColor: colors.line }} />
                     <CardMarkdown
