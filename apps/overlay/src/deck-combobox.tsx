@@ -26,6 +26,7 @@ export function DeckCombobox({
   onOpenChange: (open: boolean) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [focused, setFocused] = useState(false);
   const trigger = useRef<PublicInstance | null>(null);
   const restoreTriggerFocus = useRef(true);
   const { renderer } = useGpuix();
@@ -60,7 +61,25 @@ export function DeckCombobox({
       autoHighlight
       style={{ flexGrow: 1, alignItems: "stretch" }}
     >
-      <ComboboxTrigger ref={trigger} testId="deck-select" style={menuTrigger}>
+      <ComboboxTrigger
+        ref={trigger}
+        testId="deck-select"
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onKeyDown={(event) => {
+          if (
+            (event.key === "enter" || event.key === "space") &&
+            !event.modifiers?.cmd &&
+            !event.modifiers?.ctrl &&
+            !event.modifiers?.alt
+          ) {
+            setQuery("");
+            restoreTriggerFocus.current = true;
+            onOpenChange(true);
+          }
+        }}
+        style={{ ...menuTrigger, borderColor: focused ? "#ffffff55" : colors.line }}
+      >
         <text style={{ color: colors.text, fontSize: 13 }}>{label(value)}</text>
         <text style={{ color: colors.muted, fontSize: 13 }}>⌄</text>
       </ComboboxTrigger>

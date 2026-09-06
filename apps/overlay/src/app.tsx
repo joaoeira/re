@@ -118,6 +118,7 @@ function Dropdown({
   onOpenChange: (open: boolean) => void;
   testId: string;
 }) {
+  const [focused, setFocused] = useState(false);
   return (
     <Select
       value={value}
@@ -126,7 +127,12 @@ function Dropdown({
       onOpenChange={onOpenChange}
       style={{ flexGrow: 1, alignItems: "stretch" }}
     >
-      <SelectTrigger testId={testId} style={menuTrigger}>
+      <SelectTrigger
+        testId={testId}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{ ...menuTrigger, borderColor: focused ? "#ffffff55" : colors.line }}
+      >
         <text style={{ color: colors.text, fontSize: 13 }}>
           {options.find((option) => option.value === value)?.label ?? "Choose a deck…"}
         </text>
@@ -170,6 +176,7 @@ function DraftField({
   readOnly,
   onChange,
   onFocus,
+  onBlur,
 }: {
   label: string;
   testId: string;
@@ -181,6 +188,7 @@ function DraftField({
   readOnly: boolean;
   onChange: (value: string) => void;
   onFocus: () => void;
+  onBlur: () => void;
 }) {
   return (
     <Field label={label}>
@@ -191,6 +199,7 @@ function DraftField({
         value={value}
         onChange={(event) => onChange(event.value ?? "")}
         onFocus={onFocus}
+        onBlur={onBlur}
         placeholder={placeholder}
         minRows={rows}
         maxRows={rows}
@@ -390,6 +399,7 @@ function App() {
     focused: focus === name,
     readOnly: saving,
     onFocus: () => setFocus(name),
+    onBlur: () => setFocus((current) => (current === name ? "" : current)),
   });
   const menu = [
     { label: pinned ? "Stop Keeping on Top" : "Keep on Top", key: "⌘ P", run: togglePin },
@@ -437,6 +447,15 @@ function App() {
         if (event.key === "down") setActionIndex((actionIndex + 1) % menu.length);
         else if (event.key === "up") setActionIndex((actionIndex + menu.length - 1) % menu.length);
         else if (event.key === "enter") menu[actionIndex]?.run();
+      } else if (
+        screen === "create" &&
+        event.key === "tab" &&
+        !cmd &&
+        !event.modifiers?.ctrl &&
+        !event.modifiers?.alt
+      ) {
+        if (event.modifiers?.shift) renderer.focusPrevious();
+        else renderer.focusNext();
       } else if (screen === "create" && cmd && event.key === "enter") primary();
       else if (screen === "review") {
         const action = reviewKey(event, revealed);
