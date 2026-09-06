@@ -1561,20 +1561,15 @@ describe("Forge cards step", () => {
     document.execCommand("insertText", false, "edited source question");
 
     await expect
-      .poll(() => {
-        return invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeUpdateCard")
-          .length;
-      })
-      .toBeGreaterThanOrEqual(1);
-
-    const sourceUpdateCall = invoke.mock.calls.findLast(
-      ([method]: unknown[]) => method === "ForgeUpdateCard",
-    ) as [string, { cardId: number; question: string; answer: string }] | undefined;
-    expect(sourceUpdateCall?.[1]).toEqual({
-      cardId: 8_210,
-      question: "edited source question",
-      answer: "editable source answer",
-    });
+      .poll(
+        () =>
+          invoke.mock.calls.findLast(([method]: unknown[]) => method === "ForgeUpdateCard")?.[1],
+      )
+      .toEqual({
+        cardId: 8_210,
+        question: "edited source question",
+        answer: "editable source answer",
+      });
 
     await userEvent.click(screen.getByRole("button", { name: "Permutations" }));
 
@@ -1659,11 +1654,15 @@ describe("Forge cards step", () => {
     document.execCommand("insertText", false, "edited cloze answer");
 
     await expect
-      .poll(() => {
-        return invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeUpdateCard")
-          .length;
-      })
-      .toBeGreaterThanOrEqual(1);
+      .poll(
+        () =>
+          invoke.mock.calls.findLast(([method]: unknown[]) => method === "ForgeUpdateCard")?.[1],
+      )
+      .toEqual({
+        cardId: 8_220,
+        question: "editable cloze question",
+        answer: "edited cloze answer",
+      });
 
     await userEvent.click(screen.getByRole("button", { name: "Cloze" }));
 
@@ -1749,11 +1748,15 @@ describe("Forge cards step", () => {
     document.execCommand("insertText", false, "edited reformulate question");
 
     await expect
-      .poll(() => {
-        return invoke.mock.calls.filter(([method]: unknown[]) => method === "ForgeUpdateCard")
-          .length;
-      })
-      .toBeGreaterThanOrEqual(1);
+      .poll(
+        () =>
+          invoke.mock.calls.findLast(([method]: unknown[]) => method === "ForgeUpdateCard")?.[1],
+      )
+      .toEqual({
+        cardId: 8_225,
+        question: "edited reformulate question",
+        answer: "editable reformulate answer",
+      });
 
     const reformulateButton = screen.getByRole("button", { name: "Reformulate card" });
     (reformulateButton.element() as HTMLButtonElement).click();
