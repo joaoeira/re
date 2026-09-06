@@ -32,6 +32,9 @@
     "vite.preload.config.mts",
     "vite.renderer.config.mts",
     "src",
-    "test"
+    "test",
+    "vitest.config.ts",
+    "playwright.config.ts",
+    "playwright"
   ]
 }

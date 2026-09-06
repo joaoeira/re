@@ -11,12 +11,12 @@
     "test": "bun run --filter '*' test",
     "test:watch": "bun run --filter '*' test:watch",
     "typecheck": "bun run --filter '*' typecheck",
-    "desktop:dev": "bun run --filter @re/desktop dev",
-    "desktop:typecheck": "bun run --filter @re/desktop typecheck",
-    "desktop:test": "bun run --filter @re/desktop test",
-    "desktop:build": "bun run --filter @re/desktop build",
-    "desktop:package": "bun run --filter @re/desktop package",
-    "desktop:install": "bun run --filter @re/desktop install:local",
+    "desktop:dev": "bun run build:libraries && bun --cwd=apps/desktop run dev",
+    "desktop:typecheck": "bun run build:libraries && bun --cwd=apps/desktop run typecheck",
+    "desktop:test": "bun run build:libraries && bun --cwd=apps/desktop run test",
+    "desktop:build": "bun run build:libraries && bun --cwd=apps/desktop run build",
+    "desktop:package": "bun run build:libraries && bun --cwd=apps/desktop run package",
+    "desktop:install": "bun run build:libraries && bun --cwd=apps/desktop run install:local",
     "raycast:dev": "bun run build:libraries && bun --cwd=apps/raycast run dev",
     "raycast:test": "bun run build:libraries && bun --cwd=apps/raycast run test",
     "raycast:typecheck": "bun run build:libraries && bun --cwd=apps/raycast run typecheck",
@@ -29,7 +29,8 @@
     "watch:libraries": "tsc -b tsconfig.build.json --watch",
     "pack:libraries": "node scripts/pack-libraries.mjs",
     "check:packages": "node scripts/check-packages.mjs",
-    "check:raycast": "node scripts/check-raycast.mjs"
+    "check:raycast": "node scripts/check-raycast.mjs",
+    "check:desktop": "node scripts/check-desktop.mjs"
   },
   "devDependencies": {
     "@effect/language-service": "^0.64.1",

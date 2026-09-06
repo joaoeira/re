@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -5,6 +6,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 
+const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const sharedAliases = {
@@ -12,9 +14,9 @@ const sharedAliases = {
   "@main": path.resolve(__dirname, "src/main"),
   "@preload": path.resolve(__dirname, "src/preload"),
   "@shared": path.resolve(__dirname, "src/shared"),
-  react: path.resolve(__dirname, "../../node_modules/react"),
-  "react-dom": path.resolve(__dirname, "../../node_modules/react-dom"),
-  "react/jsx-runtime": path.resolve(__dirname, "../../node_modules/react/jsx-runtime.js"),
+  react: path.dirname(require.resolve("react/package.json")),
+  "react-dom": path.dirname(require.resolve("react-dom/package.json")),
+  "react/jsx-runtime": require.resolve("react/jsx-runtime"),
 };
 
 export default defineConfig({
@@ -62,9 +64,6 @@ export default defineConfig({
             headless: true,
             provider: playwright(),
             instances: [{ browser: "chromium" }],
-            locators: {
-              timeout: 500,
-            },
           },
         },
       },

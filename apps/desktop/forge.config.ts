@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,8 +16,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EXTERNAL_RUNTIME_PACKAGES = ["better-sqlite3", "pdf-parse"];
 
 function resolvePackageDir(name: string, searchDirs: string[]): string | null {
-  for (const dir of searchDirs) {
-    const candidate = path.join(dir, "node_modules", name);
+  const modulePaths = searchDirs.flatMap(
+    (dir) =>
+      createRequire(path.join(dir, "package.json")).resolve.paths(`${name}/package.json`) ?? [],
+  );
+  for (const dir of modulePaths) {
+    const candidate = path.join(dir, name);
     if (fs.existsSync(path.join(candidate, "package.json"))) {
       return candidate;
     }
@@ -33,16 +38,11 @@ function collectRuntimeDependencyDirs(
   if (collected.has(name)) return;
   const dir = resolvePackageDir(name, searchDirs);
   if (!dir) {
-    if (required)
-      throw new Error(
-        `Cannot resolve runtime dependency "${name}" for packaging`,
-      );
+    if (required) throw new Error(`Cannot resolve runtime dependency "${name}" for packaging`);
     return;
   }
   collected.set(name, dir);
-  const pkg = JSON.parse(
-    fs.readFileSync(path.join(dir, "package.json"), "utf8"),
-  );
+  const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"));
   const nextSearchDirs = [dir, ...searchDirs];
   for (const depName of Object.keys(pkg.dependencies ?? {})) {
     collectRuntimeDependencyDirs(depName, nextSearchDirs, collected, true);
@@ -77,7 +77,7 @@ const config = {
   rebuildConfig: {},
   hooks: {
     packageAfterCopy: async (_forgeConfig: unknown, buildPath: string) => {
-      const searchRoots = [__dirname, path.join(__dirname, "..", "..")];
+      const searchRoots = [__dirname];
       const collected = new Map<string, string>();
       for (const name of EXTERNAL_RUNTIME_PACKAGES) {
         collectRuntimeDependencyDirs(name, searchRoots, collected, true);

@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
+import { createRequire } from "node:module";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopDir = path.resolve(__dirname, "..");
-const repoRoot = path.resolve(desktopDir, "../..");
+const require = createRequire(import.meta.url);
 
 const localNodeModules = path.join(desktopDir, "node_modules");
 const modulesToLink = ["electron", "react", "react-dom"];
@@ -26,14 +27,10 @@ const pathExists = async (target) => {
 };
 
 const ensureLinkedModule = async (moduleName) => {
-  const rootModuleDir = path.join(repoRoot, "node_modules", moduleName);
+  const resolvedModuleDir = path.dirname(require.resolve(`${moduleName}/package.json`));
   const localModuleDir = path.join(localNodeModules, moduleName);
 
-  if (!(await pathExists(rootModuleDir))) {
-    throw new Error(
-      `${moduleName} is missing at ${rootModuleDir}. Run 'bun install' at repo root first.`,
-    );
-  }
+  if (resolvedModuleDir === localModuleDir) return;
 
   if (await pathExists(localModuleDir)) {
     const stats = await fs.lstat(localModuleDir);
@@ -41,7 +38,7 @@ const ensureLinkedModule = async (moduleName) => {
     if (stats.isSymbolicLink()) {
       const currentTarget = await fs.readlink(localModuleDir);
       const resolvedTarget = path.resolve(path.dirname(localModuleDir), currentTarget);
-      if (resolvedTarget === rootModuleDir) {
+      if (resolvedTarget === resolvedModuleDir) {
         return;
       }
     }
@@ -49,7 +46,7 @@ const ensureLinkedModule = async (moduleName) => {
     await fs.rm(localModuleDir, { recursive: true, force: true });
   }
 
-  await fs.symlink(rootModuleDir, localModuleDir, "junction");
+  await fs.symlink(resolvedModuleDir, localModuleDir, "junction");
   console.log(`[desktop] linked ${moduleName} -> ${localModuleDir}`);
 };
 

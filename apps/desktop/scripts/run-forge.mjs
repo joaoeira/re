@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createRequire } from "node:module";
 import { execFile as execFileCallback, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -11,15 +12,8 @@ const execFile = promisify(execFileCallback);
 const scriptPath = fileURLToPath(import.meta.url);
 const scriptDir = path.dirname(scriptPath);
 const desktopDir = path.resolve(scriptDir, "..");
-const repoRoot = path.resolve(desktopDir, "../..");
-const forgeCli = path.join(
-  repoRoot,
-  "node_modules",
-  "@electron-forge",
-  "cli",
-  "dist",
-  "electron-forge.js",
-);
+const require = createRequire(import.meta.url);
+const forgeCli = require.resolve("@electron-forge/cli/dist/electron-forge.js");
 
 const SUPPORTED_NODE_MINIMUM = 22;
 const SUPPORTED_NODE_MAXIMUM_EXCLUSIVE = 25;

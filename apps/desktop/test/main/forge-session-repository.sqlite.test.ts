@@ -159,6 +159,26 @@ const setupSqliteRepository = async () => {
           added_to_deck_at TEXT,
           UNIQUE(topic_id, card_order)
         );
+
+        CREATE TABLE forge_card_permutations (
+          id INTEGER PRIMARY KEY,
+          source_card_id INTEGER NOT NULL REFERENCES forge_cards(id) ON DELETE CASCADE,
+          permutation_order INTEGER NOT NULL CHECK (permutation_order >= 0),
+          question TEXT NOT NULL,
+          answer TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+          added_count INTEGER NOT NULL DEFAULT 0,
+          UNIQUE(source_card_id, permutation_order)
+        );
+
+        CREATE TABLE forge_card_cloze (
+          id INTEGER PRIMARY KEY,
+          source_card_id INTEGER NOT NULL UNIQUE REFERENCES forge_cards(id) ON DELETE CASCADE,
+          cloze_text TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+          updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+          added_count INTEGER NOT NULL DEFAULT 0
+        );
       `);
 
         const insertMigration = db.prepare(`
@@ -295,9 +315,7 @@ const setupSqliteRepository = async () => {
             },
           ]),
         );
-        await extractTopics(repository, session.id, [
-          { sequenceOrder: 0, topics: ["alpha"] },
-        ]);
+        await extractTopics(repository, session.id, [{ sequenceOrder: 0, topics: ["alpha"] }]);
 
         const topicId = (
           await Effect.runPromise(repository.getCardsSnapshotBySession(session.id))
@@ -354,9 +372,7 @@ const setupSqliteRepository = async () => {
             },
           ]),
         );
-        await extractTopics(repository, session.id, [
-          { sequenceOrder: 0, topics: ["original"] },
-        ]);
+        await extractTopics(repository, session.id, [{ sequenceOrder: 0, topics: ["original"] }]);
 
         const originalTopicId = (
           await Effect.runPromise(repository.getCardsSnapshotBySession(session.id))
@@ -505,9 +521,7 @@ const setupSqliteRepository = async () => {
           }),
         );
 
-        const snapshot = await Effect.runPromise(
-          repository.getCardsSnapshotBySession(session.id),
-        );
+        const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
         expect(snapshot.map((topic) => topic.topicText)).toEqual([
           "retry-a",
           "retry-b",
@@ -579,9 +593,7 @@ const setupSqliteRepository = async () => {
           ]),
         );
 
-        await extractTopics(repository, session.id, [
-          { sequenceOrder: 0, topics: ["partial"] },
-        ]);
+        await extractTopics(repository, session.id, [{ sequenceOrder: 0, topics: ["partial"] }]);
 
         await Effect.runPromise(
           repository.setTopicExtractionOutcome({
@@ -591,9 +603,7 @@ const setupSqliteRepository = async () => {
           }),
         );
 
-        const outcomes = await Effect.runPromise(
-          repository.getTopicExtractionOutcomes(session.id),
-        );
+        const outcomes = await Effect.runPromise(repository.getTopicExtractionOutcomes(session.id));
         expect(outcomes).toEqual([
           expect.objectContaining({
             family: "detail",
@@ -602,9 +612,7 @@ const setupSqliteRepository = async () => {
           }),
         ]);
 
-        const snapshot = await Effect.runPromise(
-          repository.getCardsSnapshotBySession(session.id),
-        );
+        const snapshot = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
         expect(snapshot.map((topic) => topic.topicText)).toEqual(["partial"]);
       } finally {
         await dispose();
@@ -631,18 +639,14 @@ const setupSqliteRepository = async () => {
           ]),
         );
 
-        await extractTopics(repository, session.id, [
-          { sequenceOrder: 0, topics: ["alpha"] },
-        ]);
+        await extractTopics(repository, session.id, [{ sequenceOrder: 0, topics: ["alpha"] }]);
 
         const topicId = (
           await Effect.runPromise(repository.getCardsSnapshotBySession(session.id))
         )[0]?.topicId;
         if (!topicId) throw new Error("Expected topic id.");
 
-        const initial = await Effect.runPromise(
-          repository.getCardsSnapshotBySession(session.id),
-        );
+        const initial = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
         expect(initial[0]?.markedDone).toBe(false);
 
         const marked = await Effect.runPromise(
@@ -650,9 +654,7 @@ const setupSqliteRepository = async () => {
         );
         expect(marked).toBe(true);
 
-        const afterMark = await Effect.runPromise(
-          repository.getCardsSnapshotBySession(session.id),
-        );
+        const afterMark = await Effect.runPromise(repository.getCardsSnapshotBySession(session.id));
         expect(afterMark[0]?.markedDone).toBe(true);
 
         const unmarked = await Effect.runPromise(

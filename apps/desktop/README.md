@@ -91,49 +91,60 @@ coordinator by default.
 
 ## Getting started
 
-| Requirement | Notes                                                |
-| ----------- | ---------------------------------------------------- |
-| Node        | `>=22.0.0 <25.0.0`                                   |
-| Bun         | Monorepo package manager                             |
-| Chromium    | For browser tests: `npx playwright install chromium` |
+Use Node 24 and npm. From the standalone repository:
 
 ```bash
-bun install                  # from monorepo root
-cd apps/desktop
-bun run dev                  # Electron with Vite HMR
+npm ci
+npm run dev
 ```
+
+The standalone export includes `vendor/` library archives and a portable npm lockfile.
+It does not require this monorepo or published `@re/*` packages. Installing dependencies
+also installs Electron and builds the native SQLite binding; macOS may require Xcode
+Command Line Tools if a prebuilt binding is unavailable.
 
 ### Build and package
 
 ```bash
-bun run build                # electron-forge package (unpackaged app bundle)
-bun run package              # electron-forge make (platform installers: ZIP, DEB, RPM, Squirrel)
+npm run build                # application bundle in out/
+npm run package              # platform installers in out/make/
 ```
+
+On macOS, packaging produces a ZIP and DMG with local ad hoc signing. Release signing
+and notarization require separate distribution configuration. The included GitHub Actions
+workflow checks the app on macOS and uploads installers.
 
 ### Install the latest local build on macOS
 
-From the monorepo root, one command builds, verifies, installs, relaunches, and
-health-checks the desktop app:
-
 ```bash
-bun run desktop:install
+npm run install:local
 ```
 
-The build, package, and install commands automatically select an installed Node
-version compatible with the desktop package and work around Electron Forge
-misdetecting the desktop-local `pnpm-lock.yaml`. The install command validates
-code signing and Electron ASAR integrity, then checks that the installed payload
-is byte-for-byte identical to the fresh build. The previous app is retained
-under `apps/desktop/out/install-backups/`. If the new app does not survive its
-launch check, the installer restores and relaunches the previous version.
+This command builds, verifies, installs, relaunches, and health-checks the desktop app.
+The build, package, and install commands automatically select a compatible installed Node
+version. The installer validates code signing and Electron ASAR integrity, then checks
+that the installed payload matches the fresh build. The previous app is retained under
+`out/install-backups/`. If the new app fails its launch check, the installer restores
+and relaunches the previous version.
 
-### Other scripts
+### Monorepo development and extraction
+
+While the app remains in this monorepo, use `bun run desktop:dev`, `desktop:test`,
+`desktop:typecheck`, `desktop:build`, `desktop:package`, or `desktop:install` from the root.
+These wrappers build the shared libraries before invoking the app's own commands.
+Run `bun run watch:libraries` alongside development when editing library source.
+
+`bun run check:desktop` installs an isolated copy outside the workspace, verifies native
+SQLite, runs unit and browser tests, builds platform installers, and smoke-tests the packaged payload. To retain a standalone
+copy with source, library archives, lockfile, CI, and build outputs:
 
 ```bash
-bun run typecheck            # tsc --noEmit
-bun run lint                 # oxlint
-bun run kill                 # Force-kill stale Electron processes
+bun run check:desktop --output dist/desktop
 ```
+
+The destination must not exist. The export is ready to become a separate repository.
+When the shared libraries are published, replace the `file:vendor/...` dependencies
+with their released versions and regenerate the npm lockfile.
 
 ## Testing
 
@@ -145,12 +156,16 @@ Vitest 4 with two projects:
 | `browser` | Playwright (headless Chromium) | `test/**/*.browser.test.tsx` | Component tests in a real browser |
 
 ```bash
-bun run test                 # Run all tests (both projects)
-bun run test:watch           # Watch mode
-bun run test:e2e             # Playwright E2E tests (separate config)
+npm test                     # Run all tests (both projects)
+npm run test:watch           # Watch mode
+npm run test:e2e             # Packaged payload smoke test; run build/package first
 ```
 
-Browser tests use `vitest-browser-react` for rendering and `expect.element()` for assertions. See `CLAUDE.md` for browser test gotchas (Base UI inert overlays, disabled element clicks, substring matching).
+The smoke test runs the packaged payload under the development Electron host so Playwright
+can connect without changing the shipped executable’s security fuses. It uses temporary user
+data and checks renderer startup, settings IPC, and SQLite initialization.
+
+Browser tests use `vitest-browser-react` for rendering and `expect.element()` for assertions. Run `npx playwright install chromium` before running browser tests. Run tests before packaging: Forge rebuilds SQLite for Electron, whereas Vitest uses Node. Run `npm rebuild better-sqlite3` to restore the Node binding after packaging.
 
 ## Architecture notes
 
@@ -176,4 +191,4 @@ Both main and editor windows run with `contextIsolation: true`, `sandbox: true`,
 
 ## Card format
 
-This app reads and writes the markdown card format defined by `@re/core`. See the [repo root README](../../README.md) for the format specification.
+This app reads and writes the markdown card format defined by `@re/core`. The installed `@re/core` package includes the card format documentation in its README.
