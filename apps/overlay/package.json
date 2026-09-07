@@ -8,7 +8,8 @@
     "native:build": "bun scripts/build-gpuix.ts && mkdir -p dist && clang -shared -fobjc-arc -framework Cocoa -framework Carbon native/panel.m -o dist/libpanel.dylib",
     "typecheck": "tsc --noEmit",
     "build": "bun run native:build && bun scripts/build.ts",
-    "test": "bun test test"
+    "test": "bun test test",
+    "test:rendering": "bun run native:build && bun test test/card-markdown.test.tsx"
   },
   "dependencies": {
     "@effect/platform": "^0.94.5",

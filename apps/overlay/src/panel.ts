@@ -1,4 +1,4 @@
-import { dlopen, FFIType } from "bun:ffi";
+import { dlopen, FFIType, ptr } from "bun:ffi";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
@@ -11,6 +11,7 @@ const libraryPath = existsSync(developmentLibrary)
   ? developmentLibrary
   : resolve(dirname(process.execPath), "../Frameworks/libpanel.dylib");
 const library = dlopen(libraryPath, {
+  re_text_baseline: { args: [FFIType.ptr, FFIType.f64, FFIType.f64], returns: FFIType.f64 },
   re_panel_take_route: { args: [], returns: FFIType.i32 },
   re_panel_show: { args: [], returns: FFIType.void },
   re_panel_pump: { args: [], returns: FFIType.void },
@@ -21,6 +22,17 @@ const library = dlopen(libraryPath, {
 });
 // Mirrors RE_PANEL_ROUTE_QUIT in native/panel.m.
 const ROUTE_QUIT = 1;
+
+const baselines = new Map<string, number>();
+export function textBaseline(family: string, size: number, lineHeight: number): number {
+  const key = `${family}:${size}:${lineHeight}`;
+  const previous = baselines.get(key);
+  if (previous !== undefined) return previous;
+  const name = Buffer.from(`${family}\0`);
+  const baseline = library.symbols.re_text_baseline(ptr(name), size, lineHeight);
+  baselines.set(key, baseline);
+  return baseline;
+}
 
 export const panel = {
   takeRoute: (): "quit" | null =>

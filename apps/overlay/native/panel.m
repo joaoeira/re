@@ -1,6 +1,13 @@
 #import <Cocoa/Cocoa.h>
 #import <Carbon/Carbon.h>
 
+// Match GPUI's centered line-box baseline using the same CoreText font metrics.
+double re_text_baseline(const char *family, double size, double lineHeight) {
+  NSFont *font = [NSFont fontWithName:[NSString stringWithUTF8String:family] size:size];
+  if (!font) font = [NSFont fontWithName:@"Helvetica" size:size];
+  return (lineHeight - font.ascender + font.descender) / 2 + font.ascender;
+}
+
 // GPUI owns this window and its delegate. Only configure public AppKit properties;
 // do not replace its class/delegate or run a second application event loop.
 static NSWindow *panel;

@@ -79,6 +79,11 @@ the window, with larger content available by scrolling. Broken images or formula
 show an error in place. Rendered media is cached under the system temporary folder.
 The desktop app's rich editor and AI are outside this POC.
 
+Both rendering paths share the same body and heading typography. Inline formula
+SVGs retain their MathJax baseline and align with native text using macOS font
+metrics; punctuation stays attached when a line wraps. The panel bridge exposes
+the font measurement without opening a window.
+
 ## Native integration
 
 `native/panel.m` configures GPUI's window without replacing its class or delegate.
@@ -112,3 +117,7 @@ Run the review behavior and persisted scheduling regression checks with:
 ```sh
 bun test apps/overlay/test
 ```
+
+On macOS, build the native prerequisites and run the GPUI card layout checks with
+`bun run --cwd apps/overlay test:rendering`. The regular test command also runs
+these checks when a local native build is available.

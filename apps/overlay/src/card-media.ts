@@ -11,12 +11,20 @@ import { liteAdaptor } from "mathjax-full/js/adaptors/liteAdaptor.js";
 import { RegisterHTMLHandler } from "mathjax-full/js/handlers/html.js";
 import "mathjax-full/js/input/tex/ams/AmsConfiguration.js";
 import "mathjax-full/js/input/tex/newcommand/NewcommandConfiguration.js";
-import { colors } from "./theme";
+import { cardTypography, colors } from "./theme";
 
 export interface Media {
   readonly path: string;
   readonly width: number;
   readonly height: number;
+}
+export interface Formula extends Media {
+  /** Distance from the top of the SVG to the mathematical baseline. */
+  readonly baseline: number;
+}
+
+export function mediaScale(media: Media, maxHeight = 250): number {
+  return Math.min(1, 500 / media.width, maxHeight / media.height);
 }
 const cacheDirectory = join(tmpdir(), "re-pocket-media");
 const adaptor = liteAdaptor();
@@ -26,7 +34,12 @@ const math = mathjax.document("", {
   OutputJax: new SVG({ fontCache: "none" }),
 });
 const cache = new Map<string, Promise<Media>>();
-function cached(key: string, load: () => Promise<Media>): Promise<Media> {
+const formulaCache = new Map<string, Promise<Formula>>();
+function cached<A extends Media>(
+  cache: Map<string, Promise<A>>,
+  key: string,
+  load: () => Promise<A>,
+): Promise<A> {
   const previous = cache.get(key);
   if (previous) return previous;
   const operation = load();
@@ -44,7 +57,7 @@ async function store(bytes: Uint8Array, extension: string): Promise<string> {
 }
 
 export function loadImage(url: string, deckPath: string): Promise<Media> {
-  return cached(`image:${deckPath}:${url}`, async () => {
+  return cached(cache, `image:${deckPath}:${url}`, async () => {
     let path: string;
     let bytes: Uint8Array;
     if (/^(https?:|data:image\/)/i.test(url)) {
@@ -66,11 +79,20 @@ export function loadImage(url: string, deckPath: string): Promise<Media> {
   });
 }
 
-export function renderFormula(tex: string, display: boolean): Promise<Media> {
-  return cached(`math:${display}:${tex}`, async () => {
+export function renderFormula(
+  tex: string,
+  display: boolean,
+  fontSize = cardTypography.fontSize,
+): Promise<Formula> {
+  return cached(formulaCache, `math:${display}:${fontSize}:${tex}`, async () => {
     // Reset macro/label state for each expression; one card must not affect another.
     math.inputJax[0]!.reset();
-    const node = math.convert(tex, { display, em: 18, ex: 9, containerWidth: 640 });
+    const node = math.convert(tex, {
+      display,
+      em: fontSize,
+      ex: fontSize / 2,
+      containerWidth: 640,
+    });
     const svg = adaptor.tags(node, "svg")[0];
     if (
       !svg ||
@@ -79,12 +101,13 @@ export function renderFormula(tex: string, display: boolean): Promise<Media> {
     )
       throw new Error("Invalid LaTeX expression");
     const viewBox = adaptor.getAttribute(svg, "viewBox")!.split(/\s+/).map(Number);
-    const width = (viewBox[2]! * 18) / 1000;
-    const height = (viewBox[3]! * 18) / 1000;
+    const width = (viewBox[2]! * fontSize) / 1000;
+    const height = (viewBox[3]! * fontSize) / 1000;
+    const baseline = (-viewBox[1]! * fontSize) / 1000;
     adaptor.setAttribute(svg, "width", `${width}px`);
     adaptor.setAttribute(svg, "height", `${height}px`);
     const source = adaptor.outerHTML(svg).replaceAll("currentColor", colors.text);
     const path = await store(new TextEncoder().encode(source), "svg");
-    return { path, width, height };
+    return { path, width, height, baseline };
   });
 }

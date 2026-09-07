@@ -605,7 +605,7 @@ function App() {
               paddingRight: 38,
               paddingBottom: 24,
               paddingTop: 16,
-              gap: 25,
+              gap: 16,
             }}
           >
             {current ? (

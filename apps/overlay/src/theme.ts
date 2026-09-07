@@ -22,6 +22,25 @@ export const editorTheme = {
 };
 export const menuInputTheme = { ...editorTheme, bg: colors.surface };
 
+// Keep the native Markdown renderer and mixed text/math paragraphs on one scale.
+export const cardTypography = {
+  fontFamily: "Helvetica",
+  fontSize: 14,
+  lineHeight: 22,
+  headingSizes: [19, 16, 15, 14],
+  headingLineHeights: [27, 24, 22, 22],
+};
+export const cardTheme = {
+  ...editorTheme,
+  fontSans: cardTypography.fontFamily,
+  metrics: {
+    mdTextSize: cardTypography.fontSize,
+    mdLineHeight: cardTypography.lineHeight,
+    mdHeadingSizes: cardTypography.headingSizes,
+    mdHeadingLineHeights: cardTypography.headingLineHeights,
+  },
+};
+
 export const row: StyleDesc = { display: "flex", flexDirection: "row", alignItems: "center" };
 export const column: StyleDesc = { display: "flex", flexDirection: "column" };
 
