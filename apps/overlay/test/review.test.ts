@@ -9,6 +9,7 @@ import { reviewKey } from "../src/review-controls";
 import {
   createInDeck,
   loadReview,
+  loadReviewStatus,
   gradeInDeck,
   prepareScratch,
   disposeWorkspace,
@@ -78,4 +79,30 @@ test("workspace failures report plain messages rather than error class prefixes"
     ok: false,
     error: "The deck no longer exists.",
   });
+});
+
+test("menu status separates new, scheduled due, and total cards after grading", async () => {
+  const root = await mkdtemp(join(tmpdir(), "re-pocket-status-"));
+  try {
+    const deck = join(root, "test.md");
+    await writeFile(deck, "");
+    await createInDeck(deck, { type: "qa", question: "q", answer: "a" });
+    expect(await loadReviewStatus(root)).toMatchObject({
+      ok: true,
+      value: { new: 1, due: 0, total: 1, unavailableDecks: 0 },
+    });
+    const review = await loadReview(root);
+    if (!review.ok) throw new Error(review.error);
+    await gradeInDeck(review.value.cards[0]!, "good");
+    expect(await loadReviewStatus(root)).toMatchObject({
+      ok: true,
+      value: { new: 0, due: 0, total: 1 },
+    });
+    expect(await loadReviewStatus(root, new Date(Date.now() + 11 * 60_000))).toMatchObject({
+      ok: true,
+      value: { new: 0, due: 1, total: 1 },
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

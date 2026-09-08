@@ -15,6 +15,10 @@ static NSRunningApplication *previousApp;
 static EventHotKeyRef hotKey;
 static EventHandlerRef hotKeyHandler;
 #define RE_PANEL_ROUTE_QUIT 1
+#define RE_PANEL_ROUTE_REVIEW 2
+#define RE_PANEL_ROUTE_CREATE 3
+#define RE_PANEL_ROUTE_REFRESH 4
+#define RE_PANEL_ROUTE_PREFERENCES 5
 static int pendingRoute = 0;
 static id quitMonitor;
 static BOOL pinned = YES;
@@ -22,13 +26,11 @@ static NSStatusItem *statusItem;
 static id statusTarget;
 
 @interface PocketActions : NSObject
-- (void)show:(id)sender;
-- (void)quit:(id)sender;
+- (void)route:(NSMenuItem *)sender;
 @end
 
 @implementation PocketActions
-- (void)show:(id)sender { extern void re_panel_show(void); re_panel_show(); }
-- (void)quit:(id)sender { pendingRoute = RE_PANEL_ROUTE_QUIT; }
+- (void)route:(NSMenuItem *)sender { pendingRoute = (int)sender.tag; }
 
 @end
 
@@ -103,17 +105,54 @@ int re_panel_init(void) {
   }
   statusTarget = [PocketActions new];
   statusItem = [NSStatusBar.systemStatusBar statusItemWithLength:NSVariableStatusItemLength];
-  statusItem.button.title = @"re";
-  statusItem.button.toolTip = @"re Pocket";
-  NSMenu *menu = [NSMenu new];
-  NSMenuItem *show = [menu addItemWithTitle:@"Show re Pocket" action:@selector(show:) keyEquivalent:@""];
-  show.target = statusTarget;
-  [menu addItem:NSMenuItem.separatorItem];
-  NSMenuItem *quit = [menu addItemWithTitle:@"Quit re Pocket" action:@selector(quit:) keyEquivalent:@""];
-  quit.target = statusTarget;
-  statusItem.menu = menu;
+  NSImage *icon = [NSImage imageWithSystemSymbolName:@"square.3.layers.3d" accessibilityDescription:@"re Pocket"];
+  icon.template = YES;
+  statusItem.button.image = icon;
+  statusItem.button.imagePosition = NSImageLeft;
+  statusItem.button.toolTip = @"Loading review status";
   re_panel_show();
   return (int)status;
+}
+
+// JSON is copied synchronously; Bun owns the input buffer. Menu actions only
+// enqueue routes, so no JS callback is invoked inside AppKit menu tracking.
+void re_panel_set_status(const char *json) {
+  NSData *data = [[NSString stringWithUTF8String:json] dataUsingEncoding:NSUTF8StringEncoding];
+  NSDictionary *model = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+  if (!model) return;
+  statusItem.button.title = model[@"title"];
+  statusItem.button.toolTip = model[@"tooltip"];
+  NSMenu *menu = [NSMenu new];
+  menu.autoenablesItems = NO;
+  for (NSDictionary *row in model[@"items"]) {
+    if ([row[@"separator"] boolValue]) {
+      [menu addItem:NSMenuItem.separatorItem];
+      continue;
+    }
+    NSInteger route = [row[@"route"] integerValue];
+    NSMenuItem *item = [menu addItemWithTitle:row[@"title"] action:route ? @selector(route:) : NULL keyEquivalent:@""];
+    item.enabled = route != 0;
+    item.tag = route;
+    item.target = statusTarget;
+    if (row[@"icon"]) item.image = [NSImage imageWithSystemSymbolName:row[@"icon"] accessibilityDescription:nil];
+  }
+  statusItem.menu = menu;
+}
+
+// Returned UTF-8 storage remains alive until the next folder selection.
+const char *re_panel_choose_workspace(void) {
+  static NSString *selectedPath;
+  NSOpenPanel *picker = [NSOpenPanel openPanel];
+  picker.canChooseFiles = NO;
+  picker.canChooseDirectories = YES;
+  picker.allowsMultipleSelection = NO;
+  picker.message = @"Choose the folder containing your re Markdown decks.";
+  picker.prompt = @"Use Workspace";
+  picker.level = NSFloatingWindowLevel + 1;
+  [NSApp activateIgnoringOtherApps:YES];
+  if ([picker runModal] != NSModalResponseOK) return NULL;
+  selectedPath = picker.URL.path;
+  return selectedPath.UTF8String;
 }
 
 void re_panel_dispose(void) {

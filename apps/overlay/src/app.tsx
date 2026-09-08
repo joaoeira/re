@@ -19,6 +19,7 @@ import { toErrorMessage } from "./error-message";
 import { takeLaunchRequest, type Screen } from "./launch";
 import { onSettled } from "./on-settled";
 import { panel } from "./panel";
+import { statusMenu } from "./review-status";
 import { loadPreferences, savePreferences, type Preferences } from "./preferences";
 import { reviewKey, type ReviewGrade } from "./review-controls";
 import { cardsPath } from "./storage";
@@ -28,6 +29,7 @@ import {
   prepareScratch,
   createInDeck,
   loadReview,
+  loadReviewStatus,
   gradeInDeck,
   disposeWorkspace,
   type Draft,
@@ -248,12 +250,17 @@ try {
 const events: {
   key: (event: EventPayload) => void;
   route: (screen: Screen) => void;
+  refresh: () => void;
+  preferences: () => void;
 } = {
   key: () => {},
   route: () => {},
+  refresh: () => {},
+  preferences: () => {},
 };
 
 function App() {
+  const [statusRevision, setStatusRevision] = useState(0);
   const [screen, setScreen] = useState<Screen>(initialScreen);
   const [preferences, setPreferences] = useState(initialPreferences);
   const [decks, setDecks] = useState<readonly DeckEntry[]>([]);
@@ -284,13 +291,48 @@ function App() {
       basename(currentDeckPath, ".md"))
     : "Pocket (scratch deck)";
 
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    panel.setStatus(statusMenu(null));
+    const refresh = async () => {
+      try {
+        const result = preferences.root
+          ? await loadReviewStatus(preferences.root)
+          : loadFailure
+            ? { ok: false as const, error: loadFailure.text }
+            : {
+                ok: true as const,
+                value: {
+                  due: 0,
+                  new: cards.filter((card) => !card.lastGrade).length,
+                  total: cards.length,
+                  unavailableDecks: 0,
+                },
+              };
+        if (!cancelled) panel.setStatus(statusMenu(result, !preferences.root));
+      } catch (error) {
+        if (!cancelled) panel.setStatus(statusMenu({ ok: false, error: toErrorMessage(error) }));
+      }
+      // Schedule after completion to avoid overlapping background scans.
+      if (!cancelled) timer = setTimeout(refresh, 60_000);
+    };
+    void refresh();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [preferences.root, cards, statusRevision]);
+
   function updatePreferences(patch: Partial<Preferences>) {
     const next = { ...preferences, ...patch };
     try {
       savePreferences(next);
       setPreferences(next);
+      return true;
     } catch (error) {
       setNotice(failure(`Could not save preferences: ${toErrorMessage(error)}`));
+      return false;
     }
   }
   useEffect(() => {
@@ -365,6 +407,7 @@ function App() {
     setEditorKey(editorKey + 1);
     setFocus("question");
     setNotice(success("Card created"));
+    setStatusRevision((revision) => revision + 1);
   }
   async function grade(lastGrade: ReviewGrade) {
     if (!current || !revealed || busy) return;
@@ -380,6 +423,7 @@ function App() {
       !commit(cards.map((card) => (card.id === current.id ? { ...card, lastGrade } : card)))
     )
       return;
+    setStatusRevision((revision) => revision + 1);
     setQueue(lastGrade === "again" ? [...queue.slice(1), current.id] : queue.slice(1));
     setRevealed(false);
     setNotice(null);
@@ -432,7 +476,23 @@ function App() {
     },
   ];
   useEffect(() => {
+    events.refresh = () => setStatusRevision((revision) => revision + 1);
+    events.preferences = () => {
+      if (busy) return;
+      const root = panel.chooseWorkspace();
+      if (!root) return;
+      if (!updatePreferences({ root, deck: "scratch" })) return;
+      setDecks([]);
+      setWorkspaceCards([]);
+      setQueue([]);
+      setReviewLoaded(false);
+      setRevealed(false);
+    };
     events.route = (next) => {
+      if (next === "review" && queue.length === 0 && !busy) {
+        if (preferences.root) setReviewLoaded(false);
+        else setQueue(cards.map((card) => card.id));
+      }
       setScreen(next);
       setActionsOpen(false);
       setOpenSelect(null);
@@ -612,7 +672,9 @@ function App() {
               <>
                 <CardMarkdown
                   testId={revealed && current.cardType === "cloze" ? "revealed-answer" : "prompt"}
-                  source={revealed && current.cardType === "cloze" ? current.answer : current.question}
+                  source={
+                    revealed && current.cardType === "cloze" ? current.answer : current.question
+                  }
                   deckPath={currentDeckPath}
                 />
                 {revealed && current.cardType !== "cloze" && (
@@ -754,11 +816,14 @@ function App() {
 const root = createRoot(renderer, { onKeyDown: (event) => flushSync(() => events.key(event)) });
 flushSync(() => root.render(<App />));
 const routeTimer = setInterval(() => {
-  if (panel.takeRoute() === "quit") {
+  const route = panel.takeRoute();
+  if (route === "quit") {
     void shutdown();
     return;
   }
-  const screen = takeLaunchRequest();
+  if (route === "refresh") flushSync(() => events.refresh());
+  if (route === "preferences") flushSync(() => events.preferences());
+  const screen = route === "create" || route === "review" ? route : takeLaunchRequest();
   if (!screen) return;
   flushSync(() => events.route(screen));
   panel.show();

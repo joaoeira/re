@@ -7,6 +7,7 @@ import {
   DeckManager,
   DeckManagerLive,
   scanDecks,
+  snapshotWorkspace,
   ReviewQueueBuilderLive,
   ShuffledOrderingStrategy,
   mapScanDecksErrorToError,
@@ -140,6 +141,38 @@ export const loadReview = (
             }),
           ),
           skipped: queue.issues.length,
+        };
+      }),
+    ),
+  );
+
+export interface ReviewStatus {
+  readonly due: number;
+  readonly new: number;
+  readonly total: number;
+  readonly unavailableDecks: number;
+}
+
+// Match Raycast's status: count reviewable builtin cards, not the in-memory
+// session (which may retain an Again card before its next scheduled due time).
+export const loadReviewStatus = (root: string, now = new Date()): Promise<Result<ReviewStatus>> =>
+  run(
+    result(
+      Effect.gen(function* () {
+        const snapshot = yield* snapshotWorkspace(root, { asOf: now }).pipe(
+          Effect.mapError(mapScanDecksErrorToError),
+        );
+        const valid = snapshot.decks.filter((deck) => deck.status === "ok");
+        const queue = yield* prepareBuiltinReviewQueue({
+          rootPath: snapshot.rootPath,
+          deckPaths: valid.map((deck) => deck.absolutePath),
+          now,
+        });
+        return {
+          due: queue.totalDue,
+          new: queue.totalNew,
+          total: valid.reduce((sum, deck) => sum + deck.totalCards, 0),
+          unavailableDecks: snapshot.decks.length - valid.length + queue.issues.length,
         };
       }),
     ),

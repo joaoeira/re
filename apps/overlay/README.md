@@ -24,7 +24,7 @@ run one instance at a time.
 
 Add `apps/overlay/raycast` to Raycast Settings → Extensions → Script Commands.
 The **Create Card** and **Review Cards** commands open their respective screens;
-there is no in-app screen switcher. Both delegate to `launch.sh`, which places an
+the menu bar also offers both screens. Both delegate to `launch.sh`, which places an
 atomic launch request in `~/Library/Application Support/re-pocket` before opening
 the app, so they also work with a running or hidden instance.
 
@@ -32,8 +32,16 @@ The 720 × 465 window starts above other windows. Drag its top edge to repositio
 it. The background is a dark translucent tint over native blur. **⌘ K** opens
 Actions: toggle keeping the window on top, restart a review, close, or quit.
 **Escape** closes an open menu first, then hides the window. **⌃ ⌥ ⌘ R** toggles
-the window globally; the **re** menu-bar item offers Show and Quit. **⌘ Q** quits.
+the window globally; the layers menu-bar icon shows the scheduled due count (hidden at zero). **⌘ Q** quits.
 Drafts and review position survive hiding and screen changes, but not quitting.
+
+The menu lists **due now**, **new**, and **total** cards, plus unavailable decks,
+using the same workspace snapshot and builtin review queue as the Raycast extension.
+**Review Cards** and **Create Card** open the corresponding screen. **Refresh**
+reloads the counts; they also refresh after creating/grading and every minute while
+hidden. **Choose Workspace…** opens a native folder picker and saves the deck root.
+**Quit re Pocket** exits the app. Without a workspace, counts describe the scratch
+deck: ungraded cards are new, and due is zero because scratch practice is unscheduled.
 
 ## Cards and decks
 
