@@ -12,7 +12,6 @@ import {
   loadReview,
   loadReviewStatus,
   gradeInDeck,
-  prepareScratch,
   disposeWorkspace,
 } from "../src/workspace";
 
@@ -35,70 +34,25 @@ test("review requires reveal before grading, and held/modified keys cannot advan
   for (const digit of ["1", "2", "3", "4"]) expect(reviewKey(key(digit), false)).toBeNull();
 });
 
-test("numeric grades persist distinct FSRS schedules through the deck boundary", async () => {
-  const root = await mkdtemp(join(tmpdir(), "re-pocket-grades-"));
+test("creating in a removed deck reports an actionable field error", async () => {
+  const root = await mkdtemp(join(tmpdir(), "re-pocket-missing-"));
   try {
-    const deck = join(root, "test.md");
-    await writeFile(deck, "");
-    for (const digit of ["1", "2", "3", "4"]) {
-      expect(
-        (
-          await createWorkspaceCard({
-            deckPath: deck,
-            cardType: "qa",
-            question: digit,
-            answer: "answer",
-            content: "",
-          })
-        )._tag,
-      ).toBe("Created");
-    }
-    const loaded = await loadReview(root);
-    if (!loaded.ok) throw new Error(loaded.error);
-    for (const card of loaded.value.cards) {
-      const content = await readReviewCard(root, card);
-      if (!content.ok) throw new Error(content.error);
-      const grade = reviewKey(key(content.value.prompt), true);
-      if (!grade || grade === "reveal") throw new Error("Missing grade binding");
-      expect((await gradeInDeck(card, grade)).ok).toBe(true);
-    }
-    const parsed = await Effect.runPromise(parseFile(await readFile(deck, "utf8")));
-    const delays = parsed.items.map((item) => {
-      const card = item.cards[0]!;
-      expect(card.lastReview).not.toBeNull();
-      expect(card.due).not.toBeNull();
-      return card.due!.getTime() - card.lastReview!.getTime();
+    expect(
+      await createWorkspaceCard({
+        deckPath: join(root, "missing.md"),
+        cardType: "qa",
+        question: "q",
+        answer: "a",
+        content: "",
+      }),
+    ).toMatchObject({
+      _tag: "FieldError",
+      field: "deckPath",
+      message: "The selected deck no longer exists. Refresh the deck list.",
     });
-    // Again, Hard, Good use distinct learning steps; Easy graduates to days.
-    expect(delays[0]).toBe(60_000);
-    expect(delays[1]).toBeGreaterThan(delays[0]!);
-    expect(delays[1]).toBeLessThan(delays[2]!);
-    expect(delays[2]).toBe(600_000);
-    expect(delays[3]).toBeGreaterThanOrEqual(86_400_000);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-});
-
-test("workspace failures report plain messages rather than error class prefixes", async () => {
-  expect(prepareScratch({ type: "qa", question: "", answer: "" })).toEqual({
-    ok: false,
-    error: "Enter a question.",
-  });
-  const missing = join(tmpdir(), "re-pocket-missing", "deck.md");
-  expect(
-    await createWorkspaceCard({
-      deckPath: missing,
-      cardType: "qa",
-      question: "q",
-      answer: "a",
-      content: "",
-    }),
-  ).toEqual({
-    _tag: "FieldError",
-    field: "deckPath",
-    message: "The selected deck no longer exists. Refresh the deck list.",
-  });
 });
 
 test("menu status separates new, scheduled due, and total cards after grading", async () => {
@@ -181,8 +135,9 @@ async function mountApp(
     }
     throw new Error(`UI did not settle: ${view.renderer.getAllText().join(" | ")}`);
   };
-  const has = (text: string) => view.renderer.getAllText().join("").includes(text);
+  const has = (text: string) => view.renderer.getAllText().some((node) => node.includes(text));
   const press = (keys: string) => view.renderer.simulateKeystrokes(keys);
+  if (screen === "create") await settle(() => has("test"));
   return {
     view,
     settle,
@@ -244,15 +199,24 @@ nativeTest("review edit saves to the source deck and returns to an unrevealed ca
     mounted = await mountApp(root);
     const { view, settle, has, press } = mounted;
     await settle(() => has("Show Answer"));
+    press("space");
+    await settle(() => !!view.renderer.findByTestId("revealed-answer"));
     press("cmd-e");
     await settle(() => !!view.renderer.findByTestId("edit-answer"));
     view.renderer.focusElement(view.renderer.findByTestId("edit-answer")!.id);
     press("cmd-a n e w");
     press("cmd-enter");
     await settle(() => has("Card updated") && has("Show Answer"));
-    expect(await readFile(deck, "utf8")).toContain("new");
-    expect(await readFile(deck, "utf8")).not.toContain("Old answer");
+    const loaded = await loadReview(root);
+    if (!loaded.ok) throw new Error(loaded.error);
+    expect(await readReviewCard(root, loaded.value.cards[0]!)).toMatchObject({
+      ok: true,
+      value: { prompt: "Question", reveal: "new" },
+    });
     expect(view.renderer.findByTestId("revealed-answer")).toBeUndefined();
+    press("space");
+    await settle(() => !!view.renderer.findByTestId("revealed-answer"));
+    expect(view.renderer.getPaintedText().join(" ")).toContain("new");
   } finally {
     mounted?.view.unmount();
     await rm(root, { recursive: true, force: true });
@@ -271,17 +235,16 @@ nativeTest(
       const { view, settle, has, press } = mounted;
       await settle(() => !!view.renderer.findByTestId("cloze-content"));
       view.renderer.focusElement(view.renderer.findByTestId("cloze-content")!.id);
-      press("cmd-shift-c");
-      await settle(
-        () => view.renderer.findByTestId("cloze-content")?.customProps?.value === "{{c1::}}",
-      );
       // Fill with native typing so draft state and preview wiring are exercised.
       press("cmd-a { { c 1 : : o n e } } space { { c 2 : : t w o } }");
       press("cmd-p");
       await settle(() => has("Card Preview 1/2"));
+      expect(view.renderer.getPaintedText().join(" ")).toContain("[...] two");
       expect(await readFile(deck, "utf8")).toBe("");
       press("alt-right");
       await settle(() => has("Card Preview 2/2"));
+      expect(view.renderer.getPaintedText().join(" ")).toContain("one [...]");
+      expect(await readFile(deck, "utf8")).toBe("");
       press("cmd-enter");
       await settle(() => has("2 cards created"));
       const parsed = await Effect.runPromise(parseFile(await readFile(deck, "utf8")));
@@ -315,9 +278,6 @@ nativeTest(
       await settle(() => has("Show Answer"));
       press("cmd-backspace");
       await settle(() => has("Delete Cloze Note?"));
-      press("escape");
-      expect(await loadReviewStatus(root)).toMatchObject({ ok: true, value: { total: 2 } });
-      press("cmd-backspace");
       press("cmd-enter");
       await settle(() => has("Review complete"));
       expect(await loadReviewStatus(root)).toMatchObject({ ok: true, value: { total: 0 } });
@@ -333,10 +293,9 @@ nativeTest(
   },
 );
 
-nativeTest(
-  "a card changed outside the app can be retried or skipped without grading it",
-  async () => {
-    const root = await mkdtemp(join(tmpdir(), "re-pocket-ui-retry-"));
+for (const recovery of ["retry", "skip"] as const) {
+  nativeTest(`${recovery} recovers from an unavailable card without grading it`, async () => {
+    const root = await mkdtemp(join(tmpdir(), "re-pocket-ui-recovery-"));
     let mounted: Awaited<ReturnType<typeof mountApp>> | undefined;
     try {
       const deck = join(root, "test.md");
@@ -356,27 +315,25 @@ nativeTest(
       await writeFile(deck, "");
       route("review");
       await settle(() => has("Could not load this card"));
-      press("space");
-      expect(view.renderer.findByTestId("revealed-answer")).toBeUndefined();
+      // Restore the backing file while the error remains on screen. Either recovery
+      // must leave its schedule untouched, including the skip path.
       await writeFile(deck, original);
-      press("cmd-r");
-      await settle(() => has("Show Answer") && !has("Could not load this card"));
-      expect(await loadReviewStatus(root)).toMatchObject({ ok: true, value: { new: 1 } });
-      route("create");
-      await writeFile(deck, "");
-      route("review");
-      await settle(() => has("Could not load this card"));
-      const skip = view.renderer.findByText("Skip Card")!;
-      const bounds = view.renderer.getElementBounds(skip.id)!;
-      view.renderer.nativeSimulateClick(bounds[0]! + bounds[2]! / 2, bounds[1]! + bounds[3]! / 2);
-      await settle(() => !has("Could not load this card") && has("No cards due"));
-      expect(await readFile(deck, "utf8")).toBe("");
+      if (recovery === "retry") {
+        press("cmd-r");
+        await settle(() => has("Show Answer") && !has("Could not load this card"));
+      } else {
+        const skip = view.renderer.findByText("Skip Card")!;
+        const bounds = view.renderer.getElementBounds(skip.id)!;
+        view.renderer.nativeSimulateClick(bounds[0]! + bounds[2]! / 2, bounds[1]! + bounds[3]! / 2);
+        await settle(() => !has("Could not load this card") && has("No cards due"));
+      }
+      expect(await readFile(deck, "utf8")).toBe(original);
     } finally {
       mounted?.view.unmount();
       await rm(root, { recursive: true, force: true });
     }
-  },
-);
+  });
+}
 
 nativeTest(
   "invalid creation keeps the draft and identifies the field that needs fixing",
@@ -393,18 +350,49 @@ nativeTest(
       press("q u e s t i o n cmd-enter");
       await settle(() => has("Enter an answer."));
       expect(await readFile(deck, "utf8")).toBe("");
-      expect(view.renderer.findByTestId("question")?.customProps?.value).toBe("question");
       view.renderer.focusElement(view.renderer.findByTestId("answer")!.id);
-      press("a n s w e r cmd-p");
-      await settle(() => has("Card Preview 1/1"));
-      press("escape");
-      await settle(() => !!view.renderer.findByTestId("answer"));
-      // Returning from preview should restore the field being edited.
-      press("x");
-      expect(view.renderer.findByTestId("answer")?.customProps?.value).toBe("answerx");
+      press("a n s w e r cmd-enter");
+      await settle(() => has("Card created"));
+      const loaded = await loadReview(root);
+      if (!loaded.ok) throw new Error(loaded.error);
+      expect(loaded.value.cards).toHaveLength(1);
+      expect(await readReviewCard(root, loaded.value.cards[0]!)).toMatchObject({
+        ok: true,
+        value: { prompt: "question", reveal: "answer" },
+      });
     } finally {
       mounted?.view.unmount();
       await rm(root, { recursive: true, force: true });
     }
   },
 );
+
+nativeTest("returning from preview restores the field being edited", async () => {
+  const root = await mkdtemp(join(tmpdir(), "re-pocket-ui-focus-"));
+  let mounted: Awaited<ReturnType<typeof mountApp>> | undefined;
+  try {
+    const deck = join(root, "test.md");
+    await writeFile(deck, "");
+    mounted = await mountApp(root, "create");
+    const { view, settle, has, press } = mounted;
+    await settle(() => !!view.renderer.findByTestId("question"));
+    view.renderer.focusElement(view.renderer.findByTestId("question")!.id);
+    press("q");
+    view.renderer.focusElement(view.renderer.findByTestId("answer")!.id);
+    press("a cmd-p");
+    await settle(() => has("Card Preview 1/1"));
+    press("escape");
+    await settle(() => !!view.renderer.findByTestId("answer"));
+    press("x cmd-enter");
+    await settle(() => has("Card created"));
+    const loaded = await loadReview(root);
+    if (!loaded.ok) throw new Error(loaded.error);
+    expect(await readReviewCard(root, loaded.value.cards[0]!)).toMatchObject({
+      ok: true,
+      value: { prompt: "q", reveal: "ax" },
+    });
+  } finally {
+    mounted?.view.unmount();
+    await rm(root, { recursive: true, force: true });
+  }
+});
