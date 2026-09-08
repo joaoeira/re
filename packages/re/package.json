@@ -40,6 +40,11 @@
       "types": "./dist/workspace/index.d.ts",
       "import": "./dist/workspace/index.js",
       "default": "./dist/workspace/index.js"
+    },
+    "./study": {
+      "types": "./dist/study/index.d.ts",
+      "import": "./dist/study/index.js",
+      "default": "./dist/study/index.js"
     }
   },
   "publishConfig": {
