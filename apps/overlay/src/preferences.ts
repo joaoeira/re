@@ -3,12 +3,14 @@ import { preferencesPath, writeFileAtomically } from "./storage";
 
 export interface Preferences {
   root: string | null;
+  closeAfterSubmit: boolean;
   deck: string;
   cardType: "qa" | "cloze";
 }
 export function loadPreferences(): Preferences {
   const defaults: Preferences = {
     root: null,
+    closeAfterSubmit: false,
     deck: "scratch",
     cardType: "qa",
   };
@@ -16,6 +18,7 @@ export function loadPreferences(): Preferences {
   try {
     const value = JSON.parse(readFileSync(preferencesPath, "utf8"));
     return {
+      closeAfterSubmit: value.closeAfterSubmit === true,
       root: typeof value.root === "string" ? value.root : null,
       deck: typeof value.deck === "string" ? value.deck : "scratch",
       cardType: value.cardType === "cloze" ? "cloze" : "qa",
