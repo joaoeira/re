@@ -26,7 +26,6 @@ test("preparing a library release preserves all frozen app pins and app versions
     "scripts/prepare-library-release.mjs",
     "packages/re/package.json",
     "apps/desktop/package.json",
-    "apps/raycast/package.json",
     "apps/overlay/package.json",
   ]) {
     const target = path.join(directory, file);
@@ -73,7 +72,7 @@ test("preparing a library release preserves all frozen app pins and app versions
       `## ${expected}`,
     ),
   );
-  for (const app of ["desktop", "raycast", "overlay"]) {
+  for (const app of ["desktop", "overlay"]) {
     const consumer = JSON.parse(
       await readFile(path.join(directory, "apps", app, "package.json"), "utf8"),
     );

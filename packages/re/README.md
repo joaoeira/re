@@ -47,7 +47,7 @@ npm install @effect/platform-node@4.0.0-rc.112
 removed. Core, item types, and scheduling work without installing a Node adapter.
 All five entry points share one package version and one Effect installation in a consumer.
 
-Desktop, Raycast, and Overlay remain on a separately frozen Effect v3 compatibility
+Desktop and Overlay remain on a separately frozen Effect v3 compatibility
 line. Their archive pins do not follow this library's version. Markdown files,
 card identities, and FSRS scheduling behavior are unchanged by the migration.
 

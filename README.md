@@ -2,7 +2,7 @@
 
 Metadata utilities for spaced repetition flashcard files. Parse, serialize, and manipulate markdown files with embedded scheduling metadata.
 
-The applications are [desktop](apps/desktop) and [Raycast](apps/raycast). The CLI application has been retired and removed from this repository.
+The applications are [desktop](apps/desktop) and [Pocket](apps/overlay). The CLI and Raycast applications have been retired and removed from this repository.
 
 ## Format
 
@@ -218,7 +218,6 @@ bun run build:library               # Incremental library build
 bun run watch:library               # Run alongside an app for library development
 bun run pack:library                # Clean build and inspected .tgz archive in dist/packages/
 bun run check:packages                # Build, pack, install outside the workspace, compile, run
-bun run check:raycast                 # Install, test, and build Raycast outside the workspace
 bun run check:desktop                 # Verify standalone desktop installation, tests, and packaging
 ```
 

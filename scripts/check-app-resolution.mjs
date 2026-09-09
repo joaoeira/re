@@ -8,7 +8,7 @@ import { repoRoot } from "./pack-library.mjs";
 
 export const checkAppResolution = async () => {
   const frozen = await readFrozenLibrary();
-  for (const app of ["desktop", "raycast", "overlay"]) {
+  for (const app of ["desktop", "overlay"]) {
     const result = await verifyFrozenApp(path.join(repoRoot, "apps", app), frozen);
     console.log(
       `${result.app}: re ${result.library}, Effect ${result.effect} (${result.effectEntry})`,

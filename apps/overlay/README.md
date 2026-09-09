@@ -38,7 +38,7 @@ the window globally; the layers menu-bar icon shows the scheduled due count (hid
 Drafts and review position survive hiding and screen changes, but not quitting.
 
 The menu lists **due now**, **new**, and **total** cards, plus unavailable decks,
-using the same workspace snapshot and builtin review queue as the Raycast extension.
+using the shared library’s workspace snapshot and builtin review queue.
 **Review Cards** and **Create Card** open the corresponding screen. **Refresh**
 reloads the counts; they also refresh after creating/grading and every minute while
 hidden. **Choose Workspace…** opens a native folder picker and saves the deck root.

@@ -38,7 +38,7 @@ Q&A generates the key `main`. Cloze generates keys from the actual deletion indi
 `c3`, etc.), preserving identity when another deletion is removed or the text is edited.
 
 Use `resolveBuiltinItem(item)` to interpret saved items. It checks generated card counts
-against the saved metadata, then prefers cloze when both cloze and Q&A fit. Desktop and Raycast
+against the saved metadata, then prefers cloze when both cloze and Q&A fit. Desktop and Pocket
 use this same rule for editing and review. Use `inferCards`
 from `@simbyotic/re/core` only for unsaved content that has no metadata count yet.
 
