@@ -122,7 +122,7 @@ export interface Scheduler {
   ) => Effect.Effect<ScheduleResult, ScheduleError>;
 }
 
-export const Scheduler = Context.GenericTag<Scheduler>("./index.js/Scheduler");
+export const Scheduler = Context.Service<Scheduler>("./index.js/Scheduler");
 
 /** FSRS settings. Omitted fields use the installed engine's defaults. */
 export interface FSRSOptions {
@@ -148,33 +148,38 @@ export class SchedulerConfigError extends Data.TaggedError("SchedulerConfigError
 const toSchedulerConfigError = (cause: unknown): SchedulerConfigError =>
   new SchedulerConfigError({ message: `Invalid FSRS configuration: ${String(cause)}`, cause });
 
-const StepSchema = Schema.TemplateLiteral(Schema.Number, Schema.Literal("m", "h", "d")).pipe(
+const StepSchema = Schema.TemplateLiteral([Schema.Number, Schema.Literals(["m", "h", "d"])]).check(
   // Safe integers have at most 16 digits. Bound the input before calling the
   // engine's converter, which throws if parsing the number overflows.
-  Schema.pattern(/^[1-9]\d{0,15}[mhd]$/),
-  Schema.filter((step) => Number.isSafeInteger(ConvertStepUnitToMinutes(step)), {
-    message: () => "Step duration must fit in a safe integer number of minutes",
+  // Abort on invalid syntax even when schema parsing collects all errors.
+  Schema.makeFilter(
+    (step) => /^[1-9]\d{0,15}[mhd]$/.test(step),
+    { message: "Step duration must be a positive whole number followed by m, h, or d" },
+    true,
+  ),
+  Schema.makeFilter((step) => Number.isSafeInteger(ConvertStepUnitToMinutes(step)), {
+    message: "Step duration must fit in a safe integer number of minutes",
   }),
 );
 
 const FSRSOptionsSchema = Schema.Struct({
   request_retention: Schema.optional(
-    Schema.Finite.pipe(Schema.greaterThan(0), Schema.lessThanOrEqualTo(1)),
+    Schema.Finite.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1)),
   ),
-  maximum_interval: Schema.optional(Schema.Int.pipe(Schema.positive())),
+  maximum_interval: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
   learning_steps: Schema.optional(Schema.Array(StepSchema)),
   relearning_steps: Schema.optional(Schema.Array(StepSchema)),
   enable_fuzz: Schema.optional(Schema.Boolean),
   enable_short_term: Schema.optional(Schema.Boolean),
   w: Schema.optional(Schema.Array(Schema.Finite)),
-}) satisfies Schema.Schema<FSRSOptions>;
+}) satisfies Schema.Codec<FSRSOptions>;
 
 /** Validate and capture settings when this Effect runs, then create an independent scheduler. */
 export const makeScheduler = (
   options: FSRSOptions = {},
 ): Effect.Effect<Scheduler, SchedulerConfigError> =>
   Effect.gen(function* () {
-    const config = yield* Schema.decodeUnknown(FSRSOptionsSchema, {
+    const config = yield* Schema.decodeUnknownEffect(FSRSOptionsSchema, {
       onExcessProperty: "error",
     })(options).pipe(Effect.mapError(toSchedulerConfigError));
     const engine = yield* Effect.try({

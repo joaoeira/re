@@ -16,7 +16,7 @@ import {
 export const ClozeDeletion = Schema.Struct({
   index: Schema.Number,
   hidden: Schema.String,
-  hint: Schema.optionalWith(Schema.String, { as: "Option" }),
+  hint: Schema.OptionFromOptional(Schema.String),
   start: Schema.Number,
   end: Schema.Number,
 });

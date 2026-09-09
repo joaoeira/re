@@ -20,6 +20,39 @@ const reviewedCard = (): ItemMetadata => ({
 
 describe("scheduler configuration", () => {
   it.effect(
+    "preserves defaults for omitted and undefined options and accepts empty step arrays",
+    () =>
+      Effect.gen(function* () {
+        const now = new Date("2026-01-01T12:00:00Z");
+        for (const options of [
+          undefined,
+          {
+            request_retention: undefined,
+            maximum_interval: undefined,
+            learning_steps: undefined,
+            relearning_steps: undefined,
+            enable_fuzz: undefined,
+            enable_short_term: undefined,
+            w: undefined,
+          },
+        ]) {
+          const scheduler = yield* makeScheduler(options);
+          const result = yield* scheduler.scheduleReview(createMetadata(), 2, now);
+          expect(result.updatedCard.due?.toISOString()).toBe("2026-01-01T12:10:00.000Z");
+        }
+
+        const automatic = yield* makeScheduler({ learning_steps: [], relearning_steps: [] });
+        for (const [card, grade] of [
+          [createMetadata(), 2],
+          [reviewedCard(), 0],
+        ] as const) {
+          const result = yield* automatic.scheduleReview(card, grade, now);
+          expect(result.updatedCard.due!.getTime()).toBeGreaterThan(now.getTime());
+        }
+      }),
+  );
+
+  it.effect(
     "higher retention shortens future intervals while saved deadlines and history stay intact",
     () =>
       Effect.gen(function* () {
@@ -138,9 +171,12 @@ describe("scheduler configuration", () => {
       const invalidOptions: readonly unknown[] = [
         { request_retention: 0 },
         { request_retention: 1.1 },
+        { request_retention: NaN },
+        { request_retention: Infinity },
         { maximum_interval: 0 },
         { maximum_interval: 1.5 },
         { maximum_interval: Infinity },
+        { maximum_interval: Number.MAX_SAFE_INTEGER + 1 },
         { learning_steps: ["0m", "10m"] },
         { learning_steps: ["1.5h"] },
         { learning_steps: [`${"9".repeat(400)}m`] },

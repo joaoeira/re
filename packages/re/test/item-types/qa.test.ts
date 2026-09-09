@@ -5,7 +5,7 @@ import { ContentParseError } from "../../src/core/index.js";
 
 describe("QAType", () => {
   describe("parse", () => {
-    it.scoped("parses valid Q&A content", () =>
+    it.effect("parses valid Q&A content", () =>
       Effect.gen(function* () {
         const content = `What is the capital of France?
 ---
@@ -17,7 +17,7 @@ Paris`;
       }),
     );
 
-    it.scoped("trims whitespace from question and answer", () =>
+    it.effect("trims whitespace from question and answer", () =>
       Effect.gen(function* () {
         const content = `  What is 2+2?
 ---
@@ -29,7 +29,7 @@ Paris`;
       }),
     );
 
-    it.scoped("handles multi-line question and answer", () =>
+    it.effect("handles multi-line question and answer", () =>
       Effect.gen(function* () {
         const content = `What are the primary colors?
 List all three.
@@ -44,7 +44,7 @@ Blue`;
       }),
     );
 
-    it.scoped("fails when separator is missing", () =>
+    it.effect("fails when separator is missing", () =>
       Effect.gen(function* () {
         const content = `What is the capital of France?
 Paris`;
@@ -56,7 +56,7 @@ Paris`;
       }),
     );
 
-    it.scoped("fails when question is empty", () =>
+    it.effect("fails when question is empty", () =>
       Effect.gen(function* () {
         const content = `
 ---
@@ -69,7 +69,7 @@ Paris`;
       }),
     );
 
-    it.scoped("fails when answer is empty", () =>
+    it.effect("fails when answer is empty", () =>
       Effect.gen(function* () {
         const content = `What is the capital of France?
 ---
@@ -82,7 +82,7 @@ Paris`;
       }),
     );
 
-    it.scoped("handles separator with surrounding content", () =>
+    it.effect("handles separator with surrounding content", () =>
       Effect.gen(function* () {
         // Only the first --- should act as separator
         const content = `What does --- mean?
@@ -95,7 +95,7 @@ It's a horizontal rule`;
       }),
     );
 
-    it.scoped("parses markdown images in question and answer without rewriting them", () =>
+    it.effect("parses markdown images in question and answer without rewriting them", () =>
       Effect.gen(function* () {
         const content = `Identify this organelle:
 ![Mitochondrion](../../.re/assets/mitochondrion.png)

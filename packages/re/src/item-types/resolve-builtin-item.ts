@@ -1,4 +1,4 @@
-import { Data, Effect, Either } from "effect";
+import { Data, Effect, Result } from "effect";
 import {
   adaptItemType,
   matchItemTypes,
@@ -35,7 +35,7 @@ export const resolveBuiltinItem = (
       const cardType = match.type.name;
       return isBuiltinCardType(cardType)
         ? Effect.succeed({ ...match, cards: match.cards.map((spec) => ({ ...spec, cardType })) })
-        : Effect.dieMessage(`Unexpected built-in item type: ${cardType}`);
+        : Effect.die(new Error(`Unexpected built-in item type: ${cardType}`));
     }),
   );
 
@@ -70,7 +70,7 @@ export const annotateBuiltinCardSpecs = <
   Effect.gen(function* () {
     const specsByItem = new Map<
       Item,
-      Either.Either<
+      Result.Result<
         ReadonlyMap<string, BuiltinCardSpec>,
         NoMatchingTypeError | ItemCardCountMismatch
       >
@@ -85,14 +85,14 @@ export const annotateBuiltinCardSpecs = <
           Effect.map(
             ({ cards }) => new Map(entry.item.cards.map((card, index) => [card.id, cards[index]!])),
           ),
-          Effect.either,
+          Effect.result,
         );
         specsByItem.set(entry.item, result);
-        if (Either.isLeft(result)) errors.push({ entry, error: result.left });
+        if (Result.isFailure(result)) errors.push({ entry, error: result.failure });
       }
-      if (Either.isLeft(result)) continue;
+      if (Result.isFailure(result)) continue;
 
-      const spec = result.right.get(entry.card.id);
+      const spec = result.success.get(entry.card.id);
       if (spec === undefined) {
         errors.push({
           entry,

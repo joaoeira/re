@@ -46,11 +46,11 @@ describe("builtin card identity", () => {
       const cardKey = "c3";
 
       const mismatch = yield* resolveBuiltinCard(item, { cardId: first.id, cardKey }).pipe(
-        Effect.either,
+        Effect.result,
       );
       expect(mismatch).toMatchObject({
-        _tag: "Left",
-        left: { _tag: "BuiltinCardNotFound", cardId: first.id, cardKey: "c3" },
+        _tag: "Failure",
+        failure: { _tag: "BuiltinCardNotFound", cardId: first.id, cardKey: "c3" },
       });
 
       const resolved = yield* resolveBuiltinCard(item, { cardId: second.id, cardKey });

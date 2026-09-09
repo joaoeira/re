@@ -1,11 +1,37 @@
-import { Effect, Option } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { describe, it, assert } from "@effect/vitest";
-import { ClozeType } from "../../src/item-types/cloze";
+import { ClozeDeletion, ClozeType } from "../../src/item-types/cloze";
 import { ContentParseError } from "../../src/core/index.js";
+
+describe("ClozeDeletion codec", () => {
+  it.effect("round-trips optional hints, omitting absent values and preserving empty strings", () =>
+    Effect.gen(function* () {
+      const deletion = { index: 1, hidden: "Paris", start: 0, end: 13 };
+      for (const input of [deletion, { ...deletion, hint: undefined }]) {
+        const decoded = yield* Schema.decodeUnknownEffect(ClozeDeletion)(input);
+        assert.ok(Option.isNone(decoded.hint));
+        const encoded = yield* Schema.encodeEffect(ClozeDeletion)(decoded);
+        assert.ok(!Object.hasOwn(encoded, "hint"));
+      }
+      for (const hint of ["capital city", ""]) {
+        const decoded = yield* Schema.decodeUnknownEffect(ClozeDeletion)({ ...deletion, hint });
+        assert.deepStrictEqual(decoded.hint, Option.some(hint));
+        const encoded = yield* Schema.encodeEffect(ClozeDeletion)(decoded);
+        assert.strictEqual(encoded.hint, hint);
+      }
+      for (const hint of [null, 123]) {
+        const error = yield* Schema.decodeUnknownEffect(ClozeDeletion)({ ...deletion, hint }).pipe(
+          Effect.flip,
+        );
+        assert.strictEqual(error._tag, "SchemaError");
+      }
+    }),
+  );
+});
 
 describe("ClozeType", () => {
   describe("parse", () => {
-    it.scoped("parses single cloze deletion", () =>
+    it.effect("parses single cloze deletion", () =>
       Effect.gen(function* () {
         const content = "The {{c1::capital}} of France is Paris.";
         const result = yield* ClozeType.parse(content);
@@ -17,7 +43,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("parses multiple cloze deletions", () =>
+    it.effect("parses multiple cloze deletions", () =>
       Effect.gen(function* () {
         const content = "The {{c1::capital}} of {{c2::France}} is Paris.";
         const result = yield* ClozeType.parse(content);
@@ -30,7 +56,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("sorts deletions by index", () =>
+    it.effect("sorts deletions by index", () =>
       Effect.gen(function* () {
         const content = "{{c3::third}} {{c1::first}} {{c2::second}}";
         const result = yield* ClozeType.parse(content);
@@ -44,7 +70,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("captures start and end positions", () =>
+    it.effect("captures start and end positions", () =>
       Effect.gen(function* () {
         const content = "The {{c1::capital}} of France.";
         const result = yield* ClozeType.parse(content);
@@ -54,7 +80,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("fails when no cloze deletions found", () =>
+    it.effect("fails when no cloze deletions found", () =>
       Effect.gen(function* () {
         const content = "This is plain text without any cloze deletions.";
         const error = yield* ClozeType.parse(content).pipe(Effect.flip);
@@ -66,7 +92,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("does not treat arbitrary {{...}} text as a cloze syntax error", () =>
+    it.effect("does not treat arbitrary {{...}} text as a cloze syntax error", () =>
       Effect.gen(function* () {
         const content = "See {{capital}} of France.";
         const error = yield* ClozeType.parse(content).pipe(Effect.flip);
@@ -77,7 +103,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("fails on an unclosed cloze with structured diagnostics", () =>
+    it.effect("fails on an unclosed cloze with structured diagnostics", () =>
       Effect.gen(function* () {
         const content = "start {{c3::unfinished";
         const error = yield* ClozeType.parse(content).pipe(Effect.flip);
@@ -92,7 +118,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("fails on a missing index", () =>
+    it.effect("fails on a missing index", () =>
       Effect.gen(function* () {
         const content = "{{c::answer}}";
         const error = yield* ClozeType.parse(content).pipe(Effect.flip);
@@ -103,7 +129,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("fails on a malformed index", () =>
+    it.effect("fails on a malformed index", () =>
       Effect.gen(function* () {
         const content = "{{c1a::answer}}";
         const error = yield* ClozeType.parse(content).pipe(Effect.flip);
@@ -114,7 +140,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("fails on a non-digit cloze index that includes ::", () =>
+    it.effect("fails on a non-digit cloze index that includes ::", () =>
       Effect.gen(function* () {
         for (const content of ["{{c-1::answer}}", "{{cx::answer}}", "{{c_1::answer}}"]) {
           const error = yield* ClozeType.parse(content).pipe(Effect.flip);
@@ -125,7 +151,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("fails on a missing :: separator", () =>
+    it.effect("fails on a missing :: separator", () =>
       Effect.gen(function* () {
         const content = "{{c1:answer}}";
         const error = yield* ClozeType.parse(content).pipe(Effect.flip);
@@ -136,7 +162,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("fails on unbalanced braces inside a cloze", () =>
+    it.effect("fails on unbalanced braces inside a cloze", () =>
       Effect.gen(function* () {
         const content = "{{c1::a}b}}";
         const error = yield* ClozeType.parse(content).pipe(Effect.flip);
@@ -147,7 +173,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("fails when a malformed cloze appears next to a valid cloze", () =>
+    it.effect("fails when a malformed cloze appears next to a valid cloze", () =>
       Effect.gen(function* () {
         const content = "The {{c1::Paris}} is {{c2::unfinished";
         const error = yield* ClozeType.parse(content).pipe(Effect.flip);
@@ -158,7 +184,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("allows index zero", () =>
+    it.effect("allows index zero", () =>
       Effect.gen(function* () {
         const result = yield* ClozeType.parse("The {{c0::answer}}.");
 
@@ -167,7 +193,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("allows duplicate cloze indices", () =>
+    it.effect("allows duplicate cloze indices", () =>
       Effect.gen(function* () {
         const content = "{{c1::first}} and {{c1::second}}";
         const result = yield* ClozeType.parse(content);
@@ -178,7 +204,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("handles empty hidden text", () =>
+    it.effect("handles empty hidden text", () =>
       Effect.gen(function* () {
         const content = "Fill in: {{c1::}}";
         const result = yield* ClozeType.parse(content);
@@ -187,7 +213,7 @@ describe("ClozeType", () => {
       }),
     );
 
-    it.scoped("handles multi-line content", () =>
+    it.effect("handles multi-line content", () =>
       Effect.gen(function* () {
         const content = `Line 1: {{c1::answer1}}
 Line 2: {{c2::answer2}}`;
@@ -197,7 +223,7 @@ Line 2: {{c2::answer2}}`;
       }),
     );
 
-    it.scoped("parses cloze deletion with hint", () =>
+    it.effect("parses cloze deletion with hint", () =>
       Effect.gen(function* () {
         const content = "The {{c1::Paris::capital city}} is beautiful.";
         const result = yield* ClozeType.parse(content);
@@ -210,7 +236,7 @@ Line 2: {{c2::answer2}}`;
       }),
     );
 
-    it.scoped("parses cloze without hint as Option.none", () =>
+    it.effect("parses cloze without hint as Option.none", () =>
       Effect.gen(function* () {
         const content = "The {{c1::capital}} of France.";
         const result = yield* ClozeType.parse(content);
@@ -219,7 +245,7 @@ Line 2: {{c2::answer2}}`;
       }),
     );
 
-    it.scoped("treats empty hint as Option.none", () =>
+    it.effect("treats empty hint as Option.none", () =>
       Effect.gen(function* () {
         const content = "The {{c1::Paris::}} is beautiful.";
         const result = yield* ClozeType.parse(content);
@@ -229,7 +255,7 @@ Line 2: {{c2::answer2}}`;
       }),
     );
 
-    it.scoped("parses mixed clozes with and without hints", () =>
+    it.effect("parses mixed clozes with and without hints", () =>
       Effect.gen(function* () {
         const content = "{{c1::Paris::capital}} of {{c2::France}}";
         const result = yield* ClozeType.parse(content);
@@ -241,7 +267,7 @@ Line 2: {{c2::answer2}}`;
       }),
     );
 
-    it.scoped("parses content containing markdown images without interpreting them", () =>
+    it.effect("parses content containing markdown images without interpreting them", () =>
       Effect.gen(function* () {
         const content = `![Mitochondrion](../../.re/assets/mitochondrion.png)
 The {{c1::mitochondrion}} produces ATP.`;
