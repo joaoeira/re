@@ -1,32 +1,32 @@
-name: Desktop isolation
+name: App dependency isolation
 
 on:
   workflow_dispatch:
   pull_request:
     paths:
-      - "apps/desktop/**"
-      - "packages/**"
+      - "apps/*/package.json"
+      - "packages/re/package.json"
       - "vendor/re-effect3/**"
       - "scripts/**"
-      - "tsconfig*.json"
+      - "patches/**"
       - "package.json"
       - "bun.lock"
-      - ".github/workflows/desktop-isolation.yml"
+      - ".github/workflows/app-isolation.yml"
   push:
     branches: [master]
     paths:
-      - "apps/desktop/**"
-      - "packages/**"
+      - "apps/*/package.json"
+      - "packages/re/package.json"
       - "vendor/re-effect3/**"
       - "scripts/**"
-      - "tsconfig*.json"
+      - "patches/**"
       - "package.json"
       - "bun.lock"
-      - ".github/workflows/desktop-isolation.yml"
+      - ".github/workflows/app-isolation.yml"
 
 jobs:
-  check:
-    runs-on: macos-latest
+  resolution:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,4 +38,4 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run check:app-resolution
       - run: bun run test:app-isolation
-      - run: bun run check:desktop
+      - run: bun run test:release

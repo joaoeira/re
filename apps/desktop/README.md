@@ -131,8 +131,9 @@ and relaunches the previous version.
 
 While the app remains in this monorepo, use `bun run desktop:dev`, `desktop:test`,
 `desktop:typecheck`, `desktop:build`, `desktop:package`, or `desktop:install` from the root.
-These wrappers build the shared libraries before invoking the app's own commands.
-Run `bun run watch:library` alongside development when editing library source.
+These wrappers invoke the app directly. It consumes the frozen Effect v3 library in
+`vendor/re-effect3`, independently of changes to the workspace library.
+Run `bun run check:app-resolution` to verify that boundary before app development.
 
 `bun run check:desktop` installs an isolated copy outside the workspace, verifies native
 SQLite, runs unit and browser tests, builds platform installers, and smoke-tests the packaged payload. To retain a standalone

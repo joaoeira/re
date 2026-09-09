@@ -53,12 +53,13 @@ extension into Raycast; use `npm run dev` to run it in the host. The included Gi
 workflow installs from the lockfile, runs these checks, and uploads `dist/`.
 
 While the app remains in the monorepo, use `bun run raycast:dev`, `raycast:test`,
-`raycast:typecheck`, and `raycast:build` from the repository root. Those wrappers build the
-libraries before running the app's local commands. Run `bun run watch:library` alongside
-development when changing library source.
+`raycast:typecheck`, and `raycast:build` from the repository root. Those wrappers run the
+app's local commands directly. The app consumes the frozen Effect v3 library in
+`vendor/re-effect3`; workspace library edits do not update that artifact.
+Run `bun run check:app-resolution` to verify the dependency boundary.
 
 From the monorepo root, `bun run check:raycast` copies this app outside the workspace, installs
-its built library archives with npm, and runs all checks plus the production build. To retain a
+its verified frozen library archive with npm, and runs all checks plus the production build. To retain a
 standalone copy with a portable lockfile and library archives, pass a new destination:
 
 ```bash
@@ -66,5 +67,5 @@ bun run check:raycast --output dist/raycast
 ```
 
 The export can become a separate repository. It refuses to overwrite an existing destination.
-When the libraries are published, replace the `file:vendor/...` dependencies with their released
-versions and regenerate the lockfile; the app's source and build commands need no changes.
+Keep the frozen archive until the app is separately migrated to the newer Effect contract.
+A newer workspace library version is not automatically compatible with this v3 app.

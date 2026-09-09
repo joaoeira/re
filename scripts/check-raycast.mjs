@@ -1,19 +1,11 @@
 import assert from "node:assert/strict";
-import {
-  copyFile,
-  cp,
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  realpath,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { copyFile, cp, lstat, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { packageName, packLibrary, repoRoot, run } from "./pack-library.mjs";
+import { packageName, repoRoot, run } from "./pack-library.mjs";
+
+import { prepareFrozenApp, verifyFrozenApp } from "./frozen-library.mjs";
 
 const args = process.argv.slice(2);
 assert.ok(
@@ -54,17 +46,8 @@ try {
     await copyFile(source, target);
   }
 
-  const archive = await packLibrary(path.join(app, "vendor"));
-  const manifestPath = path.join(app, "package.json");
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  const library = JSON.parse(await run("tar", ["-xOf", archive, "package/package.json"]));
-  assert.equal(
-    manifest.dependencies[packageName],
-    library.version,
-    `${packageName} must declare the version delivered by this export`,
-  );
-  manifest.dependencies[packageName] = `file:vendor/${path.basename(archive)}`;
-  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  const frozen = await prepareFrozenApp(app);
+  const manifest = JSON.parse(await readFile(path.join(app, "package.json"), "utf8"));
 
   const env = { ...process.env };
   delete env.NODE_PATH;
@@ -92,6 +75,7 @@ try {
     const installed = path.join(app, "node_modules", name);
     assert.equal(await realpath(installed), installed, `${name} must be installed, not linked`);
   }
+  await verifyFrozenApp(app, frozen);
   for (const name of ["effect", "@effect/platform", "react"]) {
     const installed = await Promise.all(
       (await run("npm", ["ls", name, "--all", "--parseable"], app, env))

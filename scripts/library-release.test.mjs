@@ -16,7 +16,7 @@ const temporary = async (t) => {
   return directory;
 };
 
-test("preparing a release writes its changelog and updates both app pins without versioning apps", async (t) => {
+test("preparing a library release preserves all frozen app pins and app versions", async (t) => {
   const directory = await temporary(t);
   for (const file of [
     "package.json",
@@ -27,11 +27,14 @@ test("preparing a release writes its changelog and updates both app pins without
     "packages/re/package.json",
     "apps/desktop/package.json",
     "apps/raycast/package.json",
+    "apps/overlay/package.json",
   ]) {
     const target = path.join(directory, file);
     await mkdir(path.dirname(target), { recursive: true });
     await cp(path.join(repoRoot, file), target);
   }
+  await cp(path.join(repoRoot, "vendor"), path.join(directory, "vendor"), { recursive: true });
+  await cp(path.join(repoRoot, "patches"), path.join(directory, "patches"), { recursive: true });
   await symlink(path.join(repoRoot, "node_modules"), path.join(directory, "node_modules"), "dir");
   await writeFile(path.join(directory, ".gitignore"), "node_modules\n");
   await run("git", ["init", "--initial-branch=master"], directory);
@@ -68,14 +71,14 @@ test("preparing a release writes its changelog and updates both app pins without
       `## ${expected}`,
     ),
   );
-  for (const app of ["desktop", "raycast"]) {
+  for (const app of ["desktop", "raycast", "overlay"]) {
     const consumer = JSON.parse(
       await readFile(path.join(directory, "apps", app, "package.json"), "utf8"),
     );
     const before = JSON.parse(
       await readFile(path.join(repoRoot, "apps", app, "package.json"), "utf8"),
     );
-    assert.equal(consumer.dependencies[manifest.name], expected);
+    assert.equal(consumer.dependencies[manifest.name], before.dependencies[manifest.name]);
     assert.equal(consumer.version, before.version);
   }
   // A subsequent frozen install must accept the lockfile produced by preparation.

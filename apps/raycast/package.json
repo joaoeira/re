@@ -23,7 +23,7 @@
     "@effect/platform": "^0.94.5",
     "@effect/platform-node": "0.104.0",
     "@raycast/api": "1.104.24",
-    "@simbyotic/re": "0.2.0",
+    "@simbyotic/re": "file:../../vendor/re-effect3/simbyotic-re-0.2.1-effect3.0.tgz",
     "effect": "3.19.18",
     "react": "19.0.0",
     "remark-math": "^6.0.0",

@@ -6,6 +6,7 @@ on:
     paths:
       - "apps/raycast/**"
       - "packages/**"
+      - "vendor/re-effect3/**"
       - "scripts/**"
       - "tsconfig*.json"
       - "package.json"
@@ -16,6 +17,7 @@ on:
     paths:
       - "apps/raycast/**"
       - "packages/**"
+      - "vendor/re-effect3/**"
       - "scripts/**"
       - "tsconfig*.json"
       - "package.json"
@@ -34,4 +36,6 @@ jobs:
         with:
           bun-version: 1.2.21
       - run: bun install --frozen-lockfile
+      - run: bun run check:app-resolution
+      - run: bun run test:app-isolation
       - run: bun run check:raycast

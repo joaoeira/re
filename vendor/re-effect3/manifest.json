@@ -1,0 +1,30 @@
+{
+  "name": "@simbyotic/re",
+  "version": "0.2.1-effect3.0",
+  "archive": "simbyotic-re-0.2.1-effect3.0.tgz",
+  "integrity": "sha512-ISnrIXU484dyywDWUD7vmjn5ZSGo2yB/7H3G0DKuCe8+gqn79L9tt8Qso0py4Im+tbf2F8XdNOEwyY7mJD4JmQ==",
+  "sourceCommit": "1a63eb550a79e6f0ef1dde0e769be973c8a3729e",
+  "sourceVersion": "0.2.0",
+  "sourceClean": false,
+  "sourcePatch": {
+    "file": "source.patch",
+    "integrity": "sha512-nzMFQzRHoZr70DSGX61NdDJe0le7V6M3/kQ1gOhn2T8z31+HqhPoUyXXydMFlLAktgm5Z4+4Qm4Tl3KVj2l3iQ=="
+  },
+  "stagingManifestOverrides": {
+    "version": "0.2.1-effect3.0"
+  },
+  "effect": "3.19.18",
+  "platform": "0.94.5",
+  "tools": {
+    "node": "v24.7.0",
+    "bun": "1.2.21",
+    "typescript": "5.9.3"
+  },
+  "baseline": {
+    "testFiles": 30,
+    "testsPassed": 415,
+    "typecheck": "passed",
+    "build": "passed",
+    "packageInspection": "passed"
+  }
+}

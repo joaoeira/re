@@ -485,7 +485,13 @@ export const makeReviewStoreLive = (
         now: Date,
       ) {
         const mapPersistenceError = (error: WriteError | CardNotFound) =>
-          Effect.fail(new Error(toWriteErrorMessage(error)));
+          Effect.fail(
+            new ReviewGradeError({
+              deckPath: reference.deckPath,
+              cardId: reference.cardId,
+              message: toWriteErrorMessage(error),
+            }),
+          );
         const scheduled = yield* gradeBuiltinCard(reference, grade, now).pipe(
           Effect.provideService(DeckManager, deckManager),
           Effect.provideService(Scheduler, scheduler),

@@ -1,12 +1,14 @@
 # Releasing @simbyotic/re
 
-`@simbyotic/re` is the single public npm package. Its `core`, `item-types`, `scheduler`, and `workspace` subpath exports share one version and changelog. Both apps depend on that one version.
+`@simbyotic/re` is the single public npm package. Its `core`, `item-types`, `scheduler`, `workspace`, and `study` subpath exports share one version and changelog. Desktop, Raycast and Overlay currently depend on the frozen Effect v3 archive in `vendor/re-effect3`, independently of the workspace library version.
+
+The frozen archive and provenance are checked by `bun run check:app-resolution`. Desktop/Raycast exports copy those exact bytes; they do not rebuild the current library. See [the frozen library instructions](../vendor/re-effect3/README.md) for reconstruction and replacement. Installing dependencies no longer builds the workspace library implicitly; use `bun run build:library` when needed.
 
 ## Record and prepare a release
 
 Run `bun run changeset` for changes to public behavior. Select `@simbyotic/re`, choose the version bump, and describe the effect on callers. Commit the generated release note with the implementation. Use patch for compatible fixes and minor for compatible additions. Before 1.0, use a minor bump for breaking changes and include migration instructions; after 1.0, breaking changes require a major bump.
 
-Run `bun run release:version` to consume pending changesets, update the package version and changelog, and refresh `bun.lock`. While the apps remain in this repository, it also updates their single exact `@simbyotic/re` dependency. It does not version or publish the apps.
+Run `bun run release:version` to consume pending changesets, update the package version and changelog, and refresh `bun.lock`. It preserves all three apps' frozen library dependency pins and does not version or publish the apps.
 
 Review and commit the result on `master`, then verify:
 

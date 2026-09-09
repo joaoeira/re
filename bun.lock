@@ -32,7 +32,7 @@
         "@fontsource-variable/jetbrains-mono": "5.2.8",
         "@openrouter/ai-sdk-provider": "^2.3.0",
         "@silk-hq/components": "0.9.12",
-        "@simbyotic/re": "0.2.0",
+        "@simbyotic/re": "file:../../vendor/re-effect3/simbyotic-re-0.2.1-effect3.0.tgz",
         "@tanstack/react-query": "^5.90.21",
         "@tanstack/react-router": "1.131.35",
         "@tiptap/extension-placeholder": "^3.20.0",
@@ -105,7 +105,7 @@
         "@effect/platform": "^0.94.5",
         "@effect/platform-node": "0.104.0",
         "@gpuix/react": "0.7.0",
-        "@simbyotic/re": "0.2.0",
+        "@simbyotic/re": "file:../../vendor/re-effect3/simbyotic-re-0.2.1-effect3.0.tgz",
         "effect": "3.19.18",
         "image-size": "^2.0.2",
         "mathjax-full": "3.2.2",
@@ -129,7 +129,7 @@
         "@effect/platform": "^0.94.5",
         "@effect/platform-node": "0.104.0",
         "@raycast/api": "1.104.24",
-        "@simbyotic/re": "0.2.0",
+        "@simbyotic/re": "file:../../vendor/re-effect3/simbyotic-re-0.2.1-effect3.0.tgz",
         "effect": "3.19.18",
         "react": "19.0.0",
         "remark-math": "^6.0.0",
@@ -2697,6 +2697,10 @@
 
     "@raycast/api/react": ["react@19.0.0", "", {}, "sha512-V8AVnmPIICiWpGfm6GLzCR/W5FXLchHop40W4nXBmdlEceh16rCN8O8LNWm5bh5XUX91fh7KpA+W0TgMKmgTpQ=="],
 
+    "@re/desktop/@simbyotic/re": ["@simbyotic/re@../../vendor/re-effect3/simbyotic-re-0.2.1-effect3.0.tgz", { "dependencies": { "ignore": "^5.3.2", "nanoid": "^5.1.6", "ts-fsrs": "^5.2.3" }, "peerDependencies": { "@effect/platform": "^0.94.5", "effect": "^3.19.18" }, "optionalPeers": ["@effect/platform"] }],
+
+    "@re/overlay/@simbyotic/re": ["@simbyotic/re@../../vendor/re-effect3/simbyotic-re-0.2.1-effect3.0.tgz", { "dependencies": { "ignore": "^5.3.2", "nanoid": "^5.1.6", "ts-fsrs": "^5.2.3" }, "peerDependencies": { "@effect/platform": "^0.94.5", "effect": "^3.19.18" }, "optionalPeers": ["@effect/platform"] }],
+
     "@re/overlay/@types/bun": ["@types/bun@1.4.1", "", { "dependencies": { "bun-types": "1.4.1" } }, "sha512-0AVGiTXGajf1rgKom3N+c5L7CBxuoyyv1i44M0nX4UDK0G/fnRAMiri93nHuVPIb429KKtAgj7HatVmmOjeQLA=="],
 
     "@re/overlay/@types/react": ["@types/react@19.0.10", "", { "dependencies": { "csstype": "^3.0.2" } }, "sha512-JuRQ9KXLEjaUNjTWpzuR231Z2WpIwczOkBEIvbHNCzQefFIT0L8IqE6NV6ULLyC1SI/i234JnDoMkfg+RjQj2g=="],
@@ -2900,6 +2904,8 @@
     "raw-body/iconv-lite": ["iconv-lite@0.7.2", "", { "dependencies": { "safer-buffer": ">= 2.1.2 < 3.0.0" } }, "sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw=="],
 
     "rc/ini": ["ini@1.3.8", "", {}, "sha512-JV/yugV2uzW5iMRSiZAyDtQd+nxtUnjeLt0acNdw98kKLrvuRVyB80tsREOE7yvGVgalhZ6RNXCmEHkUKBKxew=="],
+
+    "re-cards/@simbyotic/re": ["@simbyotic/re@../../vendor/re-effect3/simbyotic-re-0.2.1-effect3.0.tgz", { "dependencies": { "ignore": "^5.3.2", "nanoid": "^5.1.6", "ts-fsrs": "^5.2.3" }, "peerDependencies": { "@effect/platform": "^0.94.5", "effect": "^3.19.18" }, "optionalPeers": ["@effect/platform"] }],
 
     "re-cards/@types/node": ["@types/node@22.19.17", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-wGdMcf+vPYM6jikpS/qhg6WiqSV/OhG+jeeHT/KlVqxYfD40iYJf9/AE1uQxVWFvU7MipKRkRv8NSHiCGgPr8Q=="],
 

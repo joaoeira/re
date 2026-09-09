@@ -5,6 +5,7 @@ node_modules
 out
 dist
 *.tgz
+!vendor/re-effect3/*.tgz
 
 # code coverage
 coverage
