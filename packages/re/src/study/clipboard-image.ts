@@ -20,6 +20,6 @@ export interface ClipboardImageReader {
   >;
 }
 
-export const ClipboardImageReader = Context.GenericTag<ClipboardImageReader>(
+export const ClipboardImageReader = Context.Service<ClipboardImageReader>(
   "@re/study/ClipboardImageReader",
 );

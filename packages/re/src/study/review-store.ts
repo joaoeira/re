@@ -1,4 +1,5 @@
-import { FileSystem, Path } from "@effect/platform";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import {
   adaptItemType,
   reconcileCards,
@@ -153,7 +154,7 @@ export interface ReviewStore {
   readonly undoDelete: (undo: ReviewDeleteUndoToken) => Effect.Effect<void, ReviewDeleteUndoError>;
 }
 
-export const ReviewStore = Context.GenericTag<ReviewStore>("@re/study/ReviewStore");
+export const ReviewStore = Context.Service<ReviewStore>("@re/study/ReviewStore");
 
 interface PreparedReviewEdit {
   readonly cardType: "qa" | "cloze";
@@ -451,6 +452,7 @@ export const makeReviewStoreLive = (
                   { keys: originalKeys, cards: current.cards },
                   prepared.cardKeys,
                 ).pipe(
+                  Effect.fromResult,
                   Effect.mapError(
                     (error) =>
                       new ReviewEditError({

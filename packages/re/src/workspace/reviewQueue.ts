@@ -1,6 +1,6 @@
-import { Path } from "@effect/platform";
+import * as Path from "effect/Path";
 import { type Item, type ItemMetadata, State } from "../core/index.js";
-import { Array as Arr, Chunk, Context, Effect, Layer, Order, Random } from "effect";
+import { Array as Arr, Context, Effect, Layer, Order, Random, Result } from "effect";
 
 import { DeckManager, type ReadError } from "./DeckManager.js";
 import type { DeckTreeNode } from "./deckTree.js";
@@ -111,7 +111,7 @@ export const sortBy =
 export const shuffle =
   <A>(): WithinGroupOrder<A> =>
   (items) =>
-    Effect.map(Random.shuffle(items), Chunk.toReadonlyArray);
+    Random.shuffle(items);
 
 export const chain =
   <A>(...orders: WithinGroupOrder<A>[]): WithinGroupOrder<A> =>
@@ -125,12 +125,12 @@ export const byDueDate: Order.Order<QueueItem> = Order.make((a, b) => {
   if (!a.dueDate && !b.dueDate) return 0;
   if (!a.dueDate) return 1;
   if (!b.dueDate) return -1;
-  return Order.number(a.dueDate.getTime(), b.dueDate.getTime());
+  return Order.Number(a.dueDate.getTime(), b.dueDate.getTime());
 });
 
 export const byFilePosition: Order.Order<QueueItem> = Order.combine(
-  Order.mapInput(Order.string, (q: QueueItem) => q.deckPath),
-  Order.mapInput(Order.number, (q: QueueItem) => q.filePosition),
+  Order.mapInput(Order.String, (q: QueueItem) => q.deckPath),
+  Order.mapInput(Order.Number, (q: QueueItem) => q.filePosition),
 );
 
 export interface QueueOrderSpec {
@@ -139,13 +139,13 @@ export interface QueueOrderSpec {
   readonly dueCardOrder: WithinGroupOrder<QueueItem>;
 }
 
-export const QueueOrderSpec = Context.GenericTag<QueueOrderSpec>("./index.js/QueueOrderSpec");
+export const QueueOrderSpec = Context.Service<QueueOrderSpec>("./index.js/QueueOrderSpec");
 
 export interface QueueOrderingStrategy {
   readonly order: (items: readonly QueueItem[]) => Effect.Effect<readonly QueueItem[]>;
 }
 
-export const QueueOrderingStrategy = Context.GenericTag<QueueOrderingStrategy>(
+export const QueueOrderingStrategy = Context.Service<QueueOrderingStrategy>(
   "./index.js/QueueOrderingStrategy",
 );
 
@@ -157,7 +157,9 @@ export const QueueOrderingStrategyFromSpec = Layer.effect(
     return {
       order: (items) =>
         Effect.gen(function* () {
-          const [dueItems, newItems] = Arr.partition(items, (i) => i.category === "new");
+          const [dueItems, newItems] = Arr.partition(items, (i) =>
+            i.category === "new" ? Result.succeed(i) : Result.fail(i),
+          );
 
           const orderedNew = yield* spec.newCardOrder(newItems);
           const orderedDue = yield* spec.dueCardOrder(dueItems);
@@ -225,14 +227,18 @@ const countCategory = (items: readonly QueueItem[], category: QueueItem["categor
 
 const orderNewFirst = (items: readonly QueueItem[]): Effect.Effect<readonly QueueItem[]> =>
   Effect.gen(function* () {
-    const [dueItems, newItems] = Arr.partition(items, (i) => i.category === "new");
+    const [dueItems, newItems] = Arr.partition(items, (i) =>
+      i.category === "new" ? Result.succeed(i) : Result.fail(i),
+    );
     const orderedDue = yield* sortBy(byDueDate)(dueItems);
     return [...newItems, ...orderedDue];
   });
 
 const orderDueFirst = (items: readonly QueueItem[]): Effect.Effect<readonly QueueItem[]> =>
   Effect.gen(function* () {
-    const [dueItems, newItems] = Arr.partition(items, (i) => i.category === "new");
+    const [dueItems, newItems] = Arr.partition(items, (i) =>
+      i.category === "new" ? Result.succeed(i) : Result.fail(i),
+    );
     const orderedDue = yield* sortBy(byDueDate)(dueItems);
     return [...orderedDue, ...newItems];
   });
@@ -253,7 +259,7 @@ export interface ReviewQueueBuilder {
   }) => Effect.Effect<ReviewQueue>;
 }
 
-export const ReviewQueueBuilder = Context.GenericTag<ReviewQueueBuilder>(
+export const ReviewQueueBuilder = Context.Service<ReviewQueueBuilder>(
   "./index.js/ReviewQueueBuilder",
 );
 
@@ -269,7 +275,7 @@ export const ReviewQueueBuilderLive = Layer.effect(
         Effect.gen(function* () {
           const options = normalizeReviewQueueOptions(rawOptions);
           const results = yield* Effect.all(
-            deckPaths.map((p) => deckManager.readDeck(p).pipe(Effect.either)),
+            deckPaths.map((p) => deckManager.readDeck(p).pipe(Effect.result)),
             { concurrency: "unbounded" },
           );
 
@@ -279,13 +285,13 @@ export const ReviewQueueBuilderLive = Layer.effect(
           let filePosition = 0;
           for (let i = 0; i < deckPaths.length; i++) {
             const result = results[i]!;
-            if (result._tag === "Left") {
-              deckErrors.push(result.left);
+            if (Result.isFailure(result)) {
+              deckErrors.push(result.failure);
               continue;
             }
 
             const deckPath = deckPaths[i]!;
-            const file = result.right;
+            const file = result.success;
             const deckName = pathService.basename(deckPath, ".md");
             const relativePath = pathService.relative(rootPath, deckPath);
 
@@ -355,7 +361,7 @@ export interface ReviewQueueService {
   ) => Effect.Effect<ReviewQueue>;
 }
 
-export const ReviewQueueService = Context.GenericTag<ReviewQueueService>(
+export const ReviewQueueService = Context.Service<ReviewQueueService>(
   "./index.js/ReviewQueueService",
 );
 

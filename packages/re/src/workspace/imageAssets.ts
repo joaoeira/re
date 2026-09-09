@@ -1,5 +1,6 @@
-import { FileSystem, Path } from "@effect/platform";
-import type { PlatformError } from "@effect/platform/Error";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import { Effect, Schema } from "effect";
 
 import { isPathWithinRoot } from "./imagePaths.js";
@@ -8,14 +9,14 @@ export const WORKSPACE_INTERNAL_DIRECTORY_NAME = ".re";
 export const WORKSPACE_IMAGE_ASSETS_DIRECTORY_NAME = "assets";
 export const WORKSPACE_IMAGE_ASSETS_RELATIVE_PATH = `${WORKSPACE_INTERNAL_DIRECTORY_NAME}/${WORKSPACE_IMAGE_ASSETS_DIRECTORY_NAME}`;
 
-export const InvalidWorkspaceImageAssetReasonSchema = Schema.Literal(
+export const InvalidWorkspaceImageAssetReasonSchema = Schema.Literals([
   "absolute_root_path_required",
   "absolute_deck_path_required",
   "absolute_source_path_required",
   "deck_outside_root",
   "missing_file_extension",
   "unsupported_file_extension",
-);
+]);
 
 export type InvalidWorkspaceImageAssetReason = typeof InvalidWorkspaceImageAssetReasonSchema.Type;
 
@@ -28,12 +29,12 @@ export class InvalidWorkspaceImageAsset extends Schema.TaggedError<InvalidWorksp
   reason: InvalidWorkspaceImageAssetReasonSchema,
 }) {}
 
-export const ImportDeckImageAssetOperationSchema = Schema.Literal(
+export const ImportDeckImageAssetOperationSchema = Schema.Literals([
   "read_source",
   "hash_source",
   "create_assets_directory",
   "write_asset",
-);
+]);
 
 export type ImportDeckImageAssetOperation = typeof ImportDeckImageAssetOperationSchema.Type;
 
@@ -189,26 +190,15 @@ export const importDeckImageAssetFromBytes = (options: {
     );
 
     yield* fileSystem.writeFile(absolutePath, options.bytes, { flag: "wx" }).pipe(
-      Effect.catchTags({
-        SystemError: (error) =>
-          error.reason === "AlreadyExists"
-            ? Effect.void
-            : Effect.fail(
-                new ImportDeckImageAssetOperationError({
-                  operation: "write_asset",
-                  message: error.message,
-                  assetPath: absolutePath,
-                }),
-              ),
-        BadArgument: (error) =>
-          Effect.fail(
-            new ImportDeckImageAssetOperationError({
-              operation: "write_asset",
-              message: error.message,
-              assetPath: absolutePath,
-            }),
-          ),
-      }),
+      Effect.catchReason("PlatformError", "AlreadyExists", () => Effect.void),
+      Effect.mapError(
+        (error) =>
+          new ImportDeckImageAssetOperationError({
+            operation: "write_asset",
+            message: error.message,
+            assetPath: absolutePath,
+          }),
+      ),
     );
 
     return {

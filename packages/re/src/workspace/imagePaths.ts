@@ -1,7 +1,7 @@
-import { Path } from "@effect/platform";
+import * as Path from "effect/Path";
 import { Effect, Schema } from "effect";
 
-export const ResolveDeckImagePathReasonSchema = Schema.Literal(
+export const ResolveDeckImagePathReasonSchema = Schema.Literals([
   "empty_path",
   "absolute_root_path_required",
   "absolute_deck_path_required",
@@ -11,7 +11,7 @@ export const ResolveDeckImagePathReasonSchema = Schema.Literal(
   "fragment_not_allowed",
   "deck_outside_root",
   "path_outside_root",
-);
+]);
 
 export type ResolveDeckImagePathReason = typeof ResolveDeckImagePathReasonSchema.Type;
 

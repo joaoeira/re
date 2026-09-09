@@ -1,5 +1,5 @@
-import { Path } from "@effect/platform";
-import { Effect, Either } from "effect";
+import * as Path from "effect/Path";
+import { Effect, Result } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -14,12 +14,12 @@ const runResolve = (options: {
   readonly imagePath: string;
 }) => resolveDeckImagePath(options).pipe(Effect.provide(Path.layer), Effect.runPromise);
 
-const runResolveEither = (options: {
+const runResolveResult = (options: {
   readonly rootPath: string;
   readonly deckPath: string;
   readonly imagePath: string;
 }) =>
-  resolveDeckImagePath(options).pipe(Effect.either, Effect.provide(Path.layer), Effect.runPromise);
+  resolveDeckImagePath(options).pipe(Effect.result, Effect.provide(Path.layer), Effect.runPromise);
 
 const runWithinRoot = (rootPath: string, targetPath: string) =>
   isPathWithinRoot(rootPath, targetPath).pipe(Effect.provide(Path.layer), Effect.runPromise);
@@ -91,120 +91,120 @@ describe("imagePaths", () => {
     });
 
     it("rejects empty image paths", async () => {
-      const result = await runResolveEither({
+      const result = await runResolveResult({
         rootPath: "/workspace",
         deckPath: "/workspace/decks/biology/cell.md",
         imagePath: "   ",
       });
 
-      expect(Either.isLeft(result)).toBe(true);
-      if (Either.isLeft(result)) {
-        expect(result.left).toBeInstanceOf(InvalidDeckImagePath);
-        expect(result.left.reason).toBe("empty_path");
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure).toBeInstanceOf(InvalidDeckImagePath);
+        expect(result.failure.reason).toBe("empty_path");
       }
     });
 
     it("rejects absolute image paths", async () => {
-      const result = await runResolveEither({
+      const result = await runResolveResult({
         rootPath: "/workspace",
         deckPath: "/workspace/decks/biology/cell.md",
         imagePath: "/tmp/mitochondrion.png",
       });
 
-      expect(Either.isLeft(result)).toBe(true);
-      if (Either.isLeft(result)) {
-        expect(result.left.reason).toBe("absolute_path_not_allowed");
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure.reason).toBe("absolute_path_not_allowed");
       }
     });
 
     it("rejects image paths with URI schemes", async () => {
-      const result = await runResolveEither({
+      const result = await runResolveResult({
         rootPath: "/workspace",
         deckPath: "/workspace/decks/biology/cell.md",
         imagePath: "https://example.com/mitochondrion.png",
       });
 
-      expect(Either.isLeft(result)).toBe(true);
-      if (Either.isLeft(result)) {
-        expect(result.left.reason).toBe("scheme_not_allowed");
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure.reason).toBe("scheme_not_allowed");
       }
     });
 
     it("rejects image paths with query strings", async () => {
-      const result = await runResolveEither({
+      const result = await runResolveResult({
         rootPath: "/workspace",
         deckPath: "/workspace/decks/biology/cell.md",
         imagePath: "images/diagram.png?size=2x",
       });
 
-      expect(Either.isLeft(result)).toBe(true);
-      if (Either.isLeft(result)) {
-        expect(result.left.reason).toBe("query_not_allowed");
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure.reason).toBe("query_not_allowed");
       }
     });
 
     it("rejects image paths with fragments", async () => {
-      const result = await runResolveEither({
+      const result = await runResolveResult({
         rootPath: "/workspace",
         deckPath: "/workspace/decks/biology/cell.md",
         imagePath: "images/diagram.png#mitochondria",
       });
 
-      expect(Either.isLeft(result)).toBe(true);
-      if (Either.isLeft(result)) {
-        expect(result.left.reason).toBe("fragment_not_allowed");
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure.reason).toBe("fragment_not_allowed");
       }
     });
 
     it("rejects deck paths outside the workspace root", async () => {
-      const result = await runResolveEither({
+      const result = await runResolveResult({
         rootPath: "/workspace",
         deckPath: "/outside/decks/biology/cell.md",
         imagePath: "images/diagram.png",
       });
 
-      expect(Either.isLeft(result)).toBe(true);
-      if (Either.isLeft(result)) {
-        expect(result.left.reason).toBe("deck_outside_root");
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure.reason).toBe("deck_outside_root");
       }
     });
 
     it("rejects resolved image paths outside the workspace root", async () => {
-      const result = await runResolveEither({
+      const result = await runResolveResult({
         rootPath: "/workspace",
         deckPath: "/workspace/decks/biology/cell.md",
         imagePath: "../../../secret.png",
       });
 
-      expect(Either.isLeft(result)).toBe(true);
-      if (Either.isLeft(result)) {
-        expect(result.left.reason).toBe("path_outside_root");
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure.reason).toBe("path_outside_root");
       }
     });
 
     it("rejects relative workspace roots", async () => {
-      const result = await runResolveEither({
+      const result = await runResolveResult({
         rootPath: "workspace",
         deckPath: "/workspace/decks/biology/cell.md",
         imagePath: "images/diagram.png",
       });
 
-      expect(Either.isLeft(result)).toBe(true);
-      if (Either.isLeft(result)) {
-        expect(result.left.reason).toBe("absolute_root_path_required");
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure.reason).toBe("absolute_root_path_required");
       }
     });
 
     it("rejects relative deck paths", async () => {
-      const result = await runResolveEither({
+      const result = await runResolveResult({
         rootPath: "/workspace",
         deckPath: "decks/biology/cell.md",
         imagePath: "images/diagram.png",
       });
 
-      expect(Either.isLeft(result)).toBe(true);
-      if (Either.isLeft(result)) {
-        expect(result.left.reason).toBe("absolute_deck_path_required");
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure.reason).toBe("absolute_deck_path_required");
       }
     });
   });

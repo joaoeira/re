@@ -1,5 +1,7 @@
-import { Path } from "@effect/platform";
-import { Effect, Either, Layer } from "effect";
+import * as Path from "effect/Path";
+import * as FileSystem from "effect/FileSystem";
+import * as PlatformError from "effect/PlatformError";
+import { Effect, Result, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   scanDecks,
@@ -19,48 +21,48 @@ const runScan = (
     Effect.runPromise,
   );
 
-const runScanEither = (
+const runScanResult = (
   rootPath: string,
   config: MockFileSystemConfig,
   options?: Parameters<typeof scanDecks>[1],
 ) =>
   scanDecks(rootPath, options).pipe(
-    Effect.either,
+    Effect.result,
     Effect.provide(Layer.merge(createMockFileSystemLayer(config), Path.layer)),
     Effect.runPromise,
   );
 
 describe("scanDecks", () => {
   it("returns WorkspaceRootNotFound for missing roots", async () => {
-    const result = await runScanEither("/root", {
+    const result = await runScanResult("/root", {
       entryTypes: {},
       directories: {},
     });
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(WorkspaceRootNotFound);
-      expect(result.left.rootPath).toBe("/root");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(WorkspaceRootNotFound);
+      expect(result.failure.rootPath).toBe("/root");
     }
   });
 
   it("returns WorkspaceRootNotDirectory for non-directory roots", async () => {
-    const result = await runScanEither("/root/file.md", {
+    const result = await runScanResult("/root/file.md", {
       entryTypes: {
         "/root/file.md": "File",
       },
       directories: {},
     });
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(WorkspaceRootNotDirectory);
-      expect(result.left.rootPath).toBe("/root/file.md");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(WorkspaceRootNotDirectory);
+      expect(result.failure.rootPath).toBe("/root/file.md");
     }
   });
 
   it("returns WorkspaceRootUnreadable when root directory cannot be listed", async () => {
-    const result = await runScanEither("/root", {
+    const result = await runScanResult("/root", {
       entryTypes: {
         "/root": "Directory",
       },
@@ -72,10 +74,10 @@ describe("scanDecks", () => {
       },
     });
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(WorkspaceRootUnreadable);
-      expect(result.left.rootPath).toBe("/root");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(WorkspaceRootUnreadable);
+      expect(result.failure.rootPath).toBe("/root");
     }
   });
 
@@ -240,7 +242,7 @@ describe("scanDecks", () => {
   });
 
   it("fails on unexpected nested directory errors", async () => {
-    const result = await runScanEither("/root", {
+    const result = await runScanResult("/root", {
       entryTypes: {
         "/root": "Directory",
         "/root/good.md": "File",
@@ -255,10 +257,61 @@ describe("scanDecks", () => {
       },
     });
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(WorkspaceRootUnreadable);
-      expect(result.left.message).toContain("readDirectory failed for /root/broken");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(WorkspaceRootUnreadable);
+      expect(result.failure.message).toContain("readDirectory failed for /root/broken");
+    }
+  });
+
+  it("treats readLink EINVAL as an ordinary file but propagates unexpected OS failures", async () => {
+    for (const code of ["EINVAL", "EIO"]) {
+      const result = await Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        return yield* scanDecks("/root").pipe(
+          Effect.provideService(FileSystem.FileSystem, {
+            ...fs,
+            readLink: (path) =>
+              Effect.fail(
+                PlatformError.systemError({
+                  _tag: "Unknown",
+                  module: "FileSystem",
+                  method: "readLink",
+                  pathOrDescriptor: path,
+                  cause: { code },
+                }),
+              ),
+          }),
+          Effect.result,
+        );
+      }).pipe(
+        Effect.provide(
+          Layer.merge(
+            createMockFileSystemLayer({
+              entryTypes: { "/root": "Directory", "/root/ordinary.md": "File" },
+              directories: { "/root": ["ordinary.md"] },
+            }),
+            Path.layer,
+          ),
+        ),
+        Effect.runPromise,
+      );
+
+      if (code === "EINVAL") {
+        expect(result).toMatchObject({
+          _tag: "Success",
+          success: { decks: [{ relativePath: "ordinary.md" }] },
+        });
+      } else {
+        expect(result).toMatchObject({
+          _tag: "Failure",
+          failure: {
+            _tag: "WorkspaceRootUnreadable",
+            rootPath: "/root",
+            message: expect.stringContaining("readLink failed for /root/ordinary.md"),
+          },
+        });
+      }
     }
   });
 

@@ -34,7 +34,7 @@ const createTestLayer = (options?: {
       options?.onAppend?.({ deckPath, item, itemType });
       return options?.appendError === undefined ? Effect.void : Effect.fail(options.appendError);
     },
-    importImageFromBytes: () => Effect.dieMessage("Image import is not used in card tests."),
+    importImageFromBytes: () => Effect.die(new Error("Image import is not used in card tests.")),
   });
 
 const validQa: CreateCardInput = {

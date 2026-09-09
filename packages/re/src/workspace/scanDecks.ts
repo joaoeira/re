@@ -1,7 +1,8 @@
-import { FileSystem, Path } from "@effect/platform";
-import type { PlatformError } from "@effect/platform/Error";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import * as Schema from "effect/Schema";
-import { Array as Arr, Effect, Option, Order } from "effect";
+import { Array as Arr, Effect, Option, Order, Result } from "effect";
 import ignore from "ignore";
 
 const ROOT_IGNORE_FILE = ".reignore";
@@ -45,11 +46,11 @@ export class WorkspaceRootUnreadable extends Schema.TaggedError<WorkspaceRootUnr
   message: Schema.String,
 }) {}
 
-export const ScanDecksErrorSchema = Schema.Union(
+export const ScanDecksErrorSchema = Schema.Union([
   WorkspaceRootNotFound,
   WorkspaceRootNotDirectory,
   WorkspaceRootUnreadable,
-);
+]);
 
 export type ScanDecksError = typeof ScanDecksErrorSchema.Type;
 
@@ -67,21 +68,6 @@ export const toScanDecksErrorMessage = (error: ScanDecksError): string => {
 export const mapScanDecksErrorToError = (error: ScanDecksError | Error): Error =>
   "_tag" in error ? new Error(toScanDecksErrorMessage(error)) : error;
 
-const isNestedTolerable = (error: PlatformError): boolean =>
-  error._tag === "SystemError" &&
-  (error.reason === "PermissionDenied" || error.reason === "NotFound");
-
-const mapRootError = (rootPath: string, error: PlatformError): ScanDecksError => {
-  if (error._tag === "SystemError" && error.reason === "NotFound") {
-    return new WorkspaceRootNotFound({ rootPath });
-  }
-
-  return new WorkspaceRootUnreadable({
-    rootPath,
-    message: error.message,
-  });
-};
-
 const mapNestedFatalError = (
   rootPath: string,
   absolutePath: string,
@@ -93,19 +79,6 @@ const mapNestedFatalError = (
     message: `${operation} failed for ${absolutePath}: ${error.message}`,
   });
 
-const hasCauseCode = (error: PlatformError, code: string): boolean => {
-  if (error._tag !== "SystemError") {
-    return false;
-  }
-
-  const cause = error.cause;
-  if (typeof cause !== "object" || cause === null || !("code" in cause)) {
-    return false;
-  }
-
-  return (cause as { readonly code?: unknown }).code === code;
-};
-
 const hasHiddenSegment = (relativePath: string): boolean =>
   relativePath.split("/").some((segment) => segment.length > 0 && segment.startsWith("."));
 
@@ -113,10 +86,10 @@ const normalizeIgnorePatterns = (patterns: readonly string[]): readonly string[]
   Arr.filterMap(patterns, (pattern) => {
     const normalized = pattern.trim();
     if (normalized === "" || normalized.startsWith("#")) {
-      return Option.none();
+      return Result.failVoid;
     }
 
-    return Option.some(normalized);
+    return Result.succeed(normalized);
   });
 
 const appendPatterns = (matcher: ReturnType<typeof ignore>, patterns: readonly string[]): void => {
@@ -136,28 +109,16 @@ const readRootIgnorePatterns = (
 ): Effect.Effect<readonly string[], WorkspaceRootUnreadable> =>
   fileSystem.readFileString(pathService.join(rootPath, ROOT_IGNORE_FILE)).pipe(
     Effect.map((content) => normalizeIgnorePatterns(content.split(/\r?\n/))),
-    Effect.catchTag("SystemError", (error) => {
-      if (error.reason === "NotFound" || error.reason === "PermissionDenied") {
-        return Effect.succeed([]);
-      }
-
-      return Effect.fail(
-        mapNestedFatalError(
-          rootPath,
-          pathService.join(rootPath, ROOT_IGNORE_FILE),
-          "readFileString",
-          error,
-        ),
-      );
+    Effect.catchReasons("PlatformError", {
+      NotFound: () => Effect.succeed([]),
+      PermissionDenied: () => Effect.succeed([]),
     }),
-    Effect.catchTag("BadArgument", (error) =>
-      Effect.fail(
-        mapNestedFatalError(
-          rootPath,
-          pathService.join(rootPath, ROOT_IGNORE_FILE),
-          "readFileString",
-          error,
-        ),
+    Effect.mapError((error) =>
+      mapNestedFatalError(
+        rootPath,
+        pathService.join(rootPath, ROOT_IGNORE_FILE),
+        "readFileString",
+        error,
       ),
     ),
   );
@@ -169,13 +130,11 @@ const readDirectoryBestEffort = (
 ): Effect.Effect<Option.Option<readonly string[]>, WorkspaceRootUnreadable> =>
   fileSystem.readDirectory(absolutePath).pipe(
     Effect.map((entries) => Option.some(entries as readonly string[])),
-    Effect.catchAll((error) => {
-      if (isNestedTolerable(error)) {
-        return Effect.succeed(Option.none());
-      }
-
-      return Effect.fail(mapNestedFatalError(rootPath, absolutePath, "readDirectory", error));
+    Effect.catchReasons("PlatformError", {
+      NotFound: () => Effect.succeed(Option.none()),
+      PermissionDenied: () => Effect.succeed(Option.none()),
     }),
+    Effect.mapError((error) => mapNestedFatalError(rootPath, absolutePath, "readDirectory", error)),
   );
 
 const statBestEffort = (
@@ -185,13 +144,11 @@ const statBestEffort = (
 ): Effect.Effect<Option.Option<FileSystem.File.Info>, WorkspaceRootUnreadable> =>
   fileSystem.stat(absolutePath).pipe(
     Effect.map(Option.some),
-    Effect.catchAll((error) => {
-      if (isNestedTolerable(error)) {
-        return Effect.succeed(Option.none());
-      }
-
-      return Effect.fail(mapNestedFatalError(rootPath, absolutePath, "stat", error));
+    Effect.catchReasons("PlatformError", {
+      NotFound: () => Effect.succeed(Option.none()),
+      PermissionDenied: () => Effect.succeed(Option.none()),
     }),
+    Effect.mapError((error) => mapNestedFatalError(rootPath, absolutePath, "stat", error)),
   );
 
 const isSymlinkBestEffort = (
@@ -201,23 +158,27 @@ const isSymlinkBestEffort = (
 ): Effect.Effect<Option.Option<boolean>, WorkspaceRootUnreadable> =>
   fileSystem.readLink(absolutePath).pipe(
     Effect.as(Option.some(true)),
-    Effect.catchTag("SystemError", (error) => {
-      if (error.reason === "BadResource" || error.reason === "InvalidData") {
-        return Effect.succeed(Option.some(false));
-      }
-
-      if (error.reason === "Unknown" && hasCauseCode(error, "EINVAL")) {
-        return Effect.succeed(Option.some(false));
-      }
-
-      if (error.reason === "NotFound" || error.reason === "PermissionDenied") {
-        return Effect.succeed(Option.none());
-      }
-
-      return Effect.fail(mapNestedFatalError(rootPath, absolutePath, "readLink", error));
-    }),
-    Effect.catchTag("BadArgument", (error) =>
-      Effect.fail(mapNestedFatalError(rootPath, absolutePath, "readLink", error)),
+    Effect.catchReasons(
+      "PlatformError",
+      {
+        BadResource: () => Effect.succeed(Option.some(false)),
+        InvalidData: () => Effect.succeed(Option.some(false)),
+        Unknown: (reason, error) => {
+          const cause = reason.cause;
+          if (
+            typeof cause === "object" &&
+            cause !== null &&
+            "code" in cause &&
+            cause.code === "EINVAL"
+          ) {
+            return Effect.succeed(Option.some(false));
+          }
+          return Effect.fail(mapNestedFatalError(rootPath, absolutePath, "readLink", error));
+        },
+        NotFound: () => Effect.succeed(Option.none()),
+        PermissionDenied: () => Effect.succeed(Option.none()),
+      },
+      (_, error) => Effect.fail(mapNestedFatalError(rootPath, absolutePath, "readLink", error)),
     ),
   );
 
@@ -236,9 +197,18 @@ export const scanDecks = (
 
     const normalizedRootPath = pathService.resolve(rootPath);
 
-    const rootStat = yield* fileSystem
-      .stat(normalizedRootPath)
-      .pipe(Effect.mapError((error) => mapRootError(normalizedRootPath, error)));
+    const rootStat = yield* fileSystem.stat(normalizedRootPath).pipe(
+      Effect.catchReasons(
+        "PlatformError",
+        {
+          NotFound: () => Effect.fail(new WorkspaceRootNotFound({ rootPath: normalizedRootPath })),
+        },
+        (_, error) =>
+          Effect.fail(
+            new WorkspaceRootUnreadable({ rootPath: normalizedRootPath, message: error.message }),
+          ),
+      ),
+    );
 
     if (rootStat.type !== "Directory") {
       return yield* new WorkspaceRootNotDirectory({
@@ -246,9 +216,18 @@ export const scanDecks = (
       });
     }
 
-    yield* fileSystem
-      .readDirectory(normalizedRootPath)
-      .pipe(Effect.mapError((error) => mapRootError(normalizedRootPath, error)));
+    yield* fileSystem.readDirectory(normalizedRootPath).pipe(
+      Effect.catchReasons(
+        "PlatformError",
+        {
+          NotFound: () => Effect.fail(new WorkspaceRootNotFound({ rootPath: normalizedRootPath })),
+        },
+        (_, error) =>
+          Effect.fail(
+            new WorkspaceRootUnreadable({ rootPath: normalizedRootPath, message: error.message }),
+          ),
+      ),
+    );
 
     const resolved = normalizeOptions(options);
     const matcher = ignore();
@@ -327,7 +306,7 @@ export const scanDecks = (
       }
     }
 
-    const sortedDecks = Arr.sortWith(decks, (deck) => deck.relativePath, Order.string);
+    const sortedDecks = Arr.sortWith(decks, (deck) => deck.relativePath, Order.String);
 
     return {
       rootPath: normalizedRootPath,

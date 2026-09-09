@@ -1,8 +1,10 @@
-import { FileSystem, Path } from "@effect/platform";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as NodeFileSystem from "@effect/platform-node-shared/NodeFileSystem";
 import * as NodePath from "@effect/platform-node-shared/NodePath";
 import { describe, expect, it } from "@effect/vitest";
-import { parseFile, State } from "../../src/core/index.js";
+import { adaptItemType, createMetadata, parseFile, State } from "../../src/core/index.js";
+import { QAType } from "../../src/item-types/index.js";
 import { Scheduler, SchedulerLive } from "../../src/scheduler/index.js";
 import {
   DeckManager,
@@ -13,7 +15,13 @@ import {
 } from "../../src/workspace/index.js";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 
-import { makeReviewStoreLive, ReviewStore } from "../../src/study/index.js";
+import {
+  DeckStore,
+  DeckStoreLive,
+  makeReviewStoreLive,
+  ReviewStore,
+} from "../../src/study/index.js";
+import { createMockFileSystem } from "../workspace/mock-file-system.js";
 
 const ReviewStoreLive = makeReviewStoreLive((_context, markdown) => Effect.succeed(markdown));
 
@@ -32,7 +40,80 @@ const TestLive = ReviewStoreLive.pipe(
 const TestWithPlatformLive = Layer.merge(TestLive, PlatformLive);
 
 describe("ReviewStoreLive", () => {
-  it.scoped("grades the latest metadata after waiting to acquire the deck lock", () =>
+  it.live("shares the deck lock between grading and appending through the two stores", () =>
+    Effect.gen(function* () {
+      const scheduler = yield* Scheduler.pipe(Effect.provide(SchedulerLive));
+      const grading = yield* Deferred.make<void>();
+      const releaseGrade = yield* Deferred.make<void>();
+      const mock = createMockFileSystem({
+        entryTypes: { "/": "Directory", "/deck.md": "File" },
+        directories: { "/": ["deck.md"] },
+        fileContents: { "/deck.md": "<!--@ card-a 0 0 0 0-->\nQuestion\n---\nAnswer\n" },
+      });
+      const platform = Layer.merge(mock.layer, Path.layer);
+      const manager = DeckManagerLive.pipe(Layer.provideMerge(platform));
+      const queue = ReviewQueueBuilderLive.pipe(
+        Layer.provide(Layer.merge(manager, ShuffledOrderingStrategy)),
+      );
+      const pausedScheduler = Layer.succeed(Scheduler, {
+        ...scheduler,
+        scheduleReview: (card, grade, now) =>
+          Deferred.succeed(grading, undefined).pipe(
+            Effect.andThen(Deferred.await(releaseGrade)),
+            Effect.andThen(scheduler.scheduleReview(card, grade, now)),
+          ),
+      });
+      const stores = Layer.merge(ReviewStoreLive, DeckStoreLive).pipe(
+        Layer.provide(Layer.mergeAll(manager, queue, pausedScheduler)),
+      );
+
+      yield* Effect.gen(function* () {
+        const reviews = yield* ReviewStore;
+        const decks = yield* DeckStore;
+        const original = (yield* parseFile(mock.store["/deck.md"]!)).items[0]!.cards[0]!;
+        const now = new Date("2026-08-13T12:00:00Z");
+        const first = yield* reviews
+          .gradeCard(
+            {
+              deckPath: "/deck.md",
+              deckName: "deck",
+              relativePath: "deck.md",
+              cardId: "card-a",
+              cardKey: "main",
+            },
+            2,
+            now,
+          )
+          .pipe(Effect.forkScoped);
+        yield* Deferred.await(grading);
+        const appended = {
+          cards: [createMetadata()],
+          content: "Appended question\n---\nAppended answer\n",
+        };
+        const second = yield* decks
+          .appendItem("/deck.md", appended, adaptItemType(QAType))
+          .pipe(Effect.forkScoped);
+        // The mock's I/O is synchronous: the append now either waits for the shared
+        // lock or completes against the stale file if the stores have separate managers.
+        yield* Effect.yieldNow;
+        yield* Deferred.succeed(releaseGrade, undefined);
+        const undo = yield* Fiber.join(first);
+        yield* Fiber.join(second);
+
+        const saved = yield* parseFile(mock.store["/deck.md"]!);
+        expect(saved.items).toHaveLength(2);
+        expect(saved.items[0]!.cards[0]).toMatchObject({
+          id: "card-a",
+          state: State.Learning,
+          lastReview: now,
+        });
+        expect(saved.items[1]).toEqual(appended);
+        expect(undo.previousMetadata).toEqual(original);
+      }).pipe(Effect.provide(stores));
+    }).pipe(Effect.timeout("2 seconds")),
+  );
+
+  it.effect("grades the latest metadata after waiting to acquire the deck lock", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const base = yield* DeckManager;
@@ -45,8 +126,8 @@ describe("ReviewStoreLive", () => {
       const release = yield* Deferred.make<void>();
       const beforeWrite = <A, E>(operation: Effect.Effect<A, E>) =>
         Deferred.succeed(waiting, undefined).pipe(
-          Effect.zipRight(Deferred.await(release)),
-          Effect.zipRight(operation),
+          Effect.andThen(Deferred.await(release)),
+          Effect.andThen(operation),
         );
       const delayed: DeckManager = {
         ...base,
@@ -92,7 +173,7 @@ describe("ReviewStoreLive", () => {
     }).pipe(Effect.provide(DeckManagerServicesLive)),
   );
 
-  it.scoped(
+  it.effect(
     "keeps healthy cards from a deck with a mismatched item and reports the skipped item",
     () =>
       Effect.gen(function* () {
@@ -119,7 +200,7 @@ describe("ReviewStoreLive", () => {
       }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
-  it.scoped("keeps the queued cloze key when an earlier cloze is removed", () =>
+  it.effect("keeps the queued cloze key when an earlier cloze is removed", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const rootPath = yield* fileSystem.makeTempDirectoryScoped();
@@ -147,7 +228,7 @@ describe("ReviewStoreLive", () => {
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
-  it.scoped("keeps a review saved while an edit is waiting to acquire the deck lock", () =>
+  it.effect("keeps a review saved while an edit is waiting to acquire the deck lock", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const base = yield* DeckManager;
@@ -161,8 +242,8 @@ describe("ReviewStoreLive", () => {
       const release = yield* Deferred.make<void>();
       const beforeSave = <A, E>(operation: Effect.Effect<A, E>) =>
         Deferred.succeed(waiting, undefined).pipe(
-          Effect.zipRight(Deferred.await(release)),
-          Effect.zipRight(operation),
+          Effect.andThen(Deferred.await(release)),
+          Effect.andThen(operation),
         );
       // Delay entry into either public edit operation. An unlocked read made by
       // the caller before this point must not determine the metadata it saves.
@@ -213,7 +294,7 @@ describe("ReviewStoreLive", () => {
     }).pipe(Effect.provide(DeckManagerServicesLive)),
   );
 
-  it.scoped("loads a Q&A card from the whole workspace", () =>
+  it.effect("loads a Q&A card from the whole workspace", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
@@ -249,7 +330,7 @@ Success, expected errors, and requirements.
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
-  it.scoped("saves Q&A edits without changing scheduling metadata", () =>
+  it.effect("saves Q&A edits without changing scheduling metadata", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
@@ -286,7 +367,7 @@ Old answer
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
-  it.scoped("keeps the following card separate when editing a Q&A card", () =>
+  it.effect("keeps the following card separate when editing a Q&A card", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
@@ -329,7 +410,7 @@ Second answer
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
-  it.scoped("rejects cloze edits that change the generated card indices", () =>
+  it.effect("rejects cloze edits that change the generated card indices", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
@@ -358,11 +439,11 @@ France: {{c1::Paris}}. Germany: {{c2::Berlin}}.
             content: "France: {{c1::Paris}}. Germany: {{c3::Berlin}}.",
           },
         )
-        .pipe(Effect.either);
+        .pipe(Effect.result);
 
       expect(result).toMatchObject({
-        _tag: "Left",
-        left: {
+        _tag: "Failure",
+        failure: {
           _tag: "ReviewEditValidationError",
           field: "content",
         },
@@ -372,7 +453,7 @@ France: {{c1::Paris}}. Germany: {{c2::Berlin}}.
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
-  it.scoped("grades a card and writes its new schedule to the deck", () =>
+  it.effect("grades a card and writes its new schedule to the deck", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
@@ -405,7 +486,7 @@ Success, expected errors, and requirements.
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
-  it.scoped("rejects a missing generated card without changing the deck", () =>
+  it.effect("rejects a missing generated card without changing the deck", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
@@ -435,7 +516,7 @@ Success, expected errors, and requirements.
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
-  it.scoped("undoes a grade by restoring the card's exact previous schedule", () =>
+  it.effect("undoes a grade by restoring the card's exact previous schedule", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
@@ -464,7 +545,7 @@ Success, expected errors, and requirements.
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
-  it.scoped("deletes and restores an entire cloze item", () =>
+  it.effect("deletes and restores an entire cloze item", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
@@ -502,7 +583,7 @@ Success, expected errors, and requirements.
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
-  it.scoped("renders each cloze index as its own card", () =>
+  it.effect("renders each cloze index as its own card", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
@@ -553,7 +634,7 @@ Success, expected errors, and requirements.
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
-  it.scoped("reports invalid decks without hiding valid cards", () =>
+  it.effect("reports invalid decks without hiding valid cards", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
@@ -585,7 +666,7 @@ Broken card
     }).pipe(Effect.provide(TestWithPlatformLive)),
   );
 
-  it.scoped("returns an empty session when no cards are due or new", () =>
+  it.effect("returns an empty session when no cards are due or new", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
@@ -610,7 +691,7 @@ Answer
 });
 
 describe("ReviewStore grading failures", () => {
-  it.scoped("preserves the public persistence message and reference without saving a grade", () =>
+  it.effect("preserves the public persistence message and reference without saving a grade", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const base = yield* DeckManager;
@@ -655,7 +736,7 @@ describe("ReviewStore grading failures", () => {
 });
 
 describe("ReviewStore Markdown customization", () => {
-  it.scoped(
+  it.effect(
     "transforms prompt and reveal using the supplied context and Path, leaving the draft raw",
     () =>
       Effect.gen(function* () {
@@ -691,7 +772,7 @@ describe("ReviewStore Markdown customization", () => {
       }).pipe(Effect.provide(PlatformLive)),
   );
 
-  it.scoped(
+  it.effect(
     "contains a reveal transform failure as a card load error without changing the deck",
     () =>
       Effect.gen(function* () {

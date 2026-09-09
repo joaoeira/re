@@ -1,7 +1,8 @@
-import { FileSystem, Path } from "@effect/platform";
-import { SystemError } from "@effect/platform/Error";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 import { State, numericField, type ItemId } from "../../src/core/index.js";
-import { Cause, Effect, Exit, Layer, Option, Random } from "effect";
+import { Effect, Exit, Layer, Random, Result } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -127,8 +128,8 @@ const MockFileSystem = FileSystem.layerNoop({
     if (path === "/decks/broken.md") return Effect.succeed("<!--@ bad metadata-->\n");
     if (path === "/decks/empty.md") return Effect.succeed("# No cards yet\n");
     return Effect.fail(
-      new SystemError({
-        reason: "NotFound",
+      PlatformError.systemError({
+        _tag: "NotFound",
         module: "FileSystem",
         method: "readFileString",
         pathOrDescriptor: path,
@@ -178,8 +179,10 @@ describe("ReviewQueueBuilder", () => {
         ...decks,
         readDeck: (deckPath) =>
           deckPath === "/decks/blocked.md"
-            ? Effect.yieldNow().pipe(
-                Effect.zipRight(new DeckReadError({ deckPath, message: "Deck is locked" })),
+            ? Effect.yieldNow.pipe(
+                Effect.andThen(
+                  Effect.fail(new DeckReadError({ deckPath, message: "Deck is locked" })),
+                ),
               )
             : decks.readDeck(deckPath),
       });
@@ -260,9 +263,9 @@ describe("ReviewQueueBuilder", () => {
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isFailure(exit)) {
         if (kind === "interruption") {
-          expect(Exit.isInterrupted(exit)).toBe(true);
+          expect(Exit.hasInterrupts(exit)).toBe(true);
         } else {
-          expect(Option.getOrUndefined(Cause.dieOption(exit.cause))).toBe(defect);
+          expect(Result.getOrUndefined(Exit.findDefect(exit))).toBe(defect);
         }
       }
     }
@@ -385,18 +388,29 @@ describe("ReviewQueue ordering from spec", () => {
     }
   });
 
-  it("NewFirstShuffledSpec shuffles new cards deterministically with a seed", async () => {
-    const program = Effect.gen(function* () {
-      const builder = yield* ReviewQueueBuilder;
-      return yield* builder.buildQueue({
-        deckPaths: ["/decks/shuffled.md"],
-        rootPath: "/decks",
-        now: NOW,
-      });
-    }).pipe(Effect.provide(SpecLayer(NewFirstShuffledSpec)));
+  it("NewFirstShuffledSpec shuffles within the new group before applying the limit", async () => {
+    const build = (cardLimit: number | null = null) =>
+      Effect.gen(function* () {
+        const builder = yield* ReviewQueueBuilder;
+        return yield* builder.buildQueue({
+          deckPaths: ["/decks/shuffled.md"],
+          rootPath: "/decks",
+          now: NOW,
+          options: { ...DEFAULT_REVIEW_QUEUE_OPTIONS, cardLimit },
+        });
+      }).pipe(Effect.provide(SpecLayer(NewFirstShuffledSpec)));
 
-    const result = await Effect.runPromise(program.pipe(Effect.withRandom(Random.make("seed"))));
-    expect(result.items.map((item) => item.card.id)).toEqual(["s3", "s1", "s2", "s4"]);
+    const orderings: string[] = [];
+    for (const seed of ["seed", "second", "third", "fourth"]) {
+      const result = await Effect.runPromise(build().pipe(Random.withSeed(seed)));
+      const ids = result.items.map((item) => item.card.id);
+      expect(ids.slice(0, 3).sort()).toEqual(["s1", "s2", "s3"]);
+      expect(ids[3]).toBe("s4");
+      const limited = await Effect.runPromise(build(2).pipe(Random.withSeed(seed)));
+      expect(limited.items.map((item) => item.card.id)).toEqual(ids.slice(0, 2));
+      orderings.push(ids.join(","));
+    }
+    expect(new Set(orderings).size).toBeGreaterThan(1);
   });
 
   it("NewFirstFileOrderSpec sorts new cards by file position", async () => {
@@ -461,15 +475,21 @@ describe("Composable ordering primitives", () => {
     expect(byDue.map((item) => item.card.id)).toEqual(["early", "mid", "late"]);
   });
 
-  it("shuffle can be made deterministic with a seeded Random service", async () => {
-    const program = shuffle<QueueItem>()([
-      makeItem("a", "new", 0),
-      makeItem("b", "new", 1),
-      makeItem("c", "new", 2),
-    ]);
-
-    const result = await Effect.runPromise(program.pipe(Effect.withRandom(Random.make("seed"))));
-    expect(result.map((item) => item.card.id)).toEqual(["c", "a", "b"]);
+  it("shuffle preserves the input and multiplicity and is reproducible with a seed", async () => {
+    const items = [makeItem("a", "new", 0), makeItem("b", "new", 1), makeItem("c", "new", 2)];
+    items.push(items[0]!);
+    const before = [...items];
+    const program = shuffle<QueueItem>()(items);
+    const orderings: string[] = [];
+    for (const seed of ["seed", "second", "third", "fourth"]) {
+      const first = await Effect.runPromise(program.pipe(Random.withSeed(seed)));
+      const again = await Effect.runPromise(program.pipe(Random.withSeed(seed)));
+      expect(first).toEqual(again);
+      expect(first.map((item) => item.card.id).sort()).toEqual(["a", "a", "b", "c"]);
+      expect(items).toEqual(before);
+      orderings.push(first.map((item) => item.card.id).join(","));
+    }
+    expect(new Set(orderings).size).toBeGreaterThan(1);
   });
 
   it("chain composes multiple order steps", async () => {
@@ -482,7 +502,7 @@ describe("Composable ordering primitives", () => {
     const result = await chain(
       shuffle<QueueItem>(),
       sortBy(byDueDate),
-    )(items).pipe(Effect.withRandom(Random.make("seed")), Effect.runPromise);
+    )(items).pipe(Random.withSeed("seed"), Effect.runPromise);
 
     expect(result[2]?.card.id).toBe("c");
     expect(new Set(result.slice(0, 2).map((item) => item.card.id))).toEqual(new Set(["a", "b"]));

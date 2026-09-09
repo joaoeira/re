@@ -1,4 +1,4 @@
-import { FileSystem } from "@effect/platform";
+import * as FileSystem from "effect/FileSystem";
 import * as NodeFileSystem from "@effect/platform-node-shared/NodeFileSystem";
 import * as NodePath from "@effect/platform-node-shared/NodePath";
 import { describe, expect, it } from "@effect/vitest";
@@ -17,7 +17,7 @@ const DeckManagerAndPlatformLive = DeckManagerLive.pipe(Layer.provideMerge(Platf
 const TestLive = DeckStoreLive.pipe(Layer.provideMerge(DeckManagerAndPlatformLive));
 
 describe("DeckStoreLive", () => {
-  it.scoped("discovers a deck and writes a card through the real filesystem adapter", () =>
+  it.effect("discovers a deck and writes a card through the real filesystem adapter", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
@@ -47,7 +47,7 @@ describe("DeckStoreLive", () => {
     }).pipe(Effect.provide(TestLive)),
   );
 
-  it.scoped("stores an imported image in the workspace asset directory", () =>
+  it.effect("stores an imported image in the workspace asset directory", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const deckStore = yield* DeckStore;

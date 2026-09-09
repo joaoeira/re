@@ -1,5 +1,5 @@
-import { Path } from "@effect/platform";
-import { Effect, Either, Layer } from "effect";
+import * as Path from "effect/Path";
+import { Effect, Result, Layer } from "effect";
 import { numericField, type ItemId, type ParsedFile } from "../../src/core/index.js";
 import { describe, expect, it } from "vitest";
 
@@ -53,7 +53,7 @@ const runFindDuplicates = (
   );
 };
 
-const runFindDuplicatesEither = (
+const runFindDuplicatesResult = (
   rootPath: string,
   config: MockFileSystemConfig,
   options?: Parameters<typeof findWorkspaceDuplicates>[1],
@@ -64,7 +64,7 @@ const runFindDuplicatesEither = (
   );
 
   return findWorkspaceDuplicates(rootPath, options).pipe(
-    Effect.either,
+    Effect.result,
     Effect.provide(Layer.mergeAll(deckManagerLayer, fileSystemLayer, Path.layer)),
     Effect.runPromise,
   );
@@ -226,14 +226,14 @@ A
   });
 
   it("propagates root-level scan errors", async () => {
-    const result = await runFindDuplicatesEither("/missing", {
+    const result = await runFindDuplicatesResult("/missing", {
       entryTypes: {},
       directories: {},
     });
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(WorkspaceRootNotFound);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(WorkspaceRootNotFound);
     }
   });
 

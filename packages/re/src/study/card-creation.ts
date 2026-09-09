@@ -186,7 +186,7 @@ export const loadDecksForUi = (
         decks,
       }),
     ),
-    Effect.catchAll((error) =>
+    Effect.catch((error) =>
       Effect.succeed<LoadDecksUiResult>({
         _tag: "DecksLoadError",
         message: toScanDecksErrorMessage(error),

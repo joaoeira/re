@@ -1,5 +1,6 @@
-import { FileSystem, Path } from "@effect/platform";
-import type { PlatformError } from "@effect/platform/Error";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import {
   parseFile,
@@ -9,7 +10,7 @@ import {
   type EvaluableItemType,
   type ParsedFile,
 } from "../core/index.js";
-import { Context, Effect, Layer, Option } from "effect";
+import { Context, Effect, Layer, Option, Semaphore } from "effect";
 
 import { formatMetadataParseError } from "./snapshotWorkspace.js";
 
@@ -67,7 +68,7 @@ export class ItemValidationError extends Schema.TaggedError<ItemValidationError>
   message: Schema.String,
 }) {}
 
-export const InvalidDeckPathReasonSchema = Schema.Literal(
+export const InvalidDeckPathReasonSchema = Schema.Literals([
   "empty_path",
   "absolute_path_required",
   "absolute_path_not_allowed",
@@ -75,7 +76,7 @@ export const InvalidDeckPathReasonSchema = Schema.Literal(
   "missing_md_extension",
   "invalid_file_name",
   "nul_byte_not_allowed",
-);
+]);
 
 export class InvalidDeckPath extends Schema.TaggedError<InvalidDeckPath>(
   "./index.js/InvalidDeckPath",
@@ -99,7 +100,7 @@ export class DeckFileNotFound extends Schema.TaggedError<DeckFileNotFound>(
 export class DeckFileOperationError extends Schema.TaggedError<DeckFileOperationError>(
   "./index.js/DeckFileOperationError",
 )("DeckFileOperationError", {
-  operation: Schema.Literal("create", "delete", "rename"),
+  operation: Schema.Literals(["create", "delete", "rename"]),
   message: Schema.String,
   deckPath: Schema.optional(Schema.String),
   fromPath: Schema.optional(Schema.String),
@@ -203,7 +204,7 @@ export interface DeckManager {
   >;
 }
 
-export const DeckManager = Context.GenericTag<DeckManager>("./index.js/DeckManager");
+export const DeckManager = Context.Service<DeckManager>("./index.js/DeckManager");
 
 export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSystem | Path.Path> =
   Layer.effect(
@@ -212,7 +213,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
-      const lockFor = yield* Effect.cachedFunction((_deckPath: string) => Effect.makeSemaphore(1));
+      const locksByPath = new Map<string, Semaphore.Semaphore>();
 
       const withDeckLocks = <A, E, R>(
         deckPaths: readonly string[],
@@ -221,19 +222,27 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
         Effect.gen(function* () {
           // Rename must acquire both paths in the same order as other renames.
           const keys = [...new Set(deckPaths.map((deckPath) => path.resolve(deckPath)))].sort();
-          // Initializing a cached lock must finish even if its first caller is cancelled.
-          const locks = yield* Effect.forEach(keys, lockFor).pipe(Effect.uninterruptible);
+          // Get-or-create has no yield boundary, so callers always share the same lock.
+          const locks = yield* Effect.sync(() =>
+            keys.map((key) => {
+              let lock = locksByPath.get(key);
+              if (lock === undefined) {
+                lock = Semaphore.makeUnsafe(1);
+                locksByPath.set(key, lock);
+              }
+              return lock;
+            }),
+          );
           return yield* locks.reduceRight((effect, lock) => lock.withPermits(1)(effect), operation);
         });
 
       const readAndParse = (deckPath: string): Effect.Effect<ParsedFile, ReadError> =>
         fs.readFileString(deckPath).pipe(
-          Effect.mapError((error): ReadError => {
-            if (error._tag === "SystemError" && error.reason === "NotFound") {
-              return new DeckNotFound({ deckPath });
-            }
-            return new DeckReadError({ deckPath, message: error.message });
-          }),
+          Effect.catchReasons(
+            "PlatformError",
+            { NotFound: () => Effect.fail(new DeckNotFound({ deckPath })) },
+            (_, error) => Effect.fail(new DeckReadError({ deckPath, message: error.message })),
+          ),
           Effect.flatMap((content) =>
             parseFile(content).pipe(
               Effect.mapError(
@@ -415,11 +424,8 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
       ): Effect.Effect<Option.Option<FileSystem.File.Info>, DeckFileOperationError> =>
         fs.stat(targetPath).pipe(
           Effect.map(Option.some),
-          Effect.catchAll((error: PlatformError) =>
-            error._tag === "SystemError" && error.reason === "NotFound"
-              ? Effect.succeed(Option.none())
-              : Effect.fail(operationError(operation, error, fields)),
-          ),
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(Option.none())),
+          Effect.mapError((error) => operationError(operation, error, fields)),
         );
 
       const ensureParentDirectory = (
@@ -577,20 +583,18 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
                   })
                   .pipe(
                     Effect.uninterruptible,
-                    Effect.catchAll(
-                      (
-                        error: PlatformError,
-                      ): Effect.Effect<never, DeckAlreadyExists | DeckFileOperationError> => {
-                        if (error._tag === "SystemError" && error.reason === "AlreadyExists") {
-                          return Effect.fail(new DeckAlreadyExists({ deckPath: resolvedPath }));
-                        }
-
-                        return Effect.fail(
+                    Effect.catchReasons(
+                      "PlatformError",
+                      {
+                        AlreadyExists: () =>
+                          Effect.fail(new DeckAlreadyExists({ deckPath: resolvedPath })),
+                      },
+                      (_, error) =>
+                        Effect.fail(
                           operationError("create", error, {
                             deckPath: resolvedPath,
                           }),
-                        );
-                      },
+                        ),
                     ),
                   );
               }),
@@ -605,20 +609,17 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
               [resolvedPath],
               Effect.gen(function* () {
                 const info = yield* fs.stat(resolvedPath).pipe(
-                  Effect.catchAll(
-                    (
-                      error: PlatformError,
-                    ): Effect.Effect<never, DeckFileNotFound | DeckFileOperationError> => {
-                      if (error._tag === "SystemError" && error.reason === "NotFound") {
-                        return Effect.fail(new DeckFileNotFound({ deckPath: resolvedPath }));
-                      }
-
-                      return Effect.fail(
+                  Effect.catchReasons(
+                    "PlatformError",
+                    {
+                      NotFound: () => Effect.fail(new DeckFileNotFound({ deckPath: resolvedPath })),
+                    },
+                    (_, error) =>
+                      Effect.fail(
                         operationError("delete", error, {
                           deckPath: resolvedPath,
                         }),
-                      );
-                    },
+                      ),
                   ),
                 );
 
@@ -630,20 +631,17 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
 
                 yield* fs.remove(resolvedPath, { force: false, recursive: false }).pipe(
                   Effect.uninterruptible,
-                  Effect.catchAll(
-                    (
-                      error: PlatformError,
-                    ): Effect.Effect<never, DeckFileNotFound | DeckFileOperationError> => {
-                      if (error._tag === "SystemError" && error.reason === "NotFound") {
-                        return Effect.fail(new DeckFileNotFound({ deckPath: resolvedPath }));
-                      }
-
-                      return Effect.fail(
+                  Effect.catchReasons(
+                    "PlatformError",
+                    {
+                      NotFound: () => Effect.fail(new DeckFileNotFound({ deckPath: resolvedPath })),
+                    },
+                    (_, error) =>
+                      Effect.fail(
                         operationError("delete", error, {
                           deckPath: resolvedPath,
                         }),
-                      );
-                    },
+                      ),
                   ),
                 );
               }),
@@ -659,21 +657,19 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
               [fromResolvedPath, toResolvedPath],
               Effect.gen(function* () {
                 const fromInfo = yield* fs.stat(fromResolvedPath).pipe(
-                  Effect.catchAll(
-                    (
-                      error: PlatformError,
-                    ): Effect.Effect<never, DeckFileNotFound | DeckFileOperationError> => {
-                      if (error._tag === "SystemError" && error.reason === "NotFound") {
-                        return Effect.fail(new DeckFileNotFound({ deckPath: fromResolvedPath }));
-                      }
-
-                      return Effect.fail(
+                  Effect.catchReasons(
+                    "PlatformError",
+                    {
+                      NotFound: () =>
+                        Effect.fail(new DeckFileNotFound({ deckPath: fromResolvedPath })),
+                    },
+                    (_, error) =>
+                      Effect.fail(
                         operationError("rename", error, {
                           fromPath: fromResolvedPath,
                           toPath: toResolvedPath,
                         }),
-                      );
-                    },
+                      ),
                   ),
                 );
 
@@ -707,51 +703,41 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
                 // This pre-check + lock strategy prevents in-process races only.
                 yield* fs.rename(fromResolvedPath, toResolvedPath).pipe(
                   Effect.uninterruptible,
-                  Effect.catchAll(
-                    (
-                      error: PlatformError,
-                    ): Effect.Effect<
-                      never,
-                      DeckAlreadyExists | DeckFileNotFound | DeckFileOperationError
-                    > =>
-                      Effect.gen(function* () {
-                        if (error._tag === "SystemError" && error.reason === "AlreadyExists") {
-                          return yield* new DeckAlreadyExists({ deckPath: toResolvedPath });
-                        }
-
-                        if (error._tag === "SystemError" && error.reason === "NotFound") {
+                  Effect.catchReasons(
+                    "PlatformError",
+                    {
+                      AlreadyExists: () =>
+                        Effect.fail(new DeckAlreadyExists({ deckPath: toResolvedPath })),
+                      NotFound: (_, error) =>
+                        Effect.gen(function* () {
                           const sourceExists = yield* fs.stat(fromResolvedPath).pipe(
                             Effect.as(true),
-                            Effect.catchAll(
-                              (
-                                sourceError: PlatformError,
-                              ): Effect.Effect<boolean, DeckFileOperationError> => {
-                                if (
-                                  sourceError._tag === "SystemError" &&
-                                  sourceError.reason === "NotFound"
-                                ) {
-                                  return Effect.succeed(false);
-                                }
-
-                                return Effect.fail(
-                                  operationError("rename", sourceError, {
-                                    fromPath: fromResolvedPath,
-                                    toPath: toResolvedPath,
-                                  }),
-                                );
-                              },
+                            Effect.catchReason("PlatformError", "NotFound", () =>
+                              Effect.succeed(false),
+                            ),
+                            Effect.mapError((sourceError) =>
+                              operationError("rename", sourceError, {
+                                fromPath: fromResolvedPath,
+                                toPath: toResolvedPath,
+                              }),
                             ),
                           );
                           if (!sourceExists) {
                             return yield* new DeckFileNotFound({ deckPath: fromResolvedPath });
                           }
-                        }
-
-                        return yield* operationError("rename", error, {
+                          return yield* operationError("rename", error, {
+                            fromPath: fromResolvedPath,
+                            toPath: toResolvedPath,
+                          });
+                        }),
+                    },
+                    (_, error) =>
+                      Effect.fail(
+                        operationError("rename", error, {
                           fromPath: fromResolvedPath,
                           toPath: toResolvedPath,
-                        });
-                      }),
+                        }),
+                      ),
                   ),
                 );
               }),

@@ -1,4 +1,5 @@
-import { FileSystem, Path } from "@effect/platform";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import type { ItemMetadata, EvaluableItemType } from "../core/index.js";
 import {
   DeckManager,
@@ -37,7 +38,7 @@ export interface DeckStore {
   >;
 }
 
-export const DeckStore = Context.GenericTag<DeckStore>("@re/study/DeckStore");
+export const DeckStore = Context.Service<DeckStore>("@re/study/DeckStore");
 
 export const DeckStoreLive: Layer.Layer<
   DeckStore,

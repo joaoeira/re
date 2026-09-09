@@ -1,5 +1,5 @@
-import { FileSystem } from "@effect/platform";
-import { SystemError, type SystemErrorReason } from "@effect/platform/Error";
+import * as FileSystem from "effect/FileSystem";
+import * as PlatformError from "effect/PlatformError";
 import { Effect, Layer, Option } from "effect";
 
 export interface MockFileSystemConfig {
@@ -8,23 +8,23 @@ export interface MockFileSystemConfig {
   readonly fileContents?: Record<string, string>;
   readonly fileBytes?: Record<string, Uint8Array>;
   readonly symlinkTargets?: Record<string, string>;
-  readonly readDirectoryErrors?: Record<string, SystemErrorReason>;
-  readonly statErrors?: Record<string, SystemErrorReason>;
-  readonly readFileErrors?: Record<string, SystemErrorReason>;
-  readonly readLinkErrors?: Record<string, SystemErrorReason>;
-  readonly writeFileErrors?: Record<string, SystemErrorReason>;
-  readonly renameErrors?: Record<string, SystemErrorReason>;
-  readonly removeErrors?: Record<string, SystemErrorReason>;
-  readonly makeDirectoryErrors?: Record<string, SystemErrorReason>;
+  readonly readDirectoryErrors?: Record<string, PlatformError.SystemErrorTag>;
+  readonly statErrors?: Record<string, PlatformError.SystemErrorTag>;
+  readonly readFileErrors?: Record<string, PlatformError.SystemErrorTag>;
+  readonly readLinkErrors?: Record<string, PlatformError.SystemErrorTag>;
+  readonly writeFileErrors?: Record<string, PlatformError.SystemErrorTag>;
+  readonly renameErrors?: Record<string, PlatformError.SystemErrorTag>;
+  readonly removeErrors?: Record<string, PlatformError.SystemErrorTag>;
+  readonly makeDirectoryErrors?: Record<string, PlatformError.SystemErrorTag>;
 }
 
 export const makeSystemError = (
-  reason: SystemErrorReason,
+  reason: PlatformError.SystemErrorTag,
   method: string,
   pathOrDescriptor: string,
-): SystemError =>
-  new SystemError({
-    reason,
+): PlatformError.PlatformError =>
+  PlatformError.systemError({
+    _tag: reason,
     module: "FileSystem",
     method,
     pathOrDescriptor,

@@ -1,6 +1,7 @@
-import { FileSystem, Path } from "@effect/platform";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import type { ParsedFile } from "../core/index.js";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 
 import { DeckManager } from "./DeckManager.js";
 import { scanDecks, type ScanDecksError, type ScanDecksOptions } from "./scanDecks.js";
@@ -83,15 +84,15 @@ export const findWorkspaceDuplicates = (
     const deckPaths = scanResult.decks.map((deck) => deck.absolutePath);
 
     const readResults = yield* Effect.all(
-      deckPaths.map((deckPath) => deckManager.readDeck(deckPath).pipe(Effect.either)),
+      deckPaths.map((deckPath) => deckManager.readDeck(deckPath).pipe(Effect.result)),
       { concurrency: READ_CONCURRENCY },
     );
 
     const loadedDecks: { path: string; file: ParsedFile }[] = [];
     for (let i = 0; i < readResults.length; i++) {
       const result = readResults[i]!;
-      if (result._tag === "Right") {
-        loadedDecks.push({ path: deckPaths[i]!, file: result.right });
+      if (Result.isSuccess(result)) {
+        loadedDecks.push({ path: deckPaths[i]!, file: result.success });
       }
     }
 

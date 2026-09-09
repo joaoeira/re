@@ -1,4 +1,4 @@
-import { Path } from "@effect/platform";
+import * as Path from "effect/Path";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 

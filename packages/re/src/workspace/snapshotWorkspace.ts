@@ -1,4 +1,5 @@
-import { FileSystem, Path } from "@effect/platform";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { parseFile, State, type MetadataParseError, type ParsedFile } from "../core/index.js";
 import { Effect } from "effect";
@@ -47,11 +48,11 @@ export const DeckSnapshotParseErrorSchema = Schema.Struct({
   message: Schema.String,
 });
 
-export const DeckSnapshotSchema = Schema.Union(
+export const DeckSnapshotSchema = Schema.Union([
   DeckSnapshotOkSchema,
   DeckSnapshotReadErrorSchema,
   DeckSnapshotParseErrorSchema,
-);
+]);
 
 export type DeckSnapshot = typeof DeckSnapshotSchema.Type;
 

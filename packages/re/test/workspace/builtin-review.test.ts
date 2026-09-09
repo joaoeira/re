@@ -1,4 +1,5 @@
-import { FileSystem, Path } from "@effect/platform";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as NodeFileSystem from "@effect/platform-node-shared/NodeFileSystem";
 import { describe, expect, it } from "@effect/vitest";
 import { SchedulerLive } from "../../src/scheduler/index.js";
@@ -22,7 +23,7 @@ const runtime = Layer.merge(queueLayer, SchedulerLive);
 const now = new Date("2025-01-10T00:00:00Z");
 
 describe("built-in review", () => {
-  it.scoped("fills the limit with resolvable cards and reports skipped items and decks", () =>
+  it.effect("fills the limit with resolvable cards and reports skipped items and decks", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const rootPath = yield* fs.makeTempDirectoryScoped();
@@ -78,7 +79,7 @@ Another answer
       );
     }).pipe(Effect.provide(runtime)),
   );
-  it.scoped("grades current metadata and permits content edits that preserve identity", () =>
+  it.effect("grades current metadata and permits content edits that preserve identity", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const manager = yield* DeckManager;
@@ -108,7 +109,7 @@ Another answer
     }).pipe(Effect.provide(runtime)),
   );
 
-  it.scoped("does not write when a prepared card key no longer belongs to the card", () =>
+  it.effect("does not write when a prepared card key no longer belongs to the card", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const rootPath = yield* fs.makeTempDirectoryScoped();
@@ -117,10 +118,10 @@ Another answer
       const queue = yield* prepareBuiltinReviewQueue({ rootPath, deckPaths: [deckPath], now });
       const edited = "<!--@ cloze1 0 0 0 0-->\nA {{c2::different deletion}}.\n";
       yield* fs.writeFileString(deckPath, edited);
-      const result = yield* gradeBuiltinCard(queue.cards[0]!.reference, 2, now).pipe(Effect.either);
+      const result = yield* gradeBuiltinCard(queue.cards[0]!.reference, 2, now).pipe(Effect.result);
       expect(result).toMatchObject({
-        _tag: "Left",
-        left: { _tag: "BuiltinCardNotFound", cardId: "cloze1", cardKey: "c1" },
+        _tag: "Failure",
+        failure: { _tag: "BuiltinCardNotFound", cardId: "cloze1", cardKey: "c1" },
       });
       expect(yield* fs.readFileString(deckPath)).toBe(edited);
     }).pipe(Effect.provide(runtime)),

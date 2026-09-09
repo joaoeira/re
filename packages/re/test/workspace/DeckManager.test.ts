@@ -1,4 +1,5 @@
-import { Path } from "@effect/platform";
+import * as Path from "effect/Path";
+import * as FileSystem from "effect/FileSystem";
 import {
   adaptItemType,
   createMetadataWithId,
@@ -9,7 +10,7 @@ import {
   type ItemType,
 } from "../../src/core/index.js";
 import { ContentParseError } from "../../src/core/index.js";
-import { Effect, Either, Layer, Schema } from "effect";
+import { Effect, Result, Layer, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -25,7 +26,11 @@ import {
   DeckReadError,
   ItemValidationError,
 } from "../../src/workspace/index.js";
-import { createMockFileSystem, type MockFileSystemConfig } from "./mock-file-system";
+import {
+  createMockFileSystem,
+  makeSystemError,
+  type MockFileSystemConfig,
+} from "./mock-file-system";
 
 const makeCard = (id: string, state: 0 | 1 | 2 | 3 = 0): string => `<!--@ ${id} 0 0 ${state} 0-->`;
 
@@ -54,7 +59,7 @@ const twoSidedType = adaptItemType({
       reveal: "",
       cardType: "basic",
       key: "basic",
-      responseSchema: Schema.asSchema(Schema.Unknown),
+      responseSchema: Schema.Unknown,
       grade: () => Effect.succeed(0 as Grade),
     },
   ],
@@ -81,7 +86,7 @@ const twoCardType = adaptItemType({
       reveal: "",
       cardType: "forward",
       key: "forward",
-      responseSchema: Schema.asSchema(Schema.Unknown),
+      responseSchema: Schema.Unknown,
       grade: () => Effect.succeed(0 as Grade),
     },
     {
@@ -89,7 +94,7 @@ const twoCardType = adaptItemType({
       reveal: "",
       cardType: "reverse",
       key: "reverse",
-      responseSchema: Schema.asSchema(Schema.Unknown),
+      responseSchema: Schema.Unknown,
       grade: () => Effect.succeed(0 as Grade),
     },
   ],
@@ -113,7 +118,7 @@ const run = <A>(
   }).pipe(Effect.provide(layer), Effect.runPromise);
 };
 
-const runEither = <A, E>(
+const runResult = <A, E>(
   config: MockFileSystemConfig,
   fn: (manager: DeckManager) => Effect.Effect<A, E>,
 ) => {
@@ -122,7 +127,7 @@ const runEither = <A, E>(
     promise: Effect.gen(function* () {
       const manager = yield* DeckManager;
       return yield* fn(manager);
-    }).pipe(Effect.either, Effect.provide(layer), Effect.runPromise),
+    }).pipe(Effect.result, Effect.provide(layer), Effect.runPromise),
     store,
   };
 };
@@ -160,22 +165,22 @@ describe("DeckManager.readDeck", () => {
   });
 
   it("fails with DeckNotFound when file doesn't exist", async () => {
-    const { promise } = runEither({ entryTypes: {}, directories: {} }, (m) =>
+    const { promise } = runResult({ entryTypes: {}, directories: {} }, (m) =>
       m.readDeck("/missing.md"),
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckNotFound);
-      if (result.left instanceof DeckNotFound) {
-        expect(result.left.deckPath).toBe("/missing.md");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(DeckNotFound);
+      if (result.failure instanceof DeckNotFound) {
+        expect(result.failure.deckPath).toBe("/missing.md");
       }
     }
   });
 
   it("fails with DeckReadError on permission denied", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {},
         directories: {},
@@ -186,14 +191,14 @@ describe("DeckManager.readDeck", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckReadError);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(DeckReadError);
     }
   });
 
   it("fails with DeckParseError on malformed metadata", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {},
         directories: {},
@@ -203,9 +208,9 @@ describe("DeckManager.readDeck", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckParseError);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(DeckParseError);
     }
   });
 });
@@ -291,7 +296,7 @@ describe("DeckManager.updateCardMetadata", () => {
   });
 
   it("fails with CardNotFound for nonexistent ID", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {},
         directories: {},
@@ -301,24 +306,24 @@ describe("DeckManager.updateCardMetadata", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(CardNotFound);
-      if (result.left instanceof CardNotFound) {
-        expect(result.left.cardId).toBe("nope");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(CardNotFound);
+      if (result.failure instanceof CardNotFound) {
+        expect(result.failure.cardId).toBe("nope");
       }
     }
   });
 
   it("fails with DeckNotFound when file doesn't exist", async () => {
-    const { promise } = runEither({ entryTypes: {}, directories: {} }, (m) =>
+    const { promise } = runResult({ entryTypes: {}, directories: {} }, (m) =>
       m.updateCardMetadata("/missing.md", "x", meta("x")),
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckNotFound);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(DeckNotFound);
     }
   });
 });
@@ -333,7 +338,7 @@ describe("DeckManager.modifyItem", () => {
           .parseCards(content)
           .pipe(Effect.map((cards) => cards.map((card) => ({ ...card, key: "shared" })))),
     };
-    const { promise, store } = runEither(
+    const { promise, store } = runResult(
       { entryTypes: {}, directories: {}, fileContents: { "/deck.md": original } },
       (manager) =>
         manager.modifyItem(
@@ -349,8 +354,8 @@ describe("DeckManager.modifyItem", () => {
     );
 
     expect(await promise).toMatchObject({
-      _tag: "Left",
-      left: { _tag: "ItemValidationError", message: "Duplicate generated card key: shared" },
+      _tag: "Failure",
+      failure: { _tag: "ItemValidationError", message: "Duplicate generated card key: shared" },
     });
     expect(store["/deck.md"]).toBe(original);
   });
@@ -380,7 +385,7 @@ describe("DeckManager.replaceItem", () => {
   });
 
   it("fails with CardNotFound for nonexistent ID", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {},
         directories: {},
@@ -396,9 +401,9 @@ describe("DeckManager.replaceItem", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(CardNotFound);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(CardNotFound);
     }
   });
 
@@ -409,16 +414,16 @@ describe("DeckManager.replaceItem", () => {
       fileContents: { "/deck.md": deckContent },
     };
     const newItem: Item = { cards: [meta("item-a")], content: "Q\n---\nA\n" };
-    const { promise } = runEither(config, (m) =>
+    const { promise } = runResult(config, (m) =>
       m.replaceItem("/deck.md", "item-a", newItem, twoCardType),
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(ItemValidationError);
-      if (result.left instanceof ItemValidationError) {
-        expect(result.left.message).toContain("Card count mismatch");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(ItemValidationError);
+      if (result.failure instanceof ItemValidationError) {
+        expect(result.failure.message).toContain("Card count mismatch");
       }
     }
   });
@@ -433,16 +438,16 @@ describe("DeckManager.replaceItem", () => {
       cards: [meta("item-a")],
       content: "no separator here",
     };
-    const { promise } = runEither(config, (m) =>
+    const { promise } = runResult(config, (m) =>
       m.replaceItem("/deck.md", "item-a", newItem, twoSidedType),
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(ItemValidationError);
-      if (result.left instanceof ItemValidationError) {
-        expect(result.left.message).toContain("Content parse failed");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(ItemValidationError);
+      if (result.failure instanceof ItemValidationError) {
+        expect(result.failure.message).toContain("Content parse failed");
       }
     }
   });
@@ -524,12 +529,12 @@ describe("DeckManager.appendItem", () => {
       fileContents: { "/deck.md": "# Title\n" },
     };
     const newItem: Item = { cards: [meta("a")], content: "Q\n---\nA\n" };
-    const { promise } = runEither(config, (m) => m.appendItem("/deck.md", newItem, twoCardType));
+    const { promise } = runResult(config, (m) => m.appendItem("/deck.md", newItem, twoCardType));
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(ItemValidationError);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(ItemValidationError);
     }
   });
 });
@@ -589,7 +594,7 @@ describe("DeckManager.removeItem", () => {
 
   it("fails with CardNotFound for nonexistent ID", async () => {
     const content = singleCardItem("a", "Q\n");
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {},
         directories: {},
@@ -599,9 +604,9 @@ describe("DeckManager.removeItem", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(CardNotFound);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(CardNotFound);
     }
   });
 });
@@ -642,7 +647,7 @@ describe("DeckManager.createDeck", () => {
   });
 
   it("fails with DeckFileOperationError when parent directory is missing by default", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {},
         directories: {},
@@ -651,17 +656,17 @@ describe("DeckManager.createDeck", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckFileOperationError);
-      if (result.left instanceof DeckFileOperationError) {
-        expect(result.left.operation).toBe("create");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(DeckFileOperationError);
+      if (result.failure instanceof DeckFileOperationError) {
+        expect(result.failure.operation).toBe("create");
       }
     }
   });
 
   it("fails with DeckAlreadyExists when target deck already exists", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {
           "/workspace": "Directory",
@@ -676,14 +681,14 @@ describe("DeckManager.createDeck", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckAlreadyExists);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(DeckAlreadyExists);
     }
   });
 
   it("maps writeFile wx AlreadyExists to DeckAlreadyExists", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {
           "/workspace": "Directory",
@@ -698,14 +703,14 @@ describe("DeckManager.createDeck", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckAlreadyExists);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(DeckAlreadyExists);
     }
   });
 
   it("fails with InvalidDeckPath for relative paths", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {},
         directories: {},
@@ -714,17 +719,17 @@ describe("DeckManager.createDeck", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(InvalidDeckPath);
-      if (result.left instanceof InvalidDeckPath) {
-        expect(result.left.reason).toBe("absolute_path_required");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(InvalidDeckPath);
+      if (result.failure instanceof InvalidDeckPath) {
+        expect(result.failure.reason).toBe("absolute_path_required");
       }
     }
   });
 
   it("fails with InvalidDeckPath for paths containing NUL bytes", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {},
         directories: {},
@@ -733,11 +738,11 @@ describe("DeckManager.createDeck", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(InvalidDeckPath);
-      if (result.left instanceof InvalidDeckPath) {
-        expect(result.left.reason).toBe("nul_byte_not_allowed");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(InvalidDeckPath);
+      if (result.failure instanceof InvalidDeckPath) {
+        expect(result.failure.reason).toBe("nul_byte_not_allowed");
       }
     }
   });
@@ -761,7 +766,7 @@ describe("DeckManager.deleteDeck", () => {
   });
 
   it("fails with DeckFileNotFound when deck does not exist", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {},
         directories: {},
@@ -770,14 +775,14 @@ describe("DeckManager.deleteDeck", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckFileNotFound);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(DeckFileNotFound);
     }
   });
 
   it("maps remove NotFound to DeckFileNotFound", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {
           "/workspace/books/book1.md": "File",
@@ -794,14 +799,14 @@ describe("DeckManager.deleteDeck", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckFileNotFound);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(DeckFileNotFound);
     }
   });
 
   it("fails with DeckFileOperationError when target is not a file", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {
           "/workspace/books.md": "Directory",
@@ -812,11 +817,11 @@ describe("DeckManager.deleteDeck", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckFileOperationError);
-      if (result.left instanceof DeckFileOperationError) {
-        expect(result.left.operation).toBe("delete");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(DeckFileOperationError);
+      if (result.failure instanceof DeckFileOperationError) {
+        expect(result.failure.operation).toBe("delete");
       }
     }
   });
@@ -844,7 +849,7 @@ describe("DeckManager.renameDeck", () => {
   });
 
   it("fails with DeckAlreadyExists when destination exists", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {
           "/workspace/books/book1.md": "File",
@@ -861,14 +866,14 @@ describe("DeckManager.renameDeck", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckAlreadyExists);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(DeckAlreadyExists);
     }
   });
 
   it("fails with DeckFileNotFound when source missing and source equals destination", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {},
         directories: {},
@@ -877,9 +882,9 @@ describe("DeckManager.renameDeck", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckFileNotFound);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(DeckFileNotFound);
     }
   });
 
@@ -904,7 +909,7 @@ describe("DeckManager.renameDeck", () => {
   });
 
   it("maps rename AlreadyExists to DeckAlreadyExists", async () => {
-    const { promise } = runEither(
+    const { promise } = runResult(
       {
         entryTypes: {
           "/workspace/books/book1.md": "File",
@@ -922,37 +927,79 @@ describe("DeckManager.renameDeck", () => {
     );
     const result = await promise;
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckAlreadyExists);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(DeckAlreadyExists);
     }
   });
 
   it("maps rename NotFound to DeckFileNotFound when source disappears mid-rename", async () => {
-    const { promise } = runEither(
-      {
-        entryTypes: {
-          "/workspace/books/book1.md": "File",
-          "/workspace/books": "Directory",
-        },
-        directories: {},
-        fileContents: {
-          "/workspace/books/book1.md": "# old",
-        },
-        renameErrors: {
-          "/workspace/books/book1.md": "NotFound",
-        },
-        statErrors: {
-          "/workspace/books/book1.md": "NotFound",
-        },
+    const mock = createMockFileSystem({
+      entryTypes: {
+        "/workspace/books/book1.md": "File",
+        "/workspace/books": "Directory",
       },
-      (m) => m.renameDeck("/workspace/books/book1.md", "/workspace/books/book-01.md"),
-    );
-    const result = await promise;
+      directories: {},
+      fileContents: {
+        "/workspace/books/book1.md": "# old",
+      },
+    });
+    const result = await Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const manager = yield* DeckManager.pipe(
+        Effect.provide(
+          DeckManagerLive.pipe(
+            Layer.provide(
+              Layer.merge(
+                Layer.succeed(FileSystem.FileSystem, {
+                  ...fs,
+                  rename: (from) =>
+                    fs
+                      .remove(from)
+                      .pipe(
+                        Effect.andThen(Effect.fail(makeSystemError("NotFound", "rename", from))),
+                      ),
+                }),
+                Path.layer,
+              ),
+            ),
+          ),
+        ),
+      );
+      return yield* manager
+        .renameDeck("/workspace/books/book1.md", "/workspace/books/book-01.md")
+        .pipe(Effect.result);
+    }).pipe(Effect.provide(mock.layer), Effect.runPromise);
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(DeckFileNotFound);
-    }
+    expect(result).toMatchObject({
+      _tag: "Failure",
+      failure: { _tag: "DeckFileNotFound", deckPath: "/workspace/books/book1.md" },
+    });
+    expect(mock.store["/workspace/books/book1.md"]).toBeUndefined();
+  });
+
+  it("preserves the source and reports an operation error when rename cannot find another path", async () => {
+    const { promise, store } = runResult(
+      {
+        entryTypes: { "/workspace/books/book1.md": "File", "/workspace/books": "Directory" },
+        directories: {},
+        fileContents: { "/workspace/books/book1.md": "# old" },
+        renameErrors: { "/workspace/books/book1.md": "NotFound" },
+      },
+      (manager) => manager.renameDeck("/workspace/books/book1.md", "/workspace/books/book-01.md"),
+    );
+
+    expect(await promise).toMatchObject({
+      _tag: "Failure",
+      failure: {
+        _tag: "DeckFileOperationError",
+        operation: "rename",
+        fromPath: "/workspace/books/book1.md",
+        toPath: "/workspace/books/book-01.md",
+        message: expect.stringContaining("NotFound"),
+      },
+    });
+    expect(store["/workspace/books/book1.md"]).toBe("# old");
+    expect(store["/workspace/books/book-01.md"]).toBeUndefined();
   });
 });

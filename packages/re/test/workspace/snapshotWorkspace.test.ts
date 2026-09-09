@@ -1,6 +1,6 @@
-import { Path } from "@effect/platform";
+import * as Path from "effect/Path";
 import { ParseError } from "../../src/core/index.js";
-import { Effect, Either, Layer } from "effect";
+import { Effect, Result, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -23,13 +23,13 @@ const runSnapshot = (
     Effect.runPromise,
   );
 
-const runSnapshotEither = (
+const runSnapshotResult = (
   rootPath: string,
   config: MockFileSystemConfig,
   options?: Parameters<typeof snapshotWorkspace>[1],
 ) =>
   snapshotWorkspace(rootPath, options).pipe(
-    Effect.either,
+    Effect.result,
     Effect.provide(Layer.merge(createMockFileSystemLayer(config), Path.layer)),
     Effect.runPromise,
   );
@@ -42,30 +42,30 @@ Answer
 
 describe("snapshotWorkspace", () => {
   it("returns WorkspaceRootNotFound for missing roots", async () => {
-    const result = await runSnapshotEither("/root", {
+    const result = await runSnapshotResult("/root", {
       entryTypes: {},
       directories: {},
     });
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(WorkspaceRootNotFound);
-      expect(result.left.rootPath).toBe("/root");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(WorkspaceRootNotFound);
+      expect(result.failure.rootPath).toBe("/root");
     }
   });
 
   it("returns WorkspaceRootNotDirectory for non-directory roots", async () => {
-    const result = await runSnapshotEither("/root/file.md", {
+    const result = await runSnapshotResult("/root/file.md", {
       entryTypes: {
         "/root/file.md": "File",
       },
       directories: {},
     });
 
-    expect(Either.isLeft(result)).toBe(true);
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(WorkspaceRootNotDirectory);
-      expect(result.left.rootPath).toBe("/root/file.md");
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(WorkspaceRootNotDirectory);
+      expect(result.failure.rootPath).toBe("/root/file.md");
     }
   });
 

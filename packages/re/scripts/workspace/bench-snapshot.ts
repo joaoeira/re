@@ -333,7 +333,7 @@ const timedSnapshot = async (
   const start = performance.now();
   const result = await Effect.runPromise(
     snapshotWorkspace(root, { asOf }).pipe(
-      Effect.mapError((error) => new Error(toScanDecksErrorMessage(error))),
+      Effect.catch((error) => Effect.die(new Error(toScanDecksErrorMessage(error)))),
       Effect.provide(PlatformLive),
     ),
   );

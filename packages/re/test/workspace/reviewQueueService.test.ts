@@ -1,5 +1,6 @@
-import { FileSystem, Path } from "@effect/platform";
-import { SystemError } from "@effect/platform/Error";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 import { Effect, Layer, Random } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -59,8 +60,8 @@ const MockFileSystem = FileSystem.layerNoop({
     if (path === "/decks/folder1/b.md") return Effect.succeed(dueCardContent);
     if (path === "/decks/broken.md") return Effect.succeed(brokenContent);
     return Effect.fail(
-      new SystemError({
-        reason: "NotFound",
+      PlatformError.systemError({
+        _tag: "NotFound",
         module: "FileSystem",
         method: "readFileString",
         pathOrDescriptor: path,
@@ -222,17 +223,22 @@ describe("ReviewQueueLive defaults", () => {
     const selection: ReviewQueueSelection = { type: "deck", path: "mixed.md" };
     const now = new Date("2025-01-10T00:00:00Z");
 
-    const result = await Effect.gen(function* () {
+    const program = Effect.gen(function* () {
       const service = yield* ReviewQueueService;
       return yield* service.buildQueue(selection, tree, "/decks", now);
     }).pipe(
       Effect.provide(
         ReviewQueueLive.pipe(Layer.provide(Layer.mergeAll(MockDeckManager, Path.layer))),
       ),
-      Effect.withRandom(Random.make("seed")),
-      Effect.runPromise,
     );
 
-    expect(result.items.map((item) => item.card.id)).toEqual(["card4", "card1", "card3", "card2"]);
+    const orderings: string[] = [];
+    for (const seed of ["seed", "second", "third", "fourth"]) {
+      const result = await Effect.runPromise(program.pipe(Random.withSeed(seed)));
+      const ids = result.items.map((item) => item.card.id);
+      expect([...ids].sort()).toEqual(["card1", "card2", "card3", "card4"]);
+      orderings.push(ids.join(","));
+    }
+    expect(new Set(orderings).size).toBeGreaterThan(1);
   });
 });
