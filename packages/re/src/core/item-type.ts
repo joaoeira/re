@@ -1,7 +1,7 @@
-import { Data, Effect, Option, Schema, type ParseResult } from "effect";
+import { Data, Effect, Option, Schema } from "effect";
 import type { Item } from "./types.js";
 
-export const GradeSchema = Schema.Literal(0, 1, 2, 3);
+export const GradeSchema = Schema.Literals([0, 1, 2, 3]);
 export type Grade = typeof GradeSchema.Type;
 
 export interface ContentParseDiagnostic {
@@ -29,7 +29,7 @@ export interface CardSpec<Response, GradeError = never> {
   readonly prompt: string;
   readonly reveal: string;
   readonly cardType: string;
-  readonly responseSchema: Schema.Schema<Response>;
+  readonly responseSchema: Schema.Codec<Response, Response, never, never>;
   readonly grade: (response: Response) => Effect.Effect<Grade, GradeError>;
 }
 
@@ -42,7 +42,7 @@ export interface ItemType<Content, Response = unknown, GradeError = never> {
 export class ResponseValidationError extends Data.TaggedError("ResponseValidationError")<{
   readonly cardType: string;
   readonly message: string;
-  readonly cause: ParseResult.ParseError;
+  readonly cause: Schema.SchemaError;
 }> {}
 
 /** A card that validates an unknown response before invoking its typed grader. */
@@ -80,7 +80,7 @@ export const adaptItemType = <Content, Response, GradeError>(
             cardType: card.cardType,
             evaluate: (response) =>
               Effect.suspend(() =>
-                Schema.decodeUnknown(card.responseSchema)(response).pipe(
+                Schema.decodeUnknownEffect(card.responseSchema)(response).pipe(
                   Effect.mapError(
                     (cause) =>
                       new ResponseValidationError({
@@ -217,10 +217,12 @@ export function inferCards(
     Effect.suspend(() => {
       const type = types[index];
       if (!type) {
-        return new NoMatchingTypeError({
-          raw: content,
-          triedTypes: types.map((type) => type.name),
-        });
+        return Effect.fail(
+          new NoMatchingTypeError({
+            raw: content,
+            triedTypes: types.map((type) => type.name),
+          }),
+        );
       }
 
       return type.parseCards(content).pipe(

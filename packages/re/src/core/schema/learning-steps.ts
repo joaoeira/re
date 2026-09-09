@@ -1,23 +1,25 @@
-import { ParseResult, Schema } from "effect";
+import { Effect, Schema, SchemaGetter, SchemaIssue } from "effect";
 
 /**
  * Pattern for non-negative integers
  */
 const LEARNING_STEPS_PATTERN = /^(0|[1-9]\d*)$/;
 
-export const LearningStepsFromString: Schema.Schema<number, string> = Schema.transformOrFail(
-  Schema.String,
-  Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
-  {
-    strict: true,
-    decode: (s, _options, ast) => {
-      if (!LEARNING_STEPS_PATTERN.test(s)) {
-        return ParseResult.fail(
-          new ParseResult.Type(ast, s, `LearningSteps must be non-negative integer, got "${s}"`),
-        );
-      }
-      return ParseResult.succeed(parseInt(s, 10));
-    },
-    encode: (n) => ParseResult.succeed(n.toString()),
-  },
-);
+export const LearningStepsFromString: Schema.Codec<number, string, never, never> =
+  Schema.String.pipe(
+    Schema.decodeTo(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), {
+      decode: SchemaGetter.transformOrFail((s, options) => {
+        if (!LEARNING_STEPS_PATTERN.test(s)) {
+          return Effect.fail(
+            new SchemaIssue.InvalidValue(
+              { message: `LearningSteps must be non-negative integer, got "${s}"` },
+              s,
+              options,
+            ),
+          );
+        }
+        return Effect.succeed(parseInt(s, 10));
+      }),
+      encode: SchemaGetter.transform((n) => n.toString()),
+    }),
+  );

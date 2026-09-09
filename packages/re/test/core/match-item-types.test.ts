@@ -19,7 +19,7 @@ const type = (name: string, count: number): ItemType<string, Grade, GradeError> 
   parse: (content) =>
     content === "valid"
       ? Effect.succeed(content)
-      : new ContentParseError({ type: name, raw: content, message: "Invalid" }),
+      : Effect.fail(new ContentParseError({ type: name, raw: content, message: "Invalid" })),
   cards: () =>
     Array.from({ length: count }, (_, index) => manualCardSpec("", "", name, String(index))),
 });
@@ -55,10 +55,10 @@ describe("matchItemTypes", () => {
         const result = yield* matchItemTypes(
           [adaptItemType(type("first", 2)), adaptItemType(type("second", 1))],
           saved(3),
-        ).pipe(Effect.either);
+        ).pipe(Effect.result);
         expect(result).toMatchObject({
-          _tag: "Left",
-          left: {
+          _tag: "Failure",
+          failure: {
             _tag: "ItemCardCountMismatch",
             metadataCount: 3,
             parseableTypes: [
@@ -75,8 +75,8 @@ describe("matchItemTypes", () => {
       const result = yield* matchItemTypes(
         [adaptItemType(type("first", 1))],
         saved(1, "invalid"),
-      ).pipe(Effect.either);
-      expect(result).toMatchObject({ _tag: "Left", left: { _tag: "NoMatchingTypeError" } });
+      ).pipe(Effect.result);
+      expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "NoMatchingTypeError" } });
     }),
   );
 

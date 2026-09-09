@@ -4,10 +4,9 @@ import { LearningStepsFromString } from "./learning-steps.js";
 import { NumericFieldSchema } from "./numeric.js";
 import { StateSchema } from "./state.js";
 
-export const ItemIdSchema: Schema.Schema<ItemId, string> = Schema.String.pipe(
-  Schema.nonEmptyString(),
-  Schema.brand("ItemId"),
-) as Schema.Schema<ItemId, string>;
+export const ItemIdSchema: Schema.Codec<ItemId, string, never, never> = Schema.String.check(
+  Schema.isNonEmpty(),
+).pipe(Schema.brand("ItemId"));
 
 export const isItemId = (s: string): s is ItemId => s.length > 0;
 
@@ -16,11 +15,11 @@ export const isItemId = (s: string): s is ItemId => s.length > 0;
  * This does not validate relationships between fields or the Markdown encoding.
  */
 export const ItemMetadataSchema = Schema.Struct({
-  id: Schema.typeSchema(ItemIdSchema),
+  id: Schema.toType(ItemIdSchema),
   stability: NumericFieldSchema,
   difficulty: NumericFieldSchema,
   state: StateSchema,
-  learningSteps: Schema.typeSchema(LearningStepsFromString),
-  lastReview: Schema.NullOr(Schema.ValidDateFromSelf),
-  due: Schema.NullOr(Schema.ValidDateFromSelf),
-}).annotations({ identifier: "ItemMetadata" }) satisfies Schema.Schema<ItemMetadata>;
+  learningSteps: Schema.toType(LearningStepsFromString),
+  lastReview: Schema.NullOr(Schema.Date),
+  due: Schema.NullOr(Schema.Date),
+}).annotate({ identifier: "ItemMetadata" }) satisfies Schema.Codec<ItemMetadata>;

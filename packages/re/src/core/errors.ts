@@ -27,10 +27,10 @@ export class InvalidFieldValue extends Schema.TaggedError<InvalidFieldValue>(
   expected: Schema.String,
 }) {}
 
-export const MetadataParseErrorSchema = Schema.Union(
+export const MetadataParseErrorSchema = Schema.Union([
   ParseError,
   InvalidMetadataFormat,
   InvalidFieldValue,
-);
+]);
 
 export type MetadataParseError = typeof MetadataParseErrorSchema.Type;

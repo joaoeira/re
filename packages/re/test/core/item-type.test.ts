@@ -1,4 +1,4 @@
-import { Data, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
+import { Data, Deferred, Effect, Exit, Fiber, Schema } from "effect";
 import { describe, expect, it } from "@effect/vitest";
 import { expectTypeOf } from "vitest";
 import {
@@ -6,6 +6,7 @@ import {
   ContentParseError,
   inferCards,
   type Grade,
+  type CardSpec,
   type ItemType,
   type ResponseValidationError,
 } from "../../src/core/index";
@@ -21,7 +22,7 @@ const textType = <E>(
   parse: (raw) =>
     raw.startsWith("text:")
       ? Effect.succeed({ answer: raw.slice(5) })
-      : new ContentParseError({ type: "text", raw, message: "Expected text: prefix" }),
+      : Effect.fail(new ContentParseError({ type: "text", raw, message: "Expected text: prefix" })),
   cards: ({ answer }) => [
     {
       key: "main",
@@ -42,6 +43,22 @@ class NumberGradeError extends Data.TaggedError("NumberGradeError")<{
   readonly message: string;
 }> {}
 
+// The public codec contract preserves both representation and environment constraints.
+// These assertions are checked by TypeScript, not just Vitest's runtime transpilation.
+interface ResponseCodecService {
+  readonly codecService: unique symbol;
+}
+expectTypeOf(Schema.String).toExtend<CardSpec<string>["responseSchema"]>();
+expectTypeOf(Schema.Trim).toExtend<CardSpec<string>["responseSchema"]>();
+expectTypeOf(Schema.Number).toExtend<CardSpec<number>["responseSchema"]>();
+expectTypeOf(Schema.NumberFromString).not.toExtend<CardSpec<number>["responseSchema"]>();
+expectTypeOf<Schema.Codec<string, string, ResponseCodecService>>().not.toExtend<
+  CardSpec<string>["responseSchema"]
+>();
+expectTypeOf<Schema.Codec<string, string, never, ResponseCodecService>>().not.toExtend<
+  CardSpec<string>["responseSchema"]
+>();
+
 describe("card evaluation", () => {
   it.effect("keeps each parsed value paired with its grader in a mixed registry", () =>
     Effect.gen(function* () {
@@ -54,7 +71,9 @@ describe("card evaluation", () => {
         parse: (raw) =>
           raw.startsWith("number:")
             ? Effect.succeed(Number(raw.slice(7)))
-            : new ContentParseError({ type: "number", raw, message: "Expected number: prefix" }),
+            : Effect.fail(
+                new ContentParseError({ type: "number", raw, message: "Expected number: prefix" }),
+              ),
         cards: (answer) => [
           {
             key: "main",
@@ -95,6 +114,7 @@ describe("card evaluation", () => {
       const error = yield* card.evaluate(42).pipe(Effect.flip);
       expect(error._tag).toBe("ResponseValidationError");
       expect(error.cardType).toBe("text");
+      expectTypeOf(error.cause).toEqualTypeOf<Schema.SchemaError>();
       expect(responses).toEqual([]);
     }),
   );
@@ -104,13 +124,15 @@ describe("card evaluation", () => {
       const started = yield* Deferred.make<void>();
       const result = yield* Deferred.make<Grade>();
       const type = adaptItemType(
-        textType(() => Deferred.succeed(started, undefined).pipe(Effect.zipRight(result))),
+        textType(() =>
+          Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(result))),
+        ),
       );
       const { cards } = yield* inferCards([type], "text:Paris");
-      const fiber = yield* cards[0]!.evaluate("Paris").pipe(Effect.fork);
-      yield* started;
-      yield* Effect.yieldNow();
-      expect(Option.isNone(yield* Fiber.poll(fiber))).toBe(true);
+      const fiber = yield* cards[0]!.evaluate("Paris").pipe(Effect.forkChild);
+      yield* Deferred.await(started);
+      yield* Effect.yieldNow;
+      expect(fiber.pollUnsafe()).toBeUndefined();
       yield* Deferred.succeed(result, 3);
       expect(yield* Fiber.join(fiber)).toBe(3);
     }),
@@ -155,15 +177,16 @@ describe("card evaluation", () => {
       const type = adaptItemType(
         textType(() =>
           Deferred.succeed(started, undefined).pipe(
-            Effect.zipRight(Effect.never),
+            Effect.andThen(Effect.never),
             Effect.ensuring(Deferred.succeed(cleanedUp, undefined)),
           ),
         ),
       );
       const { cards } = yield* inferCards([type], "text:Paris");
-      const fiber = yield* cards[0]!.evaluate("Paris").pipe(Effect.fork);
-      yield* started;
-      expect(Exit.isInterrupted(yield* Fiber.interrupt(fiber))).toBe(true);
+      const fiber = yield* cards[0]!.evaluate("Paris").pipe(Effect.forkChild);
+      yield* Deferred.await(started);
+      yield* Fiber.interrupt(fiber);
+      expect(Exit.hasInterrupts(yield* Fiber.await(fiber))).toBe(true);
       expect(yield* Deferred.isDone(cleanedUp)).toBe(true);
     }),
   );

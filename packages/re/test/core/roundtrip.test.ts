@@ -4,7 +4,7 @@ import { parseFile } from "../../src/core/parser/index.ts";
 import { serializeFile } from "../../src/core/serializer/index.ts";
 
 describe("round-trip", () => {
-  it.scoped("preserves content byte-perfect", () =>
+  it.effect("preserves content byte-perfect", () =>
     Effect.gen(function* () {
       const original = `<!--@ abc123 0 0 0 0-->
 What is the capital of France?
@@ -18,7 +18,7 @@ Paris
     }),
   );
 
-  it.scoped("preserves preamble byte-perfect", () =>
+  it.effect("preserves preamble byte-perfect", () =>
     Effect.gen(function* () {
       const original = `---
 title: My Flashcards
@@ -39,7 +39,7 @@ A1
     }),
   );
 
-  it.scoped("preserves numeric precision", () =>
+  it.effect("preserves numeric precision", () =>
     Effect.gen(function* () {
       const original = `<!--@ abc123 5.20 4.30 2 0 2025-01-04T10:30:00.000Z 2025-01-09T15:18:00.000Z-->
 Content
@@ -51,7 +51,7 @@ Content
     }),
   );
 
-  it.scoped("canonicalizes timestamps to UTC", () =>
+  it.effect("canonicalizes timestamps to UTC", () =>
     Effect.gen(function* () {
       // Input with +02:00 offset
       const original = `<!--@ abc123 0 0 2 0 2025-01-04T12:30:00+02:00 2025-01-04T10:30:00.000Z-->
@@ -68,7 +68,7 @@ Content
     }),
   );
 
-  it.scoped("preserves multiple items", () =>
+  it.effect("preserves multiple items", () =>
     Effect.gen(function* () {
       const original = `<!--@ item1 0 0 0 0-->
 Q1
@@ -90,7 +90,7 @@ A3
     }),
   );
 
-  it.scoped("preserves CRLF in content", () =>
+  it.effect("preserves CRLF in content", () =>
     Effect.gen(function* () {
       const original = "<!--@ abc123 0 0 0 0-->\nLine1\r\nLine2\r\n";
       const parsed = yield* parseFile(original);
@@ -100,7 +100,7 @@ A3
     }),
   );
 
-  it.scoped("preserves content without trailing newline", () =>
+  it.effect("preserves content without trailing newline", () =>
     Effect.gen(function* () {
       const original = `<!--@ abc123 0 0 0 0-->
 Content without trailing newline`;
@@ -111,7 +111,7 @@ Content without trailing newline`;
     }),
   );
 
-  it.scoped("preserves empty content between items", () =>
+  it.effect("preserves empty content between items", () =>
     Effect.gen(function* () {
       const original = `<!--@ item1 0 0 0 0-->
 <!--@ item2 0 0 0 0-->
@@ -124,7 +124,7 @@ Content
     }),
   );
 
-  it.scoped("preserves horizontal rules in content", () =>
+  it.effect("preserves horizontal rules in content", () =>
     Effect.gen(function* () {
       const original = `<!--@ abc123 0 0 0 0-->
 Question here
@@ -140,7 +140,7 @@ More content
     }),
   );
 
-  it.scoped("preserves code fences in content", () =>
+  it.effect("preserves code fences in content", () =>
     Effect.gen(function* () {
       const original = `<!--@ abc123 0 0 0 0-->
 What does this code do?
@@ -162,7 +162,7 @@ It adds two numbers.
     }),
   );
 
-  it.scoped("preserves markdown image syntax byte-perfect", () =>
+  it.effect("preserves markdown image syntax byte-perfect", () =>
     Effect.gen(function* () {
       const original = `<!--@ abc123 0 0 0 0-->
 Identify this organelle.
@@ -180,7 +180,7 @@ Mitochondrion
     }),
   );
 
-  it.scoped("preserves preamble-only files", () =>
+  it.effect("preserves preamble-only files", () =>
     Effect.gen(function* () {
       const original = `This is just a regular file.
 No flashcards here.

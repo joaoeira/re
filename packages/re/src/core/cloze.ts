@@ -9,13 +9,13 @@ export interface ClozeSyntaxMatch {
   readonly end: number;
 }
 
-export const ClozeSyntaxReasonSchema = Schema.Literal(
+export const ClozeSyntaxReasonSchema = Schema.Literals([
   "unclosed",
   "unbalanced_braces",
   "missing_index",
   "malformed_index",
   "missing_separator",
-);
+]);
 
 export type ClozeSyntaxReason = typeof ClozeSyntaxReasonSchema.Type;
 
@@ -240,7 +240,7 @@ export const parseClozeDeletionsStrict = (
   if (first === undefined) {
     return Effect.succeed(matches);
   }
-  return new ClozeSyntaxError({ issues: [first, ...rest] });
+  return Effect.fail(new ClozeSyntaxError({ issues: [first, ...rest] }));
 };
 
 export const nextClozeDeletionIndex = (content: string): number => {

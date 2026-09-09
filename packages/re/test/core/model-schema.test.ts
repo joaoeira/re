@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, ParseResult, Schema } from "effect";
+import { Effect, SchemaIssue, Schema } from "effect";
 import {
   createMetadata,
   ItemMetadataSchema,
@@ -17,8 +17,8 @@ describe("model schemas", () => {
         "<!--@ fresh 0 0 0 0-->\n" +
         "Shared content\r\n";
       const parsed = yield* parseFile(markdown);
-      const validated = yield* Schema.decodeUnknown(ParsedFileSchema)(parsed);
-      const encoded = yield* Schema.encode(ParsedFileSchema)(validated);
+      const validated = yield* Schema.decodeUnknownEffect(ParsedFileSchema)(parsed);
+      const encoded = yield* Schema.encodeEffect(ParsedFileSchema)(validated);
 
       expect(serializeFile(encoded)).toBe(markdown);
     }),
@@ -27,12 +27,12 @@ describe("model schemas", () => {
   it.effect("report the location of an invalid card inside an imported file", () =>
     Effect.gen(function* () {
       const card = createMetadata();
-      const error = yield* Schema.decodeUnknown(ParsedFileSchema)({
+      const error = yield* Schema.decodeUnknownEffect(ParsedFileSchema)({
         preamble: "",
         items: [{ content: "Question", cards: [card, { ...card, state: 9 }] }],
       }).pipe(Effect.flip);
 
-      expect(ParseResult.ArrayFormatter.formatErrorSync(error)).toEqual(
+      expect(SchemaIssue.makeFormatterStandardSchemaV1()(error.issue).issues).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ path: ["items", 0, "cards", 1, "state"] }),
         ]),
@@ -44,12 +44,12 @@ describe("model schemas", () => {
     Effect.gen(function* () {
       for (const field of ["lastReview", "due"] as const) {
         for (const value of ["2025-01-04T08:30:00.000Z", new Date(NaN)]) {
-          const error = yield* Schema.decodeUnknown(ItemMetadataSchema)({
+          const error = yield* Schema.decodeUnknownEffect(ItemMetadataSchema)({
             ...createMetadata(),
             [field]: value,
           }).pipe(Effect.flip);
 
-          expect(ParseResult.ArrayFormatter.formatErrorSync(error)).toEqual(
+          expect(SchemaIssue.makeFormatterStandardSchemaV1()(error.issue).issues).toEqual(
             expect.arrayContaining([expect.objectContaining({ path: [field] })]),
           );
         }

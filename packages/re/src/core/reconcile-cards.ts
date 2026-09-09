@@ -1,4 +1,4 @@
-import { Data, Either, Option } from "effect";
+import { Data, Result, Option } from "effect";
 import type { ItemMetadata } from "./types.js";
 
 export class DuplicateCardKey extends Data.TaggedError("DuplicateCardKey")<{
@@ -31,9 +31,9 @@ export const reconcileCards = (
     readonly cards: readonly ItemMetadata[];
   },
   nextKeys: readonly string[],
-): Either.Either<readonly Option.Option<ItemMetadata>[], ReconcileError> => {
+): Result.Result<readonly Option.Option<ItemMetadata>[], ReconcileError> => {
   if (previous.keys.length !== previous.cards.length) {
-    return Either.left(
+    return Result.fail(
       new ReconcileCardCountMismatch({
         keyCount: previous.keys.length,
         metadataCount: previous.cards.length,
@@ -44,11 +44,11 @@ export const reconcileCards = (
   for (const keys of [previous.keys, nextKeys]) {
     const seen = new Set<string>();
     for (const key of keys) {
-      if (seen.has(key)) return Either.left(new DuplicateCardKey({ key }));
+      if (seen.has(key)) return Result.fail(new DuplicateCardKey({ key }));
       seen.add(key);
     }
   }
 
   const byKey = new Map(previous.keys.map((key, index) => [key, previous.cards[index]!]));
-  return Either.right(nextKeys.map((key) => Option.fromNullable(byKey.get(key))));
+  return Result.succeed(nextKeys.map((key) => Option.fromNullishOr(byKey.get(key))));
 };

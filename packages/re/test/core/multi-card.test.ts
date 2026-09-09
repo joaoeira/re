@@ -5,7 +5,7 @@ import { serializeFile } from "../../src/core/serializer/index.ts";
 
 describe("multi-card items", () => {
   describe("parsing", () => {
-    it.scoped("parses consecutive metadata lines as one item with multiple cards", () =>
+    it.effect("parses consecutive metadata lines as one item with multiple cards", () =>
       Effect.gen(function* () {
         const content = `<!--@ card1 0 0 0 0-->
 <!--@ card2 0 0 0 0-->
@@ -21,7 +21,7 @@ The atomic number of [carbon] is [6].
       }),
     );
 
-    it.scoped("parses three consecutive metadata lines as one item with three cards", () =>
+    it.effect("parses three consecutive metadata lines as one item with three cards", () =>
       Effect.gen(function* () {
         const content = `<!--@ card1 0 0 0 0-->
 <!--@ card2 0 0 0 0-->
@@ -38,7 +38,7 @@ The atomic number of [carbon] is [6].
       }),
     );
 
-    it.scoped("blank line between metadata lines breaks grouping", () =>
+    it.effect("blank line between metadata lines breaks grouping", () =>
       Effect.gen(function* () {
         const content = `<!--@ card1 0 0 0 0-->
 
@@ -57,7 +57,7 @@ Content for card2
       }),
     );
 
-    it.scoped("single metadata line creates item with one card (backwards compatible)", () =>
+    it.effect("single metadata line creates item with one card (backwards compatible)", () =>
       Effect.gen(function* () {
         const content = `<!--@ abc123 0 0 0 0-->
 What is the capital of France?
@@ -72,7 +72,7 @@ Paris
       }),
     );
 
-    it.scoped("mixed single and multi-card items", () =>
+    it.effect("mixed single and multi-card items", () =>
       Effect.gen(function* () {
         const content = `<!--@ single1 0 0 0 0-->
 Regular flashcard Q1
@@ -106,7 +106,7 @@ A2
       }),
     );
 
-    it.scoped("preserves individual card metadata in multi-card item", () =>
+    it.effect("preserves individual card metadata in multi-card item", () =>
       Effect.gen(function* () {
         const content = `<!--@ card1 1.5 2.5 1 0-->
 <!--@ card2 5.2 4.3 2 1 2025-01-04T10:30:00Z 2025-01-09T15:18:00.000Z-->
@@ -131,7 +131,7 @@ Shared content
       }),
     );
 
-    it.scoped("multi-card item with preamble", () =>
+    it.effect("multi-card item with preamble", () =>
       Effect.gen(function* () {
         const content = `---
 title: Chemistry Notes
@@ -156,7 +156,7 @@ title: Chemistry Notes
       }),
     );
 
-    it.scoped("multiple multi-card items in sequence", () =>
+    it.effect("multiple multi-card items in sequence", () =>
       Effect.gen(function* () {
         const content = `<!--@ a1 0 0 0 0-->
 <!--@ a2 0 0 0 0-->
@@ -174,7 +174,7 @@ Second cloze: [x], [y], and [z]
       }),
     );
 
-    it.scoped("multi-card item at EOF with empty content", () =>
+    it.effect("multi-card item at EOF with empty content", () =>
       Effect.gen(function* () {
         const content = `<!--@ card1 0 0 0 0-->
 <!--@ card2 0 0 0 0-->`;
@@ -188,7 +188,7 @@ Second cloze: [x], [y], and [z]
       }),
     );
 
-    it.scoped("multi-card item followed by single-card item (no blank line between)", () =>
+    it.effect("multi-card item followed by single-card item (no blank line between)", () =>
       Effect.gen(function* () {
         // Content breaks the first group, then a new item starts
         const content = `<!--@ card1 0 0 0 0-->
@@ -207,7 +207,7 @@ Regular flashcard
       }),
     );
 
-    it.scoped("handles CRLF in metadata lines", () =>
+    it.effect("handles CRLF in metadata lines", () =>
       Effect.gen(function* () {
         // Metadata lines with CRLF endings
         const content = "<!--@ card1 0 0 0 0-->\r\n<!--@ card2 0 0 0 0-->\r\nContent\r\n";
@@ -222,7 +222,7 @@ Regular flashcard
   });
 
   describe("serialization", () => {
-    it.scoped("serializes multi-card item with all metadata lines before content", () =>
+    it.effect("serializes multi-card item with all metadata lines before content", () =>
       Effect.gen(function* () {
         const original = `<!--@ card1 0 0 0 0-->
 <!--@ card2 0 0 0 0-->
@@ -235,7 +235,7 @@ The atomic number of [carbon] is [6].
       }),
     );
 
-    it.scoped("serializes mixed single and multi-card items", () =>
+    it.effect("serializes mixed single and multi-card items", () =>
       Effect.gen(function* () {
         const original = `<!--@ single 0 0 0 0-->
 Regular card
@@ -250,7 +250,7 @@ Cloze card
       }),
     );
 
-    it.scoped("preserves card order in multi-card items", () =>
+    it.effect("preserves card order in multi-card items", () =>
       Effect.gen(function* () {
         const original = `<!--@ first 1.0 2.0 1 0-->
 <!--@ second 3.0 4.0 2 0-->
@@ -272,7 +272,7 @@ Content
   });
 
   describe("round-trip", () => {
-    it.scoped("round-trips multi-card items byte-perfect", () =>
+    it.effect("round-trips multi-card items byte-perfect", () =>
       Effect.gen(function* () {
         const original = `<!--@ card1 5.20 4.30 2 1 2025-01-04T10:30:00.000Z 2025-01-09T15:18:00.000Z-->
 <!--@ card2 1.50 2.50 0 0-->
@@ -285,7 +285,7 @@ The atomic number of [carbon] is [6].
       }),
     );
 
-    it.scoped("round-trips complex file with preamble, single, and multi-card items", () =>
+    it.effect("round-trips complex file with preamble, single, and multi-card items", () =>
       Effect.gen(function* () {
         const original = `---
 title: Chemistry & Geography
@@ -321,7 +321,7 @@ What is the speed of light?
       }),
     );
 
-    it.scoped("round-trips preserving CRLF in multi-card content", () =>
+    it.effect("round-trips preserving CRLF in multi-card content", () =>
       Effect.gen(function* () {
         const original = "<!--@ card1 0 0 0 0-->\n<!--@ card2 0 0 0 0-->\nLine1\r\nLine2\r\n";
         const parsed = yield* parseFile(original);
@@ -333,7 +333,7 @@ What is the speed of light?
   });
 
   describe("error handling", () => {
-    it.scoped("fails if any card in multi-card item has invalid metadata", () =>
+    it.effect("fails if any card in multi-card item has invalid metadata", () =>
       Effect.gen(function* () {
         const content = `<!--@ card1 0 0 0 0-->
 <!--@ card2 invalid 0 0 0-->
@@ -344,7 +344,7 @@ Content
       }),
     );
 
-    it.scoped("fails if any card in multi-card item has invalid state", () =>
+    it.effect("fails if any card in multi-card item has invalid state", () =>
       Effect.gen(function* () {
         const content = `<!--@ card1 0 0 0 0-->
 <!--@ card2 0 0 99 0-->

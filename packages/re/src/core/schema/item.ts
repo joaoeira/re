@@ -6,10 +6,10 @@ import { ItemMetadataSchema } from "./metadata.js";
 export const ItemSchema = Schema.Struct({
   cards: Schema.Array(ItemMetadataSchema),
   content: Schema.String,
-}).annotations({ identifier: "Item" }) satisfies Schema.Schema<Item>;
+}).annotate({ identifier: "Item" }) satisfies Schema.Codec<Item>;
 
 /** Validate an in-memory file; this schema does not parse Markdown or JSON. */
 export const ParsedFileSchema = Schema.Struct({
   preamble: Schema.String,
   items: Schema.Array(ItemSchema),
-}).annotations({ identifier: "ParsedFile" }) satisfies Schema.Schema<ParsedFile>;
+}).annotate({ identifier: "ParsedFile" }) satisfies Schema.Codec<ParsedFile>;

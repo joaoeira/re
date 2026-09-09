@@ -3,7 +3,7 @@ import { describe, it, assert } from "@effect/vitest";
 import { parseFile } from "../../src/core/parser/index.ts";
 
 describe("parseFile", () => {
-  it.scoped("parses a simple file with one item", () =>
+  it.effect("parses a simple file with one item", () =>
     Effect.gen(function* () {
       const content = `<!--@ abc123 0 0 0 0-->
 What is the capital of France?
@@ -34,7 +34,7 @@ Paris
     }),
   );
 
-  it.scoped("parses a file with preamble", () =>
+  it.effect("parses a file with preamble", () =>
     Effect.gen(function* () {
       const content = `---
 title: My Flashcards
@@ -60,7 +60,7 @@ title: My Flashcards
     }),
   );
 
-  it.scoped("parses a file with multiple items", () =>
+  it.effect("parses a file with multiple items", () =>
     Effect.gen(function* () {
       const content = `<!--@ item1 0 0 0 0-->
 Q1
@@ -93,7 +93,7 @@ A2
     }),
   );
 
-  it.scoped("parses reviewed card with explicit due timestamp", () =>
+  it.effect("parses reviewed card with explicit due timestamp", () =>
     Effect.gen(function* () {
       const content = `<!--@ item2 5.2 4.3 2 0 2025-01-04T10:30:00Z 2025-01-09T10:30:00Z-->
 Q2
@@ -109,7 +109,7 @@ A2
     }),
   );
 
-  it.scoped("parses file with no items (preamble only)", () =>
+  it.effect("parses file with no items (preamble only)", () =>
     Effect.gen(function* () {
       const content = `This is just some text.
 No flashcards here.
@@ -121,7 +121,7 @@ No flashcards here.
     }),
   );
 
-  it.scoped("handles empty file", () =>
+  it.effect("handles empty file", () =>
     Effect.gen(function* () {
       const result = yield* parseFile("");
 
@@ -130,7 +130,7 @@ No flashcards here.
     }),
   );
 
-  it.scoped("handles consecutive metadata lines as multi-card item", () =>
+  it.effect("handles consecutive metadata lines as multi-card item", () =>
     Effect.gen(function* () {
       const content = `<!--@ item1 0 0 0 0-->
 <!--@ item2 0 0 0 0-->
@@ -151,7 +151,7 @@ Content for both cards
     }),
   );
 
-  it.scoped("preserves CRLF in content", () =>
+  it.effect("preserves CRLF in content", () =>
     Effect.gen(function* () {
       const content = "<!--@ abc123 0 0 0 0-->\nLine1\r\nLine2\r\n";
       const result = yield* parseFile(content);
@@ -160,7 +160,7 @@ Content for both cards
     }),
   );
 
-  it.scoped("handles file without trailing newline", () =>
+  it.effect("handles file without trailing newline", () =>
     Effect.gen(function* () {
       const content = `<!--@ abc123 0 0 0 0-->
 Content without trailing newline`;
@@ -170,7 +170,7 @@ Content without trailing newline`;
     }),
   );
 
-  it.scoped("preserves numeric precision", () =>
+  it.effect("preserves numeric precision", () =>
     Effect.gen(function* () {
       const content = `<!--@ abc123 5.20 4.30 2 0 2025-01-04T10:30:00Z 2025-01-09T15:18:00.000Z-->
 Content
@@ -183,7 +183,7 @@ Content
     }),
   );
 
-  it.scoped("fails on invalid field count", () =>
+  it.effect("fails on invalid field count", () =>
     Effect.gen(function* () {
       const content = `<!--@ abc123 0 0-->
 Content
@@ -193,7 +193,7 @@ Content
     }),
   );
 
-  it.scoped("fails on invalid numeric value", () =>
+  it.effect("fails on invalid numeric value", () =>
     Effect.gen(function* () {
       const content = `<!--@ abc123 invalid 0 0 0-->
 Content
@@ -203,7 +203,7 @@ Content
     }),
   );
 
-  it.scoped("fails on invalid state", () =>
+  it.effect("fails on invalid state", () =>
     Effect.gen(function* () {
       const content = `<!--@ abc123 0 0 5 0-->
 Content
@@ -213,7 +213,7 @@ Content
     }),
   );
 
-  it.scoped("fails on timestamp without timezone", () =>
+  it.effect("fails on timestamp without timezone", () =>
     Effect.gen(function* () {
       const content = `<!--@ abc123 0 0 0 0 2025-01-04T10:30:00 2025-01-09T10:30:00.000Z-->
 Content
@@ -223,7 +223,7 @@ Content
     }),
   );
 
-  it.scoped("fails on due timestamp without timezone", () =>
+  it.effect("fails on due timestamp without timezone", () =>
     Effect.gen(function* () {
       const content = `<!--@ abc123 0 0 2 0 2025-01-04T10:30:00Z 2025-01-06T10:30:00-->
 Content
@@ -233,7 +233,7 @@ Content
     }),
   );
 
-  it.scoped("handles CRLF metadata lines", () =>
+  it.effect("handles CRLF metadata lines", () =>
     Effect.gen(function* () {
       // Simulating CRLF line endings - when split on \n, lines have trailing \r
       const content = "<!--@ abc123 0 0 0 0-->\r\nContent\r\n";

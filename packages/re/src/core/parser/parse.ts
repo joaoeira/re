@@ -29,18 +29,18 @@ const parseMetadataLine = (
   const [idRaw, stabilityRaw, difficultyRaw, stateRaw, stepsRaw, lastReviewRaw, dueRaw] = tokens;
 
   return Effect.all({
-    id: Schema.decodeUnknown(ItemIdSchema)(idRaw!),
-    stability: Schema.decodeUnknown(NumericFieldFromString)(stabilityRaw!),
-    difficulty: Schema.decodeUnknown(NumericFieldFromString)(difficultyRaw!),
-    state: Schema.decodeUnknown(StateFromString)(stateRaw!),
-    learningSteps: Schema.decodeUnknown(LearningStepsFromString)(stepsRaw!),
+    id: Schema.decodeUnknownEffect(ItemIdSchema)(idRaw!),
+    stability: Schema.decodeUnknownEffect(NumericFieldFromString)(stabilityRaw!),
+    difficulty: Schema.decodeUnknownEffect(NumericFieldFromString)(difficultyRaw!),
+    state: Schema.decodeUnknownEffect(StateFromString)(stateRaw!),
+    learningSteps: Schema.decodeUnknownEffect(LearningStepsFromString)(stepsRaw!),
     lastReview:
       tokens.length === 7
-        ? Schema.decodeUnknown(LastReviewFromString)(lastReviewRaw!)
+        ? Schema.decodeUnknownEffect(LastReviewFromString)(lastReviewRaw!)
         : Effect.succeed(null),
     due:
       tokens.length === 7
-        ? Schema.decodeUnknown(LastReviewFromString)(dueRaw!)
+        ? Schema.decodeUnknownEffect(LastReviewFromString)(dueRaw!)
         : Effect.succeed(null),
   }).pipe(
     Effect.mapError((parseError) => {
@@ -68,11 +68,13 @@ export const parseMetadata = (content: string): Effect.Effect<ItemMetadata, Meta
   // A greedy line match can absorb a second comment into the ID. The first
   // closing delimiter must end the record.
   if (!match || line.indexOf("-->") !== line.length - 3) {
-    return new InvalidMetadataFormat({
-      line: 1,
-      raw: content,
-      reason: "Expected exactly one complete metadata comment",
-    });
+    return Effect.fail(
+      new InvalidMetadataFormat({
+        line: 1,
+        raw: content,
+        reason: "Expected exactly one complete metadata comment",
+      }),
+    );
   }
 
   return parseMetadataLine(match[1]!, 1);

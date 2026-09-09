@@ -1,4 +1,4 @@
-import { Either, Effect, Option } from "effect";
+import { Result, Effect, Option } from "effect";
 import { describe, expect, it } from "@effect/vitest";
 import {
   adaptItemType,
@@ -22,7 +22,7 @@ describe("reconcileCards", () => {
       lastReview: new Date("2026-01-01T12:00:00Z"),
       due: new Date("2026-01-08T12:00:00Z"),
     };
-    const result = Either.getOrThrow(
+    const result = Result.getOrThrow(
       reconcileCards(
         { keys: ["c1", "c2", "c3"], cards: [metadata("first"), metadata("removed"), reviewed] },
         ["c3", "c1", "c4"],
@@ -62,8 +62,8 @@ describe("reconcileCards", () => {
           nextKeys!,
         );
         expect(result).toMatchObject({
-          _tag: "Left",
-          left: { _tag: "DuplicateCardKey", key: "same" },
+          _tag: "Failure",
+          failure: { _tag: "DuplicateCardKey", key: "same" },
         });
       }
     }),
@@ -73,8 +73,8 @@ describe("reconcileCards", () => {
     expect(
       reconcileCards({ keys: ["c1", "c3"], cards: [metadata("unknown")] }, ["c3"]),
     ).toMatchObject({
-      _tag: "Left",
-      left: { _tag: "ReconcileCardCountMismatch", keyCount: 2, metadataCount: 1 },
+      _tag: "Failure",
+      failure: { _tag: "ReconcileCardCountMismatch", keyCount: 2, metadataCount: 1 },
     });
   });
 });

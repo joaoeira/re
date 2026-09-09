@@ -1,4 +1,4 @@
-import { ParseResult, Schema } from "effect";
+import { Effect, Schema, SchemaGetter, SchemaIssue } from "effect";
 
 /**
  * ISO 8601 timestamp pattern with required timezone.
@@ -6,10 +6,8 @@ import { ParseResult, Schema } from "effect";
  * Valid: "2025-01-04T10:30:00Z", "2025-01-04T10:30:00+02:00"
  * Invalid: "2025-01-04T10:30:00" (no timezone = machine-dependent)
  *
- * Why not Schema.DateFromString?
- * - Effect's DateFromString is lenient (accepts any Date.parse input)
- * - We require strict ISO 8601 with timezone to avoid local-time ambiguity
- * - JS Date normalizes invalid dates (Feb 30 → Mar 2), which we reject
+ * Require strict ISO 8601 with timezone to avoid local-time ambiguity.
+ * JS Date normalizes invalid dates (Feb 30 → Mar 2), which we reject.
  */
 const ISO_TIMESTAMP_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
@@ -67,33 +65,35 @@ const isValidCalendarDate = (s: string, d: Date): boolean => {
  * Rejects invalid calendar dates (e.g., Feb 30) that JS would normalize.
  * Encodes back to UTC via toISOString().
  */
-export const LastReviewFromString: Schema.Schema<Date, string> = Schema.transformOrFail(
-  Schema.String,
-  Schema.DateFromSelf,
-  {
-    strict: true,
-    decode: (s, _options, ast) => {
+export const LastReviewFromString: Schema.Codec<Date, string, never, never> = Schema.String.pipe(
+  Schema.decodeTo(Schema.Date, {
+    decode: SchemaGetter.transformOrFail((s, options) => {
       if (!ISO_TIMESTAMP_PATTERN.test(s)) {
-        return ParseResult.fail(
-          new ParseResult.Type(ast, s, `Timestamp must include timezone (Z or ±HH:MM): "${s}"`),
+        return Effect.fail(
+          new SchemaIssue.InvalidValue(
+            { message: `Timestamp must include timezone (Z or ±HH:MM): "${s}"` },
+            s,
+            options,
+          ),
         );
       }
       const d = new Date(s);
       if (isNaN(d.getTime())) {
-        return ParseResult.fail(new ParseResult.Type(ast, s, `Invalid ISO timestamp: "${s}"`));
-      }
-      if (!isValidCalendarDate(s, d)) {
-        return ParseResult.fail(
-          new ParseResult.Type(ast, s, `Invalid calendar date (normalization detected): "${s}"`),
+        return Effect.fail(
+          new SchemaIssue.InvalidValue({ message: `Invalid ISO timestamp: "${s}"` }, s, options),
         );
       }
-      return ParseResult.succeed(d);
-    },
-    encode: (d, _options, ast) => {
-      if (isNaN(d.getTime())) {
-        return ParseResult.fail(new ParseResult.Type(ast, d, "Cannot encode invalid Date"));
+      if (!isValidCalendarDate(s, d)) {
+        return Effect.fail(
+          new SchemaIssue.InvalidValue(
+            { message: `Invalid calendar date (normalization detected): "${s}"` },
+            s,
+            options,
+          ),
+        );
       }
-      return ParseResult.succeed(d.toISOString());
-    },
-  },
+      return Effect.succeed(d);
+    }),
+    encode: SchemaGetter.transform((d) => d.toISOString()),
+  }),
 );
