@@ -1,6 +1,6 @@
 # Frozen Effect v3 library for apps
 
-Desktop and Overlay consume the single archive in this directory while the workspace library prepares to migrate to Effect v4. The archive contains all five entry points, including `study`; the registry's `@simbyotic/re@0.2.0` does not contain that entry point. App Effect stays at `3.19.18`.
+Pocket consumes the single archive in this directory while the workspace library prepares to migrate to Effect v4. The archive contains all five entry points, including `study`; the registry's `@simbyotic/re@0.2.0` does not contain that entry point. App Effect stays at `3.19.18`.
 
 `manifest.json` records the source commit, source patch, build versions, original version, staged version override, baseline checks and SHA-512 integrity. No release or commit was created to produce this artifact. Because the small grading-error correction and its regression were uncommitted, `sourceClean` is explicitly false: the exact reproducible source is the recorded commit **plus `source.patch`**. Unrelated Overlay edits and migration planning documents are not part of this library snapshot.
 
@@ -10,7 +10,7 @@ Desktop and Overlay consume the single archive in this directory while the works
 
 Run `bun run check:app-resolution` to verify the archive/provenance and exercise every app's installed library with its own Effect runtime under Node and Bun. It checks all five entry points and rejects workspace links or different Effect installations. `bun run test:app-isolation` exercises corrupted bytes, wrong pins, accidental workspace resolution and portable exports.
 
-The app dependency is `file:../../vendor/re-effect3/simbyotic-re-0.2.1-effect3.0.tgz`. The Desktop standalone check copies the approved bytes, manifest and patch into the export's `vendor/`, then use `file:vendor/...tgz`. It never rebuilds the current library. Overlay continues to use the Bun workspace and its existing native build route. Run `bun run check:overlay` on Apple Silicon macOS with the project's Rust, Xcode and Metal prerequisites; native validation is not certified by a portable resolution check.
+The app dependency is `file:../../vendor/re-effect3/simbyotic-re-0.2.1-effect3.0.tgz`. Overlay continues to use the Bun workspace and its existing native build route. Run `bun run check:overlay` on Apple Silicon macOS with the project's Rust, Xcode and Metal prerequisites; native validation is not certified by a portable resolution check.
 
 ## Reconstructing the source and archive
 

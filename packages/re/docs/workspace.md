@@ -83,8 +83,8 @@ later replacement wins. Apps that coordinate several calls as one workflow still
 need their own coordination around that workflow.
 
 Service lifetime matters at application boundaries: capture a shared instance when creating
-RPC handlers instead of rebuilding `DeckManagerLive` for each request. The desktop handler
-bundle does this so reviews, editor saves, and Forge writes use the same per-deck locks.
+request handlers instead of rebuilding `DeckManagerLive` for each request, so reviews
+and authoring operations use the same per-deck locks.
 
 In a v4 layer graph, reuse the same manager layer object across queue and study branches.
 Services use explicit `Context.Service` contracts, and manager methods capture their

@@ -2,8 +2,8 @@
 
 The `0.3.0-rc.0` library targets `effect@4.0.0-rc.112` exactly. All five entry
 points expose v4 Effect, Schema, and service types. Mixing v3 and v4 values in
-one consumer graph is unsupported. The Desktop and Overlay apps in
-this repository continue to consume the frozen v3 artifact separately.
+one consumer graph is unsupported. Pocket in
+this repository continues to consume the frozen v3 artifact separately.
 
 This migration preserves Markdown metadata, numeric spelling, card identities,
 and FSRS scheduling behavior. Existing decks need no data migration. Seeded

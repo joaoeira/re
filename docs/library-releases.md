@@ -1,8 +1,8 @@
 # Releasing @simbyotic/re
 
-`@simbyotic/re` is the single public npm package. Its `core`, `item-types`, `scheduler`, `workspace`, and `study` subpath exports share one version and changelog. Desktop and Overlay currently depend on the frozen Effect v3 archive in `vendor/re-effect3`, independently of the workspace library version.
+`@simbyotic/re` is the single public npm package. Its `core`, `item-types`, `scheduler`, `workspace`, and `study` subpath exports share one version and changelog. Pocket currently depends on the frozen Effect v3 archive in `vendor/re-effect3`, independently of the workspace library version.
 
-The frozen archive and provenance are checked by `bun run check:app-resolution`. Desktop exports copy those exact bytes; they do not rebuild the current library. See [the frozen library instructions](../vendor/re-effect3/README.md) for reconstruction and replacement. Installing dependencies no longer builds the workspace library implicitly; use `bun run build:library` when needed.
+The frozen archive and provenance are checked by `bun run check:app-resolution`. See [the frozen library instructions](../vendor/re-effect3/README.md) for reconstruction and replacement. Installing dependencies no longer builds the workspace library implicitly; use `bun run build:library` when needed.
 
 ## Current Effect v4 local prerelease
 

@@ -38,15 +38,9 @@ Q&A generates the key `main`. Cloze generates keys from the actual deletion indi
 `c3`, etc.), preserving identity when another deletion is removed or the text is edited.
 
 Use `resolveBuiltinItem(item)` to interpret saved items. It checks generated card counts
-against the saved metadata, then prefers cloze when both cloze and Q&A fit. Desktop and Pocket
-use this same rule for editing and review. Use `inferCards`
+against the saved metadata, then prefers cloze when both cloze and Q&A fit. Pocket
+uses this same rule for editing and review. Use `inferCards`
 from `@simbyotic/re/core` only for unsaved content that has no metadata count yet.
-
-Desktop can open a count-mismatched item using the first parseable type and offer an explicit
-reset-and-save action. The save rechecks the current item under the deck lock and creates fresh IDs
-and learning data only if its count is still mismatched; an item repaired in the meantime is matched
-normally. Until repaired, count-mismatched items are skipped by desktop's
-duplicate index and do not participate in duplicate checks.
 
 For a review queue, call `annotateBuiltinCardKeys(entries)`. It accepts entries with `{ item, card }`,
 returns `{ items, errors }`, preserves valid entries' order and other fields, and adds a string `cardKey`.

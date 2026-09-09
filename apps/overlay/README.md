@@ -2,7 +2,7 @@
 
 A compact macOS card utility with separate Create and Review screens opened from
 Raycast. React renders through GPUIX, Bun runs the app, and a small Objective-C
-bridge supplies AppKit window behavior. No running re Desktop is required.
+bridge supplies AppKit window behavior.
 
 Requires Apple Silicon macOS, Bun, Rust 1.97.1, and Xcode with its Metal toolchain
 (`xcodebuild -downloadComponent MetalToolchain`). The first build compiles a
@@ -110,7 +110,7 @@ Markdown stays in GPUIX's native renderer; paragraphs containing math or images
 use native text and image elements. Images preserve their aspect ratio and fit
 the window, with larger content available by scrolling. Broken images or formulas
 show an error in place. Rendered media is cached under the system temporary folder.
-The desktop app's rich editor and AI are outside this POC.
+A rich editor and AI are outside this POC.
 
 Both rendering paths share the same body and heading typography. Inline formula
 SVGs retain their MathJax baseline and align with native text using macOS font
@@ -149,7 +149,7 @@ scroll parent from adding a scroll range when a short card fits in the window.
 
 Full-screen Spaces, multiple displays, and focus restoration still need hands-on
 validation. GPUIX accessibility remains limited; memory and idle CPU have not been
-benchmarked against re Desktop.
+benchmarked.
 
 Run the review behavior and persisted scheduling regression checks with:
 

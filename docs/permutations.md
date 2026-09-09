@@ -1,5 +1,7 @@
 # Review Session Permutations Assistant
 
+Historical design: this plan targets the retired Desktop app and is retained for reference.
+
 ## Purpose
 
 This document describes the design and implementation plan for adding a permutations workflow to the desktop review session. The user should be able to press `cmd+k` during review, choose `Create permutations`, open a right-hand assistant sidebar for the current card, generate candidate cards, edit them locally, and append selected candidates to the current deck.

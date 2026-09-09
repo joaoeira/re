@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -89,41 +89,15 @@ export const readFrozenLibrary = async (directory = frozenDirectory) => {
   };
 };
 
-// Used by the existing standalone exports. It copies approved bytes, never the live library.
-export const prepareFrozenApp = async (appDirectory, frozen = undefined) => {
-  frozen ??= await readFrozenLibrary();
-  const manifestPath = path.join(appDirectory, "package.json");
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  assert.equal(
-    manifest.dependencies[packageName],
-    frozen.dependency,
-    "App must pin the approved frozen library",
-  );
-  const vendor = path.join(appDirectory, "vendor");
-  await mkdir(vendor, { recursive: true });
-  await copyFile(frozen.archive, path.join(vendor, frozen.metadata.archive));
-  await copyFile(path.join(frozen.directory, "manifest.json"), path.join(vendor, "manifest.json"));
-  if (frozen.metadata.sourcePatch) {
-    await copyFile(
-      path.join(frozen.directory, frozen.metadata.sourcePatch.file),
-      path.join(vendor, frozen.metadata.sourcePatch.file),
-    );
-  }
-  manifest.dependencies[packageName] = `file:vendor/${frozen.metadata.archive}`;
-  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  return frozen;
-};
-
 export const verifyFrozenApp = async (
   appDirectory,
   frozen,
   workspaceDirectory = path.join(repoRoot, "packages/re"),
 ) => {
   const appManifest = JSON.parse(await readFile(path.join(appDirectory, "package.json"), "utf8"));
-  assert.ok(
-    [frozen.dependency, `file:vendor/${frozen.metadata.archive}`].includes(
-      appManifest.dependencies[packageName],
-    ),
+  assert.equal(
+    appManifest.dependencies[packageName],
+    frozen.dependency,
     "App must pin the approved frozen library",
   );
   const appRequire = createRequire(path.join(appDirectory, "package.json"));
