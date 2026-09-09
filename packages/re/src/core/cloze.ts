@@ -107,9 +107,7 @@ const clozeIssue = (
   message: clozeIssueMessage(reason, start),
 });
 
-const scanClozeSyntax = (
-  content: string,
-): { readonly matches: ClozeSyntaxMatch[]; readonly issues: ClozeSyntaxIssue[] } => {
+const scanClozeSyntax = (content: string) => {
   const matches: ClozeSyntaxMatch[] = [];
   const issues: ClozeSyntaxIssue[] = [];
   let searchFrom = 0;
@@ -199,7 +197,7 @@ const scanClozeSyntax = (
   return { matches, issues };
 };
 
-const splitClozeContent = (rawContent: string): { hidden: string; hint: string | null } => {
+const splitClozeContent = (rawContent: string) => {
   let depth = 0;
   for (let i = 0; i < rawContent.length; i++) {
     if (rawContent[i] === "\\" && i + 1 < rawContent.length) {

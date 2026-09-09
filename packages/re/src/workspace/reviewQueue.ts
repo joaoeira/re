@@ -116,10 +116,7 @@ export const shuffle =
 export const chain =
   <A>(...orders: WithinGroupOrder<A>[]): WithinGroupOrder<A> =>
   (items) =>
-    orders.reduce(
-      (acc, order) => Effect.flatMap(acc, order),
-      Effect.succeed(items) as Effect.Effect<readonly A[]>,
-    );
+    orders.reduce((acc, order) => Effect.flatMap(acc, order), Effect.succeed(items));
 
 export const byDueDate: Order.Order<QueueItem> = Order.make((a, b) => {
   if (!a.dueDate && !b.dueDate) return 0;

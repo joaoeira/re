@@ -32,7 +32,7 @@ import { performance } from "node:perf_hooks";
 
 import * as NodeFileSystem from "@effect/platform-node-shared/NodeFileSystem";
 import * as NodePath from "@effect/platform-node-shared/NodePath";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Record as RecordUtils } from "effect";
 
 import { toScanDecksErrorMessage } from "../../src/workspace/scanDecks";
 import {
@@ -53,7 +53,7 @@ interface Preset {
   readonly folderCount: number;
 }
 
-const PRESETS: Record<string, Preset> = {
+const PRESETS = {
   small: {
     seed: 0xc0ffee,
     summary: "~50 decks / ~1k cards",
@@ -90,7 +90,9 @@ const PRESETS: Record<string, Preset> = {
     largeCardRange: [4000, 8000],
     folderCount: 12,
   },
-};
+} satisfies Record<string, Preset>;
+
+const isPresetName = (name: string): name is keyof typeof PRESETS => Object.hasOwn(PRESETS, name);
 
 const FOLDERS = [
   "",
@@ -183,12 +185,7 @@ const itemBody = (rng: Rng, deckIndex: number, itemIndex: number): string => {
   return `${lines.join("\n")}\n\n`;
 };
 
-const deckContent = (
-  rng: Rng,
-  deckIndex: number,
-  cardTarget: number,
-  now: Date,
-): { content: string; cards: number } => {
+const deckContent = (rng: Rng, deckIndex: number, cardTarget: number, now: Date) => {
   let content = rng() < 0.5 ? `---\ntitle: Deck ${deckIndex}\n---\n\n` : `# Deck ${deckIndex}\n\n`;
   let cards = 0;
   let itemIndex = 0;
@@ -532,7 +529,7 @@ const usage = (): never => {
 
 const main = async () => {
   const args = process.argv.slice(2);
-  const presetNames: string[] = [];
+  const presetNames: (keyof typeof PRESETS)[] = [];
   let runs = 5;
   let warmup: number | undefined;
   let keep = false;
@@ -551,7 +548,7 @@ const main = async () => {
     } else if (arg === "--vault") {
       vaultPath = args[++i];
       if (vaultPath === undefined) usage();
-    } else if (arg in PRESETS) {
+    } else if (isPresetName(arg)) {
       presetNames.push(arg);
     } else {
       usage();
@@ -563,13 +560,13 @@ const main = async () => {
     return;
   }
 
-  const selected = presetNames.length > 0 ? presetNames : Object.keys(PRESETS);
+  const selected = presetNames.length > 0 ? presetNames : RecordUtils.keys(PRESETS);
   for (const name of selected) {
-    await runPreset(name, PRESETS[name]!, runs, warmup ?? "auto", keep);
+    await runPreset(name, PRESETS[name], runs, warmup ?? "auto", keep);
   }
 };
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error);
+main().catch((cause: unknown) => {
+  console.error(cause instanceof Error ? cause.message : cause);
   process.exit(1);
 });

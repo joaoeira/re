@@ -2,7 +2,7 @@ import * as Path from "effect/Path";
 import * as FileSystem from "effect/FileSystem";
 import * as PlatformError from "effect/PlatformError";
 import { Effect, Result, Layer } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   ImportDeckImageAssetOperationError,
@@ -291,6 +291,45 @@ describe("imageAssets", () => {
   });
 
   describe("importDeckImageAssetFromBytes", () => {
+    it("preserves hash failure messages and leaves the asset store untouched", async () => {
+      const failures = [
+        [new Error("Hashing unavailable"), "Hashing unavailable"],
+        [{ message: "Digest rejected" }, "Digest rejected"],
+        ["Digest unavailable", "Digest unavailable"],
+      ] as const;
+
+      for (const [cause, message] of failures) {
+        const digest = vi.spyOn(globalThis.crypto.subtle, "digest").mockRejectedValueOnce(cause);
+        try {
+          const { mock, promise } = runImportFromBytesResult(
+            { entryTypes: {}, directories: {} },
+            {
+              rootPath: "/workspace",
+              deckPath: "/workspace/deck.md",
+              bytes: new Uint8Array([1, 2, 3, 4]),
+              extension: ".png",
+            },
+          );
+
+          const result = await promise;
+          expect(result).toMatchObject({
+            _tag: "Failure",
+            failure: {
+              _tag: "ImportDeckImageAssetOperationError",
+              operation: "hash_source",
+              message,
+            },
+          });
+          expect(mock.bytesStore).toEqual({});
+          if (Result.isFailure(result)) {
+            expect(result.failure).not.toHaveProperty("sourcePath");
+          }
+        } finally {
+          digest.mockRestore();
+        }
+      }
+    });
+
     it("reports a bad write argument as a failed import rather than a deduplicated asset", async () => {
       const mock = createMockFileSystem({ entryTypes: {}, directories: {} });
       const failure = PlatformError.badArgument({

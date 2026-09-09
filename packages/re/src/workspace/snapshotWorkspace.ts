@@ -93,14 +93,7 @@ const incrementDeckStateCount = (stateCounts: MutableDeckStateCounts, state: Sta
   stateCounts[key] += 1;
 };
 
-const summarizeParsedDeck = (
-  parsedFile: ParsedFile,
-  asOf: Date,
-): {
-  totalCards: number;
-  dueCards: number;
-  stateCounts: DeckStateCounts;
-} => {
+const summarizeParsedDeck = (parsedFile: ParsedFile, asOf: Date) => {
   const stateCounts = emptyDeckStateCounts();
   let totalCards = 0;
   let dueCards = 0;

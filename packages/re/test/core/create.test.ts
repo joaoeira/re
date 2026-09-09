@@ -1,11 +1,12 @@
 import { describe, it, assert } from "vitest";
+import { Schema } from "effect";
 import {
   generateId,
   createMetadata,
   createMetadataWithId,
   numericField,
 } from "../../src/core/create.ts";
-import type { ItemId } from "../../src/core/types.ts";
+import { ItemIdSchema } from "../../src/core/schema/metadata.ts";
 
 describe("generateId", () => {
   it("generates a non-empty string", () => {
@@ -64,7 +65,7 @@ describe("createMetadata", () => {
 
 describe("createMetadataWithId", () => {
   it("creates metadata with specified ID", () => {
-    const metadata = createMetadataWithId("custom-id" as ItemId);
+    const metadata = createMetadataWithId(Schema.decodeSync(ItemIdSchema)("custom-id"));
 
     assert.strictEqual(metadata.id, "custom-id");
     assert.strictEqual(metadata.stability.value, 0);

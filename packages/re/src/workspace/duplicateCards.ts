@@ -67,7 +67,7 @@ export const findDuplicates = (locations: readonly CardLocation[]): DuplicateMap
     }
   }
 
-  return Object.fromEntries(duplicates) as DuplicateMap;
+  return Object.fromEntries(duplicates);
 };
 
 export const findWorkspaceDuplicates = (

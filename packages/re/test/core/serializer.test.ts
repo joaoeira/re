@@ -1,14 +1,18 @@
 import { describe, it, assert } from "vitest";
+import { Schema } from "effect";
 import { serializeFile, serializeMetadata } from "../../src/core/serializer/index.ts";
-import type { ItemMetadata, ParsedFile, ItemId, State } from "../../src/core/types.ts";
+import type { ItemMetadata, ParsedFile } from "../../src/core/types.ts";
+import { ItemIdSchema } from "../../src/core/schema/metadata.ts";
+
+const itemId = Schema.decodeSync(ItemIdSchema);
 
 describe("serializeMetadata", () => {
   it("serializes new item metadata", () => {
     const metadata: ItemMetadata = {
-      id: "abc123" as ItemId,
+      id: itemId("abc123"),
       stability: { value: 0, raw: "0" },
       difficulty: { value: 0, raw: "0" },
-      state: 0 as State,
+      state: 0,
       learningSteps: 0,
       lastReview: null,
       due: null,
@@ -20,10 +24,10 @@ describe("serializeMetadata", () => {
 
   it("rejects incomplete timestamp pairs instead of emitting an unreadable or lossy record", () => {
     const metadata: ItemMetadata = {
-      id: "abc123" as ItemId,
+      id: itemId("abc123"),
       stability: { value: 5.2, raw: "5.20" },
       difficulty: { value: 4.3, raw: "4.30" },
-      state: 2 as State,
+      state: 2,
       learningSteps: 0,
       lastReview: new Date("2025-01-04T10:30:00Z"),
       due: null,
@@ -38,10 +42,10 @@ describe("serializeMetadata", () => {
 
   it("serializes reviewed item metadata with due", () => {
     const metadata: ItemMetadata = {
-      id: "abc123" as ItemId,
+      id: itemId("abc123"),
       stability: { value: 5.2, raw: "5.20" },
       difficulty: { value: 4.3, raw: "4.30" },
-      state: 2 as State,
+      state: 2,
       learningSteps: 0,
       lastReview: new Date("2025-01-04T10:30:00Z"),
       due: new Date("2025-01-06T10:30:00Z"),
@@ -56,10 +60,10 @@ describe("serializeMetadata", () => {
 
   it("preserves numeric precision from raw", () => {
     const metadata: ItemMetadata = {
-      id: "abc123" as ItemId,
+      id: itemId("abc123"),
       stability: { value: 5.2, raw: "5.200" },
       difficulty: { value: 4.3, raw: "4.300" },
-      state: 2 as State,
+      state: 2,
       learningSteps: 0,
       lastReview: null,
       due: null,
@@ -72,10 +76,10 @@ describe("serializeMetadata", () => {
 
   it("canonicalizes timestamp to UTC", () => {
     const metadata: ItemMetadata = {
-      id: "abc123" as ItemId,
+      id: itemId("abc123"),
       stability: { value: 0, raw: "0" },
       difficulty: { value: 0, raw: "0" },
-      state: 2 as State,
+      state: 2,
       learningSteps: 0,
       lastReview: new Date("2025-01-04T12:30:00+02:00"), // 10:30 UTC
       due: new Date("2025-01-05T12:30:00+02:00"), // 10:30 UTC
@@ -94,10 +98,10 @@ describe("serializeFile", () => {
         {
           cards: [
             {
-              id: "item1" as ItemId,
+              id: itemId("item1"),
               stability: { value: 0, raw: "0" },
               difficulty: { value: 0, raw: "0" },
-              state: 0 as State,
+              state: 0,
               learningSteps: 0,
               lastReview: null,
               due: null,
@@ -119,10 +123,10 @@ describe("serializeFile", () => {
         {
           cards: [
             {
-              id: "item1" as ItemId,
+              id: itemId("item1"),
               stability: { value: 0, raw: "0" },
               difficulty: { value: 0, raw: "0" },
-              state: 0 as State,
+              state: 0,
               learningSteps: 0,
               lastReview: null,
               due: null,
@@ -144,10 +148,10 @@ describe("serializeFile", () => {
         {
           cards: [
             {
-              id: "item1" as ItemId,
+              id: itemId("item1"),
               stability: { value: 0, raw: "0" },
               difficulty: { value: 0, raw: "0" },
-              state: 0 as State,
+              state: 0,
               learningSteps: 0,
               lastReview: null,
               due: null,
@@ -158,10 +162,10 @@ describe("serializeFile", () => {
         {
           cards: [
             {
-              id: "item2" as ItemId,
+              id: itemId("item2"),
               stability: { value: 5.2, raw: "5.2" },
               difficulty: { value: 4.3, raw: "4.3" },
-              state: 2 as State,
+              state: 2,
               learningSteps: 0,
               lastReview: new Date("2025-01-04T10:30:00Z"),
               due: new Date("2025-01-10T10:30:00Z"),

@@ -6,7 +6,6 @@ import {
   numericField,
   parseFile,
   serializeMetadata,
-  type ItemId,
   type ItemMetadata,
 } from "../../src/core/index.js";
 
@@ -20,7 +19,7 @@ const makeCard = (input: {
   readonly lastReview?: Date | null;
   readonly due?: Date | null;
 }): ItemMetadata => ({
-  id: generateId() as ItemId,
+  id: generateId(),
   stability: numericField(input.stability ?? 0),
   difficulty: numericField(input.difficulty ?? 5),
   state: input.state,

@@ -37,8 +37,10 @@ type MutableGroup = {
   dueCards: number;
   stateCounts: { new: number; learning: number; review: number; relearning: number };
   errorCount: number;
-  children: DeckTreeNode[];
+  children: MutableNode[];
 };
+
+type MutableNode = DeckTreeLeaf | MutableGroup;
 
 const addSnapshotCounts = (group: MutableGroup, snapshot: DeckSnapshot): void => {
   if (snapshot.status === "ok") {
@@ -53,21 +55,21 @@ const addSnapshotCounts = (group: MutableGroup, snapshot: DeckSnapshot): void =>
   }
 };
 
-const sortNodes = (nodes: DeckTreeNode[]): void => {
+const sortNodes = (nodes: MutableNode[]): void => {
   nodes.sort((a, b) => {
     if (a.kind !== b.kind) return a.kind === "group" ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
   for (const node of nodes) {
     if (node.kind === "group") {
-      sortNodes((node as MutableGroup).children);
+      sortNodes(node.children);
     }
   }
 };
 
 export const buildDeckTree = (snapshots: readonly DeckSnapshot[]): DeckTreeNode[] => {
   const groups = new Map<string, MutableGroup>();
-  const rootChildren: DeckTreeNode[] = [];
+  const rootChildren: MutableNode[] = [];
 
   const ensureGroup = (segments: readonly string[], upToIndex: number): MutableGroup => {
     const groupPath = segments.slice(0, upToIndex + 1).join("/");

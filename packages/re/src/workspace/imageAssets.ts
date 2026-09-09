@@ -57,13 +57,7 @@ export const ImportedDeckImageAssetSchema = Schema.Struct({
 
 export type ImportedDeckImageAsset = typeof ImportedDeckImageAssetSchema.Type;
 
-const toErrorMessage = (error: unknown): string =>
-  typeof error === "object" &&
-  error !== null &&
-  "message" in error &&
-  typeof (error as { readonly message?: unknown }).message === "string"
-    ? (error as { readonly message: string }).message
-    : String(error);
+const hasErrorMessage = Schema.is(Schema.Struct({ message: Schema.String }));
 
 const toMarkdownRelativePath = (path: string): string => path.replaceAll("\\", "/");
 
@@ -77,7 +71,7 @@ const normalizeExtension = (extension: string): string => {
 
 const SUPPORTED_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
 
-const toSha256Hex = (sourcePath: string | undefined, bytes: Uint8Array) =>
+const toSha256Hex = (bytes: Uint8Array) =>
   Effect.tryPromise({
     try: async () => {
       const digestInput = new Uint8Array(bytes.byteLength);
@@ -87,11 +81,10 @@ const toSha256Hex = (sourcePath: string | undefined, bytes: Uint8Array) =>
         "",
       );
     },
-    catch: (error) =>
+    catch: (cause) =>
       new ImportDeckImageAssetOperationError({
         operation: "hash_source",
-        message: toErrorMessage(error),
-        ...(sourcePath ? { sourcePath } : {}),
+        message: hasErrorMessage(cause) ? cause.message : String(cause),
       }),
   });
 
@@ -172,7 +165,7 @@ export const importDeckImageAssetFromBytes = (options: {
       });
     }
 
-    const contentHash = yield* toSha256Hex(undefined, options.bytes);
+    const contentHash = yield* toSha256Hex(options.bytes);
     const assetsDirectory = yield* getWorkspaceImageAssetsDirectory(resolvedRootPath);
     const absolutePath = pathService.normalize(
       pathService.join(assetsDirectory, `${contentHash}${extension}`),

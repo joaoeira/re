@@ -67,12 +67,8 @@ const toContentParseError = (error: ClozeSyntaxError, raw: string): ContentParse
   const diagnostic = toDiagnostic(primary);
   return new ContentParseError({
     type: CLOZE,
-    message: diagnostic.message,
+    ...diagnostic,
     raw,
-    reason: diagnostic.reason,
-    start: diagnostic.start,
-    ...(diagnostic.end === undefined ? {} : { end: diagnostic.end }),
-    fragment: diagnostic.fragment,
     issues: error.issues.map(toDiagnostic),
   });
 };

@@ -54,9 +54,9 @@ export interface MockFileSystem {
 }
 
 export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSystem => {
-  const entryTypes: Record<string, FileSystem.File.Type> = { ...config.entryTypes };
-  const store: Record<string, string> = { ...config.fileContents };
-  const bytesStore: Record<string, Uint8Array> = { ...config.fileBytes };
+  const entryTypes = { ...config.entryTypes };
+  const store = { ...config.fileContents };
+  const bytesStore = { ...config.fileBytes };
   const textEncoder = new TextEncoder();
   const textDecoder = new TextDecoder();
   let nextTempFile = 0;

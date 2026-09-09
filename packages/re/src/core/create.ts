@@ -1,7 +1,11 @@
 import { nanoid } from "nanoid";
-import type { ItemId, ItemMetadata, NumericField, State } from "./types.js";
+import { Schema } from "effect";
+import type { ItemId, ItemMetadata, NumericField } from "./types.js";
+import { ItemIdSchema } from "./schema/metadata.js";
 
-export const generateId = (): ItemId => nanoid() as ItemId;
+const decodeItemId = Schema.decodeSync(ItemIdSchema);
+
+export const generateId = (): ItemId => decodeItemId(nanoid());
 
 /**
  * Create a NumericField from a number value.
@@ -23,7 +27,7 @@ export const createMetadata = (): ItemMetadata => ({
   id: generateId(),
   stability: numericField(0),
   difficulty: numericField(0),
-  state: 0 as State,
+  state: 0,
   learningSteps: 0,
   lastReview: null,
   due: null,
@@ -36,7 +40,7 @@ export const createMetadataWithId = (id: ItemId): ItemMetadata => ({
   id,
   stability: numericField(0),
   difficulty: numericField(0),
-  state: 0 as State,
+  state: 0,
   learningSteps: 0,
   lastReview: null,
   due: null,

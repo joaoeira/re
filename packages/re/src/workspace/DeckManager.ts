@@ -107,6 +107,14 @@ export class DeckFileOperationError extends Schema.TaggedError<DeckFileOperation
   toPath: Schema.optional(Schema.String),
 }) {}
 
+interface DeckFileOperationPayload {
+  readonly operation: DeckFileOperationError["operation"];
+  readonly message: string;
+  deckPath?: string;
+  fromPath?: string;
+  toPath?: string;
+}
+
 export type ReadError = DeckNotFound | DeckReadError | DeckParseError;
 export type WriteError = ReadError | DeckWriteError;
 export type DeckLifecycleError =
@@ -370,32 +378,18 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
           return path.normalize(normalizedPath);
         });
 
-      const toErrorMessage = (error: unknown): string =>
-        typeof error === "object" &&
-        error !== null &&
-        "message" in error &&
-        typeof (error as { readonly message?: unknown }).message === "string"
-          ? (error as { readonly message: string }).message
-          : String(error);
-
       const operationError = (
         operation: "create" | "delete" | "rename",
-        error: PlatformError | string,
+        message: string,
         fields?: {
           readonly deckPath?: string;
           readonly fromPath?: string;
           readonly toPath?: string;
         },
       ): DeckFileOperationError => {
-        const payload: {
-          readonly operation: "create" | "delete" | "rename";
-          readonly message: string;
-          deckPath?: string;
-          fromPath?: string;
-          toPath?: string;
-        } = {
+        const payload: DeckFileOperationPayload = {
           operation,
-          message: toErrorMessage(error),
+          message,
         };
 
         if (fields?.deckPath !== undefined) {
@@ -425,7 +419,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
         fs.stat(targetPath).pipe(
           Effect.map(Option.some),
           Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(Option.none())),
-          Effect.mapError((error) => operationError(operation, error, fields)),
+          Effect.mapError((error) => operationError(operation, error.message, fields)),
         );
 
       const ensureParentDirectory = (
@@ -437,7 +431,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
         if (createParents === true) {
           return fs.makeDirectory(parentPath, { recursive: true }).pipe(
             Effect.mapError((error: PlatformError) =>
-              operationError(operation, error, {
+              operationError(operation, error.message, {
                 deckPath,
               }),
             ),
@@ -446,7 +440,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
 
         return fs.stat(parentPath).pipe(
           Effect.mapError((error: PlatformError) =>
-            operationError(operation, error, {
+            operationError(operation, error.message, {
               deckPath,
             }),
           ),
@@ -591,7 +585,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
                       },
                       (_, error) =>
                         Effect.fail(
-                          operationError("create", error, {
+                          operationError("create", error.message, {
                             deckPath: resolvedPath,
                           }),
                         ),
@@ -616,7 +610,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
                     },
                     (_, error) =>
                       Effect.fail(
-                        operationError("delete", error, {
+                        operationError("delete", error.message, {
                           deckPath: resolvedPath,
                         }),
                       ),
@@ -638,7 +632,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
                     },
                     (_, error) =>
                       Effect.fail(
-                        operationError("delete", error, {
+                        operationError("delete", error.message, {
                           deckPath: resolvedPath,
                         }),
                       ),
@@ -665,7 +659,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
                     },
                     (_, error) =>
                       Effect.fail(
-                        operationError("rename", error, {
+                        operationError("rename", error.message, {
                           fromPath: fromResolvedPath,
                           toPath: toResolvedPath,
                         }),
@@ -716,7 +710,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
                               Effect.succeed(false),
                             ),
                             Effect.mapError((sourceError) =>
-                              operationError("rename", sourceError, {
+                              operationError("rename", sourceError.message, {
                                 fromPath: fromResolvedPath,
                                 toPath: toResolvedPath,
                               }),
@@ -725,7 +719,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
                           if (!sourceExists) {
                             return yield* new DeckFileNotFound({ deckPath: fromResolvedPath });
                           }
-                          return yield* operationError("rename", error, {
+                          return yield* operationError("rename", error.message, {
                             fromPath: fromResolvedPath,
                             toPath: toResolvedPath,
                           });
@@ -733,7 +727,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
                     },
                     (_, error) =>
                       Effect.fail(
-                        operationError("rename", error, {
+                        operationError("rename", error.message, {
                           fromPath: fromResolvedPath,
                           toPath: toResolvedPath,
                         }),

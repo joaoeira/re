@@ -1,4 +1,4 @@
-import { Result, Effect, Option } from "effect";
+import { Result, Effect, Option, Schema } from "effect";
 import { describe, expect, it } from "@effect/vitest";
 import {
   adaptItemType,
@@ -6,10 +6,10 @@ import {
   manualCardSpec,
   numericField,
   reconcileCards,
-  type ItemId,
+  ItemIdSchema,
 } from "../../src/core/index";
 
-const metadata = (id: string) => createMetadataWithId(id as ItemId);
+const metadata = (id: string) => createMetadataWithId(Schema.decodeSync(ItemIdSchema)(id));
 
 describe("reconcileCards", () => {
   it("keeps surviving cards' learning data in the new key order and marks new cards", () => {

@@ -1,8 +1,8 @@
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
-import { State, numericField, type ItemId } from "../../src/core/index.js";
-import { Effect, Exit, Layer, Random, Result } from "effect";
+import { State, numericField, ItemIdSchema } from "../../src/core/index.js";
+import { Effect, Exit, Layer, Random, Result, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -438,7 +438,7 @@ describe("Composable ordering primitives", () => {
     relativePath: "deck.md",
     item: { content: "", cards: [] },
     card: {
-      id: id as ItemId,
+      id: Schema.decodeSync(ItemIdSchema)(id),
       stability: numericField(0),
       difficulty: numericField(0),
       state: category === "new" ? State.New : State.Review,

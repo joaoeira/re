@@ -6,7 +6,7 @@ import {
   numericField,
   type Grade,
   type Item,
-  type ItemId,
+  ItemIdSchema,
   type ItemType,
 } from "../../src/core/index.js";
 import { ContentParseError } from "../../src/core/index.js";
@@ -36,7 +36,7 @@ const makeCard = (id: string, state: 0 | 1 | 2 | 3 = 0): string => `<!--@ ${id} 
 
 const singleCardItem = (id: string, content: string): string => `${makeCard(id)}\n${content}`;
 
-const meta = (id: string) => createMetadataWithId(id as ItemId);
+const meta = (id: string) => createMetadataWithId(Schema.decodeSync(ItemIdSchema)(id));
 
 const twoSidedType = adaptItemType({
   name: "two-sided",
@@ -60,7 +60,7 @@ const twoSidedType = adaptItemType({
       cardType: "basic",
       key: "basic",
       responseSchema: Schema.Unknown,
-      grade: () => Effect.succeed(0 as Grade),
+      grade: () => Effect.succeed<Grade>(0),
     },
   ],
 } satisfies ItemType<{ front: string; back: string }>);
@@ -87,7 +87,7 @@ const twoCardType = adaptItemType({
       cardType: "forward",
       key: "forward",
       responseSchema: Schema.Unknown,
-      grade: () => Effect.succeed(0 as Grade),
+      grade: () => Effect.succeed<Grade>(0),
     },
     {
       prompt: "",
@@ -95,7 +95,7 @@ const twoCardType = adaptItemType({
       cardType: "reverse",
       key: "reverse",
       responseSchema: Schema.Unknown,
-      grade: () => Effect.succeed(0 as Grade),
+      grade: () => Effect.succeed<Grade>(0),
     },
   ],
 } satisfies ItemType<{ front: string; back: string }>);

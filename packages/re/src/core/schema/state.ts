@@ -14,6 +14,7 @@ export const StateFromString: Schema.Codec<State, string, never, never> = Schema
           new SchemaIssue.InvalidValue({ message: `State must be 0-3, got "${s}"` }, s, options),
         );
       }
+      // SAFETY: The preceding pattern check limits the parsed digit to 0–3.
       return Effect.succeed(parseInt(s, 10) as State);
     }),
     encode: SchemaGetter.transform((n) => n.toString()),

@@ -7,6 +7,8 @@ import ignore from "ignore";
 
 const ROOT_IGNORE_FILE = ".reignore";
 
+const isInvalidReadLinkCause = Schema.is(Schema.Struct({ code: Schema.Literals(["EINVAL"]) }));
+
 export interface ScanDecksOptions {
   readonly includeHidden?: boolean;
   readonly extraIgnorePatterns?: readonly string[];
@@ -129,7 +131,7 @@ const readDirectoryBestEffort = (
   fileSystem: FileSystem.FileSystem,
 ): Effect.Effect<Option.Option<readonly string[]>, WorkspaceRootUnreadable> =>
   fileSystem.readDirectory(absolutePath).pipe(
-    Effect.map((entries) => Option.some(entries as readonly string[])),
+    Effect.map((entries) => Option.some(entries)),
     Effect.catchReasons("PlatformError", {
       NotFound: () => Effect.succeed(Option.none()),
       PermissionDenied: () => Effect.succeed(Option.none()),
@@ -164,13 +166,7 @@ const isSymlinkBestEffort = (
         BadResource: () => Effect.succeed(Option.some(false)),
         InvalidData: () => Effect.succeed(Option.some(false)),
         Unknown: (reason, error) => {
-          const cause = reason.cause;
-          if (
-            typeof cause === "object" &&
-            cause !== null &&
-            "code" in cause &&
-            cause.code === "EINVAL"
-          ) {
+          if (isInvalidReadLinkCause(reason.cause)) {
             return Effect.succeed(Option.some(false));
           }
           return Effect.fail(mapNestedFatalError(rootPath, absolutePath, "readLink", error));

@@ -52,6 +52,7 @@ export interface EvaluableCardSpec<GradeError = never> {
   readonly reveal: string;
   readonly cardType: string;
   readonly evaluate: (
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the response decoding boundary; adaptItemType validates with the card's schema before calling its typed grader.
     response: unknown,
   ) => Effect.Effect<Grade, ResponseValidationError | GradeError>;
 }

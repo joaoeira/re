@@ -1,6 +1,6 @@
 import * as Path from "effect/Path";
-import { Effect, Result, Layer } from "effect";
-import { numericField, type ItemId, type ParsedFile } from "../../src/core/index.js";
+import { Effect, Result, Layer, Schema } from "effect";
+import { numericField, ItemIdSchema } from "../../src/core/index.js";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -14,7 +14,7 @@ import {
 import { createMockFileSystemLayer, type MockFileSystemConfig } from "./mock-file-system";
 
 const makeCard = (id: string) => ({
-  id: id as ItemId,
+  id: Schema.decodeSync(ItemIdSchema)(id),
   stability: numericField(0),
   difficulty: numericField(0),
   state: 0 as const,
@@ -23,10 +23,7 @@ const makeCard = (id: string) => ({
   due: null,
 });
 
-const makeDeck = (
-  path: string,
-  cards: { cardIds: string[] }[],
-): { path: string; file: ParsedFile } => ({
+const makeDeck = (path: string, cards: { cardIds: string[] }[]) => ({
   path,
   file: {
     preamble: "",

@@ -1,11 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
-import {
-  buildDeckTree,
-  flattenDeckTree,
-  type DeckTreeGroup,
-  type DeckTreeLeaf,
-} from "../../src/workspace/index.js";
+import { buildDeckTree, flattenDeckTree } from "../../src/workspace/index.js";
 import type { DeckSnapshot, DeckStateCounts } from "../../src/workspace/snapshotWorkspace";
 
 const okSnapshot = (
@@ -53,8 +48,8 @@ describe("buildDeckTree", () => {
     const tree = buildDeckTree([snapshot]);
 
     expect(tree).toHaveLength(1);
-    const leaf = tree[0] as DeckTreeLeaf;
-    expect(leaf.kind).toBe("leaf");
+    const leaf = tree[0];
+    assert(leaf?.kind === "leaf");
     expect(leaf.depth).toBe(0);
     expect(leaf.name).toBe("vocab");
     expect(leaf.relativePath).toBe("vocab.md");
@@ -76,8 +71,8 @@ describe("buildDeckTree", () => {
     const tree = buildDeckTree([snapshot]);
 
     expect(tree).toHaveLength(1);
-    const group = tree[0] as DeckTreeGroup;
-    expect(group.kind).toBe("group");
+    const group = tree[0];
+    assert(group?.kind === "group");
     expect(group.depth).toBe(0);
     expect(group.name).toBe("lang");
     expect(group.relativePath).toBe("lang");
@@ -87,8 +82,8 @@ describe("buildDeckTree", () => {
     expect(group.errorCount).toBe(0);
 
     expect(group.children).toHaveLength(1);
-    const leaf = group.children[0] as DeckTreeLeaf;
-    expect(leaf.kind).toBe("leaf");
+    const leaf = group.children[0];
+    assert(leaf?.kind === "leaf");
     expect(leaf.depth).toBe(1);
     expect(leaf.name).toBe("vocab");
   });
@@ -97,24 +92,27 @@ describe("buildDeckTree", () => {
     const snapshot = okSnapshot("a/b/c/deck.md", { new: 1 });
     const tree = buildDeckTree([snapshot]);
 
-    const groupA = tree[0] as DeckTreeGroup;
+    const groupA = tree[0];
+    assert(groupA?.kind === "group");
     expect(groupA.name).toBe("a");
     expect(groupA.depth).toBe(0);
     expect(groupA.totalCards).toBe(1);
     expect(groupA.dueCards).toBe(0);
 
-    const groupB = groupA.children[0] as DeckTreeGroup;
+    const groupB = groupA.children[0];
+    assert(groupB?.kind === "group");
     expect(groupB.name).toBe("b");
     expect(groupB.depth).toBe(1);
     expect(groupB.totalCards).toBe(1);
 
-    const groupC = groupB.children[0] as DeckTreeGroup;
+    const groupC = groupB.children[0];
+    assert(groupC?.kind === "group");
     expect(groupC.name).toBe("c");
     expect(groupC.depth).toBe(2);
     expect(groupC.totalCards).toBe(1);
 
-    const leaf = groupC.children[0] as DeckTreeLeaf;
-    expect(leaf.kind).toBe("leaf");
+    const leaf = groupC.children[0];
+    assert(leaf?.kind === "leaf");
     expect(leaf.depth).toBe(3);
   });
 
@@ -124,7 +122,8 @@ describe("buildDeckTree", () => {
       okSnapshot("math/calculus.md", { new: 2, learning: 4 }, 1),
     ]);
 
-    const group = tree[0] as DeckTreeGroup;
+    const group = tree[0];
+    assert(group?.kind === "group");
     expect(group.totalCards).toBe(14);
     expect(group.dueCards).toBe(3);
     expect(group.stateCounts).toEqual({
@@ -139,12 +138,14 @@ describe("buildDeckTree", () => {
   it("aggregates counts through all ancestor groups", () => {
     const tree = buildDeckTree([okSnapshot("a/b/deep.md", { new: 10 }, 4)]);
 
-    const groupA = tree[0] as DeckTreeGroup;
+    const groupA = tree[0];
+    assert(groupA?.kind === "group");
     expect(groupA.totalCards).toBe(10);
     expect(groupA.dueCards).toBe(4);
     expect(groupA.stateCounts.new).toBe(10);
 
-    const groupB = groupA.children[0] as DeckTreeGroup;
+    const groupB = groupA.children[0];
+    assert(groupB?.kind === "group");
     expect(groupB.totalCards).toBe(10);
     expect(groupB.dueCards).toBe(4);
     expect(groupB.stateCounts.new).toBe(10);
@@ -157,7 +158,8 @@ describe("buildDeckTree", () => {
       errorSnapshot("lang/broken.md", "read_error"),
     ]);
 
-    const group = tree[0] as DeckTreeGroup;
+    const group = tree[0];
+    assert(group?.kind === "group");
     expect(group.totalCards).toBe(5);
     expect(group.dueCards).toBe(2);
     expect(group.stateCounts.new).toBe(5);
@@ -190,7 +192,8 @@ describe("buildDeckTree", () => {
   it("handles a group with only error children", () => {
     const tree = buildDeckTree([errorSnapshot("broken/a.md"), errorSnapshot("broken/b.md")]);
 
-    const group = tree[0] as DeckTreeGroup;
+    const group = tree[0];
+    assert(group?.kind === "group");
     expect(group.totalCards).toBe(0);
     expect(group.dueCards).toBe(0);
     expect(group.stateCounts).toEqual({ new: 0, learning: 0, review: 0, relearning: 0 });
@@ -227,13 +230,13 @@ describe("flattenDeckTree", () => {
   });
 
   it("skips children of collapsed groups but keeps the group row", () => {
-    const rows = flattenDeckTree(tree, { algorithms: true } as Record<string, true>);
+    const rows = flattenDeckTree(tree, { algorithms: true });
 
     expect(rows.map((r) => r.key)).toEqual(["algorithms", "japanese", "japanese/vocab.md"]);
   });
 
   it("collapses a nested group while keeping its parent expanded", () => {
-    const rows = flattenDeckTree(tree, { "algorithms/graphs": true } as Record<string, true>);
+    const rows = flattenDeckTree(tree, { "algorithms/graphs": true });
 
     expect(rows.map((r) => r.key)).toEqual([
       "algorithms",
@@ -258,7 +261,7 @@ describe("flattenDeckTree", () => {
       algorithms: true,
       "algorithms/graphs": true,
       japanese: true,
-    } as Record<string, true>;
+    } satisfies Record<string, true>;
 
     const rows = flattenDeckTree(tree, collapsed);
     expect(rows.map((r) => r.key)).toEqual(["algorithms", "japanese"]);

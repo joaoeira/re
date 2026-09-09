@@ -190,6 +190,8 @@ describe("scheduler configuration", () => {
       ];
       for (const options of invalidOptions) {
         let started = false;
+        // SAFETY: Deliberately bypass the static options contract to exercise malformed JavaScript input.
+        // The test requires rejection before any dependent program or scheduling can run.
         const error = yield* Effect.gen(function* () {
           const scheduler = yield* Scheduler;
           started = true;

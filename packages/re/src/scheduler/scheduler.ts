@@ -3,6 +3,7 @@ import {
   checkParameters,
   ConvertStepUnitToMinutes,
   createEmptyCard,
+  Rating,
   type Card,
   type FSRS,
   type Grade as FSRSGradeType,
@@ -13,7 +14,9 @@ import { State, numericField, type ItemMetadata } from "../core/index.js";
 
 export type FSRSGrade = 0 | 1 | 2 | 3;
 
-const gradeToRating = (grade: FSRSGrade): FSRSGradeType => (grade + 1) as FSRSGradeType;
+const GRADE_TO_RATING = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy] as const;
+
+const gradeToRating = (grade: FSRSGrade): FSRSGradeType => GRADE_TO_RATING[grade];
 
 export interface SchedulerLog {
   readonly rating: FSRSGrade;
@@ -106,7 +109,7 @@ export const fsrsCardToItemMetadata = (
   id: original.id,
   stability: numericField(fsrsCard.stability),
   difficulty: numericField(fsrsCard.difficulty),
-  state: fsrsCard.state as State,
+  state: fsrsCard.state,
   learningSteps: fsrsCard.learning_steps,
   lastReview: reviewDate,
   due: fsrsCard.due,

@@ -9,15 +9,15 @@ import {
   serializeFile,
   type EvaluableItemType,
   type Item,
-  type ItemId,
+  ItemIdSchema,
 } from "../../src/core/index.js";
-import { Data, Deferred, Effect, Exit, Fiber, Layer } from "effect";
+import { Data, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect";
 
 import { DeckManager, DeckManagerLive } from "../../src/workspace/index.js";
 import { createMockFileSystem, makeSystemError } from "./mock-file-system";
 
 const item = (id: string, content = `${id}\n`): Item => ({
-  cards: [createMetadataWithId(id as ItemId)],
+  cards: [createMetadataWithId(Schema.decodeSync(ItemIdSchema)(id))],
   content,
 });
 
