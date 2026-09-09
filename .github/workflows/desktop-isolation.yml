@@ -38,4 +38,5 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run check:app-resolution
       - run: bun run test:app-isolation
+      - run: bun run desktop:typecheck
       - run: bun run check:desktop
