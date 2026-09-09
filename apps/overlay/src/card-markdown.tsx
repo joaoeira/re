@@ -4,7 +4,7 @@ import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import type { Nodes, Root, Definition } from "mdast";
+import type { Nodes, Root, Definition, Paragraph } from "mdast";
 import { MediaView } from "./card-media-view";
 import { InlineParagraph } from "./card-inline";
 import { cardsPath } from "./storage";
@@ -12,6 +12,34 @@ import { cardTheme, cardTypography, colors, column } from "./theme";
 
 const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
 const stack: StyleDesc = { ...column, gap: 12, flexShrink: 0 };
+
+function flowDiagramLines(node: Paragraph, source: string) {
+  const lines = source.split(/\r?\n/);
+  // An explicit vertical flow, not an arbitrary soft-wrapped paragraph. Only
+  // top-level paragraphs are candidates; lists and fenced code keep Markdown's
+  // semantics. Do not split emphasis, links, code or math spanning source lines.
+  if (
+    lines.length < 3 ||
+    lines.length % 2 === 0 ||
+    node.children.some(
+      (child) =>
+        child.type !== "text" &&
+        child.type !== "break" &&
+        child.position?.start.line !== child.position?.end.line,
+    ) ||
+    !lines.every((line, index) =>
+      index % 2 === 0 ? /^\S/.test(line) : /^[ \t]+[↓↑↕⇓⇑⇕](?:[ \t]|$)/u.test(line),
+    )
+  )
+    return undefined;
+  return lines.map((line) => {
+    const whitespace = line.match(/^[ \t]*/)![0];
+    // Markdown tab stops are four columns; preserve mixed tabs/spaces too.
+    let indent = 0;
+    for (const character of whitespace) indent += character === "\t" ? 4 - (indent % 4) : 1;
+    return { indent, content: line.slice(whitespace.length) };
+  });
+}
 
 function special(node: Nodes): boolean {
   return (
@@ -38,17 +66,48 @@ export function CardMarkdown({
   for (const node of tree.children)
     if (node.type === "definition") definitions.set(node.identifier.toLowerCase(), node);
   const raw = (node: Nodes) => source.slice(node.position?.start.offset, node.position?.end.offset);
+  const definitionSource = [...definitions.values()].map(raw).join("\n");
+  const diagrams = new Map(
+    tree.children
+      .filter((node): node is Paragraph => node.type === "paragraph")
+      .map((node) => [node, flowDiagramLines(node, raw(node))] as const),
+  );
 
   function block(node: Nodes): ReactNode {
     const key = node.position?.start.offset;
     if (node.type === "definition") return null;
+    const diagram = node.type === "paragraph" ? diagrams.get(node) : undefined;
+    if (diagram)
+      return (
+        <div key={key} style={{ ...column, flexShrink: 0 }}>
+          {diagram.map((line, index) => (
+            <div key={index} style={{ display: "flex", flexDirection: "row" }}>
+              {line.indent > 0 && (
+                <text
+                  style={{
+                    fontFamily: cardTypography.fontFamily,
+                    fontSize: cardTypography.fontSize,
+                    lineHeight: cardTypography.lineHeight,
+                    flexShrink: 0,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {"\u00a0".repeat(line.indent)}
+                </text>
+              )}
+              <div style={{ ...column, flexGrow: 1, minWidth: 0 }}>
+                <CardMarkdown
+                  source={`${line.content}\n\n${definitionSource}`}
+                  deckPath={deckPath}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      );
     if (!special(node))
       return (
-        <markdown
-          key={key}
-          source={`${raw(node)}\n\n${[...definitions.values()].map(raw).join("\n")}`}
-          theme={cardTheme}
-        />
+        <markdown key={key} source={`${raw(node)}\n\n${definitionSource}`} theme={cardTheme} />
       );
     if (
       node.type === "math" ||

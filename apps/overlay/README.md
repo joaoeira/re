@@ -117,6 +117,12 @@ SVGs retain their MathJax baseline and align with native text using macOS font
 metrics; punctuation stays attached when a line wraps. The panel bridge exposes
 the font measurement without opening a window.
 
+Top-level vertical flow diagrams (alternating label lines and indented Unicode
+up/down-arrow lines) preserve their rows and indentation, including during cloze
+reveal. Each row still supports Markdown and inline math. Ordinary soft-wrapped
+prose, lists, code blocks, and formatting spanning multiple lines keep their
+normal Markdown semantics; this is not a general whitespace-preserving mode.
+
 ## Native integration
 
 `native/panel.m` configures GPUI's window without replacing its class or delegate.

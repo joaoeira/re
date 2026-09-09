@@ -76,3 +76,97 @@ nativeTest(
     }
   },
 );
+
+nativeTest("cloze flow diagrams retain their rows and indentation through reveal", async () => {
+  const { view, CardMarkdown } = await setup(600);
+  const { prepareScratch } = await import("../src/workspace");
+  try {
+    for (const indent of ["    ", "\t", " \t"]) {
+      const prepared = prepareScratch({
+        type: "cloze",
+        content: [
+          "{{c1::virtual address}}",
+          `${indent}↓ {{c2::page-table}} translation`,
+          "{{c3::physical address}}",
+          `${indent}↓ {{c4::memory-controller}} translation`,
+          "{{c5::DRAM location}}",
+        ].join("\n"),
+      });
+      if (!prepared.ok) throw new Error(prepared.error);
+      const card = prepared.value[3]!;
+      for (const width of [600, 190]) {
+        for (const source of [card.question, card.answer]) {
+          view.render(
+            <div style={{ width }}>
+              <CardMarkdown source={source} />
+            </div>,
+          );
+          const rows = view.renderer.findByType("markdown");
+          expect(rows).toHaveLength(5);
+          const bounds = rows.map((row) => view.renderer.getElementBounds(row.id)!);
+          for (let i = 1; i < bounds.length; i++) {
+            expect(bounds[i]![1]!).toBeGreaterThanOrEqual(
+              bounds[i - 1]![1]! + bounds[i - 1]![3]! - 1,
+            );
+          }
+          expect(bounds[1]![0]!).toBeGreaterThan(bounds[0]![0]!);
+          expect(bounds[3]![0]).toBe(bounds[1]![0]);
+          expect(bounds[2]![0]).toBe(bounds[0]![0]);
+          expect(bounds[4]![0]).toBe(bounds[0]![0]);
+          const painted = view.renderer.getPaintedText().join(" ");
+          expect(painted).toContain(source === card.question ? "[...]" : "memory-controller");
+          expect(painted).not.toContain("{{c");
+          expect(painted).not.toContain("**");
+        }
+      }
+    }
+  } finally {
+    view.unmount();
+  }
+});
+
+nativeTest("ordinary paragraph wrapping and explicit Markdown blocks stay intact", async () => {
+  const { view, CardMarkdown } = await setup(600);
+  try {
+    const prose = "An ordinary sentence\n    continues on the next source line.";
+    const diagram = "Input\n    ↓ conversion\nOutput";
+    const height = () =>
+      view.renderer.getElementBounds(view.renderer.findByTestId("content")!.id)![3]!;
+    for (const source of [
+      prose,
+      `- ${diagram.replaceAll("\n", "\n  ")}`,
+      "**Input\n    ↓ conversion\nOutput**",
+    ]) {
+      view.render(
+        <div style={{ width: 600 }}>
+          <CardMarkdown testId="content" source={source} />
+        </div>,
+      );
+      const originalHeight = height();
+      const originalText = view.renderer.getPaintedText().join(" ");
+      view.render(
+        <div style={{ width: 600 }}>
+          <CardMarkdown
+            testId="content"
+            source={source.replace(/\n +/g, " ").replaceAll("\n", " ")}
+          />
+        </div>,
+      );
+      expect(height()).toBe(originalHeight);
+      expect(view.renderer.getPaintedText().join(" ")).toBe(originalText);
+      expect(originalText).not.toContain("**");
+    }
+    view.render(
+      <div style={{ width: 600 }}>
+        <CardMarkdown testId="content" source={`\`\`\`text\n${diagram}\n\`\`\``} />
+      </div>,
+    );
+    expect(height()).toBeGreaterThanOrEqual(3 * 22);
+    const code = view.renderer.getPaintedText().join("\n");
+    expect(code).toContain("Input");
+    expect(code).toContain("    ↓ conversion");
+    expect(code).toContain("Output");
+  } finally {
+    view.unmount();
+  }
+});
