@@ -40,7 +40,12 @@ try {
     .filter(Boolean);
   for (const file of files) {
     const source = path.join(repoRoot, file);
-    assert.ok((await lstat(source)).isFile(), `Expected an ordinary app file: ${file}`);
+    const info = await lstat(source).catch((error) => {
+      if (error.code === "ENOENT") return null; // An uncommitted deletion.
+      throw error;
+    });
+    if (!info) continue;
+    assert.ok(info.isFile(), `Expected an ordinary app file: ${file}`);
     const target = path.join(app, path.relative("apps/raycast", file));
     await mkdir(path.dirname(target), { recursive: true });
     await copyFile(source, target);

@@ -1,15 +1,16 @@
 import { describe, expect, it } from "@effect/vitest";
-import type { ItemMetadata, EvaluableItemType } from "@simbyotic/re/core";
-import type { ImportedDeckImageAsset } from "@simbyotic/re/workspace";
+import type { ItemMetadata, EvaluableItemType } from "../../src/core/index.js";
+import type { ImportedDeckImageAsset } from "../../src/workspace/index.js";
 import { Effect, Layer } from "effect";
 
 import {
   ClipboardImageUnavailable,
   ClipboardImageReader,
   type ClipboardImageReader as ClipboardImageReaderService,
-} from "../src/clipboard-image";
-import { DeckStore, type DeckStore as DeckStoreService } from "../src/deck-store";
-import { insertImageForUi } from "../src/image-insertion";
+  DeckStore,
+  type DeckStore as DeckStoreService,
+  insertImageForUi,
+} from "../../src/study/index.js";
 
 const clipboardImage = {
   bytes: new Uint8Array([137, 80, 78, 71]),

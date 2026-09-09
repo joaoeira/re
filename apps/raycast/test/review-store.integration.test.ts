@@ -27,6 +27,8 @@ const TestLive = ReviewStoreLive.pipe(
 );
 const TestWithPlatformLive = Layer.merge(TestLive, PlatformLive);
 
+// Keep integration coverage of the frozen Effect v3 archive during the library migration.
+// Revisit this overlap when Raycast adopts the current library and equivalent app coverage.
 describe("ReviewStoreLive", () => {
   it.scoped("grades the latest metadata after waiting to acquire the deck lock", () =>
     Effect.gen(function* () {

@@ -1,18 +1,21 @@
 import { FileSystem } from "@effect/platform";
-import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import * as NodeFileSystem from "@effect/platform-node-shared/NodeFileSystem";
+import * as NodePath from "@effect/platform-node-shared/NodePath";
 import { describe, expect, it } from "@effect/vitest";
-import { DeckManagerLive } from "@simbyotic/re/workspace";
+import { DeckManagerLive } from "../../src/workspace/index.js";
 import { Effect, Layer } from "effect";
 
-import { createCardForUi, loadDecksForUi } from "../src/card-creation";
-import { DeckStore, DeckStoreLive } from "../src/deck-store";
+import {
+  createCardForUi,
+  loadDecksForUi,
+  DeckStore,
+  DeckStoreLive,
+} from "../../src/study/index.js";
 
 const PlatformLive = Layer.merge(NodeFileSystem.layer, NodePath.layer);
 const DeckManagerAndPlatformLive = DeckManagerLive.pipe(Layer.provideMerge(PlatformLive));
 const TestLive = DeckStoreLive.pipe(Layer.provideMerge(DeckManagerAndPlatformLive));
 
-// Keep integration coverage of the frozen Effect v3 archive during the library migration.
-// Revisit this overlap when Raycast adopts the current library and equivalent app coverage.
 describe("DeckStoreLive", () => {
   it.scoped("discovers a deck and writes a card through the real filesystem adapter", () =>
     Effect.gen(function* () {

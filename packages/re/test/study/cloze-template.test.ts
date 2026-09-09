@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appendNextClozeTemplate } from "../src/cloze-template";
+import { appendNextClozeTemplate } from "../../src/study/index.js";
 
 describe("appendNextClozeTemplate", () => {
   it("appends a template using the next cloze index", () => {

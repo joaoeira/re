@@ -1,20 +1,19 @@
 import { describe, expect, it } from "@effect/vitest";
-import type { ItemMetadata, EvaluableItemType } from "@simbyotic/re/core";
+import type { ItemMetadata, EvaluableItemType } from "../../src/core/index.js";
 import {
   DeckNotFound,
-  type DeckEntry,
   type ItemValidationError,
   type WriteError,
-} from "@simbyotic/re/workspace";
+} from "../../src/workspace/index.js";
 import { Effect, Layer } from "effect";
 
 import {
   createCardForUi,
-  loadDecksForUi,
   prepareCard,
   type CreateCardInput,
-} from "../src/card-creation";
-import { DeckStore, type DeckStore as DeckStoreService } from "../src/deck-store";
+  DeckStore,
+  type DeckStore as DeckStoreService,
+} from "../../src/study/index.js";
 
 interface AppendCall {
   readonly deckPath: string;
@@ -26,12 +25,11 @@ interface AppendCall {
 }
 
 const createTestLayer = (options?: {
-  readonly decks?: readonly DeckEntry[];
   readonly appendError?: WriteError | ItemValidationError;
   readonly onAppend?: (call: AppendCall) => void;
 }): Layer.Layer<DeckStoreService> =>
   Layer.succeed(DeckStore, {
-    listDecks: () => Effect.succeed(options?.decks ?? []),
+    listDecks: () => Effect.succeed([]),
     appendItem: (deckPath, item, itemType) => {
       options?.onAppend?.({ deckPath, item, itemType });
       return options?.appendError === undefined ? Effect.void : Effect.fail(options.appendError);
@@ -164,21 +162,4 @@ describe("createCardForUi", () => {
       ),
     ),
   );
-});
-
-describe("loadDecksForUi", () => {
-  it.effect("returns the scanned decks", () => {
-    const decks: readonly DeckEntry[] = [
-      {
-        absolutePath: "/decks/geography.md",
-        relativePath: "geography.md",
-        name: "geography",
-      },
-    ];
-
-    return Effect.gen(function* () {
-      const result = yield* loadDecksForUi("/decks");
-      expect(result).toEqual({ _tag: "DecksLoaded", decks });
-    }).pipe(Effect.provide(createTestLayer({ decks })));
-  });
 });
