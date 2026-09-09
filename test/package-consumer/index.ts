@@ -38,9 +38,17 @@ import {
   snapshotWorkspace,
   type ReadError,
 } from "@simbyotic/re/workspace";
+import {
+  DeckStore,
+  DeckStoreLive,
+  ReviewStore,
+  makeReviewStoreLive,
+  type ReviewGradeError,
+  type ReviewUndoToken,
+} from "@simbyotic/re/study";
 
 // Public imports must resolve to installed JavaScript, never a workspace source file.
-for (const name of ["core", "item-types", "scheduler", "workspace"]) {
+for (const name of ["core", "item-types", "scheduler", "workspace", "study"]) {
   assert.equal(
     fileURLToPath(import.meta.resolve(`@simbyotic/re/${name}`)),
     path.resolve("node_modules/@simbyotic/re/dist", name, "index.js"),
@@ -51,7 +59,7 @@ const qaContent = "What is the capital of France?\n---\nParis\n\n";
 const qa = Effect.runSync(QAType.parse(qaContent));
 assert.equal(QAType.cards(qa)[0]?.reveal, "Paris");
 
-// Exported schemas from all three libraries compose with the consumer's Schema implementation.
+// Public schemas compose with the consumer's own Schema implementation.
 const ConsumerSchema = Schema.Struct({
   content: QAContent,
   metadataError: MetadataParseErrorSchema,
@@ -87,6 +95,10 @@ const QueueLive = ReviewQueueBuilderLive.pipe(
   Layer.provide(Layer.merge(DeckLive, NewFirstOrderingStrategy)),
 );
 const ConsumerLive = Layer.mergeAll(DeckLive, QueueLive, SchedulerLive);
+const StudyLive = Layer.merge(
+  DeckStoreLive,
+  makeReviewStoreLive((_context, markdown) => Effect.succeed(markdown)),
+).pipe(Layer.provideMerge(ConsumerLive));
 const rootPath = await mkdtemp(path.join(tmpdir(), "re-consumer-decks-"));
 const deckPath = path.join(rootPath, "geography.md");
 const missingDeckPath = path.join(rootPath, "missing.md");
@@ -130,9 +142,11 @@ try {
         (current) =>
           Effect.gen(function* () {
             const previous = yield* resolveBuiltinItem(current);
-            const matched = yield* reconcileCards(
-              { keys: previous.cards.map((card) => card.key), cards: current.cards },
-              nextCards.map((card) => card.key),
+            const matched = yield* Effect.fromResult(
+              reconcileCards(
+                { keys: previous.cards.map((card) => card.key), cards: current.cards },
+                nextCards.map((card) => card.key),
+              ),
             );
             return { content: editedContent, cards: matched.map(Option.getOrElse(createMetadata)) };
           }),
@@ -178,8 +192,42 @@ try {
   // Independently read the bytes written by the library.
   const persisted = Effect.runSync(parseFile(await readFile(deckPath, "utf8")));
   assert.equal(persisted.items[0]?.cards[0]?.lastReview?.toISOString(), reviewedAt.toISOString());
+
+  // Capture the stores once, then call their public methods without supplying a service graph.
+  const stores = await Effect.runPromise(
+    Effect.gen(function* () {
+      return { decks: yield* DeckStore, reviews: yield* ReviewStore, manager: yield* DeckManager };
+    }).pipe(Effect.provide(StudyLive)),
+  );
+  const studyPath = path.join(rootPath, "study.md");
+  await Effect.runPromise(stores.manager.createDeck(studyPath));
+  const studyCard = createMetadata();
+  await Effect.runPromise(
+    stores.decks.appendItem(
+      studyPath,
+      { cards: [studyCard], content: qaContent },
+      adaptItemType(QAType),
+    ),
+  );
+  const session = await Effect.runPromise(stores.reviews.startSession(rootPath, reviewedAt));
+  const reference = session.cards.find((entry) => entry.cardId === studyCard.id);
+  assert.ok(reference);
+  const view = await Effect.runPromise(stores.reviews.loadCard(rootPath, reference));
+  assert.equal(view.reveal, "Paris");
+  const grade: Effect.Effect<ReviewUndoToken, ReviewGradeError, never> = stores.reviews.gradeCard(
+    reference,
+    2,
+    reviewedAt,
+  );
+  const undo = await Effect.runPromise(grade);
+  const graded = Effect.runSync(parseFile(await readFile(studyPath, "utf8")));
+  assert.equal(graded.items[0]?.cards[0]?.lastReview?.toISOString(), reviewedAt.toISOString());
+  assert.deepEqual(undo.previousMetadata, studyCard);
+  await Effect.runPromise(stores.reviews.undoGrade(undo));
+  const restored = Effect.runSync(parseFile(await readFile(studyPath, "utf8")));
+  assert.deepEqual(restored.items[0]?.cards[0], studyCard);
   console.log(
-    "Passed: public imports, declarations, schema composition, round-trip, Q&A, cloze, scheduling, tagged errors, deck writes, scan, snapshot, and partial queues with recoverable deck errors.",
+    "Passed: all five public imports, declarations, schema composition, round-trip, Q&A, cloze, scheduling, tagged errors, deck writes, scan, snapshot, partial queues, and study authoring/loading/grading/undo through captured services.",
   );
 } finally {
   await rm(rootPath, { recursive: true, force: true });

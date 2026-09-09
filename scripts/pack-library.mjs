@@ -22,23 +22,16 @@ export const run = async (command, args, cwd = repoRoot, env = process.env) => {
   }
 };
 
-export const packLibrary = async (destination) => {
-  await mkdir(destination, { recursive: true });
-  const directory = packageDirectory;
-  const original = JSON.parse(await readFile(path.join(directory, "package.json"), "utf8"));
-  await rm(path.join(directory, "dist"), { recursive: true, force: true });
-  console.log("Building the library from clean output directories...");
-  await run(process.execPath, ["node_modules/typescript/bin/tsc", "-b", "tsconfig.build.json"]);
-  const filename = await run(
-    "bun",
-    ["pm", "pack", "--destination", destination, "--ignore-scripts", "--quiet"],
-    directory,
-  );
-  const archive = path.resolve(destination, filename);
+// Used for freshly packed output and for archives supplied to the external-consumer checks.
+export const inspectLibraryArchive = async (archive) => {
   const entries = (await run("tar", ["-tzf", archive])).split("\n");
   const manifest = JSON.parse(await run("tar", ["-xOf", archive, "package/package.json"]));
   assert.equal(manifest.name, packageName);
-  assert.equal(manifest.version, original.version);
+  assert.deepEqual(
+    Object.keys(manifest.exports ?? {}).sort(),
+    ["./core", "./item-types", "./scheduler", "./study", "./workspace"],
+    "The archive must expose exactly the five public entry points",
+  );
   for (const entry of entries) {
     assert.match(
       entry,
@@ -46,10 +39,12 @@ export const packLibrary = async (destination) => {
       `Unexpected file in ${manifest.name}: ${entry}`,
     );
     if (entry.endsWith(".js") || entry.endsWith(".ts")) {
+      const content = await run("tar", ["-xOf", archive, entry]);
+      assert.doesNotMatch(content, /@effect\/schema/, `Legacy Schema reference in ${entry}`);
       assert.doesNotMatch(
-        await run("tar", ["-xOf", archive, entry]),
-        /@effect\/schema/,
-        `Legacy Schema reference in ${entry}`,
+        content,
+        /@effect\/platform(?:\/|["'])/,
+        `Removed v3 platform import in ${entry}`,
       );
     }
   }
@@ -77,6 +72,7 @@ export const packLibrary = async (destination) => {
   ]) {
     for (const [name, version] of Object.entries(manifest[field] ?? {})) {
       assert.notEqual(name, "@effect/schema", `${manifest.name}: legacy Schema ${field}`);
+      assert.notEqual(name, "@effect/platform", `${manifest.name}: removed v3 platform ${field}`);
       assert.doesNotMatch(version, /^(?:workspace|file|link):/, `${manifest.name}: ${name}`);
       assert.doesNotMatch(
         name,
@@ -85,9 +81,25 @@ export const packLibrary = async (destination) => {
       );
     }
   }
-  console.log(
-    `Packed and inspected ${manifest.name}@${manifest.version} (${entries.length} files)`,
+  console.log(`Inspected ${manifest.name}@${manifest.version} (${entries.length} files)`);
+  return manifest;
+};
+
+export const packLibrary = async (destination) => {
+  await mkdir(destination, { recursive: true });
+  const directory = packageDirectory;
+  const original = JSON.parse(await readFile(path.join(directory, "package.json"), "utf8"));
+  await rm(path.join(directory, "dist"), { recursive: true, force: true });
+  console.log("Building the library from clean output directories...");
+  await run(process.execPath, ["node_modules/typescript/bin/tsc", "-b", "tsconfig.build.json"]);
+  const filename = await run(
+    "bun",
+    ["pm", "pack", "--destination", destination, "--ignore-scripts", "--quiet"],
+    directory,
   );
+  const archive = path.resolve(destination, filename);
+  const manifest = await inspectLibraryArchive(archive);
+  assert.equal(manifest.version, original.version);
   return archive;
 };
 

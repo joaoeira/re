@@ -29,6 +29,7 @@
     "watch:library": "tsc -b tsconfig.build.json --watch",
     "pack:library": "node scripts/pack-library.mjs",
     "check:packages": "node scripts/check-packages.mjs",
+    "test:packages": "node --test scripts/library-packages.test.mjs",
     "check:raycast": "node scripts/check-raycast.mjs",
     "check:desktop": "node scripts/check-desktop.mjs",
     "changeset": "changeset",

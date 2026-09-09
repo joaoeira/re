@@ -4,8 +4,14 @@ Filesystem deck management, discovery, snapshots, image assets, and review queue
 for Markdown spaced repetition workspaces. The entry point exports ESM JavaScript
 and TypeScript declarations and uses Effect services.
 
-Callers supply the filesystem and path implementations. For example, a Node application
-must install `@effect/platform` and can use `@effect/platform-node` for those layers:
+Callers supply the filesystem and path implementations. Their service keys come from
+`effect/FileSystem` and `effect/Path`; `@effect/platform` is no longer a dependency.
+Node applications use `@effect/platform-node@4.0.0-rc.112` alongside the exact
+`effect@4.0.0-rc.112` peer:
+
+```sh
+npm install effect@4.0.0-rc.112 @effect/platform-node@4.0.0-rc.112
+```
 
 ```ts
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
@@ -80,6 +86,12 @@ Service lifetime matters at application boundaries: capture a shared instance wh
 RPC handlers instead of rebuilding `DeckManagerLive` for each request. The desktop handler
 bundle does this so reviews, editor saves, and Forge writes use the same per-deck locks.
 
+In a v4 layer graph, reuse the same manager layer object across queue and study branches.
+Services use explicit `Context.Service` contracts, and manager methods capture their
+filesystem/path dependencies. Their returned Effects need no additional service context.
+Filesystem failures use v4 `PlatformError` wrappers; recovery is selected by typed
+`Effect.catchReason`/`Effect.catchReasons` handlers before producing public domain errors.
+
 Scheduling is provided by `@simbyotic/re/scheduler`; import `Scheduler` and `SchedulerLive` from that
 package. Workspace uses its due-date helpers for snapshots and review queues. Discovery uses
 Markdown files and honors the workspace's `.reignore`. Image hashing requires Web Crypto, available
@@ -117,6 +129,10 @@ nonempty `deckErrors` is an incomplete result, so an app should report those fai
 than treating it as confirmation that the selected decks are up to date. Defects and
 interruption propagate through Effect; they are never converted into deck errors.
 The selection-based `ReviewQueueService` returns the same result type.
+
+Shuffling preserves membership and multiplicity. `Random.withSeed(seed)` gives
+reproducible ordering within the pinned v4 implementation; the old v3 seed sequence
+is not retained. Category grouping and ordering before limits are unchanged.
 
 Apps choose whether to show failures alongside available cards or require every deck to load:
 

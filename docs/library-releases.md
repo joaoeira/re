@@ -4,13 +4,45 @@
 
 The frozen archive and provenance are checked by `bun run check:app-resolution`. Desktop/Raycast exports copy those exact bytes; they do not rebuild the current library. See [the frozen library instructions](../vendor/re-effect3/README.md) for reconstruction and replacement. Installing dependencies no longer builds the workspace library implicitly; use `bun run build:library` when needed.
 
+## Current Effect v4 local prerelease
+
+The `0.3.0-rc.0` line targets exactly `effect@4.0.0-rc.112`. Its five entry points
+share that peer; workspace/study consumers supply a matching Node adapter when
+needed. The old `@effect/platform` peer is removed. See the
+[consumer migration guide](../packages/re/docs/migrating-effect-v4.md).
+
+The migration delivers a local archive, with no npm upload or release tag.
+Changesets prerelease mode prepares the version, changelog, and lockfile. While
+that mode is active, `release:version` prepares the next rc from pending changesets.
+Validate the local deliverable with:
+
+```sh
+bun install --frozen-lockfile
+bun run --filter '@simbyotic/re' test
+bun run --filter '@simbyotic/re' typecheck
+bun run test:packages
+bun run test:release
+bun run release:check
+```
+
+`release:check` produces `dist/library-release/*.tgz` and `release.json`, recording
+the source commit, dirty-checkout status, and SHA-512 integrity after validating
+the exact archive. `pack:library` also produces an inspected archive in
+`dist/packages/`. Install the archive path alongside the exact Effect peer.
+
+The publisher still supports stable versions only. Both `release:dry-run` and
+`release:publish` intentionally refuse rc versions before invoking npm. The
+release workflow verifies and retains prerelease artifacts while skipping its
+stable publishing route. Supporting public prereleases, including a `next` tag
+and promotion rules, remains separate work.
+
 ## Record and prepare a release
 
 Run `bun run changeset` for changes to public behavior. Select `@simbyotic/re`, choose the version bump, and describe the effect on callers. Commit the generated release note with the implementation. Use patch for compatible fixes and minor for compatible additions. Before 1.0, use a minor bump for breaking changes and include migration instructions; after 1.0, breaking changes require a major bump.
 
 Run `bun run release:version` to consume pending changesets, update the package version and changelog, and refresh `bun.lock`. It preserves all three apps' frozen library dependency pins and does not version or publish the apps.
 
-Review and commit the result on `master`, then verify:
+For a stable version, review and commit the result on `master`, then verify:
 
 ```bash
 bun install --frozen-lockfile
@@ -21,7 +53,13 @@ bun run test:release
 bun run release:dry-run
 ```
 
-`release:check` makes a clean build and packs one archive. It installs that exact archive into external npm consumers, checks NodeNext and bundler TypeScript resolution, and executes ESM and CommonJS consumers. One consumer has no `@effect/platform` installation, verifying that core and scheduling remain usable without the optional workspace peer.
+`release:check` makes a clean build and packs one archive. It installs that exact
+archive into external npm consumers, checks strict NodeNext and Bundler TypeScript
+resolution, and executes native ESM and CommonJS consumers. One consumer has no
+Node adapter; the other supplies one and exercises workspace and study. Both
+require one shared Effect installation and reject the removed `@effect/platform`
+and `@effect/schema` packages. CI retains the Node 22/24 matrix. Declaration maps
+must resolve to sources inside the archive, and all five exports are required.
 
 The archive and `release.json` are written to `dist/library-release/` with SHA-512 integrity and the source commit. Publishing rejects changed archives, uncommitted source, a different checkout commit, and inconsistent package identities or versions.
 

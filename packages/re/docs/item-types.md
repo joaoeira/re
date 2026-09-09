@@ -18,6 +18,11 @@ const clozeCards = ClozeType.cards(cloze);
 Q&A content separates question and answer with a line containing `---`. Cloze content uses
 `{{c1::hidden text}}` syntax, with one card per distinct cloze index.
 
+The public `ClozeDeletion` codec uses `Schema.OptionFromOptional(Schema.String)`.
+Missing and explicit-`undefined` hints decode to `Option.none()` and encode with the
+property omitted. A schema-level empty string remains `Option.some("")`; parsing
+an empty Markdown hint (`{{c1::Paris::}}`) still treats it as absent.
+
 Use `composeQA(question, answer)` to write Q&A content. It returns `Effect<string, QAComposeError>`,
 normalizes CRLF to LF, trims both fields, and rejects empty fields or standalone `---` lines in the
 normalized question. `QAComposeError.field` identifies `question` or `answer` for form validation.

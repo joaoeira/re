@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { act, useState } from "react";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { describe, expect, it, vi } from "vitest";
@@ -218,6 +218,9 @@ describe("ProviderKeyRow", () => {
   });
 
   it("collapses and clears editor after successful save completes", async () => {
+    let completeSave: () => void = () => {
+      throw new Error("Save has not started");
+    };
     function SuccessHarness() {
       const [configured, setConfigured] = useState(false);
       const [saving, setSaving] = useState(false);
@@ -233,10 +236,10 @@ describe("ProviderKeyRow", () => {
           onSave={() => {
             setSaving(true);
             setError(null);
-            setTimeout(() => {
+            completeSave = () => {
               setConfigured(true);
               setSaving(false);
-            }, 30);
+            };
           }}
           onRemove={vi.fn()}
         />
@@ -251,6 +254,7 @@ describe("ProviderKeyRow", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save Anthropic key" }));
 
     await expect.element(input).toHaveValue("sk-ant-success");
+    await act(completeSave);
     await expect
       .poll(() => screen.getByRole("textbox", { name: "Anthropic API key" }).query())
       .toBeNull();

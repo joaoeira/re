@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    // Effect platform's declarations reference Transferable and other web types.
-    "lib": ["ES2022", "DOM"],
+    // Effect's declarations use web types and the explicit resource-management symbols.
+    "lib": ["ES2022", "DOM", "ESNext.Disposable"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,

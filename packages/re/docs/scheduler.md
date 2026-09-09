@@ -24,6 +24,9 @@ const result = Effect.runSync(
 Grades are `0` (Again), `1` (Hard), `2` (Good), and `3` (Easy). `SchedulerLive` uses the
 default `ts-fsrs` configuration. The `Scheduler` interface is exported explicitly for
 consumers that provide their own implementation.
+The key uses v4 `Context.Service<Scheduler>` with the same service identifier.
+This entry point requires the shared `effect@4.0.0-rc.112` peer; the `ts-fsrs`
+engine and its scheduling policy are unchanged.
 
 ## Configuring scheduling
 
@@ -99,7 +102,7 @@ Scheduling failures use the tagged `ScheduleError` error. Conversion helpers and
 `FSRSGrade`, `ScheduleResult`, and `SchedulerLog` types are also exported.
 
 This entry point uses the core module and `ts-fsrs`, with `effect` as a peer. It requires no
-`@simbyotic/re/workspace`, `@effect/platform`, or filesystem layer. Filesystem deck persistence,
+`@simbyotic/re/workspace`, Node platform adapter, or filesystem layer. Filesystem deck persistence,
 snapshots, and review queue construction are provided by `@simbyotic/re/workspace`.
 
 Build locally with `bun run build`. From the repository root, `bun run pack:library`

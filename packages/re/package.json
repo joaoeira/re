@@ -1,6 +1,6 @@
 {
   "name": "@simbyotic/re",
-  "version": "0.2.0",
+  "version": "0.3.0-rc.0",
   "description": "Markdown flashcards, built-in item types, FSRS scheduling, and Effect workspace services",
   "bugs": {
     "url": "https://github.com/joaoeira/re/issues"

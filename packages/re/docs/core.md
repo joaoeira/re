@@ -61,7 +61,7 @@ import { createMetadata, ItemSchema, ParsedFileSchema } from "@simbyotic/re/core
 
 const ImportRequest = Schema.Struct({ deckPath: Schema.String, item: ItemSchema });
 const request = Effect.runSync(
-  Schema.decodeUnknown(ImportRequest)({
+  Schema.decodeUnknownEffect(ImportRequest)({
     deckPath: "/decks/geography.md",
     item: {
       cards: [createMetadata()],
@@ -70,7 +70,7 @@ const request = Effect.runSync(
   }),
 );
 const file = Effect.runSync(
-  Schema.decodeUnknown(ParsedFileSchema)({ preamble: "", items: [request.item] }),
+  Schema.decodeUnknownEffect(ParsedFileSchema)({ preamble: "", items: [request.item] }),
 );
 ```
 
@@ -109,11 +109,13 @@ const VocabularyType: ItemType<{ readonly answer: string }, string> = {
   parse: (raw) =>
     raw.startsWith("vocabulary:")
       ? Effect.succeed({ answer: raw.slice("vocabulary:".length) })
-      : new ContentParseError({
-          type: "vocabulary",
-          raw,
-          message: "Expected vocabulary: prefix",
-        }),
+      : Effect.fail(
+          new ContentParseError({
+            type: "vocabulary",
+            raw,
+            message: "Expected vocabulary: prefix",
+          }),
+        ),
   cards: ({ answer }) => [
     {
       key: "main",
@@ -137,7 +139,8 @@ const review = Effect.gen(function* () {
 
 An invalid response, such as a number submitted to the vocabulary card, fails with
 `ResponseValidationError` before grading starts. The error includes `cardType`, `message`, and
-the underlying Schema parse error as `cause`. A valid but incorrect answer is graded normally.
+the underlying v4 `Schema.SchemaError` as `cause` (formerly `ParseResult.ParseError`).
+A valid but incorrect answer is graded normally.
 Custom grading errors pass through unchanged and remain in the inferred Effect error union
 alongside `ResponseValidationError`, so callers can handle them with `Effect.catchTag`.
 
@@ -145,7 +148,9 @@ For asynchronous checking, the type's `grade` can return an `Effect.tryPromise` 
 asynchronous Effect. Evaluation remains lazy and supports Effect interruption and finalizers.
 Apps collect responses, display pending states, and pass successful grades to the scheduler.
 Provide any services required by a grader within its implementation; the existing `CardSpec`
-contract exposes an Effect with no outstanding service requirements.
+contract exposes an Effect with no outstanding service requirements. Its `responseSchema`
+is `Schema.Codec<Response, Response, never, never>`: decoding and encoding are both
+environment-free, and the encoded response type is preserved.
 
 Direct use of a known `ItemType` retains its precise content and response types. Discovery
 keeps parsing and card construction together so consumers
@@ -170,13 +175,17 @@ do not derive them from array positions or rendered text. Keys belong to a type'
 so callers must handle a type change separately. `manualCardSpec(prompt, reveal, cardType, key)`
 requires the key as its fourth argument. Keys are derived from content, not stored in Markdown.
 
-`reconcileCards({ keys, cards }, nextKeys)` is pure: it returns an `Either` containing metadata
+`reconcileCards({ keys, cards }, nextKeys)` is pure: it returns a v4 `Result` containing metadata
 options in the new key order. `Some` preserves the entire old metadata record, including its ID,
 learning state, dates, and numeric spelling. `None` represents a new card; callers create its
 metadata with `Option.getOrElse(createMetadata)`. Removed keys disappear. Duplicate keys on
 either side fail with `DuplicateCardKey`; differing old key and metadata counts fail with
 `ReconcileCardCountMismatch`. The matcher neither generates IDs nor guesses through corruption.
 Use it inside `DeckManager.modifyItem` to match against metadata read under the write lock.
+
+Convert the result with `Effect.fromResult(reconcileCards(previous, nextKeys))` before
+yielding it or applying Effect combinators. For synchronous handling, use
+`Result.isFailure(result)` with `result.failure`, or `result.success` on success.
 
 Review references pair the saved card ID with its generated key. Apps capture the key from the
 queued snapshot, then resolve it against current content and verify that it still belongs to

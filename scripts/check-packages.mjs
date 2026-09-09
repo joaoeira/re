@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { packageName, packLibrary, repoRoot, run } from "./pack-library.mjs";
+import { inspectLibraryArchive, packageName, packLibrary, repoRoot, run } from "./pack-library.mjs";
+
+const supportedEffectVersion = "4.0.0-rc.112";
 
 const checkConsumer = async ({ archive, consumer, withWorkspace }) => {
   await mkdir(consumer);
@@ -19,12 +21,16 @@ const checkConsumer = async ({ archive, consumer, withWorkspace }) => {
       path.join(consumer, filename),
     );
   }
+  if (withWorkspace) {
+    await copyFile(
+      path.join(repoRoot, "test/package-consumer/workspace-commonjs.cjs"),
+      path.join(consumer, "workspace-commonjs.cjs"),
+    );
+  }
   const manifestPath = path.join(consumer, "package.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  manifest.dependencies.effect =
-    process.env.RE_CONSUMER_EFFECT_VERSION ?? manifest.dependencies.effect;
+  assert.equal(manifest.dependencies.effect, supportedEffectVersion);
   if (!withWorkspace) {
-    delete manifest.dependencies["@effect/platform"];
     delete manifest.dependencies["@effect/platform-node"];
   }
   manifest.dependencies[packageName] = pathToFileURL(archive).href;
@@ -43,6 +49,11 @@ const checkConsumer = async ({ archive, consumer, withWorkspace }) => {
       /(?:^|\/)node_modules\/@effect\/schema$/,
       "The consumer must not install the legacy Schema package",
     );
+    assert.doesNotMatch(
+      installedPath,
+      /(?:^|\/)node_modules\/@effect\/platform$/,
+      "The consumer must not install the removed v3 platform package",
+    );
     if (!withWorkspace) {
       assert.doesNotMatch(
         installedPath,
@@ -54,7 +65,9 @@ const checkConsumer = async ({ archive, consumer, withWorkspace }) => {
   if (!withWorkspace) {
     console.log("Verified scheduler installation has no filesystem platform dependencies.");
   }
-  for (const name of withWorkspace ? ["effect", "@effect/platform"] : ["effect"]) {
+  // npm also rejects invalid peers outside the Effect subtree.
+  await run("npm", ["ls", "--all", "--json"], consumer, env);
+  for (const name of ["effect"]) {
     const installations = await Promise.all(
       (await run("npm", ["ls", name, "--all", "--parseable"], consumer, env))
         .split("\n")
@@ -69,6 +82,20 @@ const checkConsumer = async ({ archive, consumer, withWorkspace }) => {
   const installedEffect = JSON.parse(
     await readFile(path.join(consumer, "node_modules/effect/package.json"), "utf8"),
   );
+  assert.equal(
+    installedEffect.version,
+    supportedEffectVersion,
+    "Unexpected installed Effect version",
+  );
+  if (withWorkspace) {
+    const adapter = JSON.parse(
+      await readFile(
+        path.join(consumer, "node_modules/@effect/platform-node/package.json"),
+        "utf8",
+      ),
+    );
+    assert.equal(adapter.version, supportedEffectVersion, "The Node adapter must match Effect");
+  }
   console.log(
     `Verified shared Effect ${installedEffect.version} (consumer range: ${manifest.dependencies.effect}).`,
   );
@@ -104,9 +131,17 @@ const checkConsumer = async ({ archive, consumer, withWorkspace }) => {
   console.log(await run(process.execPath, ["dist/index.js"], consumer, env));
   console.log("Running the CommonJS consumer in native Node...");
   console.log(await run(process.execPath, ["commonjs.cjs"], consumer, env));
+  if (withWorkspace) {
+    console.log(await run(process.execPath, ["workspace-commonjs.cjs"], consumer, env));
+  }
 };
 
 export const checkPackages = async (archive) => {
+  assert.equal(
+    process.env.RE_CONSUMER_EFFECT_VERSION ?? supportedEffectVersion,
+    supportedEffectVersion,
+    `Unsupported consumer Effect version; only ${supportedEffectVersion} is validated`,
+  );
   const scratch = await mkdtemp(path.join(tmpdir(), "re-package-consumer-"));
   try {
     const relative = path.relative(await realpath(repoRoot), await realpath(scratch));
@@ -114,7 +149,11 @@ export const checkPackages = async (archive) => {
       relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative),
       "Consumer must be outside the repository",
     );
-    archive ??= await packLibrary(path.join(scratch, "archives"));
+    if (archive === undefined) {
+      archive = await packLibrary(path.join(scratch, "archives"));
+    } else {
+      await inspectLibraryArchive(archive);
+    }
     console.log("Checking the scheduler consumer...");
     await checkConsumer({
       archive,

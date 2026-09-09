@@ -71,10 +71,13 @@ const stored: ParsedFile = Effect.runSync(
   Effect.gen(function* () {
     const metadata: ItemMetadata = yield* parseMetadata(
       serializeMetadata(scheduled.updatedCard),
-    ).pipe(Effect.flatMap(Schema.decodeUnknown(ItemMetadataSchema)));
+    ).pipe(Effect.flatMap(Schema.decodeUnknownEffect(ItemMetadataSchema)));
     assert.deepEqual(metadata, scheduled.updatedCard);
-    const item: Item = yield* Schema.decodeUnknown(ItemSchema)({ content, cards: [metadata] });
-    return yield* Schema.decodeUnknown(ParsedFileSchema)({
+    const item: Item = yield* Schema.decodeUnknownEffect(ItemSchema)({
+      content,
+      cards: [metadata],
+    });
+    return yield* Schema.decodeUnknownEffect(ParsedFileSchema)({
       preamble: "# Geography\n\n",
       items: [item],
     });
@@ -110,11 +113,13 @@ const VocabularyType: ItemType<{ readonly answer: string }, string, AnswerCheckE
   parse: (raw) =>
     raw.startsWith("vocabulary:")
       ? Effect.succeed({ answer: raw.slice("vocabulary:".length) })
-      : new ContentParseError({
-          type: "vocabulary",
-          raw,
-          message: "Expected vocabulary: prefix",
-        }),
+      : Effect.fail(
+          new ContentParseError({
+            type: "vocabulary",
+            raw,
+            message: "Expected vocabulary: prefix",
+          }),
+        ),
   cards: ({ answer }) => [
     {
       key: "main",
