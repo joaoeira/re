@@ -69,21 +69,14 @@
     "ts-fsrs": "^5.2.3"
   },
   "devDependencies": {
-    "@effect/platform": "^0.94.5",
-    "@effect/platform-node-shared": "^0.57.0",
-    "@effect/vitest": "^0.27.0",
+    "@effect/platform-node-shared": "4.0.0-rc.112",
+    "@effect/vitest": "4.0.0-rc.112",
     "@types/bun": "latest",
-    "effect": "3.19.18",
+    "effect": "4.0.0-rc.112",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.0"
+    "vitest": "4.1.11"
   },
   "peerDependencies": {
-    "@effect/platform": "^0.94.5",
-    "effect": "^3.19.18"
-  },
-  "peerDependenciesMeta": {
-    "@effect/platform": {
-      "optional": true
-    }
+    "effect": "4.0.0-rc.112"
   }
 }

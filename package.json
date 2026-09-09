@@ -45,7 +45,7 @@
   },
   "devDependencies": {
     "@changesets/cli": "3.0.2",
-    "@effect/language-service": "^0.64.1",
+    "@effect/language-service": "0.87.2",
     "@oxlint/plugins": "^1.55.0",
     "@types/bun": "latest",
     "add": "^2.0.6",
