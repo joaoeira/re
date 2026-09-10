@@ -356,7 +356,7 @@ Content
 `;
 
         const error = yield* parseFile(content).pipe(Effect.flip);
-        assert.ok(error._tag === "InvalidFieldValue");
+        assert.strictEqual(error._tag, "InvalidFieldValue");
       }),
     );
 
@@ -368,7 +368,7 @@ Content
 `;
 
         const error = yield* parseFile(content).pipe(Effect.flip);
-        assert.ok(error._tag === "InvalidFieldValue");
+        assert.strictEqual(error._tag, "InvalidFieldValue");
       }),
     );
   });

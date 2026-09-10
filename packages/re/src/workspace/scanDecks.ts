@@ -2,7 +2,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Schema from "effect/Schema";
-import { Array as Arr, Effect, Option, Order, Result } from "effect";
+import { Array as Arr, Effect, Match, Option, Order, Result } from "effect";
 import ignore from "ignore";
 
 const ROOT_IGNORE_FILE = ".reignore";
@@ -56,16 +56,14 @@ export const ScanDecksErrorSchema = Schema.Union([
 
 export type ScanDecksError = typeof ScanDecksErrorSchema.Type;
 
-export const toScanDecksErrorMessage = (error: ScanDecksError): string => {
-  switch (error._tag) {
-    case "WorkspaceRootNotFound":
-      return `Workspace root not found: ${error.rootPath}`;
-    case "WorkspaceRootNotDirectory":
-      return `Workspace root is not a directory: ${error.rootPath}`;
-    case "WorkspaceRootUnreadable":
-      return `Workspace root is unreadable: ${error.message}`;
-  }
-};
+export const toScanDecksErrorMessage = (error: ScanDecksError): string =>
+  Match.value(error).pipe(
+    Match.tagsExhaustive({
+      WorkspaceRootNotFound: (error) => `Workspace root not found: ${error.rootPath}`,
+      WorkspaceRootNotDirectory: (error) => `Workspace root is not a directory: ${error.rootPath}`,
+      WorkspaceRootUnreadable: (error) => `Workspace root is unreadable: ${error.message}`,
+    }),
+  );
 
 export const mapScanDecksErrorToError = (error: ScanDecksError | Error): Error =>
   "_tag" in error ? new Error(toScanDecksErrorMessage(error)) : error;

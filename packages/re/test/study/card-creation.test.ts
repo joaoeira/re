@@ -5,7 +5,7 @@ import {
   type ItemValidationError,
   type WriteError,
 } from "../../src/workspace/index.js";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Predicate } from "effect";
 
 import {
   createCardForUi,
@@ -130,7 +130,7 @@ describe("createCardForUi", () => {
 
       expect(result._tag).toBe("FieldError");
 
-      if (result._tag === "FieldError") {
+      if (Predicate.isTagged(result, "FieldError")) {
         expect(result.field).toBe("content");
         expect(result.message).toContain("character 15");
         expect(result.message).toContain("{{cx::");

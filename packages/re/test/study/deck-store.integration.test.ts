@@ -3,7 +3,7 @@ import * as NodeFileSystem from "@effect/platform-node-shared/NodeFileSystem";
 import * as NodePath from "@effect/platform-node-shared/NodePath";
 import { describe, expect, it } from "@effect/vitest";
 import { DeckManagerLive } from "../../src/workspace/index.js";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Predicate } from "effect";
 
 import {
   createCardForUi,
@@ -29,7 +29,7 @@ describe("DeckStoreLive", () => {
       const scanned = yield* loadDecksForUi(workspacePath);
       expect(scanned._tag).toBe("DecksLoaded");
 
-      if (scanned._tag === "DecksLoaded") {
+      if (Predicate.isTagged(scanned, "DecksLoaded")) {
         expect(scanned.decks.map((deck) => deck.relativePath)).toEqual(["computing.md"]);
       }
 

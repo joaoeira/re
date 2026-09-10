@@ -11,7 +11,7 @@ import {
   type Item,
   ItemIdSchema,
 } from "../../src/core/index.js";
-import { Data, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect";
+import { Data, Deferred, Effect, Exit, Fiber, Layer, Result, Schema } from "effect";
 
 import { DeckManager, DeckManagerLive } from "../../src/workspace/index.js";
 import { createMockFileSystem, makeSystemError } from "./mock-file-system";
@@ -353,11 +353,11 @@ describe("DeckManager concurrent mutations", () => {
       yield* Deferred.succeed(releaseCheck, undefined);
       const results = [yield* Fiber.join(first), yield* Fiber.join(second)];
 
-      expect(results.filter((result) => result._tag === "Success")).toHaveLength(1);
-      expect(results.find((result) => result._tag === "Failure")).toMatchObject({
+      expect(results.filter(Result.isSuccess)).toHaveLength(1);
+      expect(results.find(Result.isFailure)).toMatchObject({
         failure: { _tag: "DeckAlreadyExists", deckPath: "/moved.md" },
       });
-      const firstWon = results[0]!._tag === "Success";
+      const firstWon = Result.isSuccess(results[0]!);
       expect((yield* manager.readDeck("/moved.md")).items[0]!.cards[0]!.id).toBe(
         firstWon ? "a" : "b",
       );

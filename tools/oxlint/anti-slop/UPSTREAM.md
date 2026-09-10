@@ -37,14 +37,18 @@ The new `anti-slop/require-readable-spacing` rule is enabled at error severity
 within the existing `packages/` scope. Its 776 initial findings were resolved
 with blank-line-only autofixes across 65 files. Lint and formatter checks pass.
 
-Four new Effect rules are available but are not enabled by this update:
+The `anti-slop-effect/no-manual-tag-comparison` rule is also enabled within
+`packages/`. Its 16 initial findings were resolved with exhaustive Match handlers,
+Effect predicates, and direct test assertions.
+
+Three new Effect rules are available but are not enabled by this update:
 
 - `anti-slop-effect/no-manual-effect-error-tag`
-- `anti-slop-effect/no-manual-tag-comparison`
 - `anti-slop-effect/no-manual-tagged-construction`
 - `anti-slop-effect/prefer-effect-match`
 
 Enabling these is a separate policy change. A read-only trial on 2026-09-10
 reported 74 manual tagged-construction findings and 16 manual tag-comparison
 findings. Repository lint passes with zero warnings and zero errors with
-the spacing rule enabled and the four new Effect rules disabled.
+the spacing and tag-comparison rules enabled and the other three new Effect
+rules disabled.

@@ -2,7 +2,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { parseFile, State, type MetadataParseError, type ParsedFile } from "../core/index.js";
-import { Effect } from "effect";
+import { Effect, Match } from "effect";
 
 import { isCardDue } from "../scheduler/index.js";
 import {
@@ -125,16 +125,16 @@ const summarizeParsedDeck = (parsedFile: ParsedFile, asOf: Date) => {
 
 const toReadErrorMessage = (error: { readonly message: string }): string => error.message;
 
-export const formatMetadataParseError = (error: MetadataParseError): string => {
-  switch (error._tag) {
-    case "ParseError":
-      return `Parse error at line ${error.line}, column ${error.column}: ${error.message}`;
-    case "InvalidMetadataFormat":
-      return `Invalid metadata at line ${error.line}: ${error.reason}`;
-    case "InvalidFieldValue":
-      return `Invalid ${error.field} at line ${error.line}: expected ${error.expected}; got "${error.value}"`;
-  }
-};
+export const formatMetadataParseError = (error: MetadataParseError): string =>
+  Match.value(error).pipe(
+    Match.tagsExhaustive({
+      ParseError: (error) =>
+        `Parse error at line ${error.line}, column ${error.column}: ${error.message}`,
+      InvalidMetadataFormat: (error) => `Invalid metadata at line ${error.line}: ${error.reason}`,
+      InvalidFieldValue: (error) =>
+        `Invalid ${error.field} at line ${error.line}: expected ${error.expected}; got "${error.value}"`,
+    }),
+  );
 
 const snapshotDeck = (
   deck: DeckEntry,
