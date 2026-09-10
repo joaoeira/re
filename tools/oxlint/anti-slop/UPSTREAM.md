@@ -50,10 +50,14 @@ values remain unchanged.
 The `anti-slop-effect/no-manual-effect-error-tag` rule is enabled within
 `packages/` with no findings and no source changes required.
 
-The remaining `anti-slop-effect/prefer-effect-match` rule is available but is
-not yet enabled.
+The `anti-slop-effect/prefer-effect-match` rule is enabled within `packages/`
+with no findings and no source changes required.
 
-Enabling these is a separate policy change. A read-only trial on 2026-09-10
-reported 74 manual tagged-construction findings and 16 manual tag-comparison
-findings. Repository lint passes with zero warnings and zero errors with
-all updated rules except `anti-slop-effect/prefer-effect-match` enabled.
+All generic and Effect rules from the recorded upstream revision are now enabled
+at error severity within `packages/`, along with the native accumulating-spread
+companion rule. Repository lint passes with zero warnings and zero errors.
+
+Validation for the Effect rule rollout included package typechecking, all 453
+library tests, independent package consumers, and the Overlay native build and
+18 tests. A temporary mutation of the card-creation success variant failed its
+test as expected; the mutation was reverted and the restored suite passed.
