@@ -1,78 +1,132 @@
 import type { ReactNode } from "react";
 import type { Notice } from "../notice";
-import { colors, column, font, row } from "../theme";
+import { colors, column, layout, row, type } from "../theme";
 import { Action } from "../ui/action";
+import { Icon, type IconName } from "../ui/icons";
+
+export interface Command {
+  readonly label: string;
+  readonly keys?: string;
+  readonly primary?: boolean;
+  readonly tone?: "danger";
+  readonly onClick: () => void;
+  readonly testId?: string;
+}
 
 export interface FooterProps {
-  readonly context: string;
-  readonly grading?: {
-    readonly onAgain: () => void;
-    readonly onHard: () => void;
-    readonly onEasy: () => void;
-  };
-  readonly primary: {
-    readonly label: string;
-    readonly keys: string;
-    readonly onClick: () => void;
-  };
-  readonly onActions: () => void;
+  readonly context?: string;
+  readonly selectors?: ReactNode;
+  readonly commands: readonly Command[];
 }
 
 export interface ShellProps {
   readonly onBack: () => void;
-  readonly progress?: string;
+  readonly onUndo?: () => void;
+  readonly onActions: () => void;
   readonly notice: Notice | null;
   readonly footer: FooterProps;
   readonly children: ReactNode;
   readonly overlays?: ReactNode;
 }
 
-export function Shell({ onBack, progress, notice, footer, children, overlays }: ShellProps) {
+export function Shell({
+  onBack,
+  onUndo,
+  onActions,
+  notice,
+  footer,
+  children,
+  overlays,
+}: ShellProps) {
   return (
     <div
       style={{
-        ...column,
+        ...row,
+        alignItems: "stretch",
         height: "100%",
-        backgroundColor: colors.window,
+        backgroundColor: colors.ground,
         position: "relative",
       }}
     >
-      <Header onBack={onBack} progress={progress} />
-      {children}
-      {notice && <NoticeLine notice={notice} />}
-      <Footer {...footer} />
+      <Rail onBack={onBack} onUndo={onUndo} onActions={onActions} />
+      <div style={{ ...column, flexGrow: 1, minWidth: 0 }}>
+        {children}
+        {notice && <NoticeLine notice={notice} />}
+        <Footer {...footer} />
+      </div>
       {overlays}
     </div>
   );
 }
 
-function Header({ onBack, progress }: Pick<ShellProps, "onBack" | "progress">) {
+function RailButton({
+  icon,
+  top,
+  bottom,
+  onClick,
+  testId,
+}: {
+  readonly icon: IconName;
+  readonly top?: number;
+  readonly bottom?: number;
+  readonly onClick: () => void;
+  readonly testId?: string;
+}) {
+  return (
+    <div
+      testId={testId}
+      onClick={onClick}
+      style={{
+        ...row,
+        justifyContent: "center",
+        position: "absolute",
+        left: 7,
+        top,
+        bottom,
+        width: 28,
+        height: 28,
+        borderRadius: 5,
+        cursor: "pointer",
+        hover: { backgroundColor: colors.hover },
+      }}
+    >
+      <Icon name={icon} />
+    </div>
+  );
+}
+
+function Rail({ onBack, onUndo, onActions }: Pick<ShellProps, "onBack" | "onUndo" | "onActions">) {
   return (
     <div
       style={{
-        ...row,
-        height: 44,
+        width: layout.rail,
         flexShrink: 0,
-        paddingLeft: 15,
-        paddingRight: 18,
-        justifyContent: "space-between",
+        position: "relative",
+        borderRightWidth: 1,
+        borderColor: colors.railBorder,
       }}
     >
-      <div onClick={onBack} style={{ cursor: "pointer", padding: 5 }}>
-        <text style={{ color: colors.muted, fontSize: font.glyph }}>‹</text>
-      </div>
-      {progress && <text style={{ color: colors.muted, fontSize: font.label }}>{progress}</text>}
+      <RailButton icon="back" top={12} onClick={onBack} testId="back" />
+      {onUndo && <RailButton icon="undo" top={56} onClick={onUndo} testId="undo" />}
+      <RailButton icon="actions" bottom={9} onClick={onActions} testId="actions" />
     </div>
   );
 }
 
 function NoticeLine({ notice }: { readonly notice: Notice }) {
   return (
-    <div style={{ paddingLeft: 20, paddingRight: 20, paddingBottom: 8 }}>
+    <div
+      style={{
+        paddingLeft: layout.contentLeft,
+        paddingRight: layout.contentRight,
+        paddingBottom: 5,
+        flexShrink: 0,
+      }}
+    >
       <text
         style={{
+          ...type.label,
           color: notice.tone === "success" ? colors.muted : colors.error,
-          fontSize: font.label,
         }}
       >
         {notice.text}
@@ -81,50 +135,38 @@ function NoticeLine({ notice }: { readonly notice: Notice }) {
   );
 }
 
-function Footer({ context, grading, primary, onActions }: FooterProps) {
+function Footer({ context, selectors, commands }: FooterProps) {
   return (
     <div
       style={{
         ...row,
         justifyContent: "space-between",
-        height: 43,
+        height: layout.footer,
         flexShrink: 0,
-        paddingLeft: 16,
-        paddingRight: 12,
+        paddingLeft: 18,
+        paddingRight: 18,
         borderTopWidth: 1,
-        borderColor: colors.line,
-        backgroundColor: colors.footer,
+        borderColor: colors.footerBorder,
       }}
     >
-      <text
-        style={{
-          color: colors.muted,
-          fontSize: font.label,
-          flexShrink: 1,
-          minWidth: 0,
-          whiteSpace: "nowrap",
-          textOverflow: "ellipsis",
-        }}
-      >
-        {context}
-      </text>
-      <div style={{ ...row, gap: 8 }}>
-        {grading && (
-          <>
-            <Action label="Again" keys="1" onClick={grading.onAgain} testId="again" />
-            <Action label="Hard" keys="2" onClick={grading.onHard} testId="hard" />
-          </>
-        )}
-        <Action
-          label={primary.label}
-          keys={primary.keys}
-          primary
-          onClick={primary.onClick}
-          testId="primary"
-        />
-        {grading && <Action label="Easy" keys="4" onClick={grading.onEasy} testId="easy" />}
-        <div style={{ width: 1, height: 16, backgroundColor: colors.line }} />
-        <Action label="Actions" keys="⌘ K" onClick={onActions} testId="actions" />
+      {selectors ?? (
+        <text
+          style={{
+            ...type.caption,
+            color: colors.muted,
+            flexShrink: 1,
+            minWidth: 0,
+            whiteSpace: "nowrap",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {context ?? ""}
+        </text>
+      )}
+      <div style={{ ...row, gap: 8, flexShrink: 0 }}>
+        {commands.map((command) => (
+          <Action key={command.label} {...command} />
+        ))}
       </div>
     </div>
   );

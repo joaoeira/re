@@ -70,10 +70,12 @@ atomic launch request in `~/Library/Application Support/re-overlay` before openi
 the app, so they also work with a running or hidden instance.
 
 The 720 × 465 window starts above other windows. Drag its top edge to reposition
-it. The background is a dark translucent tint over native blur. **⌘ K** opens
-Actions for the current screen. **⌘ ⇧ P** toggles keeping the window on top;
-**⌘ P** previews a draft. Review actions include undo, edit, delete, Open Deck,
-and restarting a session.
+it. A 42 px rail on the left holds Back at the top, Undo when a review action
+can be reverted, and the Actions menu at the bottom; **⌘ K** also opens Actions
+for the current screen. The footer shows the current deck, card type or review
+progress on the left and the screen's commands with their shortcuts on the
+right. **⌘ ⇧ P** toggles keeping the window on top; **⌘ P** previews a draft.
+Review actions include undo, edit, delete, Open deck, and restarting a session.
 **Escape** closes an open menu, returns from preview/editing, or hides the window. **⌃ ⌥ ⌘ R** toggles
 the window globally; the layers menu-bar icon shows the scheduled due count (hidden at zero). **⌘ Q** quits.
 Drafts and review position survive hiding and screen changes, but not quitting.
@@ -88,10 +90,10 @@ deck: ungraded cards are new, and due is zero because scratch practice is unsche
 
 ## Cards and decks
 
-Open the deck combobox and start typing to filter deck names by substring,
-ignoring case. Arrow keys and Enter select a result; Escape cancels. Each opening
-starts with an empty search. Card Type is a **Question and Answer / Cloze**
-dropdown. If macOS requests Documents access, click Allow in its permission
+The deck and card type pickers sit in the footer and open upward. Open the deck
+picker and start typing to filter deck names by substring, ignoring case. Arrow
+keys and Enter select a result; Escape cancels. Each opening starts with an
+empty search. Card type is a **Question and Answer / Cloze** dropdown. If macOS requests Documents access, click Allow in its permission
 prompt. Rebuilding this unsigned development app can cause macOS to ask again.
 **⌘ Return** creates a card in the selected Markdown deck using the shared re
 parser and deck manager. Cloze uses `{{c1::answer}}` syntax and supports multiple

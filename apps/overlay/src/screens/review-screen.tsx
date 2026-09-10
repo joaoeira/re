@@ -1,8 +1,9 @@
 import type { ReviewDeckIssue } from "@simbyotic/re/study";
 import { CardMarkdown } from "../card-markdown";
 import type { ReviewGrade } from "../review-controls";
-import { colors, column, font } from "../theme";
+import { colors, column, divider, row, type } from "../theme";
 import { Action } from "../ui/action";
+import { cardBody } from "./preview-screen";
 
 export type ReviewView =
   | { readonly kind: "startError"; readonly error: string }
@@ -23,105 +24,62 @@ export type ReviewView =
 export interface ReviewScreenProps {
   readonly view: ReviewView;
   readonly issues: readonly ReviewDeckIssue[];
-  readonly onRestart: () => void;
-  readonly onReloadCard: () => void;
-  readonly onSkipCard: () => void;
   readonly onOpenDeck: () => void;
   readonly onChooseWorkspace: () => void;
 }
 
-const hasCard = (view: ReviewView) =>
-  view.kind === "card" || view.kind === "loadingCard" || view.kind === "cardError";
-
 const count = (grades: readonly ReviewGrade[], grade: ReviewGrade) =>
   grades.filter((entry) => entry === grade).length;
 
-export const reviewSummary = (grades: readonly ReviewGrade[]) =>
-  `Reviewed ${grades.length} ${grades.length === 1 ? "card" : "cards"}. Again: ${count(grades, "again")} · Hard: ${count(grades, "hard")} · Good: ${count(grades, "good")} · Easy: ${count(grades, "easy")}`;
+export const reviewCount = (grades: readonly ReviewGrade[]) =>
+  `${grades.length} ${grades.length === 1 ? "card" : "cards"} reviewed`;
+export const reviewBreakdown = (grades: readonly ReviewGrade[]) =>
+  `Again ${count(grades, "again")} · Hard ${count(grades, "hard")} · Good ${count(grades, "good")} · Easy ${count(grades, "easy")}`;
 
-export function ReviewScreen({
-  view,
-  issues,
-  onRestart,
-  onReloadCard,
-  onSkipCard,
-  onOpenDeck,
-  onChooseWorkspace,
-}: ReviewScreenProps) {
-  return (
-    <div style={{ ...column, flexGrow: 1, minHeight: 0, overflowY: "scroll" }}>
-      <div
-        style={{
-          ...column,
-          flexShrink: 0,
-          flexGrow: hasCard(view) ? 0 : 1,
-          paddingLeft: 38,
-          paddingRight: 38,
-          paddingBottom: 24,
-          paddingTop: 16,
-          gap: 16,
-        }}
-      >
-        <ReviewBody
-          view={view}
-          onRestart={onRestart}
-          onReloadCard={onReloadCard}
-          onSkipCard={onSkipCard}
-          onOpenDeck={onOpenDeck}
-          onChooseWorkspace={onChooseWorkspace}
-        />
-        {(view.kind === "complete" || view.kind === "empty") && (
-          <Action label="Start New Session" keys="⌘ R" onClick={onRestart} />
-        )}
-        {issues.length > 0 && (
-          <div style={{ ...column, gap: 8 }}>
-            <text style={{ color: colors.error }}>Some decks or cards were excluded:</text>
-            {issues.map((issue, index) => (
-              <text key={index} style={{ color: colors.muted, fontSize: font.label }}>
-                {`${issue.relativePath}: ${issue.message}`}
-              </text>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+const centered = {
+  ...column,
+  flexGrow: 1,
+  justifyContent: "center",
+  paddingLeft: cardBody.paddingLeft,
+  paddingRight: cardBody.paddingRight,
+  paddingBottom: 24,
+} as const;
 
-function ReviewBody({
-  view,
-  onRestart,
-  onReloadCard,
-  onSkipCard,
-  onOpenDeck,
-  onChooseWorkspace,
-}: Omit<ReviewScreenProps, "issues">) {
+export function ReviewScreen({ view, issues, onOpenDeck, onChooseWorkspace }: ReviewScreenProps) {
   switch (view.kind) {
     case "startError":
       return (
-        <div style={{ ...column, gap: 12 }}>
-          <text style={{ color: colors.error, fontSize: font.title }}>Could not start review</text>
-          <text style={{ color: colors.muted }}>{view.error}</text>
-          <Action label="Retry" keys="⌘ R" onClick={onRestart} />
-          <Action label="Choose Workspace…" onClick={onChooseWorkspace} />
+        <div style={cardBody}>
+          <div style={{ ...column, gap: 17 }}>
+            <text style={{ ...type.heading, color: colors.error }}>Could not start review</text>
+            <text style={{ ...type.input, color: colors.muted }}>{view.error}</text>
+          </div>
+          <div style={{ ...row, marginLeft: -6, marginTop: -10 }}>
+            <Action label="Choose workspace…" onClick={onChooseWorkspace} />
+          </div>
         </div>
       );
-    case "loadingCard":
-      return <text style={{ color: colors.muted }}>Loading card…</text>;
     case "cardError":
       return (
-        <div style={{ ...column, gap: 12 }}>
-          <text style={{ color: colors.error }}>{`Could not load this card: ${view.error}`}</text>
-          <text style={{ color: colors.muted }}>{view.deckPath}</text>
-          <Action label="Retry Card" keys="⌘ R" onClick={onReloadCard} />
-          <Action label="Skip Card" onClick={onSkipCard} />
-          <Action label="Open Deck" keys="⌘ O" onClick={onOpenDeck} />
+        <div style={cardBody}>
+          <div style={{ ...column, gap: 17 }}>
+            <text style={{ ...type.heading, color: colors.error }}>Could not load this card</text>
+            <div style={{ ...column, gap: 11 }}>
+              <text style={{ ...type.input, color: colors.muted }}>{view.error}</text>
+              {view.deckPath && (
+                <text style={{ ...type.label, color: colors.muted }}>{view.deckPath}</text>
+              )}
+            </div>
+          </div>
+          <div style={{ ...row, marginLeft: -6, marginTop: -10 }}>
+            <Action label="Open deck" keys="⌘ O" onClick={onOpenDeck} />
+          </div>
         </div>
       );
     case "card": {
       const clozeRevealed = view.revealed && view.cardType === "cloze";
       return (
-        <>
+        <div style={cardBody}>
           <CardMarkdown
             testId={clozeRevealed ? "revealed-answer" : "prompt"}
             source={clozeRevealed ? view.reveal : view.prompt}
@@ -129,7 +87,7 @@ function ReviewBody({
           />
           {view.revealed && view.cardType === "qa" && (
             <>
-              <div style={{ height: 1, backgroundColor: colors.line }} />
+              <div style={divider} />
               <CardMarkdown
                 testId="revealed-answer"
                 source={view.reveal}
@@ -137,37 +95,61 @@ function ReviewBody({
               />
             </>
           )}
-        </>
+          {issues.length > 0 && <Issues issues={issues} />}
+        </div>
       );
     }
+    case "loadingCard":
     case "loading":
-    case "complete":
-    case "empty":
       return (
-        <div
-          style={{
-            ...column,
-            flexGrow: 1,
-            justifyContent: "center",
-            alignItems: "center",
-            gap: 10,
-          }}
-        >
-          <text style={{ color: colors.text, fontSize: font.display }}>
-            {view.kind === "loading"
-              ? "Loading cards…"
-              : view.kind === "complete"
-                ? "Review complete"
-                : "No cards due"}
-          </text>
-          <text style={{ color: colors.muted, fontSize: font.body }}>
-            {view.kind === "loading"
-              ? ""
-              : view.kind === "complete"
-                ? reviewSummary(view.grades)
-                : "There are no reviewable new or due cards."}
+        <div style={centered}>
+          <text style={{ ...type.input, color: colors.muted }}>
+            {view.kind === "loading" ? "Loading cards…" : "Loading card…"}
           </text>
         </div>
       );
+    case "complete":
+      return (
+        <div style={centered}>
+          <div style={{ ...column, gap: 13 }}>
+            <text style={{ ...type.display, color: colors.text }}>Review complete</text>
+            <div style={{ ...column, gap: 14 }}>
+              <text style={{ ...type.input, color: colors.muted }}>{reviewCount(view.grades)}</text>
+              <text style={{ ...type.body, color: colors.muted }}>
+                {reviewBreakdown(view.grades)}
+              </text>
+            </div>
+          </div>
+          {issues.length > 0 && <Issues issues={issues} />}
+        </div>
+      );
+    case "empty":
+      return (
+        <div style={centered}>
+          <div style={{ ...column, gap: 13 }}>
+            <text style={{ ...type.display, color: colors.text }}>No cards due</text>
+            <text style={{ ...type.input, color: colors.muted }}>
+              There are no reviewable new or due cards.
+            </text>
+          </div>
+          {issues.length > 0 && <Issues issues={issues} />}
+        </div>
+      );
   }
+}
+
+function Issues({ issues }: { readonly issues: readonly ReviewDeckIssue[] }) {
+  return (
+    <>
+      <div style={divider} />
+      <div style={{ ...column, gap: 11 }}>
+        <text style={{ ...type.body, color: colors.error }}>Some decks or cards were excluded</text>
+        {issues.map((issue, index) => (
+          <text key={index} style={{ ...type.label, color: colors.muted }}>
+            {`${issue.relativePath}: ${issue.message}`}
+          </text>
+        ))}
+      </div>
+    </>
+  );
 }

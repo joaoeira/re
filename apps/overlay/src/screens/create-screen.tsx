@@ -1,69 +1,78 @@
-import { colors, column } from "../theme";
+import { colors, column, layout, row, type } from "../theme";
+import { Action } from "../ui/action";
 import { DeckCombobox, type DeckComboboxProps } from "../ui/deck-combobox";
 import { Dropdown } from "../ui/dropdown";
-import { DraftField, Field, type DraftFieldName, type DraftFieldState } from "../ui/field";
+import { DraftField, type DraftFieldName, type DraftFieldState } from "../ui/field";
 
-export interface CreateScreenProps {
-  readonly editorKey: number;
+export const formBody = {
+  ...column,
+  flexGrow: 1,
+  minHeight: 0,
+  overflowY: "scroll",
+  paddingLeft: layout.contentLeft,
+  paddingRight: layout.contentRight,
+  paddingTop: layout.formTop,
+  paddingBottom: 12,
+  gap: 23,
+} as const;
+
+export interface CreateSelectorsProps {
   readonly cardType: "qa" | "cloze";
-  readonly deck: DeckComboboxProps & { readonly error?: string };
+  readonly deck: DeckComboboxProps;
   readonly type: {
     readonly open: boolean;
     readonly onOpenChange: (open: boolean) => void;
     readonly onChange: (value: string) => void;
   };
+}
+
+export function CreateSelectors({ cardType, deck, type }: CreateSelectorsProps) {
+  return (
+    <div style={{ ...row, gap: 11, minWidth: 0 }}>
+      <DeckCombobox {...deck} />
+      <Dropdown
+        testId="type-select"
+        value={cardType}
+        open={type.open}
+        onOpenChange={type.onOpenChange}
+        options={[
+          { value: "qa", label: "Question and Answer" },
+          { value: "cloze", label: "Cloze" },
+        ]}
+        triggerLabel={(value) => (value === "cloze" ? "Cloze" : "Q&A")}
+        onChange={type.onChange}
+      />
+    </div>
+  );
+}
+
+export interface CreateScreenProps {
+  readonly editorKey: number;
+  readonly cardType: "qa" | "cloze";
   readonly draft: {
     readonly question: string;
     readonly answer: string;
     readonly content: string;
   };
+  readonly deckError?: string;
   readonly initialFocus: DraftFieldName;
   readonly field: (name: DraftFieldName) => DraftFieldState;
   readonly onChange: (name: DraftFieldName, value: string) => void;
+  readonly onInsertCloze: () => void;
 }
 
 export function CreateScreen({
   editorKey,
   cardType,
-  deck,
-  type,
   draft,
+  deckError,
   initialFocus,
   field,
   onChange,
+  onInsertCloze,
 }: CreateScreenProps) {
-  const { error: deckError, ...deckCombobox } = deck;
   return (
-    <div
-      key={editorKey}
-      style={{
-        ...column,
-        minHeight: 0,
-        overflowY: "scroll",
-        flexGrow: 1,
-        paddingLeft: 70,
-        paddingRight: 70,
-        paddingTop: 9,
-        gap: 17,
-      }}
-    >
-      <Field label="Deck" error={deckError}>
-        <DeckCombobox {...deckCombobox} />
-      </Field>
-      <Field label="Card Type">
-        <Dropdown
-          testId="type-select"
-          value={cardType}
-          open={type.open}
-          onOpenChange={type.onOpenChange}
-          options={[
-            { value: "qa", label: "Question and Answer" },
-            { value: "cloze", label: "Cloze" },
-          ]}
-          onChange={type.onChange}
-        />
-      </Field>
-      <div style={{ height: 1, backgroundColor: colors.line }} />
+    <div key={editorKey} style={formBody}>
       {cardType === "qa" ? (
         <>
           <DraftField
@@ -73,7 +82,7 @@ export function CreateScreen({
             value={draft.question}
             onChange={(value) => onChange("question", value)}
             placeholder="What do you want to remember?"
-            rows={2}
+            rows={4}
             {...field("question")}
           />
           <DraftField
@@ -83,22 +92,32 @@ export function CreateScreen({
             value={draft.answer}
             onChange={(value) => onChange("answer", value)}
             placeholder="The answer"
-            rows={2}
+            rows={5}
             {...field("answer")}
           />
         </>
       ) : (
-        <DraftField
-          label="Content"
-          testId="cloze-content"
-          autoFocus
-          value={draft.content}
-          onChange={(value) => onChange("content", value)}
-          placeholder="The {{c1::answer}} in context."
-          rows={5}
-          {...field("content")}
-        />
+        <>
+          <DraftField
+            label="Content"
+            testId="cloze-content"
+            autoFocus
+            value={draft.content}
+            onChange={(value) => onChange("content", value)}
+            placeholder="The {{c1::answer}} in context."
+            rows={11}
+            {...field("content")}
+          />
+          <div style={{ ...row, marginLeft: -6, marginTop: -7 }}>
+            <Action label="Insert cloze" keys="⌘ ⇧ C" onClick={onInsertCloze} />
+          </div>
+        </>
       )}
+      {deckError && <DeckError message={deckError} />}
     </div>
   );
+}
+
+function DeckError({ message }: { readonly message: string }) {
+  return <text style={{ ...type.label, color: colors.error }}>{message}</text>;
 }

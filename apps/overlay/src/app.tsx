@@ -22,12 +22,12 @@ import { reviewKey, type ReviewGrade } from "./review-controls";
 import { gradeSession, removeSessionCards, type SessionProgress } from "./review-session";
 import { statusMenu } from "./review-status";
 import { ActionsMenu, type MenuItem } from "./screens/actions-menu";
-import { CreateScreen } from "./screens/create-screen";
+import { CreateScreen, CreateSelectors } from "./screens/create-screen";
 import { DeleteDialog } from "./screens/delete-dialog";
 import { EditScreen } from "./screens/edit-screen";
 import { PreviewScreen } from "./screens/preview-screen";
 import { ReviewScreen, type ReviewView } from "./screens/review-screen";
-import { Shell } from "./screens/shell";
+import { Shell, type Command } from "./screens/shell";
 import { cardsPath } from "./storage";
 import type { DraftFieldName, DraftFieldState } from "./ui/field";
 import {
@@ -657,29 +657,29 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
   const menu: MenuItem[] = [
     ...(editDraft
       ? [
-          { label: "Save Changes", key: "⌘ ↵", run: () => void saveEdit() },
-          { label: "Discard Changes", key: "Esc", run: discardEdit },
+          { label: "Save changes", key: "⌘ ↵", run: () => void saveEdit() },
+          { label: "Discard changes", key: "Esc", run: discardEdit },
         ]
       : screen === "create"
         ? [
-            { label: preview ? "Edit Card" : "Preview Card", key: "⌘ P", run: openPreview },
+            { label: preview ? "Edit card" : "Preview card", key: "⌘ P", run: openPreview },
             ...(!preview
               ? [
                   ...(preferences.cardType === "cloze"
-                    ? [{ label: "Insert Cloze Template", key: "⌘ ⇧ C", run: insertCloze }]
+                    ? [{ label: "Insert cloze template", key: "⌘ ⇧ C", run: insertCloze }]
                     : []),
                   {
-                    label: "Insert Image from Clipboard",
+                    label: "Insert image from clipboard",
                     key: "⌘ I",
                     run: () => void insertImage(),
                   },
-                  { label: "Refresh Decks", key: "⌘ R", run: () => void refreshDecks() },
+                  { label: "Refresh decks", key: "⌘ R", run: () => void refreshDecks() },
                 ]
               : []),
             {
               label: preferences.closeAfterSubmit
-                ? "Keep Open After Creating"
-                : "Close After Creating",
+                ? "Keep open after creating"
+                : "Close after creating",
               key: "",
               run: () => updatePreferences({ closeAfterSubmit: !preferences.closeAfterSubmit }),
             },
@@ -688,7 +688,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
             ...(lastAction
               ? [
                   {
-                    label: lastAction.kind === "grade" ? "Undo Last Review" : "Undo Delete",
+                    label: lastAction.kind === "grade" ? "Undo last review" : "Undo delete",
                     key: "⌘ Z",
                     run: () => void undo(),
                   },
@@ -697,12 +697,12 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
             ...(current && !cardError
               ? [
                   {
-                    label: current.cardType === "cloze" ? "Edit Cloze Note" : "Edit Card",
+                    label: current.cardType === "cloze" ? "Edit cloze note" : "Edit card",
                     key: "⌘ E",
                     run: openEditor,
                   },
                   {
-                    label: current.cardType === "cloze" ? "Delete Cloze Note" : "Delete Card",
+                    label: current.cardType === "cloze" ? "Delete cloze note" : "Delete card",
                     key: "⌘ ⌫",
                     run: requestDelete,
                   },
@@ -711,7 +711,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
             ...(current
               ? [
                   {
-                    label: currentDeckPath ? "Open Deck" : "Open Scratch Data",
+                    label: currentDeckPath ? "Open deck" : "Open scratch data",
                     key: "⌘ O",
                     run: openDeck,
                   },
@@ -719,17 +719,17 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
               : []),
             ...(cardError
               ? [
-                  { label: "Retry Card", key: "⌘ R", run: reloadCard },
-                  { label: "Skip Card", key: "", run: skipCard },
+                  { label: "Retry card", key: "⌘ R", run: reloadCard },
+                  { label: "Skip card", key: "", run: skipCard },
                 ]
               : []),
           ]),
-    { label: "Choose Workspace…", key: "", run: () => events.preferences() },
-    { label: pinned ? "Stop Keeping on Top" : "Keep on Top", key: "⌘ ⇧ P", run: togglePin },
+    { label: "Choose workspace…", key: "", run: () => events.preferences() },
+    { label: pinned ? "Stop keeping on top" : "Keep on top", key: "⌘ ⇧ P", run: togglePin },
     ...(screen === "review" && !editDraft
-      ? [{ label: "Restart Review", key: "", run: restart }]
+      ? [{ label: "Restart review", key: "", run: restart }]
       : []),
-    { label: "Close Window", key: "Esc", run: panel.hide },
+    { label: "Close window", key: "Esc", run: panel.hide },
     {
       label: "Quit",
       key: "⌘ Q",
@@ -838,18 +838,11 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  const primaryLabel = busy
-    ? "Working…"
-    : editDraft
-      ? "Save Changes"
-      : screen === "create"
-        ? "Create Card"
-        : !current
-          ? "Close"
-          : revealed
-            ? "Good"
-            : "Show Answer";
-  const grading = screen === "review" && !editDraft && revealed && current && !cardError;
+  const deckOptions = [
+    ...decks.map((deck) => ({ value: deck.absolutePath, label: deck.name })),
+    { value: "scratch", label: "Overlay (scratch deck)" },
+  ];
+  const chooseWorkspace = () => events.preferences();
   const reviewView: ReviewView = startError
     ? { kind: "startError", error: startError }
     : loadingCard
@@ -871,31 +864,121 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
               ? { kind: "complete", grades: progress.grades }
               : { kind: "empty" };
 
+  const savingCommand: Command = { label: "Saving…", onClick: () => {} };
+  const commands: Command[] = editDraft
+    ? [
+        { label: "Discard", keys: "Esc", onClick: discardEdit },
+        saving
+          ? savingCommand
+          : {
+              label: "Save changes",
+              keys: "⌘ ↵",
+              primary: true,
+              onClick: primary,
+              testId: "primary",
+            },
+      ]
+    : screen === "create"
+      ? [
+          ...(preview && previewIndex > 0
+            ? [{ label: "Previous", keys: "⌥ ←", onClick: () => setPreviewIndex(previewIndex - 1) }]
+            : []),
+          ...(preview && previewIndex < preview.length - 1
+            ? [{ label: "Next", keys: "⌥ →", onClick: () => setPreviewIndex(previewIndex + 1) }]
+            : []),
+          ...(preview ? [{ label: "Edit", keys: "⌘ P", onClick: openPreview }] : []),
+          saving
+            ? savingCommand
+            : {
+                label: "Create card",
+                keys: "⌘ ↵",
+                primary: true,
+                onClick: primary,
+                testId: "primary",
+              },
+        ]
+      : reviewView.kind === "startError"
+        ? [{ label: "Retry", keys: "⌘ R", primary: true, onClick: restart }]
+        : reviewView.kind === "loading" || reviewView.kind === "loadingCard"
+          ? []
+          : saving
+            ? [savingCommand]
+            : reviewView.kind === "cardError"
+              ? [
+                  { label: "Skip card", onClick: skipCard },
+                  { label: "Retry card", keys: "⌘ R", primary: true, onClick: reloadCard },
+                ]
+              : reviewView.kind === "card" && reviewView.revealed
+                ? [
+                    { label: "Again", keys: "1", onClick: () => grade("again"), testId: "again" },
+                    { label: "Hard", keys: "2", onClick: () => grade("hard"), testId: "hard" },
+                    {
+                      label: "Good",
+                      keys: "Space / 3",
+                      primary: true,
+                      onClick: primary,
+                      testId: "primary",
+                    },
+                    { label: "Easy", keys: "4", onClick: () => grade("easy"), testId: "easy" },
+                  ]
+                : reviewView.kind === "card"
+                  ? [
+                      {
+                        label: "Show answer",
+                        keys: "Space",
+                        primary: true,
+                        onClick: primary,
+                        testId: "primary",
+                      },
+                    ]
+                  : [{ label: "New session", keys: "⌘ R", primary: true, onClick: restart }];
+  const context = editDraft
+    ? `${currentDeckName} · Editing ${editDraft.cardType === "cloze" ? "cloze note" : "card"}`
+    : preview
+      ? `Preview · ${previewIndex + 1} of ${preview.length}`
+      : screen === "create"
+        ? undefined
+        : reviewView.kind === "startError" || reviewView.kind === "loading"
+          ? "Review"
+          : current
+            ? `${currentDeckName} · ${queue.length} left`
+            : `Review · ${queue.length} left`;
+  const selectors =
+    screen === "create" && !preview && !editDraft ? (
+      <CreateSelectors
+        cardType={preferences.cardType}
+        deck={{
+          value: preferences.deck,
+          options: deckOptions,
+          open: openSelect === "deck",
+          onOpenChange: (open) => setOpenSelect(open ? "deck" : null),
+          onChange: (deck) => {
+            if (!saving) {
+              updatePreferences({ deck });
+              setFieldErrors({});
+            }
+          },
+        }}
+        type={{
+          open: openSelect === "type",
+          onOpenChange: (open) => setOpenSelect(open ? "type" : null),
+          onChange: (type) => {
+            if (!saving) {
+              updatePreferences({ cardType: type === "cloze" ? "cloze" : "qa" });
+              setFieldErrors({});
+            }
+          },
+        }}
+      />
+    ) : undefined;
+
   return (
     <Shell
       onBack={back}
-      progress={
-        screen === "review" && (current || lastAction)
-          ? `${progress.grades.length} reviewed · ${queue.length} remaining${lastAction ? " · ⌘Z Undo" : ""}`
-          : undefined
-      }
+      onUndo={screen === "review" && !editDraft && lastAction ? () => void undo() : undefined}
+      onActions={toggleActions}
       notice={notice}
-      footer={{
-        context: screen === "create" ? "Create Card" : current ? currentDeckName : "Review Cards",
-        grading: grading
-          ? {
-              onAgain: () => grade("again"),
-              onHard: () => grade("hard"),
-              onEasy: () => grade("easy"),
-            }
-          : undefined,
-        primary: {
-          label: primaryLabel,
-          keys: editDraft || screen === "create" ? "⌘ ↵" : revealed ? "Space / 3" : "Space",
-          onClick: primary,
-        },
-        onActions: toggleActions,
-      }}
+      footer={{ context, selectors, commands }}
       overlays={
         <>
           {confirmingDelete && current && (
@@ -921,65 +1004,31 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
       }
     >
       {editDraft ? (
-        <EditScreen
-          draft={editDraft}
-          field={draftField}
-          onChange={editReviewField}
-          onDiscard={discardEdit}
-        />
+        <EditScreen draft={editDraft} field={draftField} onChange={editReviewField} />
       ) : screen === "create" && preview ? (
         <PreviewScreen
           cards={preview}
           index={previewIndex}
           deckPath={preferences.deck === "scratch" ? undefined : preferences.deck}
-          onEdit={openPreview}
-          onIndexChange={setPreviewIndex}
         />
       ) : screen === "create" ? (
         <CreateScreen
           editorKey={editorKey}
           cardType={preferences.cardType}
-          deck={{
-            value: preferences.deck,
-            open: openSelect === "deck",
-            onOpenChange: (open) => setOpenSelect(open ? "deck" : null),
-            options: [
-              ...decks.map((deck) => ({ value: deck.absolutePath, label: deck.name })),
-              { value: "scratch", label: "Overlay (scratch deck)" },
-            ],
-            onChange: (deck) => {
-              if (!saving) {
-                updatePreferences({ deck });
-                setFieldErrors({});
-              }
-            },
-            error: fieldErrors.deckPath,
-          }}
-          type={{
-            open: openSelect === "type",
-            onOpenChange: (open) => setOpenSelect(open ? "type" : null),
-            onChange: (type) => {
-              if (!saving) {
-                updatePreferences({ cardType: type === "cloze" ? "cloze" : "qa" });
-                setFieldErrors({});
-              }
-            },
-          }}
           draft={{ question, answer, content: cloze }}
+          deckError={fieldErrors.deckPath}
           initialFocus={imageTarget.current}
           field={draftField}
           onChange={editDraftField}
+          onInsertCloze={insertCloze}
         />
       ) : (
         <ReviewScreen
           key={current?.id ?? "empty-review"}
           view={reviewView}
           issues={issues}
-          onRestart={restart}
-          onReloadCard={reloadCard}
-          onSkipCard={skipCard}
           onOpenDeck={openDeck}
-          onChooseWorkspace={() => events.preferences()}
+          onChooseWorkspace={chooseWorkspace}
         />
       )}
     </Shell>

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@gpuix/react";
-import { colors, font, menuItem, menuSurface, menuTrigger } from "../theme";
+import { colors, popover, popoverItem, type } from "../theme";
+import { Key } from "./key";
+import { SelectorLabel } from "./selector";
 
 export interface DropdownProps {
   readonly value: string;
@@ -9,38 +11,47 @@ export interface DropdownProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly testId: string;
+  readonly triggerLabel?: (value: string) => string;
 }
 
-export function Dropdown({ value, options, onChange, open, onOpenChange, testId }: DropdownProps) {
+export function Dropdown({
+  value,
+  options,
+  onChange,
+  open,
+  onOpenChange,
+  testId,
+  triggerLabel,
+}: DropdownProps) {
   const [focused, setFocused] = useState(false);
+  const label = options.find((option) => option.value === value)?.label ?? "Choose…";
   return (
-    <Select
-      value={value}
-      onValueChange={onChange}
-      open={open}
-      onOpenChange={onOpenChange}
-      style={{ flexGrow: 1, alignItems: "stretch" }}
-    >
+    <Select value={value} onValueChange={onChange} open={open} onOpenChange={onOpenChange}>
       <SelectTrigger
         testId={testId}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        style={{ ...menuTrigger, borderColor: focused ? colors.focus : colors.line }}
+        style={{ cursor: "pointer" }}
       >
-        <text style={{ color: colors.text, fontSize: font.body }}>
-          {options.find((option) => option.value === value)?.label ?? "Choose a deck…"}
-        </text>
-        <text style={{ color: colors.muted, fontSize: font.body }}>⌄</text>
+        <SelectorLabel focused={focused}>
+          {triggerLabel ? triggerLabel(value) : label}
+        </SelectorLabel>
       </SelectTrigger>
-      <SelectContent style={{ ...menuSurface, maxHeight: 235, overflowY: "scroll" }}>
+      <SelectContent
+        side="top"
+        align="start"
+        sideOffset={8}
+        style={{ ...popover, width: 230, maxHeight: 300, overflowY: "scroll" }}
+      >
         {options.map((option) => (
           <SelectItem
             key={option.value}
             value={option.value}
             textValue={option.label}
-            style={({ highlighted }) => menuItem(highlighted)}
+            style={({ highlighted }) => popoverItem(highlighted)}
           >
-            <text style={{ color: colors.text, fontSize: font.body }}>{option.label}</text>
+            <text style={{ ...type.label, color: colors.text }}>{option.label}</text>
+            {option.value === value && <Key>✓</Key>}
           </SelectItem>
         ))}
       </SelectContent>

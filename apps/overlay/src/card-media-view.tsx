@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { loadImage, mediaScale, renderFormula, type Media } from "./card-media";
 import { toErrorMessage } from "./error-message";
 import { onSettled } from "./on-settled";
-import { colors, font } from "./theme";
+import { colors, type } from "./theme";
 
 export function MediaView({
   source,
@@ -26,15 +26,13 @@ export function MediaView({
   }, [source, deckPath, formula, display]);
   if (typeof result === "string")
     return (
-      <text style={{ color: colors.error, fontSize: font.body }}>
+      <text style={{ color: colors.error, ...type.body }}>
         {formula ? `LaTeX: ${source}` : `Image unavailable: ${source}`} — {result}
       </text>
     );
   if (!result)
     return (
-      <text style={{ color: colors.muted, fontSize: font.body }}>
-        {formula ? "…" : "Loading image…"}
-      </text>
+      <text style={{ color: colors.muted, ...type.body }}>{formula ? "…" : "Loading image…"}</text>
     );
   const scale = mediaScale(result, formula ? 200 : 250);
   return (

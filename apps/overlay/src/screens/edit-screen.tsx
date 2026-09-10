@@ -1,30 +1,16 @@
 import type { ReviewCardDraft } from "@simbyotic/re/study";
-import { colors, column, font } from "../theme";
-import { Action } from "../ui/action";
 import { DraftField, type DraftFieldName, type DraftFieldState } from "../ui/field";
+import { formBody } from "./create-screen";
 
 export interface EditScreenProps {
   readonly draft: ReviewCardDraft;
   readonly field: (name: DraftFieldName) => DraftFieldState;
   readonly onChange: (name: DraftFieldName, value: string) => void;
-  readonly onDiscard: () => void;
 }
 
-export function EditScreen({ draft, field, onChange, onDiscard }: EditScreenProps) {
+export function EditScreen({ draft, field, onChange }: EditScreenProps) {
   return (
-    <div
-      style={{
-        ...column,
-        flexGrow: 1,
-        minHeight: 0,
-        overflowY: "scroll",
-        padding: 30,
-        gap: 16,
-      }}
-    >
-      <text style={{ color: colors.text, fontSize: font.title }}>
-        {`Edit ${draft.cardType === "cloze" ? "Cloze Note" : "Card"}`}
-      </text>
+    <div style={formBody}>
       {draft.cardType === "qa" ? (
         <>
           <DraftField
@@ -32,7 +18,7 @@ export function EditScreen({ draft, field, onChange, onDiscard }: EditScreenProp
             testId="edit-question"
             value={draft.question}
             placeholder="Question"
-            rows={3}
+            rows={4}
             autoFocus
             {...field("question")}
             onChange={(value) => onChange("question", value)}
@@ -42,7 +28,7 @@ export function EditScreen({ draft, field, onChange, onDiscard }: EditScreenProp
             testId="edit-answer"
             value={draft.answer}
             placeholder="Answer"
-            rows={3}
+            rows={5}
             {...field("answer")}
             onChange={(value) => onChange("answer", value)}
           />
@@ -53,13 +39,12 @@ export function EditScreen({ draft, field, onChange, onDiscard }: EditScreenProp
           testId="edit-content"
           value={draft.content}
           placeholder="Cloze note"
-          rows={6}
+          rows={11}
           autoFocus
           {...field("content")}
           onChange={(value) => onChange("content", value)}
         />
       )}
-      <Action label="Discard Changes" keys="Esc" onClick={onDiscard} />
     </div>
   );
 }

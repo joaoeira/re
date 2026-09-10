@@ -1,4 +1,4 @@
-import { colors, font, menuItem, menuSurface } from "../theme";
+import { colors, layout, popover, popoverItem, type } from "../theme";
 import { Key } from "../ui/key";
 
 export interface MenuItem {
@@ -18,23 +18,13 @@ export function ActionsMenu({ items, activeIndex, onActivate, onSelect }: Action
   return (
     <div
       style={{
-        ...menuSurface,
+        ...popover,
         position: "absolute",
-        bottom: 49,
-        right: 12,
+        left: layout.rail + 6,
+        bottom: 8,
         width: 285,
-        maxHeight: 350,
+        maxHeight: 400,
         overflowY: "scroll",
-        padding: 6,
-        gap: 2,
-        borderRadius: 10,
-        boxShadow: {
-          offsetX: 0,
-          offsetY: 6,
-          blurRadius: 24,
-          spreadRadius: 0,
-          color: colors.shadow,
-        },
       }}
     >
       {items.map((item, index) => (
@@ -42,9 +32,9 @@ export function ActionsMenu({ items, activeIndex, onActivate, onSelect }: Action
           key={item.label}
           onClick={() => onSelect(item)}
           onMouseEnter={() => onActivate(index)}
-          style={{ ...menuItem(activeIndex === index), justifyContent: "space-between" }}
+          style={popoverItem(activeIndex === index)}
         >
-          <text style={{ color: colors.text, fontSize: font.body }}>{item.label}</text>
+          <text style={{ ...type.label, color: colors.text }}>{item.label}</text>
           {item.key && <Key>{item.key}</Key>}
         </div>
       ))}

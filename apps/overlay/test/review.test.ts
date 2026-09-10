@@ -195,16 +195,16 @@ nativeTest(
       });
       mounted = await mountApp(root);
       const { view, settle, has, press } = mounted;
-      await settle(() => has("Show Answer"));
+      await settle(() => has("Show answer"));
       press("space");
       await settle(() => has("Again"));
       press("1");
       await settle(() => has("Review complete"));
-      expect(has("Reviewed 1 card. Again: 1")).toBe(true);
+      expect(has("1 card reviewed") && has("Again 1 · Hard 0 · Good 0 · Easy 0")).toBe(true);
       expect(await loadReviewStatus(root)).toMatchObject({ ok: true, value: { new: 0, due: 0 } });
       press("cmd-z");
-      await settle(() => has("Show Answer"));
-      expect(has("0 reviewed · 1 remaining")).toBe(true);
+      await settle(() => has("Show answer"));
+      expect(has("· 1 left")).toBe(true);
       expect(view.renderer.findByTestId("revealed-answer")).toBeUndefined();
       expect(await loadReviewStatus(root)).toMatchObject({ ok: true, value: { new: 1, due: 0 } });
     } finally {
@@ -229,7 +229,7 @@ nativeTest("review edit saves to the source deck and returns to an unrevealed ca
     });
     mounted = await mountApp(root);
     const { view, settle, has, press } = mounted;
-    await settle(() => has("Show Answer"));
+    await settle(() => has("Show answer"));
     press("space");
     await settle(() => !!view.renderer.findByTestId("revealed-answer"));
     press("cmd-e");
@@ -237,7 +237,7 @@ nativeTest("review edit saves to the source deck and returns to an unrevealed ca
     view.renderer.focusElement(view.renderer.findByTestId("edit-answer")!.id);
     press("cmd-a n e w");
     press("cmd-enter");
-    await settle(() => has("Card updated") && has("Show Answer"));
+    await settle(() => has("Card updated") && has("Show answer"));
     const loaded = await loadReview(root);
     if (!loaded.ok) throw new Error(loaded.error);
     expect(await readReviewCard(root, loaded.value.cards[0]!)).toMatchObject({
@@ -269,11 +269,11 @@ nativeTest(
       // Fill with native typing so draft state and preview wiring are exercised.
       press("cmd-a { { c 1 : : o n e } } space { { c 2 : : t w o } }");
       press("cmd-p");
-      await settle(() => has("Card Preview 1/2"));
+      await settle(() => has("Preview · 1 of 2"));
       expect(view.renderer.getPaintedText().join(" ")).toContain("[...] two");
       expect(await readFile(deck, "utf8")).toBe("");
       press("alt-right");
-      await settle(() => has("Card Preview 2/2"));
+      await settle(() => has("Preview · 2 of 2"));
       expect(view.renderer.getPaintedText().join(" ")).toContain("one [...]");
       expect(await readFile(deck, "utf8")).toBe("");
       press("cmd-enter");
@@ -306,15 +306,15 @@ nativeTest(
       });
       mounted = await mountApp(root);
       const { settle, has, press } = mounted;
-      await settle(() => has("Show Answer"));
+      await settle(() => has("Show answer"));
       press("cmd-backspace");
-      await settle(() => has("Delete Cloze Note?"));
+      await settle(() => has("Delete cloze note?"));
       press("cmd-enter");
       await settle(() => has("Review complete"));
       expect(await loadReviewStatus(root)).toMatchObject({ ok: true, value: { total: 0 } });
       press("cmd-z");
-      await settle(() => has("Show Answer"));
-      expect(has("0 reviewed · 2 remaining")).toBe(true);
+      await settle(() => has("Show answer"));
+      expect(has("· 2 left")).toBe(true);
       expect(await loadReviewStatus(root)).toMatchObject({ ok: true, value: { new: 2, total: 2 } });
       expect(await readFile(deck, "utf8")).toContain("{{c1::one}} and {{c2::two}}");
     } finally {
@@ -341,7 +341,7 @@ for (const recovery of ["retry", "skip"] as const) {
       const original = await readFile(deck, "utf8");
       mounted = await mountApp(root);
       const { view, settle, has, press, route } = mounted;
-      await settle(() => has("Show Answer"));
+      await settle(() => has("Show answer"));
       route("create");
       await writeFile(deck, "");
       route("review");
@@ -351,9 +351,9 @@ for (const recovery of ["retry", "skip"] as const) {
       await writeFile(deck, original);
       if (recovery === "retry") {
         press("cmd-r");
-        await settle(() => has("Show Answer") && !has("Could not load this card"));
+        await settle(() => has("Show answer") && !has("Could not load this card"));
       } else {
-        const skip = view.renderer.findByText("Skip Card")!;
+        const skip = view.renderer.findByText("Skip card")!;
         const bounds = view.renderer.getElementBounds(skip.id)!;
         view.renderer.nativeSimulateClick(bounds[0]! + bounds[2]! / 2, bounds[1]! + bounds[3]! / 2);
         await settle(() => !has("Could not load this card") && has("No cards due"));
@@ -411,7 +411,7 @@ nativeTest("returning from preview restores the field being edited", async () =>
     press("q");
     view.renderer.focusElement(view.renderer.findByTestId("answer")!.id);
     press("a cmd-p");
-    await settle(() => has("Card Preview 1/1"));
+    await settle(() => has("Preview · 1 of 1"));
     press("escape");
     await settle(() => !!view.renderer.findByTestId("answer"));
     press("x cmd-enter");

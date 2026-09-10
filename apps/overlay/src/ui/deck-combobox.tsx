@@ -10,7 +10,8 @@ import {
   useGpuix,
   type PublicInstance,
 } from "@gpuix/react";
-import { colors, column, font, menuInputTheme, menuItem, menuSurface, menuTrigger } from "../theme";
+import { colors, column, menuInputTheme, popover, popoverItem, type } from "../theme";
+import { SelectorLabel } from "./selector";
 
 export interface DeckComboboxProps {
   readonly value: string;
@@ -55,7 +56,6 @@ export function DeckCombobox({ value, options, onChange, open, onOpenChange }: D
         itemToString(item).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
       }
       autoHighlight
-      style={{ flexGrow: 1, alignItems: "stretch" }}
     >
       <ComboboxTrigger
         ref={trigger}
@@ -74,46 +74,46 @@ export function DeckCombobox({ value, options, onChange, open, onOpenChange }: D
             onOpenChange(true);
           }
         }}
-        style={{ ...menuTrigger, borderColor: focused ? colors.focus : colors.line }}
+        style={{ cursor: "pointer" }}
       >
-        <text style={{ color: colors.text, fontSize: font.body }}>{label(value)}</text>
-        <text style={{ color: colors.muted, fontSize: font.body }}>⌄</text>
+        <SelectorLabel focused={focused}>{label(value)}</SelectorLabel>
       </ComboboxTrigger>
       <ComboboxContent
+        side="top"
+        align="start"
+        sideOffset={8}
         onMouseDownOutside={() => {
           restoreTriggerFocus.current = false;
         }}
-        style={menuSurface}
+        style={{ ...popover, width: 350 }}
       >
         <ComboboxInput
           testId="deck-search"
           placeholder="Search decks…"
           theme={menuInputTheme}
           style={{
-            height: 35,
-            paddingLeft: 9,
-            paddingRight: 9,
-            fontSize: font.body,
+            ...type.body,
+            height: 40,
+            padding: 8,
             color: colors.text,
             backgroundColor: colors.surface,
             borderBottomWidth: 1,
-            borderColor: colors.line,
-            marginBottom: 5,
+            borderColor: colors.fieldBorder,
           }}
         />
-        <ComboboxList style={{ ...column, maxHeight: 195, overflowY: "scroll" }}>
+        <ComboboxList style={{ ...column, maxHeight: 170, overflowY: "scroll" }}>
           {(item) => (
             <ComboboxItem
               key={item}
               value={item}
-              style={({ highlighted }) => menuItem(highlighted)}
+              style={({ highlighted }) => popoverItem(highlighted)}
             >
-              <text style={{ color: colors.text, fontSize: font.body }}>{label(item)}</text>
+              <text style={{ ...type.label, color: colors.text }}>{label(item)}</text>
             </ComboboxItem>
           )}
         </ComboboxList>
-        <ComboboxEmpty style={{ padding: 9 }}>
-          <text style={{ color: colors.muted, fontSize: font.body }}>No decks match</text>
+        <ComboboxEmpty style={popoverItem(false)}>
+          <text style={{ ...type.label, color: colors.muted }}>No decks match</text>
         </ComboboxEmpty>
       </ComboboxContent>
     </Combobox>
