@@ -41,7 +41,8 @@ describe("DeckStoreLive", () => {
         content: "",
       });
 
-      expect(created).toEqual({ _tag: "Created", cardCount: 1 });
+      expect(created).toHaveProperty("_tag", "Created");
+      expect(created).toMatchObject({ cardCount: 1 });
 
       const written = yield* fileSystem.readFileString(deckPath);
       expect(written).toContain("<!--@");

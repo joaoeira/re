@@ -70,19 +70,13 @@ Another answer
         reference: { cardKey: "c1" },
         content: { cardType: "cloze" },
       });
-      expect(queue.issues).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            kind: "deck",
-            error: expect.objectContaining({ _tag: "DeckNotFound" }),
-          }),
-          expect.objectContaining({
-            kind: "card",
-            cardId: "broken",
-            error: expect.objectContaining({ _tag: "NoMatchingTypeError" }),
-          }),
-        ]),
+      expect(queue.issues.find((issue) => issue.kind === "deck")).toHaveProperty(
+        "error._tag",
+        "DeckNotFound",
       );
+      expect(
+        queue.issues.find((issue) => issue.kind === "card" && issue.cardId === "broken"),
+      ).toHaveProperty("error._tag", "NoMatchingTypeError");
     }).pipe(Effect.provide(runtime)),
   );
   it.effect("grades current metadata and permits content edits that preserve identity", () =>
@@ -125,10 +119,9 @@ Another answer
       const edited = "<!--@ cloze1 0 0 0 0-->\nA {{c2::different deletion}}.\n";
       yield* fs.writeFileString(deckPath, edited);
       const result = yield* gradeBuiltinCard(queue.cards[0]!.reference, 2, now).pipe(Effect.result);
-      expect(result).toMatchObject({
-        _tag: "Failure",
-        failure: { _tag: "BuiltinCardNotFound", cardId: "cloze1", cardKey: "c1" },
-      });
+      expect(result).toHaveProperty("_tag", "Failure");
+      expect(result).toHaveProperty("failure._tag", "BuiltinCardNotFound");
+      expect(result).toMatchObject({ failure: { cardId: "cloze1", cardKey: "c1" } });
       expect(yield* fs.readFileString(deckPath)).toBe(edited);
     }).pipe(Effect.provide(runtime)),
   );

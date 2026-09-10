@@ -1,6 +1,6 @@
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as PlatformError from "effect/PlatformError";
+import { makeSystemError } from "./mock-file-system";
 import { State, numericField, ItemIdSchema } from "../../src/core/index.js";
 import { Effect, Exit, Layer, Random, Result, Schema } from "effect";
 import { describe, expect, it } from "vitest";
@@ -135,14 +135,7 @@ const MockFileSystem = FileSystem.layerNoop({
 
     if (path === "/decks/empty.md") return Effect.succeed("# No cards yet\n");
 
-    return Effect.fail(
-      PlatformError.systemError({
-        _tag: "NotFound",
-        module: "FileSystem",
-        method: "readFileString",
-        pathOrDescriptor: path,
-      }),
-    );
+    return Effect.fail(makeSystemError("NotFound", "readFileString", path));
   },
 });
 
@@ -224,11 +217,17 @@ describe("ReviewQueueBuilder", () => {
     expect(result.items.map((item) => item.card.id)).toEqual(["card4"]);
     expect(result.totalNew).toBe(0);
     expect(result.totalDue).toBe(1);
+    expect(result.deckErrors.map((error) => error._tag)).toEqual([
+      "DeckReadError",
+      "DeckNotFound",
+      "DeckParseError",
+      "DeckNotFound",
+    ]);
     expect(result.deckErrors).toMatchObject([
-      { _tag: "DeckReadError", deckPath: "/decks/blocked.md", message: "Deck is locked" },
-      { _tag: "DeckNotFound", deckPath: "/decks/missing.md" },
-      { _tag: "DeckParseError", deckPath: "/decks/broken.md" },
-      { _tag: "DeckNotFound", deckPath: "/decks/missing.md" },
+      { deckPath: "/decks/blocked.md", message: "Deck is locked" },
+      { deckPath: "/decks/missing.md" },
+      { deckPath: "/decks/broken.md" },
+      { deckPath: "/decks/missing.md" },
     ]);
   });
 
@@ -247,9 +246,8 @@ describe("ReviewQueueBuilder", () => {
     expect(empty.items).toEqual([]);
     expect(empty.deckErrors).toEqual([]);
     expect(failed.items).toEqual([]);
-    expect(failed.deckErrors).toMatchObject([
-      { _tag: "DeckNotFound", deckPath: "/decks/missing.md" },
-    ]);
+    expect(failed.deckErrors).toHaveProperty("0._tag", "DeckNotFound");
+    expect(failed.deckErrors).toMatchObject([{ deckPath: "/decks/missing.md" }]);
   });
 
   it("propagates defects and interruption instead of reporting successful partial queues", async () => {

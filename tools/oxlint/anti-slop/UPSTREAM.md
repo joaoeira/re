@@ -41,14 +41,19 @@ The `anti-slop-effect/no-manual-tag-comparison` rule is also enabled within
 `packages/`. Its 16 initial findings were resolved with exhaustive Match handlers,
 Effect predicates, and direct test assertions.
 
-Three new Effect rules are available but are not enabled by this update:
+The `anti-slop-effect/no-manual-tagged-construction` rule is also enabled within
+`packages/`. Its 74 initial findings were resolved with typed Data.taggedEnum
+constructors for study UI results, the shared platform-error fixture constructor,
+and explicit tag and payload assertions in tests. The public result types and
+values remain unchanged.
+
+Two new Effect rules are available but are not enabled by this update:
 
 - `anti-slop-effect/no-manual-effect-error-tag`
-- `anti-slop-effect/no-manual-tagged-construction`
 - `anti-slop-effect/prefer-effect-match`
 
 Enabling these is a separate policy change. A read-only trial on 2026-09-10
 reported 74 manual tagged-construction findings and 16 manual tag-comparison
 findings. Repository lint passes with zero warnings and zero errors with
-the spacing and tag-comparison rules enabled and the other three new Effect
-rules disabled.
+the spacing, tag-comparison, and tagged-construction rules enabled and the
+other two new Effect rules disabled.

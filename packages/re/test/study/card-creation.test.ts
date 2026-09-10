@@ -100,7 +100,8 @@ describe("createCardForUi", () => {
     return Effect.gen(function* () {
       const result = yield* createCardForUi(validQa);
 
-      expect(result).toEqual({ _tag: "Created", cardCount: 1 });
+      expect(result).toHaveProperty("_tag", "Created");
+      expect(result).toMatchObject({ cardCount: 1 });
       expect(appendCall?.deckPath).toBe(validQa.deckPath);
       expect(appendCall?.item.content).toBe(
         "What is an effect?\n---\nA description of a computation.",
@@ -152,8 +153,8 @@ describe("createCardForUi", () => {
     Effect.gen(function* () {
       const result = yield* createCardForUi(validQa);
 
-      expect(result).toEqual({
-        _tag: "FieldError",
+      expect(result).toHaveProperty("_tag", "FieldError");
+      expect(result).toMatchObject({
         field: "deckPath",
         message: "The selected deck no longer exists. Refresh the deck list.",
       });

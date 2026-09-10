@@ -70,7 +70,8 @@ describe("Scheduler", () => {
       ]) {
         const card = makeCard({ state: State.Review, stability: 2, ...timestamps });
         const error = yield* scheduler.scheduleReview(card, 2, now).pipe(Effect.flip);
-        expect(error).toMatchObject({ _tag: "ScheduleError", cardId: card.id });
+        expect(error).toHaveProperty("_tag", "ScheduleError");
+        expect(error).toMatchObject({ cardId: card.id });
       }
     }).pipe(Effect.provide(SchedulerLive), Effect.runPromise);
   });

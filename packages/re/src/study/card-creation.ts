@@ -64,6 +64,10 @@ export type LoadDecksUiResult =
       readonly message: string;
     };
 
+const createCardUiResult = Data.taggedEnum<CreateCardUiResult>();
+
+const loadDecksUiResult = Data.taggedEnum<LoadDecksUiResult>();
+
 const requireText = (
   value: string,
   field: CardField,
@@ -133,46 +137,40 @@ export const createCard = Effect.fn("Study.createCard")(function* (input: Create
   return { cardCount: prepared.cardCount } as const;
 });
 
-const operationError = (message: string): CreateCardUiResult => ({
-  _tag: "OperationError",
-  message,
-});
+const operationError = (message: string): CreateCardUiResult =>
+  createCardUiResult.OperationError({ message });
 
 export const createCardForUi = (
   input: CreateCardInput,
 ): Effect.Effect<CreateCardUiResult, never, DeckStore> =>
   createCard(input).pipe(
-    Effect.map(
-      ({ cardCount }): CreateCardUiResult => ({
-        _tag: "Created",
-        cardCount,
-      }),
-    ),
+    Effect.map(({ cardCount }): CreateCardUiResult => createCardUiResult.Created({ cardCount })),
     Effect.catchTags({
       CardFieldError: (error) =>
-        Effect.succeed<CreateCardUiResult>({
-          _tag: "FieldError",
-          field: error.field,
-          message: error.message,
-        }),
+        Effect.succeed<CreateCardUiResult>(
+          createCardUiResult.FieldError({ field: error.field, message: error.message }),
+        ),
       ContentParseError: (error) =>
-        Effect.succeed<CreateCardUiResult>({
-          _tag: "FieldError",
-          field: input.cardType === "cloze" ? "content" : "question",
-          message: formatContentParseError(error),
-        }),
+        Effect.succeed<CreateCardUiResult>(
+          createCardUiResult.FieldError({
+            field: input.cardType === "cloze" ? "content" : "question",
+            message: formatContentParseError(error),
+          }),
+        ),
       DeckNotFound: () =>
-        Effect.succeed<CreateCardUiResult>({
-          _tag: "FieldError",
-          field: "deckPath",
-          message: "The selected deck no longer exists. Refresh the deck list.",
-        }),
+        Effect.succeed<CreateCardUiResult>(
+          createCardUiResult.FieldError({
+            field: "deckPath",
+            message: "The selected deck no longer exists. Refresh the deck list.",
+          }),
+        ),
       DeckParseError: (error) =>
-        Effect.succeed<CreateCardUiResult>({
-          _tag: "FieldError",
-          field: "deckPath",
-          message: `The selected deck is invalid: ${error.message}`,
-        }),
+        Effect.succeed<CreateCardUiResult>(
+          createCardUiResult.FieldError({
+            field: "deckPath",
+            message: `The selected deck is invalid: ${error.message}`,
+          }),
+        ),
       DeckReadError: (error) =>
         Effect.succeed(operationError(`Could not read the selected deck: ${error.message}`)),
       DeckWriteError: (error) =>
@@ -186,16 +184,10 @@ export const loadDecksForUi = (
 ): Effect.Effect<LoadDecksUiResult, never, DeckStore> =>
   DeckStore.pipe(
     Effect.flatMap((store) => store.listDecks(workspacePath)),
-    Effect.map(
-      (decks): LoadDecksUiResult => ({
-        _tag: "DecksLoaded",
-        decks,
-      }),
-    ),
+    Effect.map((decks): LoadDecksUiResult => loadDecksUiResult.DecksLoaded({ decks })),
     Effect.catch((error) =>
-      Effect.succeed<LoadDecksUiResult>({
-        _tag: "DecksLoadError",
-        message: toScanDecksErrorMessage(error),
-      }),
+      Effect.succeed<LoadDecksUiResult>(
+        loadDecksUiResult.DecksLoadError({ message: toScanDecksErrorMessage(error) }),
+      ),
     ),
   );

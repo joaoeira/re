@@ -77,8 +77,8 @@ describe("insertImageForUi", () => {
         content: "What does this diagram show?",
       });
 
-      expect(result).toEqual({
-        _tag: "Inserted",
+      expect(result).toHaveProperty("_tag", "Inserted");
+      expect(result).toMatchObject({
         content: "What does this diagram show?\n\n![](.re/assets/abc123.png)",
         deckRelativePath: ".re/assets/abc123.png",
       });
@@ -107,10 +107,8 @@ describe("insertImageForUi", () => {
         content: "Question",
       });
 
-      expect(result).toEqual({
-        _tag: "OperationError",
-        message: "Copy an image before using Insert Image.",
-      });
+      expect(result).toHaveProperty("_tag", "OperationError");
+      expect(result).toMatchObject({ message: "Copy an image before using Insert Image." });
     }).pipe(
       Effect.provide(
         createTestLayer({

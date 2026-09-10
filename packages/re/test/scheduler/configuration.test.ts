@@ -209,7 +209,7 @@ describe("scheduler configuration", () => {
           return yield* scheduler.scheduleReview(createMetadata(), 2, new Date());
         }).pipe(Effect.provide(makeSchedulerLayer(options as FSRSOptions)), Effect.flip);
 
-        expect(error).toMatchObject({ _tag: "SchedulerConfigError" });
+        expect(error).toHaveProperty("_tag", "SchedulerConfigError");
         expect(started).toBe(false);
       }
     }),

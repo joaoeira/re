@@ -284,7 +284,8 @@ describe("DeckManager concurrent mutations", () => {
 
       expect((yield* manager.readDeck("/moved.md")).items[0]!.content.trim()).toBe("Saved");
       const oldPath = yield* manager.readDeck("/deck.md").pipe(Effect.result);
-      expect(oldPath).toMatchObject({ _tag: "Failure", failure: { _tag: "DeckNotFound" } });
+      expect(oldPath).toHaveProperty("_tag", "Failure");
+      expect(oldPath).toHaveProperty("failure._tag", "DeckNotFound");
       // A rename to the same path is a no-op, not a second acquisition of its lock.
       yield* manager.renameDeck("/moved.md", "/moved.md");
     }).pipe(Effect.timeout("2 seconds")),
@@ -306,10 +307,9 @@ describe("DeckManager concurrent mutations", () => {
       yield* Fiber.join(edit);
       yield* Fiber.join(deletion);
 
-      expect(yield* manager.readDeck("/deck.md").pipe(Effect.result)).toMatchObject({
-        _tag: "Failure",
-        failure: { _tag: "DeckNotFound" },
-      });
+      const oldPath = yield* manager.readDeck("/deck.md").pipe(Effect.result);
+      expect(oldPath).toHaveProperty("_tag", "Failure");
+      expect(oldPath).toHaveProperty("failure._tag", "DeckNotFound");
     }).pipe(Effect.timeout("2 seconds")),
   );
 
@@ -354,9 +354,9 @@ describe("DeckManager concurrent mutations", () => {
       const results = [yield* Fiber.join(first), yield* Fiber.join(second)];
 
       expect(results.filter(Result.isSuccess)).toHaveLength(1);
-      expect(results.find(Result.isFailure)).toMatchObject({
-        failure: { _tag: "DeckAlreadyExists", deckPath: "/moved.md" },
-      });
+      const failedRename = results.find(Result.isFailure);
+      expect(failedRename).toHaveProperty("failure._tag", "DeckAlreadyExists");
+      expect(failedRename).toMatchObject({ failure: { deckPath: "/moved.md" } });
       const firstWon = Result.isSuccess(results[0]!);
       expect((yield* manager.readDeck("/moved.md")).items[0]!.cards[0]!.id).toBe(
         firstWon ? "a" : "b",
@@ -430,7 +430,8 @@ describe("DeckManager.modifyItem", () => {
         )
         .pipe(Effect.result);
 
-      expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "EditRejected" } });
+      expect(result).toHaveProperty("_tag", "Failure");
+      expect(result).toHaveProperty("failure._tag", "EditRejected");
       expect(yield* fs.readFileString(deckPath)).toBe(original);
 
       yield* manager.modifyItem(
@@ -516,10 +517,10 @@ describe("DeckManager save recovery", () => {
           }),
         );
 
-        expect(yield* update.pipe(Effect.result)).toMatchObject({
-          _tag: "Failure",
-          failure: { _tag: "DeckWriteError", deckPath },
-        });
+        const failedUpdate = yield* update.pipe(Effect.result);
+        expect(failedUpdate).toHaveProperty("_tag", "Failure");
+        expect(failedUpdate).toHaveProperty("failure._tag", "DeckWriteError");
+        expect(failedUpdate).toMatchObject({ failure: { deckPath } });
         expect(yield* fs.readFileString(deckPath)).toBe(original);
         expect((yield* fs.readDirectory(directory)).sort()).toEqual(["deck.md", "deck.md.tmp"]);
         expect(yield* fs.readFileString(`${deckPath}.tmp`)).toBe("Other tool's file");

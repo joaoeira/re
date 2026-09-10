@@ -37,7 +37,8 @@ describe("parseMetadata", () => {
           "<!--@ imported-card--><!-- 0 0 0 0-->",
         ]) {
           const error = yield* parseMetadata(input).pipe(Effect.flip);
-          expect(error).toMatchObject({ _tag: "InvalidMetadataFormat", line: 1 });
+          expect(error).toHaveProperty("_tag", "InvalidMetadataFormat");
+          expect(error).toMatchObject({ line: 1 });
         }
       }),
   );
@@ -45,10 +46,12 @@ describe("parseMetadata", () => {
   it.effect("preserves recoverable metadata failures for a complete comment", () =>
     Effect.gen(function* () {
       const formatError = yield* parseMetadata("<!--@ imported-card 0 0-->").pipe(Effect.flip);
-      expect(formatError).toMatchObject({ _tag: "InvalidMetadataFormat", line: 1 });
+      expect(formatError).toHaveProperty("_tag", "InvalidMetadataFormat");
+      expect(formatError).toMatchObject({ line: 1 });
 
       const valueError = yield* parseMetadata("<!--@ imported-card 0 0 9 0-->").pipe(Effect.flip);
-      expect(valueError).toMatchObject({ _tag: "InvalidFieldValue", line: 1 });
+      expect(valueError).toHaveProperty("_tag", "InvalidFieldValue");
+      expect(valueError).toMatchObject({ line: 1 });
     }),
   );
 
@@ -58,7 +61,8 @@ describe("parseMetadata", () => {
         "<!--@ incomplete-review 5 4 2 0 2025-01-04T10:30:00Z-->",
       ).pipe(Effect.flip);
 
-      expect(error).toMatchObject({ _tag: "InvalidMetadataFormat", line: 1 });
+      expect(error).toHaveProperty("_tag", "InvalidMetadataFormat");
+      expect(error).toMatchObject({ line: 1 });
     }),
   );
 });

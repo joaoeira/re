@@ -65,20 +65,17 @@ describe("reconcileCards", () => {
           nextKeys!,
         );
 
-        expect(result).toMatchObject({
-          _tag: "Failure",
-          failure: { _tag: "DuplicateCardKey", key: "same" },
-        });
+        expect(result).toHaveProperty("_tag", "Failure");
+        expect(result).toHaveProperty("failure._tag", "DuplicateCardKey");
+        expect(result).toMatchObject({ failure: { key: "same" } });
       }
     }),
   );
 
   it("refuses to guess which metadata belongs to a key when counts differ", () => {
-    expect(
-      reconcileCards({ keys: ["c1", "c3"], cards: [metadata("unknown")] }, ["c3"]),
-    ).toMatchObject({
-      _tag: "Failure",
-      failure: { _tag: "ReconcileCardCountMismatch", keyCount: 2, metadataCount: 1 },
-    });
+    const result = reconcileCards({ keys: ["c1", "c3"], cards: [metadata("unknown")] }, ["c3"]);
+    expect(result).toHaveProperty("_tag", "Failure");
+    expect(result).toHaveProperty("failure._tag", "ReconcileCardCountMismatch");
+    expect(result).toMatchObject({ failure: { keyCount: 2, metadataCount: 1 } });
   });
 });

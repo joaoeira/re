@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 
 import { ClipboardImageReader } from "./clipboard-image.js";
 import { DeckStore } from "./deck-store.js";
@@ -24,6 +24,8 @@ export type InsertImageUiResult =
       readonly message: string;
     };
 
+const insertImageUiResult = Data.taggedEnum<InsertImageUiResult>();
+
 const appendImageMarkdown = (content: string, deckRelativePath: string): string => {
   const separator =
     content.length === 0
@@ -42,10 +44,9 @@ export const insertImageForUi = (
 ): Effect.Effect<InsertImageUiResult, never, ClipboardImageReader | DeckStore> =>
   Effect.gen(function* () {
     if (input.deckPath.trim().length === 0) {
-      return {
-        _tag: "DeckPathError",
+      return insertImageUiResult.DeckPathError({
         message: "Choose a deck before inserting an image.",
-      } as const;
+      });
     }
 
     const clipboard = yield* ClipboardImageReader;
@@ -59,35 +60,34 @@ export const insertImageForUi = (
       image.extension,
     );
 
-    return {
-      _tag: "Inserted",
+    return insertImageUiResult.Inserted({
       content: appendImageMarkdown(input.content, imported.deckRelativePath),
       deckRelativePath: imported.deckRelativePath,
-    } as const;
+    });
   }).pipe(
     Effect.catchTags({
       ClipboardImageUnavailable: (error) =>
-        Effect.succeed<InsertImageUiResult>({
-          _tag: "OperationError",
-          message: error.message,
-        }),
+        Effect.succeed<InsertImageUiResult>(
+          insertImageUiResult.OperationError({ message: error.message }),
+        ),
       ClipboardImageReadError: (error) =>
-        Effect.succeed<InsertImageUiResult>({
-          _tag: "OperationError",
-          message: error.message,
-        }),
+        Effect.succeed<InsertImageUiResult>(
+          insertImageUiResult.OperationError({ message: error.message }),
+        ),
       InvalidWorkspaceImageAsset: (error) =>
-        Effect.succeed<InsertImageUiResult>({
-          _tag: "OperationError",
-          message:
-            error.reason === "unsupported_file_extension"
-              ? "The copied image format is not supported."
-              : `Could not import the image (${error.reason}).`,
-        }),
+        Effect.succeed<InsertImageUiResult>(
+          insertImageUiResult.OperationError({
+            message:
+              error.reason === "unsupported_file_extension"
+                ? "The copied image format is not supported."
+                : `Could not import the image (${error.reason}).`,
+          }),
+        ),
       ImportDeckImageAssetOperationError: (error) =>
-        Effect.succeed<InsertImageUiResult>({
-          _tag: "OperationError",
-          message: `Could not save the image: ${error.message}`,
-        }),
+        Effect.succeed<InsertImageUiResult>(
+          insertImageUiResult.OperationError({
+            message: `Could not save the image: ${error.message}`,
+          }),
+        ),
     }),
   );

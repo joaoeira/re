@@ -1,6 +1,5 @@
 import * as Path from "effect/Path";
 import * as FileSystem from "effect/FileSystem";
-import * as PlatformError from "effect/PlatformError";
 import { Effect, Result, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import {
@@ -9,7 +8,11 @@ import {
   WorkspaceRootNotFound,
   WorkspaceRootUnreadable,
 } from "../../src/workspace/index.js";
-import { createMockFileSystemLayer, type MockFileSystemConfig } from "./mock-file-system";
+import {
+  createMockFileSystemLayer,
+  makeSystemError,
+  type MockFileSystemConfig,
+} from "./mock-file-system";
 
 const runScan = (
   rootPath: string,
@@ -276,16 +279,7 @@ describe("scanDecks", () => {
         return yield* scanDecks("/root").pipe(
           Effect.provideService(FileSystem.FileSystem, {
             ...fs,
-            readLink: (path) =>
-              Effect.fail(
-                PlatformError.systemError({
-                  _tag: "Unknown",
-                  module: "FileSystem",
-                  method: "readLink",
-                  pathOrDescriptor: path,
-                  cause: { code },
-                }),
-              ),
+            readLink: (path) => Effect.fail(makeSystemError("Unknown", "readLink", path, { code })),
           }),
           Effect.result,
         );
@@ -303,15 +297,13 @@ describe("scanDecks", () => {
       );
 
       if (code === "EINVAL") {
-        expect(result).toMatchObject({
-          _tag: "Success",
-          success: { decks: [{ relativePath: "ordinary.md" }] },
-        });
+        expect(result).toHaveProperty("_tag", "Success");
+        expect(result).toMatchObject({ success: { decks: [{ relativePath: "ordinary.md" }] } });
       } else {
+        expect(result).toHaveProperty("_tag", "Failure");
+        expect(result).toHaveProperty("failure._tag", "WorkspaceRootUnreadable");
         expect(result).toMatchObject({
-          _tag: "Failure",
           failure: {
-            _tag: "WorkspaceRootUnreadable",
             rootPath: "/root",
             message: expect.stringContaining("readLink failed for /root/ordinary.md"),
           },

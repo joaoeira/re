@@ -1,6 +1,6 @@
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as PlatformError from "effect/PlatformError";
+import { makeSystemError } from "./mock-file-system";
 import { Effect, Layer, Random } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -65,14 +65,7 @@ const MockFileSystem = FileSystem.layerNoop({
 
     if (path === "/decks/broken.md") return Effect.succeed(brokenContent);
 
-    return Effect.fail(
-      PlatformError.systemError({
-        _tag: "NotFound",
-        module: "FileSystem",
-        method: "readFileString",
-        pathOrDescriptor: path,
-      }),
-    );
+    return Effect.fail(makeSystemError("NotFound", "readFileString", path));
   },
 });
 

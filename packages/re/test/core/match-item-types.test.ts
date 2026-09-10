@@ -58,10 +58,10 @@ describe("matchItemTypes", () => {
           saved(3),
         ).pipe(Effect.result);
 
+        expect(result).toHaveProperty("_tag", "Failure");
+        expect(result).toHaveProperty("failure._tag", "ItemCardCountMismatch");
         expect(result).toMatchObject({
-          _tag: "Failure",
           failure: {
-            _tag: "ItemCardCountMismatch",
             metadataCount: 3,
             parseableTypes: [
               { name: "first", cardCount: 2 },
@@ -79,7 +79,8 @@ describe("matchItemTypes", () => {
         saved(1, "invalid"),
       ).pipe(Effect.result);
 
-      expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "NoMatchingTypeError" } });
+      expect(result).toHaveProperty("_tag", "Failure");
+      expect(result).toHaveProperty("failure._tag", "NoMatchingTypeError");
     }),
   );
 

@@ -22,12 +22,14 @@ export const makeSystemError = (
   reason: PlatformError.SystemErrorTag,
   method: string,
   pathOrDescriptor: string,
+  cause?: unknown,
 ): PlatformError.PlatformError =>
   PlatformError.systemError({
     _tag: reason,
     module: "FileSystem",
     method,
     pathOrDescriptor,
+    cause,
   });
 
 const makeFileInfo = (type: FileSystem.File.Type): FileSystem.File.Info => ({

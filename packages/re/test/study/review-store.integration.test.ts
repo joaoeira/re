@@ -470,13 +470,9 @@ France: {{c1::Paris}}. Germany: {{c2::Berlin}}.
         )
         .pipe(Effect.result);
 
-      expect(result).toMatchObject({
-        _tag: "Failure",
-        failure: {
-          _tag: "ReviewEditValidationError",
-          field: "content",
-        },
-      });
+      expect(result).toHaveProperty("_tag", "Failure");
+      expect(result).toHaveProperty("failure._tag", "ReviewEditValidationError");
+      expect(result).toMatchObject({ failure: { field: "content" } });
       const written = yield* fileSystem.readFileString(deckPath);
       expect(written).toBe(original);
     }).pipe(Effect.provide(TestWithPlatformLive)),

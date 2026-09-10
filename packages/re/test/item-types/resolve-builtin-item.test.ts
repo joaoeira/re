@@ -54,10 +54,9 @@ describe("builtin card identity", () => {
         Effect.result,
       );
 
-      expect(mismatch).toMatchObject({
-        _tag: "Failure",
-        failure: { _tag: "BuiltinCardNotFound", cardId: first.id, cardKey: "c3" },
-      });
+      expect(mismatch).toHaveProperty("_tag", "Failure");
+      expect(mismatch).toHaveProperty("failure._tag", "BuiltinCardNotFound");
+      expect(mismatch).toMatchObject({ failure: { cardId: first.id, cardKey: "c3" } });
 
       const resolved = yield* resolveBuiltinCard(item, { cardId: second.id, cardKey });
       expect(resolved.card.id).toBe(second.id);
@@ -119,10 +118,15 @@ describe("annotateBuiltinCardKeys", () => {
         expect(items.map(({ label, cardKey }) => ({ label, cardKey }))).toEqual([
           { label: "healthy", cardKey: "main" },
         ]);
+        expect(errors.map(({ error }) => error._tag)).toEqual([
+          "NoMatchingTypeError",
+          "ItemCardCountMismatch",
+          "BuiltinCardNotFound",
+        ]);
         expect(errors).toMatchObject([
-          { entry: { label: "malformed" }, error: { _tag: "NoMatchingTypeError" } },
-          { entry: { label: "mismatched" }, error: { _tag: "ItemCardCountMismatch" } },
-          { entry: { label: "missing" }, error: { _tag: "BuiltinCardNotFound" } },
+          { entry: { label: "malformed" } },
+          { entry: { label: "mismatched" } },
+          { entry: { label: "missing" } },
         ]);
       }),
   );

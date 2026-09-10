@@ -331,14 +331,9 @@ describe("imageAssets", () => {
           );
 
           const result = await promise;
-          expect(result).toMatchObject({
-            _tag: "Failure",
-            failure: {
-              _tag: "ImportDeckImageAssetOperationError",
-              operation: "hash_source",
-              message,
-            },
-          });
+          expect(result).toHaveProperty("_tag", "Failure");
+          expect(result).toHaveProperty("failure._tag", "ImportDeckImageAssetOperationError");
+          expect(result).toMatchObject({ failure: { operation: "hash_source", message } });
           expect(mock.bytesStore).toEqual({});
 
           if (Result.isFailure(result)) {
@@ -376,10 +371,10 @@ describe("imageAssets", () => {
         );
       }).pipe(Effect.provide(Layer.merge(mock.layer, Path.layer)), Effect.runPromise);
 
+      expect(result).toHaveProperty("_tag", "Failure");
+      expect(result).toHaveProperty("failure._tag", "ImportDeckImageAssetOperationError");
       expect(result).toMatchObject({
-        _tag: "Failure",
         failure: {
-          _tag: "ImportDeckImageAssetOperationError",
           operation: "write_asset",
           message: failure.message,
           assetPath:

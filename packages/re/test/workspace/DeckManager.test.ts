@@ -387,10 +387,10 @@ describe("DeckManager.modifyItem", () => {
         ),
     );
 
-    expect(await promise).toMatchObject({
-      _tag: "Failure",
-      failure: { _tag: "ItemValidationError", message: "Duplicate generated card key: shared" },
-    });
+    const result = await promise;
+    expect(result).toHaveProperty("_tag", "Failure");
+    expect(result).toHaveProperty("failure._tag", "ItemValidationError");
+    expect(result).toMatchObject({ failure: { message: "Duplicate generated card key: shared" } });
     expect(store["/deck.md"]).toBe(original);
   });
 });
@@ -1075,10 +1075,9 @@ describe("DeckManager.renameDeck", () => {
         .pipe(Effect.result);
     }).pipe(Effect.provide(mock.layer), Effect.runPromise);
 
-    expect(result).toMatchObject({
-      _tag: "Failure",
-      failure: { _tag: "DeckFileNotFound", deckPath: "/workspace/books/book1.md" },
-    });
+    expect(result).toHaveProperty("_tag", "Failure");
+    expect(result).toHaveProperty("failure._tag", "DeckFileNotFound");
+    expect(result).toMatchObject({ failure: { deckPath: "/workspace/books/book1.md" } });
     expect(mock.store["/workspace/books/book1.md"]).toBeUndefined();
   });
 
@@ -1093,10 +1092,11 @@ describe("DeckManager.renameDeck", () => {
       (manager) => manager.renameDeck("/workspace/books/book1.md", "/workspace/books/book-01.md"),
     );
 
-    expect(await promise).toMatchObject({
-      _tag: "Failure",
+    const result = await promise;
+    expect(result).toHaveProperty("_tag", "Failure");
+    expect(result).toHaveProperty("failure._tag", "DeckFileOperationError");
+    expect(result).toMatchObject({
       failure: {
-        _tag: "DeckFileOperationError",
         operation: "rename",
         fromPath: "/workspace/books/book1.md",
         toPath: "/workspace/books/book-01.md",
