@@ -53,7 +53,11 @@ if (existsSync(output) && existsSync(stamp) && readFileSync(stamp, "utf8") === f
       stdout: "ignore",
       stderr: "ignore",
     }).exitCode === 0;
-  if (!alreadyPatched) run(["git", "apply", patch], source);
+  if (!alreadyPatched) {
+    // An older version of the patch may already be applied; start from pristine sources.
+    run(["git", "checkout", "--", "."], source);
+    run(["git", "apply", patch], source);
+  }
 
   run(["cargo", ...cargoArguments], resolve(source, "packages/native"));
   mkdirSync(resolve(output, ".."), { recursive: true });
