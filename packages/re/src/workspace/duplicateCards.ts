@@ -33,6 +33,7 @@ export const extractCardLocations = (
   for (const deck of decks) {
     for (let itemIndex = 0; itemIndex < deck.file.items.length; itemIndex++) {
       const item = deck.file.items[itemIndex]!;
+
       for (let cardIndex = 0; cardIndex < item.cards.length; cardIndex++) {
         const card = item.cards[cardIndex]!;
         locations.push({
@@ -53,6 +54,7 @@ export const findDuplicates = (locations: readonly CardLocation[]): DuplicateMap
 
   for (const location of locations) {
     const current = grouped.get(location.id);
+
     if (current) {
       current.push(location);
     } else {
@@ -61,6 +63,7 @@ export const findDuplicates = (locations: readonly CardLocation[]): DuplicateMap
   }
 
   const duplicates: [string, readonly CardLocation[]][] = [];
+
   for (const [id, locs] of grouped.entries()) {
     if (locs.length > 1) {
       duplicates.push([id, locs]);
@@ -89,8 +92,10 @@ export const findWorkspaceDuplicates = (
     );
 
     const loadedDecks: { path: string; file: ParsedFile }[] = [];
+
     for (let i = 0; i < readResults.length; i++) {
       const result = readResults[i]!;
+
       if (Result.isSuccess(result)) {
         loadedDecks.push({ path: deckPaths[i]!, file: result.success });
       }

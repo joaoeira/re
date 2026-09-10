@@ -1,5 +1,7 @@
 export { QAType, QAContent, composeQA, QAComposeError } from "./qa.js";
+
 export { ClozeType, ClozeContent, ClozeDeletion } from "./cloze.js";
+
 export {
   resolveBuiltinItem,
   annotateBuiltinCardKeys,

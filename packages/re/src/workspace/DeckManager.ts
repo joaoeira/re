@@ -116,7 +116,9 @@ interface DeckFileOperationPayload {
 }
 
 export type ReadError = DeckNotFound | DeckReadError | DeckParseError;
+
 export type WriteError = ReadError | DeckWriteError;
+
 export type DeckLifecycleError =
   | InvalidDeckPath
   | DeckAlreadyExists
@@ -230,17 +232,21 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
         Effect.gen(function* () {
           // Rename must acquire both paths in the same order as other renames.
           const keys = [...new Set(deckPaths.map((deckPath) => path.resolve(deckPath)))].sort();
+
           // Get-or-create has no yield boundary, so callers always share the same lock.
           const locks = yield* Effect.sync(() =>
             keys.map((key) => {
               let lock = locksByPath.get(key);
+
               if (lock === undefined) {
                 lock = Semaphore.makeUnsafe(1);
                 locksByPath.set(key, lock);
               }
+
               return lock;
             }),
           );
+
           return yield* locks.reduceRight((effect, lock) => lock.withPermits(1)(effect), operation);
         });
 
@@ -268,12 +274,14 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
       ): Effect.Effect<{ itemIndex: number; cardIndex: number }, CardNotFound> => {
         for (let i = 0; i < parsed.items.length; i++) {
           const item = parsed.items[i]!;
+
           for (let c = 0; c < item.cards.length; c++) {
             if (item.cards[c]!.id === cardId) {
               return Effect.succeed({ itemIndex: i, cardIndex: c });
             }
           }
         }
+
         return Effect.fail(new CardNotFound({ deckPath, cardId }));
       };
 
@@ -288,6 +296,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
               prefix: ".re-write-",
               suffix: ".tmp",
             });
+
             yield* fs.writeFileString(tmpPath, content);
             // A rename cannot be cancelled once the OS starts it. Keep the lock
             // until it finishes, before cleaning up the temporary file.
@@ -305,6 +314,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
       ): Effect.Effect<A, WriteError | E, R> =>
         Effect.suspend(() => {
           const filePath = path.resolve(deckPath);
+
           return withDeckLocks(
             [filePath],
             readAndParse(filePath).pipe(
@@ -330,6 +340,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
           ),
           Effect.flatMap((cards) => {
             const keys = new Set<string>();
+
             for (const card of cards) {
               if (keys.has(card.key)) {
                 return Effect.fail(
@@ -339,9 +350,12 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
                   }),
                 );
               }
+
               keys.add(card.key);
             }
+
             const expectedCards = cards.length;
+
             if (expectedCards !== item.cards.length) {
               return Effect.fail(
                 new ItemValidationError({
@@ -350,6 +364,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
                 }),
               );
             }
+
             return Effect.void;
           }),
         );
@@ -357,6 +372,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
       const validateDeckPath = (inputPath: string): Effect.Effect<string, InvalidDeckPath> =>
         Effect.gen(function* () {
           const normalizedPath = inputPath.trim();
+
           if (normalizedPath.length === 0) {
             return yield* new InvalidDeckPath({ inputPath, reason: "empty_path" });
           }
@@ -428,6 +444,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
         createParents?: boolean,
       ): Effect.Effect<void, DeckFileOperationError> => {
         const parentPath = path.dirname(deckPath);
+
         if (createParents === true) {
           return fs.makeDirectory(parentPath, { recursive: true }).pipe(
             Effect.mapError((error: PlatformError) =>
@@ -461,14 +478,18 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
           Effect.gen(function* () {
             const { itemIndex } = yield* findItemByCardId(parsed, cardId, deckPath);
             const changed = yield* change(parsed.items[itemIndex]!);
+
             const item =
               itemIndex === parsed.items.length - 1 || changed.content.endsWith("\n")
                 ? changed
                 : { ...changed, content: changed.content + "\n" };
+
             yield* validateItem(item, itemType, deckPath);
+
             const items = parsed.items.map((current, index) =>
               index === itemIndex ? item : current,
             );
+
             return { file: { ...parsed, items }, result: item };
           }),
         );
@@ -478,6 +499,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
           Effect.gen(function* () {
             const { itemIndex, cardIndex } = yield* findItemByCardId(parsed, cardId, deckPath);
             const currentItem = parsed.items[itemIndex]!;
+
             const { metadata, result } = yield* change({
               item: currentItem,
               card: currentItem.cards[cardIndex]!,
@@ -486,6 +508,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
             const items = parsed.items.map((item, idx) => {
               if (idx !== itemIndex) return item;
               const cards = item.cards.map((card, cIdx) => (cIdx === cardIndex ? metadata : card));
+
               return { ...item, cards };
             });
 
@@ -515,6 +538,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
 
               if (items.length > 0) {
                 const lastItem = items[items.length - 1]!;
+
                 if (lastItem.content.length > 0 && !lastItem.content.endsWith("\n\n")) {
                   const fixedItems = [...items];
                   const trimmed = lastItem.content.replace(/\n*$/, "");
@@ -553,6 +577,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
             Effect.sync(() => {
               const items = [...parsed.items];
               items.splice(removed.itemIndex, 0, removed.item);
+
               return { file: { ...parsed, items }, result: undefined };
             }),
           ),
@@ -560,6 +585,7 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
         createDeck: (deckPath, options) =>
           Effect.gen(function* () {
             const resolvedPath = yield* validateDeckPath(deckPath);
+
             return yield* withDeckLocks(
               [resolvedPath],
               Effect.gen(function* () {
@@ -716,9 +742,11 @@ export const DeckManagerLive: Layer.Layer<DeckManager, never, FileSystem.FileSys
                               }),
                             ),
                           );
+
                           if (!sourceExists) {
                             return yield* new DeckFileNotFound({ deckPath: fromResolvedPath });
                           }
+
                           return yield* operationError("rename", error.message, {
                             fromPath: fromResolvedPath,
                             toPath: toResolvedPath,

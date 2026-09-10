@@ -16,6 +16,7 @@ import { createMockFileSystem, type MockFileSystemConfig } from "./mock-file-sys
 
 const buildLayer = (config: MockFileSystemConfig) => {
   const mock = createMockFileSystem(config);
+
   return {
     mock,
     layer: Layer.merge(mock.layer, Path.layer),
@@ -37,6 +38,7 @@ const runImport = (
   options: Parameters<typeof importDeckImageAsset>[0],
 ) => {
   const { mock, layer } = buildLayer(config);
+
   return {
     mock,
     promise: importDeckImageAsset(options).pipe(Effect.provide(layer), Effect.runPromise),
@@ -48,6 +50,7 @@ const runImportResult = (
   options: Parameters<typeof importDeckImageAsset>[0],
 ) => {
   const { mock, layer } = buildLayer(config);
+
   return {
     mock,
     promise: importDeckImageAsset(options).pipe(
@@ -63,6 +66,7 @@ const runImportFromBytes = (
   options: Parameters<typeof importDeckImageAssetFromBytes>[0],
 ) => {
   const { mock, layer } = buildLayer(config);
+
   return {
     mock,
     promise: importDeckImageAssetFromBytes(options).pipe(Effect.provide(layer), Effect.runPromise),
@@ -74,6 +78,7 @@ const runImportFromBytesResult = (
   options: Parameters<typeof importDeckImageAssetFromBytes>[0],
 ) => {
   const { mock, layer } = buildLayer(config);
+
   return {
     mock,
     promise: importDeckImageAssetFromBytes(options).pipe(
@@ -95,6 +100,7 @@ describe("imageAssets", () => {
     it("rejects relative workspace roots", async () => {
       const result = await runGetAssetsDirectoryResult("workspace");
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure).toBeInstanceOf(InvalidWorkspaceImageAsset);
         expect(result.failure.reason).toBe("absolute_root_path_required");
@@ -105,6 +111,7 @@ describe("imageAssets", () => {
   describe("importDeckImageAsset", () => {
     it("imports an image into the canonical store and returns the markdown path to write", async () => {
       const sourceBytes = new Uint8Array([1, 2, 3, 4]);
+
       const { mock, promise } = runImport(
         {
           entryTypes: {
@@ -146,8 +153,10 @@ describe("imageAssets", () => {
 
     it("deduplicates by content hash when the canonical asset already exists", async () => {
       const sourceBytes = new Uint8Array([1, 2, 3, 4]);
+
       const assetPath =
         "/workspace/.re/assets/9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a.png";
+
       const { mock, promise } = runImport(
         {
           entryTypes: {
@@ -192,8 +201,10 @@ describe("imageAssets", () => {
 
       const result = await promise;
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure).toBeInstanceOf(InvalidWorkspaceImageAsset);
+
         if (result.failure instanceof InvalidWorkspaceImageAsset) {
           expect(result.failure.reason).toBe("missing_file_extension");
         }
@@ -220,8 +231,10 @@ describe("imageAssets", () => {
 
       const result = await promise;
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure).toBeInstanceOf(InvalidWorkspaceImageAsset);
+
         if (result.failure instanceof InvalidWorkspaceImageAsset) {
           expect(result.failure.reason).toBe("deck_outside_root");
         }
@@ -246,8 +259,10 @@ describe("imageAssets", () => {
 
       const result = await promise;
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure).toBeInstanceOf(ImportDeckImageAssetOperationError);
+
         if (result.failure instanceof ImportDeckImageAssetOperationError) {
           expect(result.failure.operation).toBe("read_source");
           expect(result.failure.sourcePath).toBe("/tmp/missing.png");
@@ -258,6 +273,7 @@ describe("imageAssets", () => {
     it("maps non-AlreadyExists write failures to a typed operation error", async () => {
       const assetPath =
         "/workspace/.re/assets/9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a.png";
+
       const { promise } = runImportResult(
         {
           entryTypes: {
@@ -280,8 +296,10 @@ describe("imageAssets", () => {
 
       const result = await promise;
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure).toBeInstanceOf(ImportDeckImageAssetOperationError);
+
         if (result.failure instanceof ImportDeckImageAssetOperationError) {
           expect(result.failure.operation).toBe("write_asset");
           expect(result.failure.assetPath).toBe(assetPath);
@@ -300,6 +318,7 @@ describe("imageAssets", () => {
 
       for (const [cause, message] of failures) {
         const digest = vi.spyOn(globalThis.crypto.subtle, "digest").mockRejectedValueOnce(cause);
+
         try {
           const { mock, promise } = runImportFromBytesResult(
             { entryTypes: {}, directories: {} },
@@ -321,6 +340,7 @@ describe("imageAssets", () => {
             },
           });
           expect(mock.bytesStore).toEqual({});
+
           if (Result.isFailure(result)) {
             expect(result.failure).not.toHaveProperty("sourcePath");
           }
@@ -332,13 +352,16 @@ describe("imageAssets", () => {
 
     it("reports a bad write argument as a failed import rather than a deduplicated asset", async () => {
       const mock = createMockFileSystem({ entryTypes: {}, directories: {} });
+
       const failure = PlatformError.badArgument({
         module: "FileSystem",
         method: "writeFile",
         description: "Invalid write flag",
       });
+
       const result = await Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
+
         return yield* importDeckImageAssetFromBytes({
           rootPath: "/workspace",
           deckPath: "/workspace/deck.md",
@@ -368,6 +391,7 @@ describe("imageAssets", () => {
 
     it("imports bytes into the canonical store and returns the markdown path to write", async () => {
       const sourceBytes = new Uint8Array([1, 2, 3, 4]);
+
       const { mock, promise } = runImportFromBytes(
         {
           entryTypes: {},
@@ -419,8 +443,10 @@ describe("imageAssets", () => {
 
       const result = await promise;
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure).toBeInstanceOf(InvalidWorkspaceImageAsset);
+
         if (result.failure instanceof InvalidWorkspaceImageAsset) {
           expect(result.failure.reason).toBe("unsupported_file_extension");
         }

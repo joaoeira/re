@@ -46,12 +46,14 @@ export const computeDueDate = (card: ItemMetadata): Date | null => card.due;
 export const isCardDue = (card: ItemMetadata, now: Date): boolean => {
   if (card.state === State.New) return false;
   const dueDate = computeDueDate(card);
+
   return dueDate !== null && dueDate <= now;
 };
 
 export const resolveDueDateIfDue = (card: ItemMetadata, now: Date): Date | null => {
   if (card.state === State.New) return null;
   const dueDate = computeDueDate(card);
+
   return dueDate !== null && dueDate <= now ? dueDate : null;
 };
 
@@ -61,6 +63,7 @@ export const resolveDueDateIfDue = (card: ItemMetadata, now: Date): Date | null 
  */
 export const computeScheduledDays = (card: ItemMetadata): number => {
   if (card.state === State.New || card.due === null || card.lastReview === null) return 0;
+
   return Math.max(0, Math.floor((card.due.getTime() - card.lastReview.getTime()) / 86_400_000));
 };
 
@@ -71,6 +74,7 @@ export const computeScheduledDays = (card: ItemMetadata): number => {
 export const computeElapsedDays = (card: ItemMetadata, now: Date): number => {
   if (!card.lastReview) return 0;
   const msPerDay = 24 * 60 * 60 * 1000;
+
   return Math.max(0, (now.getTime() - card.lastReview.getTime()) / msPerDay);
 };
 
@@ -185,9 +189,11 @@ export const makeScheduler = (
     const config = yield* Schema.decodeUnknownEffect(FSRSOptionsSchema, {
       onExcessProperty: "error",
     })(options).pipe(Effect.mapError(toSchedulerConfigError));
+
     const engine = yield* Effect.try({
       try: () => {
         if (config.w !== undefined) checkParameters(config.w);
+
         return fsrs({
           ...config,
           learning_steps: config.learning_steps && [...config.learning_steps],
@@ -197,6 +203,7 @@ export const makeScheduler = (
       },
       catch: toSchedulerConfigError,
     });
+
     return makeSchedulerService(engine);
   });
 
@@ -216,6 +223,7 @@ const makeSchedulerService = (engine: FSRS): Scheduler => ({
         const fsrsCard = itemMetadataToFSRSCard(card, now);
         const rating = gradeToRating(grade);
         const { card: nextCard, log } = engine.next(fsrsCard, now, rating);
+
         // ts-fsrs can exceed its maximum when it separates the grade intervals.
         // Apply the cap after scheduling so the persisted deadline respects it.
         const due = new Date(

@@ -22,6 +22,7 @@ describe("reconcileCards", () => {
       lastReview: new Date("2026-01-01T12:00:00Z"),
       due: new Date("2026-01-08T12:00:00Z"),
     };
+
     const result = Result.getOrThrow(
       reconcileCards(
         { keys: ["c1", "c2", "c3"], cards: [metadata("first"), metadata("removed"), reviewed] },
@@ -52,7 +53,9 @@ describe("reconcileCards", () => {
           manualCardSpec("Reverse", "Answer", "vocabulary", "same"),
         ],
       });
+
       const keys = (yield* type.parseCards("content")).map((card) => card.key);
+
       for (const [oldKeys, nextKeys] of [
         [keys, ["new"]],
         [["old"], keys],
@@ -61,6 +64,7 @@ describe("reconcileCards", () => {
           { keys: oldKeys!, cards: oldKeys!.map((key, index) => metadata(`${key}-${index}`)) },
           nextKeys!,
         );
+
         expect(result).toMatchObject({
           _tag: "Failure",
           failure: { _tag: "DuplicateCardKey", key: "same" },

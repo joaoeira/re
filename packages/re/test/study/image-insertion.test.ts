@@ -57,6 +57,7 @@ const createTestLayer = (options?: {
       ) => Effect.void,
       importImageFromBytes: (workspacePath, deckPath, bytes, extension) => {
         options?.onImport?.({ workspacePath, deckPath, bytes, extension });
+
         return Effect.succeed(importedImage);
       },
     }),

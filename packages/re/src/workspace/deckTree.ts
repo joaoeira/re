@@ -58,8 +58,10 @@ const addSnapshotCounts = (group: MutableGroup, snapshot: DeckSnapshot): void =>
 const sortNodes = (nodes: MutableNode[]): void => {
   nodes.sort((a, b) => {
     if (a.kind !== b.kind) return a.kind === "group" ? -1 : 1;
+
     return a.name.localeCompare(b.name);
   });
+
   for (const node of nodes) {
     if (node.kind === "group") {
       sortNodes(node.children);
@@ -74,6 +76,7 @@ export const buildDeckTree = (snapshots: readonly DeckSnapshot[]): DeckTreeNode[
   const ensureGroup = (segments: readonly string[], upToIndex: number): MutableGroup => {
     const groupPath = segments.slice(0, upToIndex + 1).join("/");
     let group = groups.get(groupPath);
+
     if (group) return group;
 
     group = {
@@ -117,12 +120,14 @@ export const buildDeckTree = (snapshots: readonly DeckSnapshot[]): DeckTreeNode[
         const group = ensureGroup(segments, i);
         addSnapshotCounts(group, snapshot);
       }
+
       const parentGroup = groups.get(segments.slice(0, -1).join("/"))!;
       parentGroup.children.push(leaf);
     }
   }
 
   sortNodes(rootChildren);
+
   return rootChildren;
 };
 
@@ -143,5 +148,6 @@ export const flattenDeckTree = (
   };
 
   walk(nodes);
+
   return rows;
 };

@@ -1,6 +1,9 @@
 export { parseFile, parseMetadata } from "./parser/index.js";
+
 export { serializeFile, serializeMetadata } from "./serializer/index.js";
+
 export { generateId, createMetadata, createMetadataWithId, numericField } from "./create.js";
+
 export {
   hasClozeDeletion,
   nextClozeDeletionIndex,
@@ -12,12 +15,15 @@ export {
   ClozeSyntaxIssue,
   ClozeSyntaxError,
 } from "./cloze.js";
+
 export type { ClozeSyntaxMatch, ClozeReplacerContext, ClozeSyntaxReason } from "./cloze.js";
 
 export type { Item, ItemMetadata, ParsedFile, NumericField, ItemId } from "./types.js";
+
 export { State } from "./types.js";
 
 export type { MetadataParseError } from "./errors.js";
+
 export {
   ParseError,
   InvalidMetadataFormat,
@@ -26,10 +32,15 @@ export {
 } from "./errors.js";
 
 export { ItemIdSchema, isItemId } from "./schema/index.js";
+
 export { ItemMetadataSchema, ItemSchema, ParsedFileSchema } from "./schema/index.js";
+
 export { StateFromString, StateSchema } from "./schema/index.js";
+
 export { NumericFieldFromString, NumericFieldSchema } from "./schema/index.js";
+
 export { LearningStepsFromString } from "./schema/index.js";
+
 export { LastReviewFromString } from "./schema/index.js";
 
 export type {
@@ -43,6 +54,7 @@ export type {
   ItemTypeMatch,
   ParseableItemType,
 } from "./item-type.js";
+
 export {
   GradeSchema,
   ContentParseError,
@@ -54,6 +66,7 @@ export {
   matchItemTypes,
   ItemCardCountMismatch,
 } from "./item-type.js";
+
 export {
   reconcileCards,
   DuplicateCardKey,

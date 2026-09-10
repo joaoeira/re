@@ -67,11 +67,13 @@ export type SnapshotWorkspaceResult = typeof SnapshotWorkspaceResultSchema.Type;
 export const SnapshotWorkspaceErrorSchema = ScanDecksErrorSchema;
 
 export type SnapshotWorkspaceError = ScanDecksError;
+
 export type SnapshotWorkspaceOptions = ScanDecksOptions & {
   readonly asOf?: Date;
 };
 
 type DeckStateCountKey = keyof DeckStateCounts;
+
 type MutableDeckStateCounts = Record<DeckStateCountKey, number>;
 
 const STATE_TO_COUNT_KEY: Record<State, DeckStateCountKey> = {
@@ -102,6 +104,7 @@ const summarizeParsedDeck = (parsedFile: ParsedFile, asOf: Date) => {
     for (const card of item.cards) {
       totalCards += 1;
       incrementDeckStateCount(stateCounts, card.state);
+
       if (isCardDue(card, asOf)) {
         dueCards += 1;
       }
@@ -156,6 +159,7 @@ const snapshotDeck = (
             }),
             onSuccess: (parsed): DeckSnapshot => {
               const { totalCards, dueCards, stateCounts } = summarizeParsedDeck(parsed, asOf);
+
               return {
                 ...deck,
                 status: "ok",

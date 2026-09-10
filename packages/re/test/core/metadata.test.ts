@@ -24,6 +24,7 @@ describe("parseMetadata", () => {
     () =>
       Effect.gen(function* () {
         const comment = "<!--@ imported-card 0 0 0 0-->";
+
         for (const input of [
           "",
           "imported-card 0 0 0 0",
@@ -56,6 +57,7 @@ describe("parseMetadata", () => {
       const error = yield* parseMetadata(
         "<!--@ incomplete-review 5 4 2 0 2025-01-04T10:30:00Z-->",
       ).pipe(Effect.flip);
+
       expect(error).toMatchObject({ _tag: "InvalidMetadataFormat", line: 1 });
     }),
   );

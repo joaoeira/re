@@ -48,13 +48,19 @@ class NumberGradeError extends Data.TaggedError("NumberGradeError")<{
 interface ResponseCodecService {
   readonly codecService: unique symbol;
 }
+
 expectTypeOf(Schema.String).toExtend<CardSpec<string>["responseSchema"]>();
+
 expectTypeOf(Schema.Trim).toExtend<CardSpec<string>["responseSchema"]>();
+
 expectTypeOf(Schema.Number).toExtend<CardSpec<number>["responseSchema"]>();
+
 expectTypeOf(Schema.NumberFromString).not.toExtend<CardSpec<number>["responseSchema"]>();
+
 expectTypeOf<Schema.Codec<string, string, ResponseCodecService>>().not.toExtend<
   CardSpec<string>["responseSchema"]
 >();
+
 expectTypeOf<Schema.Codec<string, string, never, ResponseCodecService>>().not.toExtend<
   CardSpec<string>["responseSchema"]
 >();
@@ -66,6 +72,7 @@ describe("card evaluation", () => {
         (response, answer): Effect.Effect<Grade, TextGradeError> =>
           Effect.succeed(response === answer ? 2 : 0),
       );
+
       const number: ItemType<number, number, NumberGradeError> = {
         name: "number",
         parse: (raw) =>
@@ -85,6 +92,7 @@ describe("card evaluation", () => {
           },
         ],
       };
+
       const types = [adaptItemType(text), adaptItemType(number)];
       const inferredText = yield* inferCards(types, "text:Paris");
       const textCard = inferredText.cards[0]!;
@@ -101,14 +109,17 @@ describe("card evaluation", () => {
   it.effect("rejects invalid responses before running the grader", () =>
     Effect.gen(function* () {
       const responses: string[] = [];
+
       const type = adaptItemType(
         textType((response) =>
           Effect.sync(() => {
             responses.push(response);
+
             return 2;
           }),
         ),
       );
+
       const { cards } = yield* inferCards([type], "text:Paris");
       const card = cards[0]!;
       const error = yield* card.evaluate(42).pipe(Effect.flip);
@@ -123,11 +134,13 @@ describe("card evaluation", () => {
     Effect.gen(function* () {
       const started = yield* Deferred.make<void>();
       const result = yield* Deferred.make<Grade>();
+
       const type = adaptItemType(
         textType(() =>
           Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(result))),
         ),
       );
+
       const { cards } = yield* inferCards([type], "text:Paris");
       const fiber = yield* cards[0]!.evaluate("Paris").pipe(Effect.forkChild);
       yield* Deferred.await(started);
@@ -141,11 +154,13 @@ describe("card evaluation", () => {
   it.effect("passes the schema's decoded response to the grader", () =>
     Effect.gen(function* () {
       const text = textType((response, answer) => Effect.succeed(response === answer ? 2 : 0));
+
       const trimmed: ItemType<TextContent, string> = {
         ...text,
         cards: (content) =>
           text.cards(content).map((card) => ({ ...card, responseSchema: Schema.Trim })),
       };
+
       const { cards } = yield* inferCards([adaptItemType(trimmed)], "text:Paris");
       expect(yield* cards[0]!.evaluate("  Paris  ")).toBe(2);
     }),
@@ -154,6 +169,7 @@ describe("card evaluation", () => {
   it.effect("preserves asynchronous grading failures for catchTag", () =>
     Effect.gen(function* () {
       const failure = new TextGradeError({ message: "Grading service unavailable" });
+
       const type = adaptItemType(
         textType(() =>
           Effect.tryPromise({
@@ -162,10 +178,13 @@ describe("card evaluation", () => {
           }),
         ),
       );
+
       const { cards } = yield* inferCards([type], "text:Paris");
+
       const caught = yield* cards[0]!
         .evaluate("Paris")
         .pipe(Effect.catchTag("TextGradeError", (error) => Effect.succeed(error.message)));
+
       expect(caught).toBe("Grading service unavailable");
     }),
   );
@@ -174,6 +193,7 @@ describe("card evaluation", () => {
     Effect.gen(function* () {
       const started = yield* Deferred.make<void>();
       const cleanedUp = yield* Deferred.make<void>();
+
       const type = adaptItemType(
         textType(() =>
           Deferred.succeed(started, undefined).pipe(
@@ -182,6 +202,7 @@ describe("card evaluation", () => {
           ),
         ),
       );
+
       const { cards } = yield* inferCards([type], "text:Paris");
       const fiber = yield* cards[0]!.evaluate("Paris").pipe(Effect.forkChild);
       yield* Deferred.await(started);
@@ -204,9 +225,11 @@ describe("card evaluation", () => {
     Effect.gen(function* () {
       const first = adaptItemType(textType(() => Effect.succeed(1)));
       const second = { ...first, name: "second" };
+
       const attempted = yield* inferCards([first, second], "unrecognized").pipe(
         Effect.catchTag("NoMatchingTypeError", (error) => Effect.succeed(error.triedTypes)),
       );
+
       expect(attempted).toEqual(["text", "second"]);
     }),
   );

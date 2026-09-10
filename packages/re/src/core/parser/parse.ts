@@ -46,6 +46,7 @@ const parseMetadataLine = (
     Effect.mapError((parseError) => {
       // Extract field info from the error if possible
       const message = String(parseError);
+
       return new InvalidFieldValue({
         line: lineNumber,
         field: "metadata",
@@ -116,6 +117,7 @@ export const parseFile = (content: string): Effect.Effect<ParsedFile, MetadataPa
 
   // Find all metadata lines
   const metadataLineIndices: number[] = [];
+
   for (let i = 0; i < lines.length; i++) {
     if (METADATA_LINE_PATTERN.test(lines[i]!.content)) {
       metadataLineIndices.push(i);
@@ -148,6 +150,7 @@ export const parseFile = (content: string): Effect.Effect<ParsedFile, MetadataPa
       currentRun = [current];
     }
   }
+
   runs.push(currentRun); // Don't forget the last run
 
   // Extract preamble (content before first metadata line)
@@ -180,6 +183,7 @@ export const parseFile = (content: string): Effect.Effect<ParsedFile, MetadataPa
 
     // Content ends at the start of the NEXT run's first metadata line, or EOF
     const nextRun = runs[runIndex + 1];
+
     const contentEndOffset =
       nextRun !== undefined ? lines[nextRun[0]!]!.startOffset : content.length;
 

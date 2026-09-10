@@ -40,6 +40,7 @@ describe("scanDecks", () => {
     });
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(WorkspaceRootNotFound);
       expect(result.failure.rootPath).toBe("/root");
@@ -55,6 +56,7 @@ describe("scanDecks", () => {
     });
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(WorkspaceRootNotDirectory);
       expect(result.failure.rootPath).toBe("/root/file.md");
@@ -75,6 +77,7 @@ describe("scanDecks", () => {
     });
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(WorkspaceRootUnreadable);
       expect(result.failure.rootPath).toBe("/root");
@@ -258,6 +261,7 @@ describe("scanDecks", () => {
     });
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(WorkspaceRootUnreadable);
       expect(result.failure.message).toContain("readDirectory failed for /root/broken");
@@ -268,6 +272,7 @@ describe("scanDecks", () => {
     for (const code of ["EINVAL", "EIO"]) {
       const result = await Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
+
         return yield* scanDecks("/root").pipe(
           Effect.provideService(FileSystem.FileSystem, {
             ...fs,

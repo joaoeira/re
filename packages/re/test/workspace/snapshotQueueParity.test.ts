@@ -14,6 +14,7 @@ import { createMockFileSystemLayer, type MockFileSystemConfig } from "./mock-fil
 describe("snapshot/queue due parity", () => {
   it("matches snapshot dueCards sum and queue totalDue for same asOf", async () => {
     const asOf = new Date("2025-01-10T00:00:00Z");
+
     const config: MockFileSystemConfig = {
       entryTypes: {
         "/root": "Directory",
@@ -73,6 +74,7 @@ Answer
 
     const queue = await Effect.gen(function* () {
       const builder = yield* ReviewQueueBuilder;
+
       return yield* builder.buildQueue({
         deckPaths: ["/root/a.md", "/root/b.md", "/root/c.md"],
         rootPath: "/root",

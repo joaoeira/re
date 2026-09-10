@@ -24,6 +24,7 @@ describe("scheduler configuration", () => {
     () =>
       Effect.gen(function* () {
         const now = new Date("2026-01-01T12:00:00Z");
+
         for (const options of [
           undefined,
           {
@@ -42,6 +43,7 @@ describe("scheduler configuration", () => {
         }
 
         const automatic = yield* makeScheduler({ learning_steps: [], relearning_steps: [] });
+
         for (const [card, grade] of [
           [createMetadata(), 2],
           [reviewedCard(), 0],
@@ -77,6 +79,7 @@ describe("scheduler configuration", () => {
       const scheduler = yield* makeScheduler({ maximum_interval: 7, learning_steps: ["30d"] });
       const card = { ...reviewedCard(), stability: numericField(1000) };
       const now = card.due!;
+
       for (const [input, grade] of [
         [card, 3],
         [createMetadata(), 0],
@@ -95,6 +98,7 @@ describe("scheduler configuration", () => {
           learning_steps: ["3m", "25m"],
           relearning_steps: ["2h"],
         } satisfies FSRSOptions;
+
         const original = yield* makeScheduler(options);
         options.learning_steps[0] = "25m";
         const changed = yield* makeScheduler(options);
@@ -118,6 +122,7 @@ describe("scheduler configuration", () => {
         enable_short_term: false,
         learning_steps: ["2h"],
       });
+
       const now = new Date("2026-01-01T12:00:00Z");
       const result = yield* scheduler.scheduleReview(createMetadata(), 0, now);
 
@@ -153,6 +158,7 @@ describe("scheduler configuration", () => {
       const plain = yield* makeScheduler({ enable_fuzz: false });
       const fuzzed = yield* makeScheduler({ enable_fuzz: true });
       const differences: boolean[] = [];
+
       for (let day = 1; day <= 10; day++) {
         const now = new Date(`2026-02-${String(day).padStart(2, "0")}T12:00:00Z`);
         const card = reviewedCard();
@@ -160,6 +166,7 @@ describe("scheduler configuration", () => {
         const varied = yield* fuzzed.scheduleReview(card, 2, now);
         differences.push(ordinary.updatedCard.due!.getTime() !== varied.updatedCard.due!.getTime());
       }
+
       expect(differences.some(Boolean)).toBe(true);
     }),
   );
@@ -168,6 +175,7 @@ describe("scheduler configuration", () => {
     Effect.gen(function* () {
       const nonFiniteWeights = [...default_w];
       nonFiniteWeights[2] = NaN;
+
       const invalidOptions: readonly unknown[] = [
         { request_retention: 0 },
         { request_retention: 1.1 },
@@ -188,13 +196,16 @@ describe("scheduler configuration", () => {
         { w: nonFiniteWeights },
         { desired_retention: 0.95 },
       ];
+
       for (const options of invalidOptions) {
         let started = false;
+
         // SAFETY: Deliberately bypass the static options contract to exercise malformed JavaScript input.
         // The test requires rejection before any dependent program or scheduling can run.
         const error = yield* Effect.gen(function* () {
           const scheduler = yield* Scheduler;
           started = true;
+
           return yield* scheduler.scheduleReview(createMetadata(), 2, new Date());
         }).pipe(Effect.provide(makeSchedulerLayer(options as FSRSOptions)), Effect.flip);
 

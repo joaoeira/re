@@ -10,6 +10,7 @@ describe("QAType", () => {
         const content = `What is the capital of France?
 ---
 Paris`;
+
         const result = yield* QAType.parse(content);
 
         assert.strictEqual(result.question, "What is the capital of France?");
@@ -22,6 +23,7 @@ Paris`;
         const content = `  What is 2+2?
 ---
   4  `;
+
         const result = yield* QAType.parse(content);
 
         assert.strictEqual(result.question, "What is 2+2?");
@@ -37,6 +39,7 @@ List all three.
 Red
 Yellow
 Blue`;
+
         const result = yield* QAType.parse(content);
 
         assert.strictEqual(result.question, "What are the primary colors?\nList all three.");
@@ -48,6 +51,7 @@ Blue`;
       Effect.gen(function* () {
         const content = `What is the capital of France?
 Paris`;
+
         const error = yield* QAType.parse(content).pipe(Effect.flip);
 
         assert.ok(error instanceof ContentParseError);
@@ -61,6 +65,7 @@ Paris`;
         const content = `
 ---
 Paris`;
+
         const error = yield* QAType.parse(content).pipe(Effect.flip);
 
         assert.ok(error instanceof ContentParseError);
@@ -74,6 +79,7 @@ Paris`;
         const content = `What is the capital of France?
 ---
 `;
+
         const error = yield* QAType.parse(content).pipe(Effect.flip);
 
         assert.ok(error instanceof ContentParseError);
@@ -88,6 +94,7 @@ Paris`;
         const content = `What does --- mean?
 ---
 It's a horizontal rule`;
+
         const result = yield* QAType.parse(content);
 
         assert.strictEqual(result.question, "What does --- mean?");
@@ -102,6 +109,7 @@ It's a horizontal rule`;
 ---
 Mitochondrion
 ![Annotated diagram](../../.re/assets/mitochondrion-annotated.png)`;
+
         const result = yield* QAType.parse(content);
 
         assert.strictEqual(
@@ -161,6 +169,7 @@ Mitochondrion
 ---
 Answer
 ![Reveal image](../../.re/assets/reveal.png)`);
+
         const cards = QAType.cards(content);
 
         assert.strictEqual(
@@ -183,6 +192,7 @@ describe("composeQA", () => {
         "  Question\r\n --- \r\nMore?  ",
         "  Answer\r\n---\r\nDetails  ",
       );
+
       const parsed = yield* QAType.parse(content);
       assert.deepStrictEqual(parsed, {
         question: "Question\n --- \nMore?",

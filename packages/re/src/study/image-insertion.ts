@@ -33,6 +33,7 @@ const appendImageMarkdown = (content: string, deckRelativePath: string): string 
         : content.endsWith("\n")
           ? "\n"
           : "\n\n";
+
   return `${content}${separator}![](${deckRelativePath})`;
 };
 
@@ -50,6 +51,7 @@ export const insertImageForUi = (
     const clipboard = yield* ClipboardImageReader;
     const image = yield* clipboard.readImage();
     const deckStore = yield* DeckStore;
+
     const imported = yield* deckStore.importImageFromBytes(
       input.workspacePath,
       input.deckPath,

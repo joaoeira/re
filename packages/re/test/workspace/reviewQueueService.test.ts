@@ -54,11 +54,17 @@ const brokenContent = "<!--@ bad metadata-->";
 const MockFileSystem = FileSystem.layerNoop({
   readFileString: (path) => {
     if (path === "/decks/new.md") return Effect.succeed(newCardContent);
+
     if (path === "/decks/due.md") return Effect.succeed(dueCardContent);
+
     if (path === "/decks/mixed.md") return Effect.succeed(mixedContent);
+
     if (path === "/decks/folder1/a.md") return Effect.succeed(newCardContent);
+
     if (path === "/decks/folder1/b.md") return Effect.succeed(dueCardContent);
+
     if (path === "/decks/broken.md") return Effect.succeed(brokenContent);
+
     return Effect.fail(
       PlatformError.systemError({
         _tag: "NotFound",
@@ -183,6 +189,7 @@ describe("ReviewQueueService", () => {
 
     const result = await Effect.gen(function* () {
       const service = yield* ReviewQueueService;
+
       return yield* service.buildQueue(selection, tree, "/decks", now);
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
@@ -199,6 +206,7 @@ describe("ReviewQueueService", () => {
 
     const deckResult = await Effect.gen(function* () {
       const service = yield* ReviewQueueService;
+
       return yield* service.buildQueue(deckSelection, tree, "/decks", now);
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
@@ -208,6 +216,7 @@ describe("ReviewQueueService", () => {
 
     const folderResult = await Effect.gen(function* () {
       const service = yield* ReviewQueueService;
+
       return yield* service.buildQueue(folderSelection, tree, "/decks", now);
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
@@ -225,6 +234,7 @@ describe("ReviewQueueLive defaults", () => {
 
     const program = Effect.gen(function* () {
       const service = yield* ReviewQueueService;
+
       return yield* service.buildQueue(selection, tree, "/decks", now);
     }).pipe(
       Effect.provide(
@@ -233,12 +243,14 @@ describe("ReviewQueueLive defaults", () => {
     );
 
     const orderings: string[] = [];
+
     for (const seed of ["seed", "second", "third", "fourth"]) {
       const result = await Effect.runPromise(program.pipe(Random.withSeed(seed)));
       const ids = result.items.map((item) => item.card.id);
       expect([...ids].sort()).toEqual(["card1", "card2", "card3", "card4"]);
       orderings.push(ids.join(","));
     }
+
     expect(new Set(orderings).size).toBeGreaterThan(1);
   });
 });

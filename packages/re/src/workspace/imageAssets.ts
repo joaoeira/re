@@ -6,7 +6,9 @@ import { Effect, Schema } from "effect";
 import { isPathWithinRoot } from "./imagePaths.js";
 
 export const WORKSPACE_INTERNAL_DIRECTORY_NAME = ".re";
+
 export const WORKSPACE_IMAGE_ASSETS_DIRECTORY_NAME = "assets";
+
 export const WORKSPACE_IMAGE_ASSETS_RELATIVE_PATH = `${WORKSPACE_INTERNAL_DIRECTORY_NAME}/${WORKSPACE_IMAGE_ASSETS_DIRECTORY_NAME}`;
 
 export const InvalidWorkspaceImageAssetReasonSchema = Schema.Literals([
@@ -63,9 +65,11 @@ const toMarkdownRelativePath = (path: string): string => path.replaceAll("\\", "
 
 const normalizeExtension = (extension: string): string => {
   const trimmed = extension.trim().toLowerCase();
+
   if (trimmed.length === 0) {
     return "";
   }
+
   return trimmed.startsWith(".") ? trimmed : `.${trimmed}`;
 };
 
@@ -77,6 +81,7 @@ const toSha256Hex = (bytes: Uint8Array) =>
       const digestInput = new Uint8Array(bytes.byteLength);
       digestInput.set(bytes);
       const digest = await globalThis.crypto.subtle.digest("SHA-256", digestInput);
+
       return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(
         "",
       );
@@ -140,6 +145,7 @@ export const importDeckImageAssetFromBytes = (options: {
     const resolvedDeckPath = pathService.resolve(options.deckPath);
 
     const deckWithinRoot = yield* isPathWithinRoot(resolvedRootPath, resolvedDeckPath);
+
     if (!deckWithinRoot) {
       return yield* new InvalidWorkspaceImageAsset({
         rootPath: options.rootPath,
@@ -149,6 +155,7 @@ export const importDeckImageAssetFromBytes = (options: {
     }
 
     const extension = normalizeExtension(options.extension);
+
     if (extension.length === 0) {
       return yield* new InvalidWorkspaceImageAsset({
         rootPath: options.rootPath,
@@ -167,6 +174,7 @@ export const importDeckImageAssetFromBytes = (options: {
 
     const contentHash = yield* toSha256Hex(options.bytes);
     const assetsDirectory = yield* getWorkspaceImageAssetsDirectory(resolvedRootPath);
+
     const absolutePath = pathService.normalize(
       pathService.join(assetsDirectory, `${contentHash}${extension}`),
     );
@@ -250,6 +258,7 @@ export const importDeckImageAsset = (options: {
     const resolvedSourcePath = pathService.resolve(options.sourcePath);
 
     const deckWithinRoot = yield* isPathWithinRoot(resolvedRootPath, resolvedDeckPath);
+
     if (!deckWithinRoot) {
       return yield* new InvalidWorkspaceImageAsset({
         rootPath: options.rootPath,
@@ -260,6 +269,7 @@ export const importDeckImageAsset = (options: {
     }
 
     const extension = normalizeExtension(pathService.extname(resolvedSourcePath));
+
     if (extension.length === 0) {
       return yield* new InvalidWorkspaceImageAsset({
         rootPath: options.rootPath,
@@ -279,6 +289,7 @@ export const importDeckImageAsset = (options: {
           }),
       ),
     );
+
     return yield* importDeckImageAssetFromBytes({
       rootPath: resolvedRootPath,
       deckPath: resolvedDeckPath,

@@ -41,6 +41,7 @@ export const serializeFile = (file: ParsedFile): string => {
       result += serializeMetadata(card);
       result += "\n";
     }
+
     result += item.content;
   }
 

@@ -32,7 +32,9 @@ export const NumericFieldFromString: Schema.Codec<NumericField, string, never, n
               ),
             );
           }
+
           const value = parseFloat(raw);
+
           if (!Number.isFinite(value)) {
             return Effect.fail(
               new SchemaIssue.InvalidValue(
@@ -42,6 +44,7 @@ export const NumericFieldFromString: Schema.Codec<NumericField, string, never, n
               ),
             );
           }
+
           return Effect.succeed({ value, raw });
         }),
         encode: SchemaGetter.transform((field) => field.raw),

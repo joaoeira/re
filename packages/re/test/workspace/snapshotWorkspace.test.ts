@@ -48,6 +48,7 @@ describe("snapshotWorkspace", () => {
     });
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(WorkspaceRootNotFound);
       expect(result.failure.rootPath).toBe("/root");
@@ -63,6 +64,7 @@ describe("snapshotWorkspace", () => {
     });
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(WorkspaceRootNotDirectory);
       expect(result.failure.rootPath).toBe("/root/file.md");
@@ -143,6 +145,7 @@ Shared answer
 
     const deck = result.decks[0]!;
     expect(deck.status).toBe("ok");
+
     if (deck.status === "ok") {
       expect(deck.totalCards).toBe(6);
       expect(deck.dueCards).toBe(4);
@@ -171,6 +174,7 @@ Shared answer
 
     const deck = result.decks[0]!;
     expect(deck.status).toBe("ok");
+
     if (deck.status === "ok") {
       expect(deck.totalCards).toBe(0);
       expect(deck.dueCards).toBe(0);
@@ -205,11 +209,13 @@ Shared answer
     const good = result.decks.find((deck) => deck.name === "good");
 
     expect(blocked?.status).toBe("read_error");
+
     if (blocked?.status === "read_error") {
       expect(blocked.message).toContain("PermissionDenied");
     }
 
     expect(good?.status).toBe("ok");
+
     if (good?.status === "ok") {
       expect(good.totalCards).toBe(1);
       expect(good.dueCards).toBe(0);
@@ -262,6 +268,7 @@ Answer
 
     const deck = result.decks[0]!;
     expect(deck.status).toBe("ok");
+
     if (deck.status === "ok") {
       expect(deck.totalCards).toBe(5);
       expect(deck.dueCards).toBe(2);
@@ -290,6 +297,7 @@ Answer
 
     const deck = result.decks[0]!;
     expect(deck.status).toBe("ok");
+
     if (deck.status === "ok") {
       expect(deck.totalCards).toBe(2);
       expect(deck.dueCards).toBe(0);
@@ -298,6 +306,7 @@ Answer
 
   it("returns deterministic asOf when provided", async () => {
     const asOf = new Date("2025-01-15T03:04:05.000Z");
+
     const result = await runSnapshot(
       "/root",
       {
@@ -339,6 +348,7 @@ Bad card`,
     const good = result.decks.find((deck) => deck.name === "good");
 
     expect(bad?.status).toBe("parse_error");
+
     if (bad?.status === "parse_error") {
       expect(bad.message).toContain("Invalid metadata at line 1: expected");
       expect(bad.message).toContain('got "bad invalid 0 0 0"');
@@ -364,6 +374,7 @@ Bad format card`,
 
     const bad = result.decks[0]!;
     expect(bad.status).toBe("parse_error");
+
     if (bad.status === "parse_error") {
       expect(bad.message).toContain("Invalid metadata at line 1: Expected 5 or 7 fields, got 4");
     }
@@ -396,6 +407,7 @@ Bad format card`,
       includeHidden: true,
       extraIgnorePatterns: ["*.md", "!keep.md", "!.hidden/secret.md"],
     });
+
     expect(withHiddenAndIgnores.decks.map((deck) => deck.relativePath)).toEqual([
       ".hidden/secret.md",
       "keep.md",

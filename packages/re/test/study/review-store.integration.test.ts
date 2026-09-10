@@ -26,17 +26,21 @@ import { createMockFileSystem } from "../workspace/mock-file-system.js";
 const ReviewStoreLive = makeReviewStoreLive((_context, markdown) => Effect.succeed(markdown));
 
 const PlatformLive = Layer.merge(NodeFileSystem.layer, NodePath.layer);
+
 const DeckManagerServicesLive = DeckManagerLive.pipe(Layer.provideMerge(PlatformLive));
+
 const QueueServicesLive = ReviewQueueBuilderLive.pipe(
   Layer.provideMerge(
     Layer.mergeAll(DeckManagerServicesLive, ShuffledOrderingStrategy, PlatformLive),
   ),
 );
+
 const TestLive = ReviewStoreLive.pipe(
   Layer.provide(
     Layer.mergeAll(QueueServicesLive, DeckManagerServicesLive, SchedulerLive, PlatformLive),
   ),
 );
+
 const TestWithPlatformLive = Layer.merge(TestLive, PlatformLive);
 
 describe("ReviewStoreLive", () => {
@@ -45,16 +49,20 @@ describe("ReviewStoreLive", () => {
       const scheduler = yield* Scheduler.pipe(Effect.provide(SchedulerLive));
       const grading = yield* Deferred.make<void>();
       const releaseGrade = yield* Deferred.make<void>();
+
       const mock = createMockFileSystem({
         entryTypes: { "/": "Directory", "/deck.md": "File" },
         directories: { "/": ["deck.md"] },
         fileContents: { "/deck.md": "<!--@ card-a 0 0 0 0-->\nQuestion\n---\nAnswer\n" },
       });
+
       const platform = Layer.merge(mock.layer, Path.layer);
       const manager = DeckManagerLive.pipe(Layer.provideMerge(platform));
+
       const queue = ReviewQueueBuilderLive.pipe(
         Layer.provide(Layer.merge(manager, ShuffledOrderingStrategy)),
       );
+
       const pausedScheduler = Layer.succeed(Scheduler, {
         ...scheduler,
         scheduleReview: (card, grade, now) =>
@@ -63,6 +71,7 @@ describe("ReviewStoreLive", () => {
             Effect.andThen(scheduler.scheduleReview(card, grade, now)),
           ),
       });
+
       const stores = Layer.merge(ReviewStoreLive, DeckStoreLive).pipe(
         Layer.provide(Layer.mergeAll(manager, queue, pausedScheduler)),
       );
@@ -72,6 +81,7 @@ describe("ReviewStoreLive", () => {
         const decks = yield* DeckStore;
         const original = (yield* parseFile(mock.store["/deck.md"]!)).items[0]!.cards[0]!;
         const now = new Date("2026-08-13T12:00:00Z");
+
         const first = yield* reviews
           .gradeCard(
             {
@@ -85,14 +95,18 @@ describe("ReviewStoreLive", () => {
             now,
           )
           .pipe(Effect.forkScoped);
+
         yield* Deferred.await(grading);
+
         const appended = {
           cards: [createMetadata()],
           content: "Appended question\n---\nAppended answer\n",
         };
+
         const second = yield* decks
           .appendItem("/deck.md", appended, adaptItemType(QAType))
           .pipe(Effect.forkScoped);
+
         // The mock's I/O is synchronous: the append now either waits for the shared
         // lock or completes against the stale file if the stores have separate managers.
         yield* Effect.yieldNow;
@@ -124,11 +138,13 @@ describe("ReviewStoreLive", () => {
       const original = (yield* base.readDeck(deckPath)).items[0]!.cards[0]!;
       const waiting = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
+
       const beforeWrite = <A, E>(operation: Effect.Effect<A, E>) =>
         Deferred.succeed(waiting, undefined).pipe(
           Effect.andThen(Deferred.await(release)),
           Effect.andThen(operation),
         );
+
       const delayed: DeckManager = {
         ...base,
         modifyCardMetadata: (path, id, change) =>
@@ -136,6 +152,7 @@ describe("ReviewStoreLive", () => {
         updateCardMetadata: (path, id, metadata) =>
           beforeWrite(base.updateCardMetadata(path, id, metadata)),
       };
+
       const reviews = yield* ReviewStore.pipe(
         Effect.provide(
           ReviewStoreLive.pipe(
@@ -150,6 +167,7 @@ describe("ReviewStoreLive", () => {
           ),
         ),
       );
+
       const reference = {
         deckPath,
         deckName: "deck",
@@ -157,15 +175,19 @@ describe("ReviewStoreLive", () => {
         cardId: "card-a",
         cardKey: "main",
       };
+
       const grading = yield* reviews
         .gradeCard(reference, 2, new Date("2026-08-02T12:00:00Z"))
         .pipe(Effect.forkScoped);
+
       yield* Deferred.await(waiting);
+
       const intervening = yield* scheduler.scheduleReview(
         original,
         2,
         new Date("2026-08-01T12:00:00Z"),
       );
+
       yield* base.updateCardMetadata(deckPath, "card-a", intervening.updatedCard);
       yield* Deferred.succeed(release, undefined);
       const undo = yield* Fiber.join(grading);
@@ -240,11 +262,13 @@ describe("ReviewStoreLive", () => {
       );
       const waiting = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
+
       const beforeSave = <A, E>(operation: Effect.Effect<A, E>) =>
         Deferred.succeed(waiting, undefined).pipe(
           Effect.andThen(Deferred.await(release)),
           Effect.andThen(operation),
         );
+
       // Delay entry into either public edit operation. An unlocked read made by
       // the caller before this point must not determine the metadata it saves.
       const delayed: DeckManager = {
@@ -252,6 +276,7 @@ describe("ReviewStoreLive", () => {
         modifyItem: (path, id, change, type) => beforeSave(base.modifyItem(path, id, change, type)),
         replaceItem: (path, id, item, type) => beforeSave(base.replaceItem(path, id, item, type)),
       };
+
       const reviews = yield* ReviewStore.pipe(
         Effect.provide(
           ReviewStoreLive.pipe(
@@ -266,6 +291,7 @@ describe("ReviewStoreLive", () => {
           ),
         ),
       );
+
       const reference = {
         deckPath,
         deckName: "deck",
@@ -273,6 +299,7 @@ describe("ReviewStoreLive", () => {
         cardId: "card-a",
         cardKey: "main",
       };
+
       const edit = yield* reviews
         .saveEdit(reference, {
           cardType: "qa",
@@ -280,6 +307,7 @@ describe("ReviewStoreLive", () => {
           answer: "Edited answer",
         })
         .pipe(Effect.forkScoped);
+
       yield* Deferred.await(waiting);
 
       yield* reviews.gradeCard(reference, 2, new Date("2026-08-13T12:00:00Z"));
@@ -425,6 +453,7 @@ France: {{c1::Paris}}. Germany: {{c2::Berlin}}.
 
       const original = yield* fileSystem.readFileString(deckPath);
       const reviews = yield* ReviewStore;
+
       const result = yield* reviews
         .saveEdit(
           {
@@ -491,10 +520,13 @@ Success, expected errors, and requirements.
       const fileSystem = yield* FileSystem.FileSystem;
       const workspacePath = yield* fileSystem.makeTempDirectoryScoped();
       const deckPath = `${workspacePath}/cloze.md`;
+
       const source =
         "<!--@ first-card 0 0 0 0-->\n<!--@ removed-card 0 0 0 0-->\nOnly {{c1::Paris}} remains.\n";
+
       yield* fileSystem.writeFileString(deckPath, source);
       const reviews = yield* ReviewStore;
+
       const error = yield* reviews
         .gradeCard(
           {
@@ -565,9 +597,11 @@ Success, expected errors, and requirements.
       expect(loaded.sourceCardIds).toEqual(["lisbon-card", "portugal-card"]);
 
       const undo = yield* reviews.deleteItem(session.cards[0]!);
+
       const afterDelete = yield* fileSystem
         .readFileString(deckPath)
         .pipe(Effect.flatMap(parseFile));
+
       expect(afterDelete.items).toEqual([]);
 
       yield* reviews.undoDelete(undo);
@@ -597,9 +631,11 @@ Success, expected errors, and requirements.
 
       const reviews = yield* ReviewStore;
       const session = yield* reviews.startSession(workspacePath, new Date("2026-08-13T12:00:00Z"));
+
       const rendered = yield* Effect.forEach(session.cards, (card) =>
         reviews.loadCard(session.rootPath, card),
       );
+
       const normalized = rendered.map((card) => ({
         ...card,
         prompt: card.prompt.trim(),
@@ -699,11 +735,13 @@ describe("ReviewStore grading failures", () => {
       const deckPath = `${directory}/deck.md`;
       const original = "<!--@ card-a 0 0 0 0-->\nQuestion\n---\nAnswer";
       yield* fs.writeFileString(deckPath, original);
+
       const failing: DeckManager = {
         ...base,
         modifyCardMetadata: () =>
           Effect.fail(new DeckWriteError({ deckPath, message: "disk full" })),
       };
+
       const reviews = yield* ReviewStore.pipe(
         Effect.provide(
           ReviewStoreLive.pipe(
@@ -713,6 +751,7 @@ describe("ReviewStore grading failures", () => {
           ),
         ),
       );
+
       const error = yield* reviews
         .gradeCard(
           {
@@ -726,6 +765,7 @@ describe("ReviewStore grading failures", () => {
           new Date("2026-09-09T12:00:00Z"),
         )
         .pipe(Effect.flip);
+
       expect(error._tag).toBe("ReviewGradeError");
       expect(error.deckPath).toBe(deckPath);
       expect(error.cardId).toBe("card-a");
@@ -745,11 +785,13 @@ describe("ReviewStore Markdown customization", () => {
         const deckPath = `${rootPath}/notes/deck.md`;
         yield* fs.makeDirectory(`${rootPath}/notes`);
         yield* fs.writeFileString(deckPath, "<!--@ card-a 0 0 0 0-->\nQuestion\n---\nAnswer");
+
         const reviews = yield* ReviewStore.pipe(
           Effect.provide(
             makeReviewStoreLive((context, markdown) =>
               Effect.gen(function* () {
                 const path = yield* Path.Path;
+
                 return `${path.relative(context.rootPath, context.deckPath)}: ${markdown}`;
               }),
             ).pipe(Layer.provide(Layer.merge(QueueServicesLive, SchedulerLive))),
@@ -781,6 +823,7 @@ describe("ReviewStore Markdown customization", () => {
         const deckPath = `${rootPath}/deck.md`;
         const original = "<!--@ card-a 0 0 0 0-->\nQuestion\n---\nAnswer";
         yield* fs.writeFileString(deckPath, original);
+
         const reviews = yield* ReviewStore.pipe(
           Effect.provide(
             makeReviewStoreLive((_context, markdown) =>

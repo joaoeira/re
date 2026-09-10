@@ -15,6 +15,7 @@ const okSnapshot = (
     relearning: 0,
     ...counts,
   };
+
   return {
     status: "ok",
     absolutePath: `/root/${relativePath}`,

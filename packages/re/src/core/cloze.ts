@@ -36,6 +36,7 @@ export class ClozeSyntaxError extends Schema.TaggedError<ClozeSyntaxError>(
 }) {}
 
 const CLOZE_DETECTION_PATTERN = /\{\{c\d+::/;
+
 const CLOZE_OPENER = /\{\{c(\d+)::/g;
 
 const isDigit = (char: string | undefined): boolean =>
@@ -58,6 +59,7 @@ const scanBalancedBody = (content: string, bodyStart: number): BalancedBodyResul
       i += 2;
       continue;
     }
+
     if (content[i] === "{") {
       depth += 1;
     } else if (content[i] === "}") {
@@ -65,13 +67,17 @@ const scanBalancedBody = (content: string, bodyStart: number): BalancedBodyResul
         if (i + 1 < content.length && content[i + 1] === "}") {
           return { kind: "ok", bodyEnd: i };
         }
+
         if (i + 1 >= content.length) {
           return { kind: "unclosed" };
         }
+
         return { kind: "unbalanced_braces", at: i };
       }
+
       depth -= 1;
     }
+
     i += 1;
   }
 
@@ -80,6 +86,7 @@ const scanBalancedBody = (content: string, bodyStart: number): BalancedBodyResul
 
 const clozeIssueMessage = (reason: ClozeSyntaxReason, start: number): string => {
   const at = `starting at character ${start}`;
+
   switch (reason) {
     case "unclosed":
       return `Unclosed cloze deletion ${at}`;
@@ -114,11 +121,13 @@ const scanClozeSyntax = (content: string) => {
 
   while (searchFrom < content.length) {
     const start = content.indexOf("{{c", searchFrom);
+
     if (start === -1) {
       break;
     }
 
     let pos = start + 3;
+
     if (pos >= content.length) {
       break;
     }
@@ -131,9 +140,11 @@ const scanClozeSyntax = (content: string) => {
     }
 
     const tokenStart = pos;
+
     while (isIndexTokenChar(content[pos])) {
       pos += 1;
     }
+
     const token = content.slice(tokenStart, pos);
     const hadDigits = isDigit(token[0]);
     const isPureDigits = /^\d+$/.test(token);
@@ -142,12 +153,14 @@ const scanClozeSyntax = (content: string) => {
       if (isPureDigits) {
         const index = Number.parseInt(token, 10);
         const bodyStart = pos + 2;
+
         if (!Number.isFinite(index)) {
           searchFrom = bodyStart;
           continue;
         }
 
         const body = scanBalancedBody(content, bodyStart);
+
         if (body.kind === "ok") {
           const rawBody = content.slice(bodyStart, body.bodyEnd);
           const { hidden, hint } = splitClozeContent(rawBody);
@@ -169,6 +182,7 @@ const scanClozeSyntax = (content: string) => {
         } else {
           issues.push(clozeIssue(content, "unbalanced_braces", start, body.at + 1));
         }
+
         searchFrom = bodyStart;
         continue;
       }
@@ -186,6 +200,7 @@ const scanClozeSyntax = (content: string) => {
         searchFrom = pos + 1;
         continue;
       }
+
       issues.push(clozeIssue(content, "missing_separator", start, pos));
       searchFrom = Math.max(pos, start + 3);
       continue;
@@ -199,11 +214,13 @@ const scanClozeSyntax = (content: string) => {
 
 const splitClozeContent = (rawContent: string) => {
   let depth = 0;
+
   for (let i = 0; i < rawContent.length; i++) {
     if (rawContent[i] === "\\" && i + 1 < rawContent.length) {
       i += 1;
       continue;
     }
+
     if (rawContent[i] === "{") {
       depth += 1;
     } else if (rawContent[i] === "}") {
@@ -218,6 +235,7 @@ const splitClozeContent = (rawContent: string) => {
       const rest = rawContent.slice(i + 2);
       const nextSep = rest.indexOf("::");
       const hint = nextSep === -1 ? rest : rest.slice(0, nextSep);
+
       return { hidden, hint: hint.length > 0 ? hint : null };
     }
   }
@@ -235,9 +253,11 @@ export const parseClozeDeletionsStrict = (
 ): Effect.Effect<readonly ClozeSyntaxMatch[], ClozeSyntaxError> => {
   const { matches, issues } = scanClozeSyntax(content);
   const [first, ...rest] = issues;
+
   if (first === undefined) {
     return Effect.succeed(matches);
   }
+
   return Effect.fail(new ClozeSyntaxError({ issues: [first, ...rest] }));
 };
 
@@ -248,6 +268,7 @@ export const nextClozeDeletionIndex = (content: string): number => {
 
   while ((match = opener.exec(content)) !== null) {
     const index = Number.parseInt(match[1]!, 10);
+
     if (!Number.isFinite(index)) {
       continue;
     }
@@ -263,6 +284,7 @@ export const replaceClozeDeletions = (
   replacer: (deletion: ClozeSyntaxMatch) => string,
 ): string => {
   const deletions = parseClozeDeletions(content);
+
   if (deletions.length === 0) {
     return content;
   }
@@ -277,6 +299,7 @@ export const replaceClozeDeletions = (
   }
 
   output += content.slice(cursor);
+
   return output;
 };
 
@@ -298,12 +321,14 @@ const maskClozeBodies = (content: string, deletions: readonly ClozeSyntaxMatch[]
   }
 
   result += content.slice(cursor);
+
   return result;
 };
 
 const skipCodeSpan = (content: string, start: number): number => {
   let ticks = 0;
   let i = start;
+
   while (i < content.length && content[i] === "`") {
     ticks += 1;
     i += 1;
@@ -311,16 +336,19 @@ const skipCodeSpan = (content: string, start: number): number => {
 
   const closer = "`".repeat(ticks);
   const closeIdx = content.indexOf(closer, i);
+
   return closeIdx === -1 ? i : closeIdx + ticks;
 };
 
 const isFlankingOpen = (content: string, afterDollar: number): boolean => {
   if (afterDollar >= content.length) return false;
+
   return !/\s/.test(content[afterDollar]!);
 };
 
 const isFlankingClose = (content: string, beforeDollar: number): boolean => {
   if (beforeDollar < 0) return false;
+
   return !/\s/.test(content[beforeDollar]!);
 };
 
@@ -347,16 +375,19 @@ const parseMathSpans = (
       if (masked[i + 1] === "$") {
         const searchStart = i + 2;
         const closeIdx = masked.indexOf("$$", searchStart);
+
         if (closeIdx !== -1) {
           spans.push({ start: i, end: closeIdx + 2 });
           i = closeIdx + 2;
         } else {
           i += 2;
         }
+
         continue;
       }
 
       const afterOpen = i + 1;
+
       if (!isFlankingOpen(masked, afterOpen)) {
         i += 1;
         continue;
@@ -364,23 +395,29 @@ const parseMathSpans = (
 
       let j = afterOpen;
       let found = false;
+
       while (j < masked.length) {
         if (masked[j] === "\n") break;
+
         if (masked[j] === "\\" && j + 1 < masked.length) {
           j += 2;
           continue;
         }
+
         if (masked[j] === "$" && isFlankingClose(masked, j - 1)) {
           spans.push({ start: i, end: j + 1 });
           i = j + 1;
           found = true;
           break;
         }
+
         j += 1;
       }
+
       if (!found) {
         i += 1;
       }
+
       continue;
     }
 
@@ -400,6 +437,7 @@ export const replaceClozeDeletionsWithContext = (
   replacer: (deletion: ClozeReplacerContext) => string,
 ): string => {
   const deletions = parseClozeDeletions(content);
+
   if (deletions.length === 0) {
     return content;
   }
@@ -415,5 +453,6 @@ export const replaceClozeDeletionsWithContext = (
   }
 
   output += content.slice(cursor);
+
   return output;
 };

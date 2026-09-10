@@ -14,6 +14,7 @@ describe("resolveBuiltinItem", () => {
         content: "The capital of {{c1::France}}?\n---\nParis",
         cards: [createMetadata()],
       });
+
       expect(match.type.name).toBe("cloze");
       expect(match.cards[0]!.key).toBe("c1");
       expect(match.cards[0]!.prompt).toContain("**[...]**");
@@ -24,10 +25,12 @@ describe("resolveBuiltinItem", () => {
     Effect.gen(function* () {
       const content = "{{c1::Paris}} is in {{c2::France}}.\n---\nAnswer";
       const oneCard = yield* resolveBuiltinItem({ content, cards: [createMetadata()] });
+
       const twoCards = yield* resolveBuiltinItem({
         content,
         cards: [createMetadata(), createMetadata()],
       });
+
       expect(oneCard.type.name).toBe("qa");
       expect(twoCards.type.name).toBe("cloze");
     }),
@@ -39,15 +42,18 @@ describe("builtin card identity", () => {
     Effect.gen(function* () {
       const first = createMetadata();
       const second = createMetadata();
+
       const item = {
         content: "{{c1::Paris}} is in {{c3::France}}.",
         cards: [first, second],
       };
+
       const cardKey = "c3";
 
       const mismatch = yield* resolveBuiltinCard(item, { cardId: first.id, cardKey }).pipe(
         Effect.result,
       );
+
       expect(mismatch).toMatchObject({
         _tag: "Failure",
         failure: { _tag: "BuiltinCardNotFound", cardId: first.id, cardKey: "c3" },
@@ -70,6 +76,7 @@ describe("annotateBuiltinCardKeys", () => {
         content: "{{c1::one}} {{c3::three}} {{c5::five}}",
         cards: [createMetadata(), createMetadata(), createMetadata()],
       };
+
       const qa = { content: "Question\n---\nAnswer", cards: [createMetadata()] };
 
       const { items: entries } = yield* annotateBuiltinCardKeys([
@@ -93,11 +100,14 @@ describe("annotateBuiltinCardKeys", () => {
     () =>
       Effect.gen(function* () {
         const malformed = { content: "No card syntax", cards: [createMetadata()] };
+
         const mismatched = {
           content: "{{c1::one}}",
           cards: [createMetadata(), createMetadata()],
         };
+
         const healthy = { content: "Question\n---\nAnswer", cards: [createMetadata()] };
+
         const { items, errors } = yield* annotateBuiltinCardKeys([
           { item: malformed, card: malformed.cards[0]!, label: "malformed" },
           { item: mismatched, card: mismatched.cards[0]!, label: "mismatched" },
@@ -105,6 +115,7 @@ describe("annotateBuiltinCardKeys", () => {
           { item: healthy, card: createMetadata(), label: "missing" },
           { item: healthy, card: healthy.cards[0]!, label: "healthy" },
         ]);
+
         expect(items.map(({ label, cardKey }) => ({ label, cardKey }))).toEqual([
           { label: "healthy", cardKey: "main" },
         ]);

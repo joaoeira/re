@@ -20,6 +20,7 @@ const parseTimezoneOffsetMinutes = (timezone: string): number => {
   const sign = timezone.startsWith("-") ? -1 : 1;
   const hours = parseInt(timezone.slice(1, 3), 10);
   const minutes = parseInt(timezone.slice(4, 6), 10);
+
   return sign * (hours * 60 + minutes);
 };
 
@@ -29,6 +30,7 @@ const parseTimezoneOffsetMinutes = (timezone: string): number => {
  */
 const isValidCalendarDate = (s: string, d: Date): boolean => {
   const match = ISO_TIMESTAMP_PATTERN.exec(s);
+
   if (!match) return false;
 
   const [, year, month, day, hour, minute, second, , tz] = match;
@@ -77,12 +79,15 @@ export const LastReviewFromString: Schema.Codec<Date, string, never, never> = Sc
           ),
         );
       }
+
       const d = new Date(s);
+
       if (isNaN(d.getTime())) {
         return Effect.fail(
           new SchemaIssue.InvalidValue({ message: `Invalid ISO timestamp: "${s}"` }, s, options),
         );
       }
+
       if (!isValidCalendarDate(s, d)) {
         return Effect.fail(
           new SchemaIssue.InvalidValue(
@@ -92,6 +97,7 @@ export const LastReviewFromString: Schema.Codec<Date, string, never, never> = Sc
           ),
         );
       }
+
       return Effect.succeed(d);
     }),
     encode: SchemaGetter.transform((d) => d.toISOString()),

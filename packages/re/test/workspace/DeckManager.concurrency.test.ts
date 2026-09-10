@@ -46,6 +46,7 @@ const makeManager = (fs: FileSystem.FileSystem) =>
 
 const mockFs = (items: readonly Item[]) => {
   const content = serializeFile({ preamble: "", items });
+
   return FileSystem.FileSystem.pipe(
     Effect.provide(
       createMockFileSystem({
@@ -60,6 +61,7 @@ const mockFs = (items: readonly Item[]) => {
 const pauseValidation = Effect.gen(function* () {
   const entered = yield* Deferred.make<void>();
   const release = yield* Deferred.make<void>();
+
   const type: EvaluableItemType = {
     ...itemType,
     parseCards: (content) =>
@@ -68,6 +70,7 @@ const pauseValidation = Effect.gen(function* () {
         Effect.andThen(itemType.parseCards(content)),
       ),
   };
+
   return { entered, release, type };
 });
 
@@ -77,6 +80,7 @@ describe("DeckManager concurrent mutations", () => {
       const manager = yield* makeManager(yield* mockFs([item("a"), item("b")]));
       const entered = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
+
       const increment = (pause: boolean) =>
         manager.modifyCardMetadata("/deck.md", "a", ({ card }) =>
           Effect.gen(function* () {
@@ -84,15 +88,18 @@ describe("DeckManager concurrent mutations", () => {
               yield* Deferred.succeed(entered, undefined);
               yield* Deferred.await(release);
             }
+
             return {
               metadata: { ...card, stability: numericField(card.stability.value + 1) },
               result: card.stability.value,
             };
           }),
         );
+
       const first = yield* increment(true).pipe(Effect.forkScoped);
       yield* Deferred.await(entered);
       const second = yield* increment(false).pipe(Effect.forkScoped);
+
       const edit = yield* manager
         .modifyItem(
           "/deck.md",
@@ -101,6 +108,7 @@ describe("DeckManager concurrent mutations", () => {
           itemType,
         )
         .pipe(Effect.forkScoped);
+
       yield* Effect.yieldNow;
       yield* Deferred.succeed(release, undefined);
       expect(yield* Fiber.join(first)).toBe(0);
@@ -124,11 +132,13 @@ describe("DeckManager concurrent mutations", () => {
         item("deleted"),
         item("restored"),
       ]);
+
       const manager = yield* makeManager({
         ...fs,
         // Capture the old contents before yielding, as an asynchronous read can do.
         readFileString: (path) => fs.readFileString(path).pipe(Effect.tap(() => Effect.yieldNow)),
       });
+
       const removed = yield* manager.removeItem("/deck.md", "restored");
       yield* Effect.all(
         [
@@ -164,9 +174,11 @@ describe("DeckManager concurrent mutations", () => {
     Effect.gen(function* () {
       const manager = yield* makeManager(yield* mockFs([item("a")]));
       const pause = yield* pauseValidation;
+
       const edit = yield* manager
         .replaceItem("/deck.md", "a", item("a"), pause.type)
         .pipe(Effect.forkScoped);
+
       yield* Deferred.await(pause.entered);
 
       yield* manager.updateCardMetadata("/other.md", "a", {
@@ -183,9 +195,11 @@ describe("DeckManager concurrent mutations", () => {
     Effect.gen(function* () {
       const manager = yield* makeManager(yield* mockFs([item("a"), item("b")]));
       const pause = yield* pauseValidation;
+
       const edit = yield* manager
         .replaceItem("/deck.md", "a", item("a", "Saved\n"), pause.type)
         .pipe(Effect.forkScoped);
+
       yield* Deferred.await(pause.entered);
       const cancelled = yield* manager.removeItem("/deck.md", "b").pipe(Effect.forkScoped);
       yield* TestClock.adjust(0);
@@ -208,24 +222,29 @@ describe("DeckManager concurrent mutations", () => {
       const manager = yield* makeManager(fs);
       const holdingDestination = yield* Deferred.make<void>();
       const releaseDestination = yield* Deferred.make<void>();
+
       const holder = yield* manager
         .modifyCardMetadata("/z.md", "a", ({ card }) =>
           Effect.gen(function* () {
             yield* Deferred.succeed(holdingDestination, undefined);
             yield* Deferred.await(releaseDestination);
+
             return { metadata: card, result: undefined };
           }),
         )
         .pipe(Effect.forkScoped);
+
       yield* Deferred.await(holdingDestination);
 
       const rename = yield* manager.renameDeck("/a.md", "/z.md").pipe(Effect.forkScoped);
       yield* Effect.yieldNow;
       const changingSource = yield* Deferred.make<void>();
+
       const sourceEdit = yield* manager
         .modifyCardMetadata("/a.md", "a", ({ card }) =>
           Effect.gen(function* () {
             yield* Deferred.succeed(changingSource, undefined);
+
             return {
               metadata: { ...card, stability: numericField(42) },
               result: card.stability.value,
@@ -233,6 +252,7 @@ describe("DeckManager concurrent mutations", () => {
           }),
         )
         .pipe(Effect.forkScoped);
+
       yield* Effect.yieldNow;
       expect(yield* Deferred.isDone(changingSource)).toBe(false);
 
@@ -250,9 +270,11 @@ describe("DeckManager concurrent mutations", () => {
     Effect.gen(function* () {
       const manager = yield* makeManager(yield* mockFs([item("a")]));
       const pause = yield* pauseValidation;
+
       const edit = yield* manager
         .replaceItem("/deck.md", "a", item("a", "Saved\n"), pause.type)
         .pipe(Effect.forkScoped);
+
       yield* Deferred.await(pause.entered);
       const rename = yield* manager.renameDeck("/deck.md", "/moved.md").pipe(Effect.forkScoped);
       yield* TestClock.adjust(0);
@@ -272,9 +294,11 @@ describe("DeckManager concurrent mutations", () => {
     Effect.gen(function* () {
       const manager = yield* makeManager(yield* mockFs([item("a")]));
       const pause = yield* pauseValidation;
+
       const edit = yield* manager
         .replaceItem("/deck.md", "a", item("a", "Saved\n"), pause.type)
         .pipe(Effect.forkScoped);
+
       yield* Deferred.await(pause.entered);
       const deletion = yield* manager.deleteDeck("/deck.md").pipe(Effect.forkScoped);
       yield* TestClock.adjust(0);
@@ -295,27 +319,35 @@ describe("DeckManager concurrent mutations", () => {
       const destinationChecked = yield* Deferred.make<void>();
       const releaseCheck = yield* Deferred.make<void>();
       let pauseNextDestinationCheck = true;
+
       const manager = yield* makeManager({
         ...fs,
         stat: (path) =>
           Effect.gen(function* () {
             const result = yield* fs.stat(path).pipe(Effect.exit);
+
             if (path === "/moved.md" && pauseNextDestinationCheck) {
               pauseNextDestinationCheck = false;
               yield* Deferred.succeed(destinationChecked, undefined);
               yield* Deferred.await(releaseCheck);
             }
+
             return yield* result;
           }),
       });
+
       yield* manager.replaceItem("/other.md", "a", item("b"), itemType);
+
       const first = yield* manager
         .renameDeck("/deck.md", "/moved.md")
         .pipe(Effect.result, Effect.forkScoped);
+
       yield* Deferred.await(destinationChecked);
+
       const second = yield* manager
         .renameDeck("/other.md", "/moved.md")
         .pipe(Effect.result, Effect.forkScoped);
+
       // Drain runnable fibers before releasing the delayed filesystem response.
       yield* TestClock.adjust(0);
       yield* Deferred.succeed(releaseCheck, undefined);
@@ -344,6 +376,7 @@ const diskFixture = Effect.gen(function* () {
   yield* fs.writeFileString(deckPath, original);
   // Another tool may own this filename; a deck save must leave it alone.
   yield* fs.writeFileString(`${deckPath}.tmp`, "Other tool's file");
+
   return { fs, directory, deckPath, original };
 });
 
@@ -361,6 +394,7 @@ describe("DeckManager.modifyItem", () => {
         }),
       );
       const manager = yield* makeManager(fs);
+
       const saved = yield* manager.modifyItem(
         deckPath,
         "first",
@@ -386,6 +420,7 @@ describe("DeckManager.modifyItem", () => {
       const original = "<!--@ a  0 0 0 0-->\nOriginal\n";
       yield* fs.writeFileString(deckPath, original);
       const manager = yield* makeManager(fs);
+
       const result = yield* manager
         .modifyItem(
           deckPath,
@@ -394,6 +429,7 @@ describe("DeckManager.modifyItem", () => {
           itemType,
         )
         .pipe(Effect.result);
+
       expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "EditRejected" } });
       expect(yield* fs.readFileString(deckPath)).toBe(original);
 
@@ -417,6 +453,7 @@ describe("DeckManager save recovery", () => {
         const renaming = yield* Deferred.make<void>();
         const releaseRename = yield* Deferred.make<void>();
         let pauseNextRename = true;
+
         const manager = yield* makeManager({
           ...fs,
           rename: (from, to) =>
@@ -426,15 +463,18 @@ describe("DeckManager save recovery", () => {
                 yield* Deferred.succeed(renaming, undefined);
                 yield* Deferred.await(releaseRename);
               }
+
               yield* fs.rename(from, to);
             }),
         });
+
         const increment = manager.modifyCardMetadata("/deck.md", "a", ({ card }) =>
           Effect.succeed({
             metadata: { ...card, stability: numericField(card.stability.value + 1) },
             result: card.stability.value,
           }),
         );
+
         const first = yield* increment.pipe(Effect.forkScoped);
         yield* Deferred.await(renaming);
         const cancelling = yield* Fiber.interrupt(first).pipe(Effect.forkScoped);
@@ -454,23 +494,28 @@ describe("DeckManager save recovery", () => {
       Effect.gen(function* () {
         const { fs, directory, deckPath, original } = yield* diskFixture;
         let failNextRename = true;
+
         const manager = yield* makeManager({
           ...fs,
           rename: (from, to) =>
             Effect.suspend(() => {
               if (failNextRename) {
                 failNextRename = false;
+
                 return Effect.fail(makeSystemError("PermissionDenied", "rename", from));
               }
+
               return fs.rename(from, to);
             }),
         });
+
         const update = manager.modifyCardMetadata(deckPath, "a", ({ card }) =>
           Effect.succeed({
             metadata: { ...card, stability: numericField(42) },
             result: "saved",
           }),
         );
+
         expect(yield* update.pipe(Effect.result)).toMatchObject({
           _tag: "Failure",
           failure: { _tag: "DeckWriteError", deckPath },
@@ -488,22 +533,27 @@ describe("DeckManager save recovery", () => {
       const { fs, directory, deckPath, original } = yield* diskFixture;
       const written = yield* Deferred.make<void>();
       let pauseNextWrite = true;
+
       const manager = yield* makeManager({
         ...fs,
         writeFileString: (path, content, options) =>
           Effect.gen(function* () {
             yield* fs.writeFileString(path, content, options);
+
             if (pauseNextWrite) {
               pauseNextWrite = false;
               yield* Deferred.succeed(written, undefined);
+
               return yield* Effect.never;
             }
           }),
       });
+
       const update = manager.updateCardMetadata(deckPath, "a", {
         ...item("a").cards[0]!,
         stability: numericField(42),
       });
+
       const save = yield* update.pipe(Effect.forkScoped);
       yield* Deferred.await(written);
       yield* Fiber.interrupt(save);

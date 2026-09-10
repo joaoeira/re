@@ -11,6 +11,7 @@ describe("multi-card items", () => {
 <!--@ card2 0 0 0 0-->
 The atomic number of [carbon] is [6].
 `;
+
         const result = yield* parseFile(content);
 
         assert.strictEqual(result.items.length, 1);
@@ -28,6 +29,7 @@ The atomic number of [carbon] is [6].
 <!--@ card3 0 0 0 0-->
 [Paris] is the capital of [France] in [Europe].
 `;
+
         const result = yield* parseFile(content);
 
         assert.strictEqual(result.items.length, 1);
@@ -45,6 +47,7 @@ The atomic number of [carbon] is [6].
 <!--@ card2 0 0 0 0-->
 Content for card2
 `;
+
         const result = yield* parseFile(content);
 
         assert.strictEqual(result.items.length, 2);
@@ -64,6 +67,7 @@ What is the capital of France?
 ---
 Paris
 `;
+
         const result = yield* parseFile(content);
 
         assert.strictEqual(result.items.length, 1);
@@ -86,6 +90,7 @@ Regular flashcard Q2
 ---
 A2
 `;
+
         const result = yield* parseFile(content);
 
         assert.strictEqual(result.items.length, 3);
@@ -112,6 +117,7 @@ A2
 <!--@ card2 5.2 4.3 2 1 2025-01-04T10:30:00Z 2025-01-09T15:18:00.000Z-->
 Shared content
 `;
+
         const result = yield* parseFile(content);
 
         assert.strictEqual(result.items.length, 1);
@@ -141,6 +147,7 @@ title: Chemistry Notes
 <!--@ card2 0 0 0 0-->
 The atomic number of [carbon] is [6].
 `;
+
         const result = yield* parseFile(content);
 
         assert.strictEqual(
@@ -166,6 +173,7 @@ First cloze: [foo] and [bar]
 <!--@ b3 0 0 0 0-->
 Second cloze: [x], [y], and [z]
 `;
+
         const result = yield* parseFile(content);
 
         assert.strictEqual(result.items.length, 2);
@@ -178,6 +186,7 @@ Second cloze: [x], [y], and [z]
       Effect.gen(function* () {
         const content = `<!--@ card1 0 0 0 0-->
 <!--@ card2 0 0 0 0-->`;
+
         const result = yield* parseFile(content);
 
         assert.strictEqual(result.items.length, 1);
@@ -197,6 +206,7 @@ Shared cloze content
 <!--@ single 0 0 0 0-->
 Regular flashcard
 `;
+
         const result = yield* parseFile(content);
 
         assert.strictEqual(result.items.length, 2);
@@ -228,6 +238,7 @@ Regular flashcard
 <!--@ card2 0 0 0 0-->
 The atomic number of [carbon] is [6].
 `;
+
         const parsed = yield* parseFile(original);
         const serialized = serializeFile(parsed);
 
@@ -243,6 +254,7 @@ Regular card
 <!--@ multi2 0 0 0 0-->
 Cloze card
 `;
+
         const parsed = yield* parseFile(original);
         const serialized = serializeFile(parsed);
 
@@ -257,6 +269,7 @@ Cloze card
 <!--@ third 5.0 6.0 0 0-->
 Content
 `;
+
         const parsed = yield* parseFile(original);
         const serialized = serializeFile(parsed);
 
@@ -278,6 +291,7 @@ Content
 <!--@ card2 1.50 2.50 0 0-->
 The atomic number of [carbon] is [6].
 `;
+
         const parsed = yield* parseFile(original);
         const serialized = serializeFile(parsed);
 
@@ -314,6 +328,7 @@ What is the speed of light?
 ---
 299,792,458 m/s
 `;
+
         const parsed = yield* parseFile(original);
         const serialized = serializeFile(parsed);
 
@@ -339,6 +354,7 @@ What is the speed of light?
 <!--@ card2 invalid 0 0 0-->
 Content
 `;
+
         const error = yield* parseFile(content).pipe(Effect.flip);
         assert.ok(error._tag === "InvalidFieldValue");
       }),
@@ -350,6 +366,7 @@ Content
 <!--@ card2 0 0 99 0-->
 Content
 `;
+
         const error = yield* parseFile(content).pipe(Effect.flip);
         assert.ok(error._tag === "InvalidFieldValue");
       }),

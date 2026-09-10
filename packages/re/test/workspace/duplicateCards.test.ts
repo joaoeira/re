@@ -40,6 +40,7 @@ const runFindDuplicates = (
   options?: Parameters<typeof findWorkspaceDuplicates>[1],
 ) => {
   const fileSystemLayer = createMockFileSystemLayer(config);
+
   const deckManagerLayer = DeckManagerLive.pipe(
     Layer.provide(Layer.merge(fileSystemLayer, Path.layer)),
   );
@@ -56,6 +57,7 @@ const runFindDuplicatesResult = (
   options?: Parameters<typeof findWorkspaceDuplicates>[1],
 ) => {
   const fileSystemLayer = createMockFileSystemLayer(config);
+
   const deckManagerLayer = DeckManagerLive.pipe(
     Layer.provide(Layer.merge(fileSystemLayer, Path.layer)),
   );
@@ -229,6 +231,7 @@ A
     });
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(WorkspaceRootNotFound);
     }

@@ -41,6 +41,7 @@ import {
 } from "../../src/workspace/snapshotWorkspace";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
 const MINUTE_MS = 60 * 1000;
 
 interface Preset {
@@ -115,22 +116,26 @@ const buildFolderPool = (folderCount: number): readonly string[] => {
   }
 
   const folders: string[] = [...FOLDERS];
+
   for (let index = FOLDERS.length; index < folderCount; index++) {
     const region = String(Math.floor(index / 50)).padStart(2, "0");
     const collection = String(Math.floor(index / 10)).padStart(3, "0");
     const topic = String(index).padStart(3, "0");
     folders.push(`collections/region-${region}/collection-${collection}/topic-${topic}`);
   }
+
   return folders;
 };
 
 const mulberry32 = (seed: number): (() => number) => {
   let a = seed >>> 0;
+
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
     let t = a;
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 };
@@ -157,6 +162,7 @@ const metadataLine = (rng: Rng, id: string, now: Date): string => {
     const difficulty = 1 + rng() * 9;
     const lastReview = isoOffset(now, -randInt(rng, 1, 90) * DAY_MS);
     const due = isoOffset(now, (rng() * 90 - 45) * DAY_MS);
+
     return `<!--@ ${id} ${stability} ${difficulty} 2 0 ${lastReview} ${due}-->`;
   }
 
@@ -164,12 +170,14 @@ const metadataLine = (rng: Rng, id: string, now: Date): string => {
     const lastReviewOffset = -randInt(rng, 0, 120) * MINUTE_MS;
     const lastReview = isoOffset(now, lastReviewOffset);
     const due = isoOffset(now, lastReviewOffset + 10 * MINUTE_MS);
+
     return `<!--@ ${id} ${0.2 + rng()} ${4 + rng() * 4} 1 ${randInt(rng, 0, 1)} ${lastReview} ${due}-->`;
   }
 
   const lastReviewOffset = -randInt(rng, 0, 24 * 60) * MINUTE_MS;
   const lastReview = isoOffset(now, lastReviewOffset);
   const due = isoOffset(now, lastReviewOffset + 10 * MINUTE_MS);
+
   return `<!--@ ${id} ${1 + rng() * 3} ${5 + rng() * 4} 3 0 ${lastReview} ${due}-->`;
 };
 
@@ -179,9 +187,11 @@ const itemBody = (rng: Rng, deckIndex: number, itemIndex: number): string => {
     "---",
     `It combines ${pick(rng, ["retrieval practice", "spacing", "interleaving", "elaboration"])} with idea ${itemIndex}, plus enough surrounding prose to make parsing realistic.`,
   ];
+
   if (rng() < 0.15) {
     lines.push(`![diagram](assets/img-${randInt(rng, 0, 9)}.png)`);
   }
+
   return `${lines.join("\n")}\n\n`;
 };
 
@@ -193,10 +203,12 @@ const deckContent = (rng: Rng, deckIndex: number, cardTarget: number, now: Date)
   while (cards < cardTarget) {
     const remaining = cardTarget - cards;
     const cardsInItem = rng() < 0.1 ? Math.min(randInt(rng, 2, 3), remaining) : 1;
+
     for (let k = 0; k < cardsInItem; k++) {
       content += `${metadataLine(rng, `bench-d${deckIndex}-i${itemIndex}-c${k}`, now)}\n`;
       cards += 1;
     }
+
     content += itemBody(rng, deckIndex, itemIndex);
     itemIndex += 1;
   }
@@ -212,9 +224,11 @@ const writeVaultFile = async (root: string, relativePath: string, data: string |
 
 const fakeBinary = (size: number, seedByte: number): Uint8Array => {
   const bytes = new Uint8Array(size);
+
   for (let i = 0; i < size; i++) {
     bytes[i] = (i * 31 + seedByte) & 0xff;
   }
+
   return bytes;
 };
 
@@ -249,6 +263,7 @@ const generateVault = async (
   for (let i = 0; i < preset.smallDecks; i++) {
     await writeDeck(preset.smallCardRange);
   }
+
   for (let i = 0; i < preset.largeDecks; i++) {
     await writeDeck(preset.largeCardRange);
   }
@@ -274,6 +289,7 @@ const generateVault = async (
 
   await writeVaultFile(root, ".git/HEAD", "ref: refs/heads/master\n");
   await writeVaultFile(root, ".git/config", "[core]\n\trepositoryformatversion = 0\n");
+
   for (let i = 0; i < 5; i++) {
     await writeVaultFile(root, `.git/objects/ab/${i}f3c9d1e`, fakeBinary(2048, i));
   }
@@ -282,8 +298,10 @@ const generateVault = async (
     if (folder === "" || rng() < 0.4) {
       continue;
     }
+
     await writeVaultFile(root, nodePath.join(folder, "notes.txt"), `Notes for ${folder}\n`);
     const imageCount = randInt(rng, 1, 3);
+
     for (let i = 0; i < imageCount; i++) {
       await writeVaultFile(
         root,
@@ -306,8 +324,10 @@ const sweepVault = async (
 
   while (stack.length > 0) {
     const directory = stack.pop()!;
+
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const entryPath = nodePath.join(directory, entry.name);
+
       if (entry.isDirectory()) {
         directories += 1;
         stack.push(entryPath);
@@ -328,12 +348,14 @@ const timedSnapshot = async (
   asOf: Date,
 ): Promise<{ ms: number; result: SnapshotWorkspaceResult }> => {
   const start = performance.now();
+
   const result = await Effect.runPromise(
     snapshotWorkspace(root, { asOf }).pipe(
       Effect.catch((error) => Effect.die(new Error(toScanDecksErrorMessage(error)))),
       Effect.provide(PlatformLive),
     ),
   );
+
   return { ms: performance.now() - start, result };
 };
 
@@ -351,6 +373,7 @@ const summarize = (result: SnapshotWorkspaceResult) => {
       summary.errorDecks += 1;
       continue;
     }
+
     summary.okDecks += 1;
     summary.cards += deck.totalCards;
     summary.due += deck.dueCards;
@@ -375,6 +398,7 @@ const formatMs = (ms: number): string => `${ms.toFixed(1)} ms`.padStart(11);
 const median = (values: readonly number[]): number => {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
+
   return sorted.length % 2 === 0 ? (sorted[middle - 1]! + sorted[middle]!) / 2 : sorted[middle]!;
 };
 
@@ -384,8 +408,11 @@ interface ExpectedCounts {
 }
 
 const MIN_ADAPTIVE_WARMUP = 3;
+
 const MAX_ADAPTIVE_WARMUP = 10;
+
 const WARMUP_STABLE_PASSES = 2;
+
 const WARMUP_CONVERGENCE_TOLERANCE = 0.02;
 
 const runBench = async (
@@ -407,18 +434,22 @@ const runBench = async (
       if (result.decks.length !== reference.decks) {
         problems.push(`expected ${reference.decks} decks, found ${result.decks.length}`);
       }
+
       if (summary.cards !== reference.cards) {
         problems.push(
           `expected ${formatInt(reference.cards)} cards, counted ${formatInt(summary.cards)}`,
         );
       }
     }
+
     if (expected !== undefined && summary.errorDecks > 0) {
       problems.push(`${summary.errorDecks} decks failed to read/parse`);
     }
+
     if (problems.length > 0) {
       throw new Error(`${passLabel} produced a wrong snapshot: ${problems.join("; ")}`);
     }
+
     return summary;
   };
 
@@ -431,13 +462,17 @@ const runBench = async (
     const { ms, result } = await timedSnapshot(root, asOf);
     checkRun(result, `warm-up pass ${warmupTimes.length + 1}`);
     warmupTimes.push(ms);
+
     if (warmup === "auto" && warmupTimes.length >= MIN_ADAPTIVE_WARMUP) {
       const withinBand =
         ms >= bestWarmup * (1 - WARMUP_CONVERGENCE_TOLERANCE) &&
         ms <= bestWarmup * (1 + WARMUP_CONVERGENCE_TOLERANCE);
+
       stablePasses = withinBand ? stablePasses + 1 : 0;
+
       if (stablePasses >= WARMUP_STABLE_PASSES) break;
     }
+
     bestWarmup = Math.min(bestWarmup, ms);
   }
 
@@ -449,6 +484,7 @@ const runBench = async (
     const { ms, result } = await timedSnapshot(root, asOf);
     const summary = checkRun(result, `run ${i + 1}`);
     times.push(ms);
+
     if (firstSummary === undefined) {
       firstSummary = summary;
       firstDeckCount = result.decks.length;
@@ -463,12 +499,14 @@ const runBench = async (
       `review ${formatInt(summary.states.review)} / relearning ${formatInt(summary.states.relearning)}`,
   );
   console.log();
+
   if (warmupTimes.length > 0) {
     console.log(
       `  warm-up: ${warmupTimes.length} untimed ${warmupTimes.length === 1 ? "pass" : "passes"} ` +
         `(${warmupTimes.map((ms) => ms.toFixed(1)).join(" → ")} ms)`,
     );
   }
+
   times.forEach((ms, index) => {
     console.log(`  run ${index + 1}:${formatMs(ms)}`);
   });
@@ -537,16 +575,20 @@ const main = async () => {
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
+
     if (arg === "--runs") {
       runs = Number(args[++i]);
+
       if (!Number.isInteger(runs) || runs < 1) usage();
     } else if (arg === "--warmup") {
       warmup = Number(args[++i]);
+
       if (!Number.isInteger(warmup) || warmup < 0) usage();
     } else if (arg === "--keep") {
       keep = true;
     } else if (arg === "--vault") {
       vaultPath = args[++i];
+
       if (vaultPath === undefined) usage();
     } else if (isPresetName(arg)) {
       presetNames.push(arg);
@@ -557,10 +599,12 @@ const main = async () => {
 
   if (vaultPath !== undefined) {
     await runRealVault(vaultPath, runs, warmup ?? 0);
+
     return;
   }
 
   const selected = presetNames.length > 0 ? presetNames : RecordUtils.keys(PRESETS);
+
   for (const name of selected) {
     await runPreset(name, PRESETS[name], runs, warmup ?? "auto", keep);
   }

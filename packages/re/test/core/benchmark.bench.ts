@@ -38,25 +38,33 @@ import type { ParsedFile, Item } from "../../src/core/types.ts";
 // Generate test files of various sizes
 const generateFile = (itemCount: number): string => {
   let content = "---\ntitle: Benchmark Test\n---\n\n";
+
   for (let i = 0; i < itemCount; i++) {
     const hasReview = i % 2 === 0;
+
     const metadata = hasReview
       ? `<!--@ item${i} ${(i * 0.5).toFixed(1)} ${(i * 0.3).toFixed(
           1,
         )} 2 0 2025-01-04T10:30:00.000Z-->`
       : `<!--@ item${i} 0 0 0 0-->`;
+
     content += `${metadata}\nQuestion ${i}: What is ${i} + ${i}?\n---\nAnswer: ${i * 2}\n\n`;
   }
+
   return content;
 };
 
 const smallFile = generateFile(10);
+
 const mediumFile = generateFile(100);
+
 const largeFile = generateFile(1000);
 
 // Pre-parsed files for serialization benchmarks
 let parsedSmall: ParsedFile;
+
 let parsedMedium: ParsedFile;
+
 let parsedLarge: ParsedFile;
 
 // Parse once for serialization benchmarks
@@ -69,6 +77,7 @@ Effect.runSync(
     ),
   ),
 );
+
 Effect.runSync(
   parseFile(mediumFile).pipe(
     Effect.tap((f) =>
@@ -78,6 +87,7 @@ Effect.runSync(
     ),
   ),
 );
+
 Effect.runSync(
   parseFile(largeFile).pipe(
     Effect.tap((f) =>
@@ -149,12 +159,14 @@ describe("createMetadata", () => {
 describe("build file", () => {
   bench("create 100 items and serialize", () => {
     const items: Item[] = [];
+
     for (let i = 0; i < 100; i++) {
       items.push({
         cards: [createMetadata()],
         content: `Question ${i}\n---\nAnswer ${i}\n`,
       });
     }
+
     const file: ParsedFile = { preamble: "", items };
     serializeFile(file);
   });

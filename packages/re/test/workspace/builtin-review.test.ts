@@ -15,11 +15,15 @@ import {
 } from "../../src/workspace/index.js";
 
 const platform = Layer.merge(NodeFileSystem.layer, Path.layer);
+
 const decks = DeckManagerLive.pipe(Layer.provideMerge(platform));
+
 const queueLayer = ReviewQueueBuilderLive.pipe(
   Layer.provideMerge(Layer.merge(decks, NewFirstOrderingStrategy)),
 );
+
 const runtime = Layer.merge(queueLayer, SchedulerLive);
+
 const now = new Date("2025-01-10T00:00:00Z");
 
 describe("built-in review", () => {
@@ -47,12 +51,14 @@ Another question?
 Another answer
 `,
       );
+
       const queue = yield* prepareBuiltinReviewQueue({
         rootPath,
         deckPaths: [deckPath, `${rootPath}/missing.md`],
         now,
         options: { includeNew: true, includeDue: true, order: "default", cardLimit: 2 },
       });
+
       expect(queue.cards.map(({ reference }) => reference.cardId)).toEqual(["qa1", "due1"]);
       expect(queue).toMatchObject({ totalNew: 1, totalDue: 1 });
       expect(queue.cards[0]?.content).toEqual({

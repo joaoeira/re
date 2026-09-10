@@ -54,6 +54,7 @@ describe("NumericFieldFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(NumericFieldFromString)("-1").pipe(
         Effect.flip,
       );
+
       assert.ok(result);
     }),
   );
@@ -63,6 +64,7 @@ describe("NumericFieldFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(NumericFieldFromString)("Infinity").pipe(
         Effect.flip,
       );
+
       assert.ok(result);
     }),
   );
@@ -72,6 +74,7 @@ describe("NumericFieldFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(NumericFieldFromString)("NaN").pipe(
         Effect.flip,
       );
+
       assert.ok(result);
     }),
   );
@@ -81,6 +84,7 @@ describe("NumericFieldFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(NumericFieldFromString)("1e-7").pipe(
         Effect.flip,
       );
+
       assert.ok(result);
     }),
   );
@@ -90,6 +94,7 @@ describe("NumericFieldFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(NumericFieldFromString)(".5").pipe(
         Effect.flip,
       );
+
       assert.ok(result);
     }),
   );
@@ -99,6 +104,7 @@ describe("NumericFieldFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(NumericFieldFromString)("5.").pipe(
         Effect.flip,
       );
+
       assert.ok(result);
     }),
   );
@@ -108,6 +114,7 @@ describe("NumericFieldFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(NumericFieldFromString)("5.2x").pipe(
         Effect.flip,
       );
+
       assert.ok(result);
     }),
   );
@@ -124,9 +131,11 @@ describe("NumericFieldFromString", () => {
     Effect.gen(function* () {
       // A number with 400 digits will parse to Infinity
       const hugeNumber = "1" + "0".repeat(400);
+
       const result = yield* Schema.decodeUnknownEffect(NumericFieldFromString)(hugeNumber).pipe(
         Effect.flip,
       );
+
       assert.ok(result);
     }),
   );
@@ -195,14 +204,18 @@ describe("LearningStepsFromString", () => {
         yield* Schema.encodeEffect(LearningStepsFromString)(maximum),
         String(maximum),
       );
+
       const overflow = yield* Schema.decodeUnknownEffect(LearningStepsFromString)(
         "9007199254740992",
       ).pipe(Effect.flip);
+
       assert.strictEqual(overflow._tag, "SchemaError");
+
       for (const invalid of [-1, 1.5, maximum + 1, Infinity, NaN]) {
         const error = yield* Schema.encodeEffect(LearningStepsFromString)(invalid).pipe(
           Effect.flip,
         );
+
         assert.strictEqual(error._tag, "SchemaError");
       }
     }),
@@ -227,6 +240,7 @@ describe("LearningStepsFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(LearningStepsFromString)("-1").pipe(
         Effect.flip,
       );
+
       assert.ok(result);
     }),
   );
@@ -236,6 +250,7 @@ describe("LearningStepsFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(LearningStepsFromString)("1.5").pipe(
         Effect.flip,
       );
+
       assert.ok(result);
     }),
   );
@@ -245,6 +260,7 @@ describe("LearningStepsFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(LearningStepsFromString)("01").pipe(
         Effect.flip,
       );
+
       assert.ok(result);
     }),
   );
@@ -255,6 +271,7 @@ describe("LastReviewFromString", () => {
     Effect.gen(function* () {
       const result =
         yield* Schema.decodeUnknownEffect(LastReviewFromString)("2025-01-04T10:30:00Z");
+
       assert.ok(result instanceof Date);
       assert.strictEqual(result.toISOString(), "2025-01-04T10:30:00.000Z");
     }),
@@ -265,6 +282,7 @@ describe("LastReviewFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(LastReviewFromString)(
         "2025-01-04T10:30:00+02:00",
       );
+
       assert.ok(result instanceof Date);
       // 10:30+02:00 = 08:30 UTC
       assert.strictEqual(result.toISOString(), "2025-01-04T08:30:00.000Z");
@@ -276,6 +294,7 @@ describe("LastReviewFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(LastReviewFromString)(
         "2025-01-04T10:30:00.123Z",
       );
+
       assert.ok(result instanceof Date);
       assert.strictEqual(result.toISOString(), "2025-01-04T10:30:00.123Z");
     }),
@@ -286,6 +305,7 @@ describe("LastReviewFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(LastReviewFromString)(
         "2025-01-04T10:30:00",
       ).pipe(Effect.flip);
+
       assert.ok(result);
     }),
   );
@@ -303,6 +323,7 @@ describe("LastReviewFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(LastReviewFromString)(
         "2025-02-30T10:30:00Z",
       ).pipe(Effect.flip);
+
       assert.ok(result);
     }),
   );
@@ -312,6 +333,7 @@ describe("LastReviewFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(LastReviewFromString)(
         "2025-02-30T10:30:00+02:00",
       ).pipe(Effect.flip);
+
       assert.ok(result);
     }),
   );
@@ -321,6 +343,7 @@ describe("LastReviewFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(LastReviewFromString)(
         "2025-02-29T10:30:00Z",
       ).pipe(Effect.flip);
+
       assert.ok(result);
     }),
   );
@@ -329,6 +352,7 @@ describe("LastReviewFromString", () => {
     Effect.gen(function* () {
       const result =
         yield* Schema.decodeUnknownEffect(LastReviewFromString)("2024-02-29T10:30:00Z");
+
       assert.ok(result instanceof Date);
       assert.strictEqual(result.toISOString(), "2024-02-29T10:30:00.000Z");
     }),
@@ -339,6 +363,7 @@ describe("LastReviewFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(LastReviewFromString)(
         "2025-01-04T25:30:00Z",
       ).pipe(Effect.flip);
+
       assert.ok(result);
     }),
   );
@@ -348,6 +373,7 @@ describe("LastReviewFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(LastReviewFromString)(
         "2025-01-04T10:61:00Z",
       ).pipe(Effect.flip);
+
       assert.ok(result);
     }),
   );
@@ -357,6 +383,7 @@ describe("LastReviewFromString", () => {
       const result = yield* Schema.decodeUnknownEffect(LastReviewFromString)(
         "2025-13-04T10:30:00Z",
       ).pipe(Effect.flip);
+
       assert.ok(result);
     }),
   );
@@ -364,9 +391,11 @@ describe("LastReviewFromString", () => {
   it.effect("fails to encode invalid Date", () =>
     Effect.gen(function* () {
       const invalidDate = new Date("invalid");
+
       const result = yield* Schema.encodeEffect(LastReviewFromString)(invalidDate).pipe(
         Effect.flip,
       );
+
       assert.ok(result);
     }),
   );

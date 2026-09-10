@@ -13,7 +13,9 @@ import {
 } from "../../src/study/index.js";
 
 const PlatformLive = Layer.merge(NodeFileSystem.layer, NodePath.layer);
+
 const DeckManagerAndPlatformLive = DeckManagerLive.pipe(Layer.provideMerge(PlatformLive));
+
 const TestLive = DeckStoreLive.pipe(Layer.provideMerge(DeckManagerAndPlatformLive));
 
 describe("DeckStoreLive", () => {
@@ -26,6 +28,7 @@ describe("DeckStoreLive", () => {
 
       const scanned = yield* loadDecksForUi(workspacePath);
       expect(scanned._tag).toBe("DecksLoaded");
+
       if (scanned._tag === "DecksLoaded") {
         expect(scanned.decks.map((deck) => deck.relativePath)).toEqual(["computing.md"]);
       }
@@ -37,6 +40,7 @@ describe("DeckStoreLive", () => {
         answer: "Success, expected errors, and requirements.",
         content: "",
       });
+
       expect(created).toEqual({ _tag: "Created", cardCount: 1 });
 
       const written = yield* fileSystem.readFileString(deckPath);

@@ -7,22 +7,26 @@ describe("ClozeDeletion codec", () => {
   it.effect("round-trips optional hints, omitting absent values and preserving empty strings", () =>
     Effect.gen(function* () {
       const deletion = { index: 1, hidden: "Paris", start: 0, end: 13 };
+
       for (const input of [deletion, { ...deletion, hint: undefined }]) {
         const decoded = yield* Schema.decodeUnknownEffect(ClozeDeletion)(input);
         assert.ok(Option.isNone(decoded.hint));
         const encoded = yield* Schema.encodeEffect(ClozeDeletion)(decoded);
         assert.ok(!Object.hasOwn(encoded, "hint"));
       }
+
       for (const hint of ["capital city", ""]) {
         const decoded = yield* Schema.decodeUnknownEffect(ClozeDeletion)({ ...deletion, hint });
         assert.deepStrictEqual(decoded.hint, Option.some(hint));
         const encoded = yield* Schema.encodeEffect(ClozeDeletion)(decoded);
         assert.strictEqual(encoded.hint, hint);
       }
+
       for (const hint of [null, 123]) {
         const error = yield* Schema.decodeUnknownEffect(ClozeDeletion)({ ...deletion, hint }).pipe(
           Effect.flip,
         );
+
         assert.strictEqual(error._tag, "SchemaError");
       }
     }),
@@ -217,6 +221,7 @@ describe("ClozeType", () => {
       Effect.gen(function* () {
         const content = `Line 1: {{c1::answer1}}
 Line 2: {{c2::answer2}}`;
+
         const result = yield* ClozeType.parse(content);
 
         assert.strictEqual(result.deletions.length, 2);
@@ -271,6 +276,7 @@ Line 2: {{c2::answer2}}`;
       Effect.gen(function* () {
         const content = `![Mitochondrion](../../.re/assets/mitochondrion.png)
 The {{c1::mitochondrion}} produces ATP.`;
+
         const result = yield* ClozeType.parse(content);
 
         assert.strictEqual(result.text, content);
@@ -387,6 +393,7 @@ The {{c1::mitochondrion}} produces ATP.`;
         const content = yield* ClozeType.parse(
           "The {{c1::capital::hint1}} of {{c2::France::hint2}} is Paris.",
         );
+
         const cards = ClozeType.cards(content);
 
         assert.strictEqual(cards[0]!.reveal, "The **capital** of France is Paris.");
@@ -409,6 +416,7 @@ The {{c1::mitochondrion}} produces ATP.`;
       Effect.gen(function* () {
         const content = yield* ClozeType.parse(`![Mitochondrion](../../.re/assets/mitochondrion.png)
 The {{c1::mitochondrion}} produces ATP.`);
+
         const cards = ClozeType.cards(content);
 
         assert.strictEqual(cards.length, 1);

@@ -12,6 +12,7 @@ import { Data, Effect } from "effect";
 import { DeckStore } from "./deck-store.js";
 
 export type CardType = "qa" | "cloze";
+
 export type CardField = "deckPath" | "question" | "answer" | "content";
 
 export interface CreateCardInput {
@@ -75,6 +76,7 @@ const requireText = (
 
 export const formatContentParseError = (error: ContentParseError): string => {
   const fragment = error.fragment === undefined ? "" : ` — ${error.fragment}`;
+
   return `${error.message}${fragment}`;
 };
 
@@ -89,7 +91,9 @@ export const prepareCard = Effect.fn("Study.prepareCard")(function* (input: Crea
               (error) => new CardFieldError({ field: error.field, message: error.message }),
             ),
           );
+
           const parsedContent = yield* QAType.parse(content);
+
           return {
             content,
             itemType: adaptItemType(QAType),
@@ -99,6 +103,7 @@ export const prepareCard = Effect.fn("Study.prepareCard")(function* (input: Crea
       : yield* Effect.gen(function* () {
           const content = yield* requireText(input.content, "content", "Enter cloze content.");
           const parsedContent = yield* ClozeType.parse(content);
+
           return {
             content,
             itemType: adaptItemType(ClozeType),
@@ -124,6 +129,7 @@ export const createCard = Effect.fn("Study.createCard")(function* (input: Create
   const prepared = yield* prepareCard(input);
   const store = yield* DeckStore;
   yield* store.appendItem(prepared.deckPath, prepared.item, prepared.itemType);
+
   return { cardCount: prepared.cardCount } as const;
 });
 

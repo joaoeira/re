@@ -58,6 +58,7 @@ export const isPathWithinRoot = (
 ): Effect.Effect<boolean, never, Path.Path> =>
   Effect.gen(function* () {
     const pathService = yield* Path.Path;
+
     return isWithinRootWithPathService(pathService, rootPath, targetPath);
   });
 

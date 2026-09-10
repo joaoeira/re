@@ -43,6 +43,7 @@ export const reconcileCards = (
 
   for (const keys of [previous.keys, nextKeys]) {
     const seen = new Set<string>();
+
     for (const key of keys) {
       if (seen.has(key)) return Result.fail(new DuplicateCardKey({ key }));
       seen.add(key);
@@ -50,5 +51,6 @@ export const reconcileCards = (
   }
 
   const byKey = new Map(previous.keys.map((key, index) => [key, previous.cards[index]!]));
+
   return Result.succeed(nextKeys.map((key) => Option.fromNullishOr(byKey.get(key))));
 };

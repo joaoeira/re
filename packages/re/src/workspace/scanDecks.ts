@@ -87,6 +87,7 @@ const hasHiddenSegment = (relativePath: string): boolean =>
 const normalizeIgnorePatterns = (patterns: readonly string[]): readonly string[] =>
   Arr.filterMap(patterns, (pattern) => {
     const normalized = pattern.trim();
+
     if (normalized === "" || normalized.startsWith("#")) {
       return Result.failVoid;
     }
@@ -169,6 +170,7 @@ const isSymlinkBestEffort = (
           if (isInvalidReadLinkCause(reason.cause)) {
             return Effect.succeed(Option.some(false));
           }
+
           return Effect.fail(mapNestedFatalError(rootPath, absolutePath, "readLink", error));
         },
         NotFound: () => Effect.succeed(Option.none()),

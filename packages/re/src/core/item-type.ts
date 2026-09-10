@@ -2,6 +2,7 @@ import { Data, Effect, Option, Schema } from "effect";
 import type { Item } from "./types.js";
 
 export const GradeSchema = Schema.Literals([0, 1, 2, 3]);
+
 export type Grade = typeof GradeSchema.Type;
 
 export interface ContentParseDiagnostic {
@@ -145,6 +146,7 @@ export class ItemCardCountMismatch extends Data.TaggedError("ItemCardCountMismat
 }> {
   override get message(): string {
     const counts = this.parseableTypes.map((type) => `${type.name}: ${type.cardCount}`).join(", ");
+
     return `Item has ${this.metadataCount} metadata record(s), but its content generates a different number of cards (${counts}).`;
   }
 }
@@ -177,24 +179,29 @@ export function matchItemTypes(
 
     for (const type of types) {
       const cards = yield* type.parseCards(item.content).pipe(Effect.option);
+
       if (Option.isNone(cards)) continue;
 
       parseableTypes.push({ name: type.name, cardCount: cards.value.length });
+
       if (cards.value.length === item.cards.length) {
         matches.push({ type, cards: cards.value });
       }
     }
 
     const [first, ...rest] = matches;
+
     if (first) return [first, ...rest] as const;
 
     const [parseable, ...otherParseable] = parseableTypes;
+
     if (parseable) {
       return yield* new ItemCardCountMismatch({
         metadataCount: item.cards.length,
         parseableTypes: [parseable, ...otherParseable],
       });
     }
+
     return yield* new NoMatchingTypeError({
       raw: item.content,
       triedTypes: types.map((type) => type.name),
@@ -217,6 +224,7 @@ export function inferCards(
   const tryNext = (index: number): Effect.Effect<InferredCards<unknown>, NoMatchingTypeError> =>
     Effect.suspend(() => {
       const type = types[index];
+
       if (!type) {
         return Effect.fail(
           new NoMatchingTypeError({

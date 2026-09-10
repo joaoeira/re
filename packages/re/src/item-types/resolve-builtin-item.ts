@@ -33,6 +33,7 @@ export const resolveBuiltinItem = (
   matchItemTypes(builtinTypes, item).pipe(
     Effect.flatMap(([match]) => {
       const cardType = match.type.name;
+
       return isBuiltinCardType(cardType)
         ? Effect.succeed({ ...match, cards: match.cards.map((spec) => ({ ...spec, cardType })) })
         : Effect.die(new Error(`Unexpected built-in item type: ${cardType}`));
@@ -75,11 +76,13 @@ export const annotateBuiltinCardSpecs = <
         NoMatchingTypeError | ItemCardCountMismatch
       >
     >();
+
     const items: Array<{ readonly entry: Entry; readonly spec: BuiltinCardSpec }> = [];
     const errors: Array<AnnotatedBuiltinCards<Entry>["errors"][number]> = [];
 
     for (const entry of entries) {
       let result = specsByItem.get(entry.item);
+
       if (!result) {
         result = yield* resolveBuiltinItem(entry.item).pipe(
           Effect.map(
@@ -88,11 +91,14 @@ export const annotateBuiltinCardSpecs = <
           Effect.result,
         );
         specsByItem.set(entry.item, result);
+
         if (Result.isFailure(result)) errors.push({ entry, error: result.failure });
       }
+
       if (Result.isFailure(result)) continue;
 
       const spec = result.success.get(entry.card.id);
+
       if (spec === undefined) {
         errors.push({
           entry,
@@ -102,6 +108,7 @@ export const annotateBuiltinCardSpecs = <
         items.push({ entry, spec });
       }
     }
+
     return { items, errors };
   });
 
@@ -137,8 +144,10 @@ export const resolveBuiltinCard = (
     const position = cards.findIndex((card) => card.key === reference.cardKey);
     const spec = cards[position];
     const card = item.cards[position];
+
     if (!spec || !card || card.id !== reference.cardId) {
       return yield* new BuiltinCardNotFound(reference);
     }
+
     return { ...match, card, spec };
   });

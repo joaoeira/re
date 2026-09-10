@@ -98,6 +98,7 @@ describe("imagePaths", () => {
       });
 
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure).toBeInstanceOf(InvalidDeckImagePath);
         expect(result.failure.reason).toBe("empty_path");
@@ -112,6 +113,7 @@ describe("imagePaths", () => {
       });
 
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure.reason).toBe("absolute_path_not_allowed");
       }
@@ -125,6 +127,7 @@ describe("imagePaths", () => {
       });
 
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure.reason).toBe("scheme_not_allowed");
       }
@@ -138,6 +141,7 @@ describe("imagePaths", () => {
       });
 
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure.reason).toBe("query_not_allowed");
       }
@@ -151,6 +155,7 @@ describe("imagePaths", () => {
       });
 
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure.reason).toBe("fragment_not_allowed");
       }
@@ -164,6 +169,7 @@ describe("imagePaths", () => {
       });
 
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure.reason).toBe("deck_outside_root");
       }
@@ -177,6 +183,7 @@ describe("imagePaths", () => {
       });
 
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure.reason).toBe("path_outside_root");
       }
@@ -190,6 +197,7 @@ describe("imagePaths", () => {
       });
 
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure.reason).toBe("absolute_root_path_required");
       }
@@ -203,6 +211,7 @@ describe("imagePaths", () => {
       });
 
       expect(Result.isFailure(result)).toBe(true);
+
       if (Result.isFailure(result)) {
         expect(result.failure.reason).toBe("absolute_deck_path_required");
       }

@@ -168,6 +168,7 @@ const formatContentParseError = (error: {
   readonly fragment?: string;
 }) => {
   const fragment = error.fragment === undefined ? "" : ` — ${error.fragment}`;
+
   return `${error.message}${fragment}`;
 };
 
@@ -178,6 +179,7 @@ const prepareReviewEdit = Effect.fn("ReviewStore.prepareEdit")(function* (draft:
         (error) => new ReviewEditValidationError({ field: error.field, message: error.message }),
       ),
     );
+
     const parsed = yield* QAType.parse(content).pipe(
       Effect.mapError(
         (error) =>
@@ -227,8 +229,10 @@ const sameKeys = (left: readonly string[], right: readonly string[]): boolean =>
 const findItemByCardId = (items: readonly Item[], cardId: string) => {
   for (const item of items) {
     const card = item.cards.find((card) => card.id === cardId);
+
     if (card) return { item, card };
   }
+
   return null;
 };
 
@@ -263,10 +267,12 @@ export const makeReviewStoreLive = (
         const validDeckPaths = snapshot.decks
           .filter((deck) => deck.status === "ok")
           .map((deck) => deck.absolutePath);
+
         const totalCards = snapshot.decks.reduce(
           (total, deck) => total + (deck.status === "ok" ? deck.totalCards : 0),
           0,
         );
+
         const issues: ReviewDeckIssue[] = snapshot.decks.flatMap((deck) =>
           deck.status === "ok"
             ? []
@@ -332,6 +338,7 @@ export const makeReviewStoreLive = (
               }),
           ),
         );
+
         const found = findItemByCardId(parsed.items, reference.cardId);
 
         if (found === null) {
@@ -352,6 +359,7 @@ export const makeReviewStoreLive = (
               }),
           ),
         );
+
         const prepareMarkdown = (markdown: string) =>
           transform(
             {
@@ -373,6 +381,7 @@ export const makeReviewStoreLive = (
 
         const prompt = yield* prepareMarkdown(cardSpec.prompt);
         const reveal = yield* prepareMarkdown(cardSpec.reveal);
+
         const draft: ReviewCardDraft =
           cardSpec.cardType === "qa"
             ? yield* QAType.parse(found.item.content).pipe(
@@ -408,6 +417,7 @@ export const makeReviewStoreLive = (
         draft: ReviewCardDraft,
       ) {
         const prepared = yield* prepareReviewEdit(draft);
+
         const mapPersistenceError = (error: WriteError | CardNotFound | ItemValidationError) =>
           Effect.fail(
             new ReviewEditError({
@@ -416,6 +426,7 @@ export const makeReviewStoreLive = (
               message: toWriteErrorMessage(error),
             }),
           );
+
         yield* deckManager
           .modifyItem(
             reference.deckPath,
@@ -432,6 +443,7 @@ export const makeReviewStoreLive = (
                       }),
                   ),
                 );
+
                 if (original.type.name !== prepared.cardType) {
                   return yield* new ReviewEditError({
                     deckPath: reference.deckPath,
@@ -441,6 +453,7 @@ export const makeReviewStoreLive = (
                 }
 
                 const originalKeys = original.cards.map((card) => card.key);
+
                 if (!sameKeys(originalKeys, prepared.cardKeys)) {
                   return yield* new ReviewEditValidationError({
                     field: "content",
@@ -448,6 +461,7 @@ export const makeReviewStoreLive = (
                       "Editing cannot add, remove, or renumber cloze indices during a review.",
                   });
                 }
+
                 const matches = yield* reconcileCards(
                   { keys: originalKeys, cards: current.cards },
                   prepared.cardKeys,
@@ -462,6 +476,7 @@ export const makeReviewStoreLive = (
                       }),
                   ),
                 );
+
                 return {
                   content: prepared.content,
                   cards: matches.map((match) => Option.getOrElse(match, createMetadata)),
@@ -494,6 +509,7 @@ export const makeReviewStoreLive = (
               message: toWriteErrorMessage(error),
             }),
           );
+
         const scheduled = yield* gradeBuiltinCard(reference, grade, now).pipe(
           Effect.provideService(DeckManager, deckManager),
           Effect.provideService(Scheduler, scheduler),

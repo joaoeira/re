@@ -68,6 +68,7 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
           const targetPath = `${options?.directory ?? "/tmp"}/${options?.prefix ?? ""}${nextTempFile++}${options?.suffix ?? ""}`;
           store[targetPath] = "";
           entryTypes[targetPath] = "File";
+
           return targetPath;
         }),
         (targetPath) =>
@@ -81,11 +82,13 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
     readDirectory: (targetPath) =>
       Effect.gen(function* () {
         const forced = config.readDirectoryErrors?.[targetPath];
+
         if (forced) {
           return yield* makeSystemError(forced, "readDirectory", targetPath);
         }
 
         const entries = config.directories[targetPath];
+
         if (entries) {
           return [...entries];
         }
@@ -100,16 +103,19 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
     readFile: (targetPath) =>
       Effect.gen(function* () {
         const forced = config.readFileErrors?.[targetPath];
+
         if (forced) {
           return yield* makeSystemError(forced, "readFile", targetPath);
         }
 
         const bytes = bytesStore[targetPath];
+
         if (bytes !== undefined) {
           return bytes;
         }
 
         const content = store[targetPath];
+
         if (content !== undefined) {
           return textEncoder.encode(content);
         }
@@ -124,16 +130,19 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
     readFileString: (targetPath) =>
       Effect.gen(function* () {
         const forced = config.readFileErrors?.[targetPath];
+
         if (forced) {
           return yield* makeSystemError(forced, "readFileString", targetPath);
         }
 
         const bytes = bytesStore[targetPath];
+
         if (bytes !== undefined) {
           return textDecoder.decode(bytes);
         }
 
         const content = store[targetPath];
+
         if (content !== undefined) {
           return content;
         }
@@ -148,6 +157,7 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
     writeFile: (targetPath, data, options) =>
       Effect.gen(function* () {
         const forced = config.writeFileErrors?.[targetPath];
+
         if (forced) {
           return yield* makeSystemError(forced, "writeFile", targetPath);
         }
@@ -169,6 +179,7 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
     writeFileString: (targetPath, data, options) =>
       Effect.gen(function* () {
         const forced = config.writeFileErrors?.[targetPath];
+
         if (forced) {
           return yield* makeSystemError(forced, "writeFileString", targetPath);
         }
@@ -190,6 +201,7 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
     makeDirectory: (targetPath) =>
       Effect.gen(function* () {
         const forced = config.makeDirectoryErrors?.[targetPath];
+
         if (forced) {
           return yield* makeSystemError(forced, "makeDirectory", targetPath);
         }
@@ -198,12 +210,14 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
     rename: (oldPath, newPath) =>
       Effect.gen(function* () {
         const forced = config.renameErrors?.[oldPath];
+
         if (forced) {
           return yield* makeSystemError(forced, "rename", oldPath);
         }
 
         const content = store[oldPath];
         const bytes = bytesStore[oldPath];
+
         if (content === undefined && bytes === undefined) {
           return yield* makeSystemError("NotFound", "rename", oldPath);
         }
@@ -225,6 +239,7 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
     remove: (targetPath) =>
       Effect.gen(function* () {
         const forced = config.removeErrors?.[targetPath];
+
         if (forced) {
           return yield* makeSystemError(forced, "remove", targetPath);
         }
@@ -237,11 +252,13 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
     readLink: (targetPath) =>
       Effect.gen(function* () {
         const forced = config.readLinkErrors?.[targetPath];
+
         if (forced) {
           return yield* makeSystemError(forced, "readLink", targetPath);
         }
 
         const target = config.symlinkTargets?.[targetPath];
+
         if (target !== undefined) {
           return target;
         }
@@ -256,11 +273,13 @@ export const createMockFileSystem = (config: MockFileSystemConfig): MockFileSyst
     stat: (targetPath) =>
       Effect.gen(function* () {
         const forced = config.statErrors?.[targetPath];
+
         if (forced) {
           return yield* makeSystemError(forced, "stat", targetPath);
         }
 
         const type = entryTypes[targetPath];
+
         if (!type) {
           return yield* makeSystemError("NotFound", "stat", targetPath);
         }

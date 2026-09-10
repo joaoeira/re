@@ -326,6 +326,7 @@ describe("math-context-aware replacement", () => {
     const contexts: boolean[] = [];
     replaceClozeDeletionsWithContext("$E = {{c1::mc^2}}$", (d) => {
       contexts.push(d.insideMath);
+
       return d.hidden;
     });
 
@@ -336,6 +337,7 @@ describe("math-context-aware replacement", () => {
     const contexts: boolean[] = [];
     replaceClozeDeletionsWithContext("The {{c1::answer}} is here.", (d) => {
       contexts.push(d.insideMath);
+
       return d.hidden;
     });
 
@@ -346,6 +348,7 @@ describe("math-context-aware replacement", () => {
     const contexts: boolean[] = [];
     replaceClozeDeletionsWithContext("The {{c1::capital}} of $E = {{c2::mc^2}}$", (d) => {
       contexts.push(d.insideMath);
+
       return d.hidden;
     });
 
@@ -356,6 +359,7 @@ describe("math-context-aware replacement", () => {
     const contexts: boolean[] = [];
     replaceClozeDeletionsWithContext("$$E = {{c1::mc^2}}$$", (d) => {
       contexts.push(d.insideMath);
+
       return d.hidden;
     });
 
@@ -366,6 +370,7 @@ describe("math-context-aware replacement", () => {
     const contexts: boolean[] = [];
     replaceClozeDeletionsWithContext("Price is \\$5, answer: {{c1::yes}}", (d) => {
       contexts.push(d.insideMath);
+
       return d.hidden;
     });
 
@@ -376,6 +381,7 @@ describe("math-context-aware replacement", () => {
     const contexts: boolean[] = [];
     replaceClozeDeletionsWithContext("$\\frac{1}{{{c1::x^{2}}}}$", (d) => {
       contexts.push(d.insideMath);
+
       return d.hidden;
     });
 
@@ -386,6 +392,7 @@ describe("math-context-aware replacement", () => {
     const contexts: boolean[] = [];
     replaceClozeDeletionsWithContext("`$not math$` and {{c1::answer}}", (d) => {
       contexts.push(d.insideMath);
+
       return d.hidden;
     });
 
@@ -411,6 +418,7 @@ describe("math-context-aware replacement", () => {
     const contexts: boolean[] = [];
     replaceClozeDeletionsWithContext("${{c1::a}}$ then {{c2::b}} then ${{c3::c}}$", (d) => {
       contexts.push(d.insideMath);
+
       return d.hidden;
     });
 
@@ -421,6 +429,7 @@ describe("math-context-aware replacement", () => {
     const contexts: boolean[] = [];
     replaceClozeDeletionsWithContext("This costs $5 and {{c1::answer}}", (d) => {
       contexts.push(d.insideMath);
+
       return d.hidden;
     });
 
@@ -431,6 +440,7 @@ describe("math-context-aware replacement", () => {
     const contexts: boolean[] = [];
     replaceClozeDeletionsWithContext("Price is {{c1::$5}} and $x = {{c2::2}}$", (d) => {
       contexts.push(d.insideMath);
+
       return d.hidden;
     });
 
@@ -441,6 +451,7 @@ describe("math-context-aware replacement", () => {
     const contexts: boolean[] = [];
     replaceClozeDeletionsWithContext("``$x$`` and {{c1::answer}}", (d) => {
       contexts.push(d.insideMath);
+
       return d.hidden;
     });
 
@@ -451,6 +462,7 @@ describe("math-context-aware replacement", () => {
     const contexts: boolean[] = [];
     replaceClozeDeletionsWithContext("$ not math $ and {{c1::answer}}", (d) => {
       contexts.push(d.insideMath);
+
       return d.hidden;
     });
 
@@ -461,6 +473,7 @@ describe("math-context-aware replacement", () => {
     const contexts: boolean[] = [];
     replaceClozeDeletionsWithContext("$$unclosed and $x = {{c1::2}}$", (d) => {
       contexts.push(d.insideMath);
+
       return d.hidden;
     });
 

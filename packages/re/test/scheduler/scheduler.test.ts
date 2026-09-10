@@ -32,6 +32,7 @@ describe("Scheduler", () => {
   it("selects due cards by their stored deadline, excluding new and unscheduled cards", async () => {
     const now = new Date("2025-01-10T12:00:00Z");
     const lastReview = new Date("2025-01-01T12:00:00Z");
+
     const cards = {
       overdue: makeCard({ state: State.Review, stability: 100, lastReview, due: lastReview }),
       atBoundary: makeCard({ state: State.Learning, lastReview, due: now }),
@@ -48,6 +49,7 @@ describe("Scheduler", () => {
 
     const dueNames = await Effect.gen(function* () {
       const scheduler = yield* Scheduler;
+
       return Object.entries(cards)
         .filter(([, card]) => scheduler.isDue(card, now))
         .map(([name]) => name);
@@ -61,6 +63,7 @@ describe("Scheduler", () => {
     const previous = new Date("2025-01-01T12:00:00Z");
     await Effect.gen(function* () {
       const scheduler = yield* Scheduler;
+
       for (const timestamps of [
         { lastReview: previous, due: null },
         { lastReview: null, due: previous },
@@ -74,6 +77,7 @@ describe("Scheduler", () => {
 
   it("schedules a new card graded Good for the default ten-minute learning step", async () => {
     const now = new Date("2025-01-10T12:00:00Z");
+
     const card = makeCard({
       state: State.New,
       due: null,
@@ -82,6 +86,7 @@ describe("Scheduler", () => {
 
     const result = await Effect.gen(function* () {
       const scheduler = yield* Scheduler;
+
       return yield* scheduler.scheduleReview(card, 2, now);
     }).pipe(Effect.provide(SchedulerLive), Effect.runPromise);
 
@@ -91,6 +96,7 @@ describe("Scheduler", () => {
 
   it("round-trips scheduled due through serializer and parser", async () => {
     const now = new Date("2025-01-10T12:00:00Z");
+
     const card = makeCard({
       state: State.New,
       due: null,
@@ -99,6 +105,7 @@ describe("Scheduler", () => {
 
     const scheduled = await Effect.gen(function* () {
       const scheduler = yield* Scheduler;
+
       return yield* scheduler.scheduleReview(card, 2, now);
     }).pipe(Effect.provide(SchedulerLive), Effect.runPromise);
 

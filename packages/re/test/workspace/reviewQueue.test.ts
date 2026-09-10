@@ -120,13 +120,21 @@ S4
 const MockFileSystem = FileSystem.layerNoop({
   readFileString: (path) => {
     if (path === "/decks/new.md") return Effect.succeed(newCardContent);
+
     if (path === "/decks/due.md") return Effect.succeed(dueCardContent);
+
     if (path === "/decks/mixed.md") return Effect.succeed(mixedContent);
+
     if (path === "/decks/gaps-a.md") return Effect.succeed(gapsAContent);
+
     if (path === "/decks/gaps-b.md") return Effect.succeed(gapsBContent);
+
     if (path === "/decks/shuffled.md") return Effect.succeed(shuffledContent);
+
     if (path === "/decks/broken.md") return Effect.succeed("<!--@ bad metadata-->\n");
+
     if (path === "/decks/empty.md") return Effect.succeed("# No cards yet\n");
+
     return Effect.fail(
       PlatformError.systemError({
         _tag: "NotFound",
@@ -163,6 +171,7 @@ const runQueue = (input: {
 }) =>
   Effect.gen(function* () {
     const builder = yield* ReviewQueueBuilder;
+
     return yield* builder.buildQueue({
       deckPaths: input.deckPaths,
       rootPath: input.rootPath ?? "/decks",
@@ -175,6 +184,7 @@ describe("ReviewQueueBuilder", () => {
   it("reports every deck failure in input order while filtering and limiting usable cards", async () => {
     const result = await Effect.gen(function* () {
       const decks = yield* DeckManager;
+
       const delayedDecks = Layer.succeed(DeckManager, {
         ...decks,
         readDeck: (deckPath) =>
@@ -189,6 +199,7 @@ describe("ReviewQueueBuilder", () => {
 
       return yield* Effect.gen(function* () {
         const builder = yield* ReviewQueueBuilder;
+
         return yield* builder.buildQueue({
           deckPaths: [
             "/decks/blocked.md",
@@ -226,6 +237,7 @@ describe("ReviewQueueBuilder", () => {
       deckPaths: ["/decks/empty.md"],
       layer: BuilderLayer(IdentityOrderingStrategy),
     });
+
     const failed = await runQueue({
       deckPaths: ["/decks/missing.md"],
       layer: BuilderLayer(IdentityOrderingStrategy),
@@ -242,6 +254,7 @@ describe("ReviewQueueBuilder", () => {
 
   it("propagates defects and interruption instead of reporting successful partial queues", async () => {
     const defect = new Error("Filesystem implementation failed");
+
     for (const [kind, failure] of [
       ["defect", Effect.die(defect)],
       ["interruption", Effect.interrupt],
@@ -251,8 +264,10 @@ describe("ReviewQueueBuilder", () => {
           Layer.merge(FileSystem.layerNoop({ readFileString: () => failure }), Path.layer),
         ),
       );
+
       const exit = await Effect.gen(function* () {
         const builder = yield* ReviewQueueBuilder;
+
         return yield* builder.buildQueue({
           deckPaths: ["/decks/unavailable.md"],
           rootPath: "/decks",
@@ -261,6 +276,7 @@ describe("ReviewQueueBuilder", () => {
       }).pipe(Effect.provide(BuilderLayer(IdentityOrderingStrategy, decks)), Effect.runPromiseExit);
 
       expect(Exit.isFailure(exit)).toBe(true);
+
       if (Exit.isFailure(exit)) {
         if (kind === "interruption") {
           expect(Exit.hasInterrupts(exit)).toBe(true);
@@ -365,8 +381,10 @@ describe("ReviewQueue ordering from spec", () => {
     });
 
     let seenDue = false;
+
     for (const item of result.items) {
       if (item.category === "due") seenDue = true;
+
       if (item.category === "new" && seenDue) {
         throw new Error("New card found after due card");
       }
@@ -380,8 +398,10 @@ describe("ReviewQueue ordering from spec", () => {
     });
 
     let seenNew = false;
+
     for (const item of result.items) {
       if (item.category === "new") seenNew = true;
+
       if (item.category === "due" && seenNew) {
         throw new Error("Due card found after new card");
       }
@@ -392,6 +412,7 @@ describe("ReviewQueue ordering from spec", () => {
     const build = (cardLimit: number | null = null) =>
       Effect.gen(function* () {
         const builder = yield* ReviewQueueBuilder;
+
         return yield* builder.buildQueue({
           deckPaths: ["/decks/shuffled.md"],
           rootPath: "/decks",
@@ -401,6 +422,7 @@ describe("ReviewQueue ordering from spec", () => {
       }).pipe(Effect.provide(SpecLayer(NewFirstShuffledSpec)));
 
     const orderings: string[] = [];
+
     for (const seed of ["seed", "second", "third", "fourth"]) {
       const result = await Effect.runPromise(build().pipe(Random.withSeed(seed)));
       const ids = result.items.map((item) => item.card.id);
@@ -410,6 +432,7 @@ describe("ReviewQueue ordering from spec", () => {
       expect(limited.items.map((item) => item.card.id)).toEqual(ids.slice(0, 2));
       orderings.push(ids.join(","));
     }
+
     expect(new Set(orderings).size).toBeGreaterThan(1);
   });
 
@@ -481,6 +504,7 @@ describe("Composable ordering primitives", () => {
     const before = [...items];
     const program = shuffle<QueueItem>()(items);
     const orderings: string[] = [];
+
     for (const seed of ["seed", "second", "third", "fourth"]) {
       const first = await Effect.runPromise(program.pipe(Random.withSeed(seed)));
       const again = await Effect.runPromise(program.pipe(Random.withSeed(seed)));
@@ -489,6 +513,7 @@ describe("Composable ordering primitives", () => {
       expect(items).toEqual(before);
       orderings.push(first.map((item) => item.card.id).join(","));
     }
+
     expect(new Set(orderings).size).toBeGreaterThan(1);
   });
 

@@ -32,6 +32,7 @@ const createTestLayer = (options?: {
     listDecks: () => Effect.succeed([]),
     appendItem: (deckPath, item, itemType) => {
       options?.onAppend?.({ deckPath, item, itemType });
+
       return options?.appendError === undefined ? Effect.void : Effect.fail(options.appendError);
     },
     importImageFromBytes: () => Effect.die(new Error("Image import is not used in card tests.")),
@@ -128,11 +129,13 @@ describe("createCardForUi", () => {
       });
 
       expect(result._tag).toBe("FieldError");
+
       if (result._tag === "FieldError") {
         expect(result.field).toBe("content");
         expect(result.message).toContain("character 15");
         expect(result.message).toContain("{{cx::");
       }
+
       expect(appended).toBe(false);
     }).pipe(
       Effect.provide(

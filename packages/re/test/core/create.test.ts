@@ -16,9 +16,11 @@ describe("generateId", () => {
 
   it("generates unique IDs", () => {
     const ids = new Set<string>();
+
     for (let i = 0; i < 100; i++) {
       ids.add(generateId());
     }
+
     assert.strictEqual(ids.size, 100);
   });
 });

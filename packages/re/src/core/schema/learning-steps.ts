@@ -18,6 +18,7 @@ export const LearningStepsFromString: Schema.Codec<number, string, never, never>
             ),
           );
         }
+
         return Effect.succeed(parseInt(s, 10));
       }),
       encode: SchemaGetter.transform((n) => n.toString()),

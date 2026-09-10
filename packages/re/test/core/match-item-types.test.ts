@@ -42,6 +42,7 @@ describe("matchItemTypes", () => {
           ],
           saved(2),
         );
+
         expect(matches.map((match) => match.type.name)).toEqual(["first", "second"]);
         expect(matches[0].cards.map((card) => card.key)).toEqual(["0", "1"]);
         expectTypeOf(matches[0].cards).toEqualTypeOf<readonly EvaluableCardSpec<GradeError>[]>();
@@ -56,6 +57,7 @@ describe("matchItemTypes", () => {
           [adaptItemType(type("first", 2)), adaptItemType(type("second", 1))],
           saved(3),
         ).pipe(Effect.result);
+
         expect(result).toMatchObject({
           _tag: "Failure",
           failure: {
@@ -76,6 +78,7 @@ describe("matchItemTypes", () => {
         [adaptItemType(type("first", 1))],
         saved(1, "invalid"),
       ).pipe(Effect.result);
+
       expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "NoMatchingTypeError" } });
     }),
   );
@@ -83,6 +86,7 @@ describe("matchItemTypes", () => {
   it.effect("does not hide a parser defect by falling back to another type", () =>
     Effect.gen(function* () {
       const defect = new Error("broken parser");
+
       const result = yield* matchItemTypes(
         [
           { name: "broken", parseCards: () => Effect.die(defect) },
@@ -90,6 +94,7 @@ describe("matchItemTypes", () => {
         ],
         saved(1),
       ).pipe(Effect.exit);
+
       expect(result).toEqual(Exit.die(defect));
     }),
   );

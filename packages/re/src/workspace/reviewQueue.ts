@@ -66,16 +66,21 @@ export const collectDeckPathsFromSelection = (
     for (const node of nodes) {
       if (node.kind === "group" && node.relativePath === targetPath) {
         collectFromNode(node);
+
         return true;
       }
+
       if (node.kind === "leaf" && node.relativePath === targetPath) {
         paths.push(node.snapshot.absolutePath);
+
         return true;
       }
+
       if (node.kind === "group" && findAndCollect(node.children, targetPath)) {
         return true;
       }
     }
+
     return false;
   };
 
@@ -84,6 +89,7 @@ export const collectDeckPathsFromSelection = (
       for (const node of tree) {
         collectFromNode(node);
       }
+
       break;
     case "folder":
       findAndCollect(tree, selection.path);
@@ -120,8 +126,11 @@ export const chain =
 
 export const byDueDate: Order.Order<QueueItem> = Order.make((a, b) => {
   if (!a.dueDate && !b.dueDate) return 0;
+
   if (!a.dueDate) return 1;
+
   if (!b.dueDate) return -1;
+
   return Order.Number(a.dueDate.getTime(), b.dueDate.getTime());
 });
 
@@ -227,7 +236,9 @@ const orderNewFirst = (items: readonly QueueItem[]): Effect.Effect<readonly Queu
     const [dueItems, newItems] = Arr.partition(items, (i) =>
       i.category === "new" ? Result.succeed(i) : Result.fail(i),
     );
+
     const orderedDue = yield* sortBy(byDueDate)(dueItems);
+
     return [...newItems, ...orderedDue];
   });
 
@@ -236,7 +247,9 @@ const orderDueFirst = (items: readonly QueueItem[]): Effect.Effect<readonly Queu
     const [dueItems, newItems] = Arr.partition(items, (i) =>
       i.category === "new" ? Result.succeed(i) : Result.fail(i),
     );
+
     const orderedDue = yield* sortBy(byDueDate)(dueItems);
+
     return [...orderedDue, ...newItems];
   });
 
@@ -271,6 +284,7 @@ export const ReviewQueueBuilderLive = Layer.effect(
       buildQueue: ({ deckPaths, rootPath, now, options: rawOptions }) =>
         Effect.gen(function* () {
           const options = normalizeReviewQueueOptions(rawOptions);
+
           const results = yield* Effect.all(
             deckPaths.map((p) => deckManager.readDeck(p).pipe(Effect.result)),
             { concurrency: "unbounded" },
@@ -280,8 +294,10 @@ export const ReviewQueueBuilderLive = Layer.effect(
           const deckErrors: ReadError[] = [];
 
           let filePosition = 0;
+
           for (let i = 0; i < deckPaths.length; i++) {
             const result = results[i]!;
+
             if (Result.isFailure(result)) {
               deckErrors.push(result.failure);
               continue;
@@ -307,6 +323,7 @@ export const ReviewQueueBuilderLive = Layer.effect(
                   });
                 } else {
                   const dueDate = resolveDueDateIfDue(card, now);
+
                   if (dueDate !== null) {
                     allItems.push({
                       deckPath,
@@ -320,12 +337,14 @@ export const ReviewQueueBuilderLive = Layer.effect(
                     });
                   }
                 }
+
                 filePosition++;
               }
             }
           }
 
           const filteredItems = applyCategoryFilters(allItems, options);
+
           const orderedItems = yield* (() => {
             switch (options.order) {
               case "default":
@@ -336,6 +355,7 @@ export const ReviewQueueBuilderLive = Layer.effect(
                 return orderNewFirst(filteredItems);
             }
           })();
+
           const limitedItems = applyCardLimit(orderedItems, options);
 
           return {

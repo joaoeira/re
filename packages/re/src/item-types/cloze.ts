@@ -65,6 +65,7 @@ const toDiagnostic = (issue: ClozeSyntaxIssue): ContentParseDiagnostic =>
 const toContentParseError = (error: ClozeSyntaxError, raw: string): ContentParseError => {
   const primary = error.issues[0];
   const diagnostic = toDiagnostic(primary);
+
   return new ContentParseError({
     type: CLOZE,
     ...diagnostic,
@@ -80,6 +81,7 @@ const generateReveal = (content: ClozeContent, targetIndex: number): string =>
     if (deletion.index !== targetIndex) {
       return deletion.hidden;
     }
+
     return deletion.insideMath ? `\\boldsymbol{${deletion.hidden}}` : `**${deletion.hidden}**`;
   });
 
@@ -88,9 +90,11 @@ const generatePrompt = (content: ClozeContent, targetIndex: number): string =>
     if (deletion.index !== targetIndex) {
       return deletion.hidden;
     }
+
     if (deletion.insideMath) {
       return deletion.hint ? `\\text{[${escapeTexText(deletion.hint)}]}` : `\\text{[\\ldots]}`;
     }
+
     return deletion.hint ? `**[${deletion.hint}]**` : "**[...]**";
   });
 
@@ -130,6 +134,7 @@ export const ClozeType: ItemType<ClozeContent, Grade, never> = {
   cards: (content: ClozeContent): ReadonlyArray<CardSpec<Grade, never>> => {
     const indices: number[] = [];
     let lastIndex: number | null = null;
+
     for (const deletion of content.deletions) {
       if (deletion.index !== lastIndex) {
         indices.push(deletion.index);

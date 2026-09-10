@@ -66,15 +66,19 @@ export const prepareBuiltinReviewQueue: (input: {
   "prepareBuiltinReviewQueue",
 )(function* ({ rootPath, deckPaths, now, options = DEFAULT_REVIEW_QUEUE_OPTIONS }) {
   const builder = yield* ReviewQueueBuilder;
+
   const queue = yield* builder.buildQueue({
     rootPath,
     deckPaths,
     now,
     options: { ...options, cardLimit: null },
   });
+
   const resolved = yield* annotateBuiltinCardSpecs(queue.items);
+
   const selected =
     options.cardLimit === null ? resolved.items : resolved.items.slice(0, options.cardLimit);
+
   const cards = selected.map(
     ({ entry, spec }): PreparedReviewCard => ({
       reference: { deckPath: entry.deckPath, cardId: entry.card.id, cardKey: spec.key },
@@ -84,6 +88,7 @@ export const prepareBuiltinReviewQueue: (input: {
       content: { prompt: spec.prompt, reveal: spec.reveal, cardType: spec.cardType },
     }),
   );
+
   return {
     cards,
     totalNew: cards.filter((card) => card.category === "new").length,
@@ -134,6 +139,7 @@ export const gradeBuiltinCard: (
   Effect.fn("gradeBuiltinCard")(function* (reference, grade, now) {
     const manager = yield* DeckManager;
     const scheduler = yield* Scheduler;
+
     return yield* manager.modifyCardMetadata(
       reference.deckPath,
       reference.cardId,
@@ -142,6 +148,7 @@ export const gradeBuiltinCard: (
           const { spec } = yield* resolveBuiltinCard(item, reference);
           const evaluatedGrade = yield* spec.evaluate(grade);
           const scheduled = yield* scheduler.scheduleReview(card, evaluatedGrade, now);
+
           return {
             metadata: scheduled.updatedCard,
             result: { ...scheduled, previousCard: card, grade: evaluatedGrade },

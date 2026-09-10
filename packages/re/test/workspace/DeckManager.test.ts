@@ -42,6 +42,7 @@ const twoSidedType = adaptItemType({
   name: "two-sided",
   parse: (content) => {
     const parts = content.split("---\n");
+
     if (parts.length < 2) {
       return Effect.fail(
         new ContentParseError({
@@ -51,6 +52,7 @@ const twoSidedType = adaptItemType({
         }),
       );
     }
+
     return Effect.succeed({ front: parts[0]!, back: parts[1]! });
   },
   cards: () => [
@@ -69,6 +71,7 @@ const twoCardType = adaptItemType({
   name: "two-card",
   parse: (content) => {
     const parts = content.split("---\n");
+
     if (parts.length < 2) {
       return Effect.fail(
         new ContentParseError({
@@ -78,6 +81,7 @@ const twoCardType = adaptItemType({
         }),
       );
     }
+
     return Effect.succeed({ front: parts[0]!, back: parts[1]! });
   },
   cards: () => [
@@ -104,6 +108,7 @@ const buildLayer = (config: MockFileSystemConfig) => {
   const mock = createMockFileSystem(config);
   const deps = Layer.merge(mock.layer, Path.layer);
   const layer = Layer.provide(DeckManagerLive, deps);
+
   return { layer, store: mock.store };
 };
 
@@ -112,8 +117,10 @@ const run = <A>(
   fn: (manager: DeckManager) => Effect.Effect<A, unknown>,
 ) => {
   const { layer } = buildLayer(config);
+
   return Effect.gen(function* () {
     const manager = yield* DeckManager;
+
     return yield* fn(manager);
   }).pipe(Effect.provide(layer), Effect.runPromise);
 };
@@ -123,9 +130,11 @@ const runResult = <A, E>(
   fn: (manager: DeckManager) => Effect.Effect<A, E>,
 ) => {
   const { layer, store } = buildLayer(config);
+
   return {
     promise: Effect.gen(function* () {
       const manager = yield* DeckManager;
+
       return yield* fn(manager);
     }).pipe(Effect.result, Effect.provide(layer), Effect.runPromise),
     store,
@@ -137,9 +146,11 @@ const runSuccess = <A>(
   fn: (manager: DeckManager) => Effect.Effect<A, unknown>,
 ) => {
   const { layer, store } = buildLayer(config);
+
   return {
     promise: Effect.gen(function* () {
       const manager = yield* DeckManager;
+
       return yield* fn(manager);
     }).pipe(Effect.provide(layer), Effect.runPromise),
     store,
@@ -149,6 +160,7 @@ const runSuccess = <A>(
 describe("DeckManager.readDeck", () => {
   it("returns parsed file for valid deck", async () => {
     const content = `# Title\n${singleCardItem("abc", "Question\n---\nAnswer\n")}`;
+
     const result = await run(
       {
         entryTypes: {},
@@ -168,11 +180,14 @@ describe("DeckManager.readDeck", () => {
     const { promise } = runResult({ entryTypes: {}, directories: {} }, (m) =>
       m.readDeck("/missing.md"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(DeckNotFound);
+
       if (result.failure instanceof DeckNotFound) {
         expect(result.failure.deckPath).toBe("/missing.md");
       }
@@ -189,9 +204,11 @@ describe("DeckManager.readDeck", () => {
       },
       (m) => m.readDeck("/blocked.md"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(DeckReadError);
     }
@@ -206,9 +223,11 @@ describe("DeckManager.readDeck", () => {
       },
       (m) => m.readDeck("/bad.md"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(DeckParseError);
     }
@@ -224,12 +243,14 @@ describe("DeckManager.updateCardMetadata", () => {
       directories: {},
       fileContents: { "/deck.md": deckContent },
     };
+
     const { promise, store } = runSuccess(config, (m) => {
       const updated = {
         ...meta("card-a"),
         stability: numericField(5),
         difficulty: numericField(3),
       };
+
       return m.updateCardMetadata("/deck.md", "card-a", updated);
     });
 
@@ -244,6 +265,7 @@ describe("DeckManager.updateCardMetadata", () => {
       directories: {},
       fileContents: { "/deck.md": deckContent },
     };
+
     const { promise, store } = runSuccess(config, (m) => {
       const updated = {
         ...meta("card-a"),
@@ -251,6 +273,7 @@ describe("DeckManager.updateCardMetadata", () => {
         lastReview: new Date("2025-01-01T00:00:00.000Z"),
         due: new Date("2025-01-08T00:00:00.000Z"),
       };
+
       return m.updateCardMetadata("/deck.md", "card-a", updated);
     });
 
@@ -266,6 +289,7 @@ describe("DeckManager.updateCardMetadata", () => {
       directories: {},
       fileContents: { "/deck.md": deckContent },
     };
+
     const { promise, store } = runSuccess(config, (m) =>
       m.updateCardMetadata("/deck.md", "card-a", meta("card-a")),
     );
@@ -278,13 +302,16 @@ describe("DeckManager.updateCardMetadata", () => {
 
   it("preserves other cards in the same item", async () => {
     const multiCard = `<!--@ mc-a 0 0 0 0-->\n<!--@ mc-b 0 0 2 0 2025-01-01T00:00:00.000Z 2025-01-01T00:00:00.000Z-->\nShared\n---\nAnswer\n`;
+
     const config: MockFileSystemConfig = {
       entryTypes: {},
       directories: {},
       fileContents: { "/deck.md": multiCard },
     };
+
     const { promise, store } = runSuccess(config, (m) => {
       const updated = { ...meta("mc-a"), stability: numericField(9) };
+
       return m.updateCardMetadata("/deck.md", "mc-a", updated);
     });
 
@@ -304,11 +331,14 @@ describe("DeckManager.updateCardMetadata", () => {
       },
       (m) => m.updateCardMetadata("/deck.md", "nope", meta("nope")),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(CardNotFound);
+
       if (result.failure instanceof CardNotFound) {
         expect(result.failure.cardId).toBe("nope");
       }
@@ -319,9 +349,11 @@ describe("DeckManager.updateCardMetadata", () => {
     const { promise } = runResult({ entryTypes: {}, directories: {} }, (m) =>
       m.updateCardMetadata("/missing.md", "x", meta("x")),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(DeckNotFound);
     }
@@ -331,6 +363,7 @@ describe("DeckManager.updateCardMetadata", () => {
 describe("DeckManager.modifyItem", () => {
   it("rejects duplicate generated keys without changing the saved deck", async () => {
     const original = singleCardItem("existing", "Question\n---\nAnswer\n");
+
     const duplicateKeyType = {
       ...twoCardType,
       parseCards: (content: string) =>
@@ -338,6 +371,7 @@ describe("DeckManager.modifyItem", () => {
           .parseCards(content)
           .pipe(Effect.map((cards) => cards.map((card) => ({ ...card, key: "shared" })))),
     };
+
     const { promise, store } = runResult(
       { entryTypes: {}, directories: {}, fileContents: { "/deck.md": original } },
       (manager) =>
@@ -370,10 +404,12 @@ describe("DeckManager.replaceItem", () => {
       directories: {},
       fileContents: { "/deck.md": deckContent },
     };
+
     const newItem: Item = {
       cards: [meta("item-a")],
       content: "NewQ\n---\nNewA",
     };
+
     const { promise, store } = runSuccess(config, (m) =>
       m.replaceItem("/deck.md", "item-a", newItem, twoSidedType),
     );
@@ -399,9 +435,11 @@ describe("DeckManager.replaceItem", () => {
           twoSidedType,
         ),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(CardNotFound);
     }
@@ -413,15 +451,20 @@ describe("DeckManager.replaceItem", () => {
       directories: {},
       fileContents: { "/deck.md": deckContent },
     };
+
     const newItem: Item = { cards: [meta("item-a")], content: "Q\n---\nA\n" };
+
     const { promise } = runResult(config, (m) =>
       m.replaceItem("/deck.md", "item-a", newItem, twoCardType),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(ItemValidationError);
+
       if (result.failure instanceof ItemValidationError) {
         expect(result.failure.message).toContain("Card count mismatch");
       }
@@ -434,18 +477,23 @@ describe("DeckManager.replaceItem", () => {
       directories: {},
       fileContents: { "/deck.md": deckContent },
     };
+
     const newItem: Item = {
       cards: [meta("item-a")],
       content: "no separator here",
     };
+
     const { promise } = runResult(config, (m) =>
       m.replaceItem("/deck.md", "item-a", newItem, twoSidedType),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(ItemValidationError);
+
       if (result.failure instanceof ItemValidationError) {
         expect(result.failure.message).toContain("Content parse failed");
       }
@@ -456,15 +504,18 @@ describe("DeckManager.replaceItem", () => {
 describe("DeckManager.appendItem", () => {
   it("appends to deck with existing items", async () => {
     const existing = singleCardItem("existing", "Q\n---\nA\n");
+
     const config: MockFileSystemConfig = {
       entryTypes: {},
       directories: {},
       fileContents: { "/deck.md": existing },
     };
+
     const newItem: Item = {
       cards: [meta("new-card")],
       content: "NewQ\n---\nNewA\n",
     };
+
     const { promise, store } = runSuccess(config, (m) =>
       m.appendItem("/deck.md", newItem, twoSidedType),
     );
@@ -481,7 +532,9 @@ describe("DeckManager.appendItem", () => {
       directories: {},
       fileContents: { "/deck.md": "# Title\n" },
     };
+
     const newItem: Item = { cards: [meta("first")], content: "Q\n---\nA\n" };
+
     const { promise, store } = runSuccess(config, (m) =>
       m.appendItem("/deck.md", newItem, twoSidedType),
     );
@@ -492,12 +545,15 @@ describe("DeckManager.appendItem", () => {
 
   it("ensures blank line separator when last content lacks trailing newline", async () => {
     const existing = `${makeCard("a")}\nContent without newline`;
+
     const config: MockFileSystemConfig = {
       entryTypes: {},
       directories: {},
       fileContents: { "/deck.md": existing },
     };
+
     const newItem: Item = { cards: [meta("b")], content: "Q\n---\nA\n" };
+
     const { promise, store } = runSuccess(config, (m) =>
       m.appendItem("/deck.md", newItem, twoSidedType),
     );
@@ -513,7 +569,9 @@ describe("DeckManager.appendItem", () => {
       directories: {},
       fileContents: { "/deck.md": "# No trailing newline" },
     };
+
     const newItem: Item = { cards: [meta("first")], content: "Q\n---\nA\n" };
+
     const { promise, store } = runSuccess(config, (m) =>
       m.appendItem("/deck.md", newItem, twoSidedType),
     );
@@ -528,11 +586,13 @@ describe("DeckManager.appendItem", () => {
       directories: {},
       fileContents: { "/deck.md": "# Title\n" },
     };
+
     const newItem: Item = { cards: [meta("a")], content: "Q\n---\nA\n" };
     const { promise } = runResult(config, (m) => m.appendItem("/deck.md", newItem, twoCardType));
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(ItemValidationError);
     }
@@ -542,15 +602,18 @@ describe("DeckManager.appendItem", () => {
 describe("DeckManager.removeItem", () => {
   it("restores a removed item at its original position", async () => {
     const content = `${singleCardItem("a", "QA\n")}${singleCardItem("b", "QB\n")}${singleCardItem("c", "QC\n")}`;
+
     const config: MockFileSystemConfig = {
       entryTypes: {},
       directories: {},
       fileContents: { "/deck.md": content },
     };
+
     const { promise, store } = runSuccess(config, (manager) =>
       Effect.gen(function* () {
         const removed = yield* manager.removeItem("/deck.md", "b");
         yield* manager.restoreItem("/deck.md", removed);
+
         return removed;
       }),
     );
@@ -564,11 +627,13 @@ describe("DeckManager.removeItem", () => {
 
   it("removes item from middle, preserves surrounding items", async () => {
     const content = `${singleCardItem("a", "QA\n")}${singleCardItem("b", "QB\n")}${singleCardItem("c", "QC\n")}`;
+
     const config: MockFileSystemConfig = {
       entryTypes: {},
       directories: {},
       fileContents: { "/deck.md": content },
     };
+
     const { promise, store } = runSuccess(config, (m) => m.removeItem("/deck.md", "b"));
 
     await promise;
@@ -581,11 +646,13 @@ describe("DeckManager.removeItem", () => {
 
   it("removes last item, leaves only preamble", async () => {
     const content = `# Title\n${singleCardItem("only", "Q\n---\nA\n")}`;
+
     const config: MockFileSystemConfig = {
       entryTypes: {},
       directories: {},
       fileContents: { "/deck.md": content },
     };
+
     const { promise, store } = runSuccess(config, (m) => m.removeItem("/deck.md", "only"));
 
     await promise;
@@ -594,6 +661,7 @@ describe("DeckManager.removeItem", () => {
 
   it("fails with CardNotFound for nonexistent ID", async () => {
     const content = singleCardItem("a", "Q\n");
+
     const { promise } = runResult(
       {
         entryTypes: {},
@@ -602,9 +670,11 @@ describe("DeckManager.removeItem", () => {
       },
       (m) => m.removeItem("/deck.md", "nope"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(CardNotFound);
     }
@@ -620,6 +690,7 @@ describe("DeckManager.createDeck", () => {
       },
       directories: {},
     };
+
     const { promise, store } = runSuccess(config, (m) =>
       m.createDeck("/workspace/books/book1.md", {
         initialContent: "# Book 1\n",
@@ -635,6 +706,7 @@ describe("DeckManager.createDeck", () => {
       entryTypes: {},
       directories: {},
     };
+
     const { promise, store } = runSuccess(config, (m) =>
       m.createDeck("/workspace/books/book1.md", {
         createParents: true,
@@ -654,11 +726,14 @@ describe("DeckManager.createDeck", () => {
       },
       (m) => m.createDeck("/workspace/books/book1.md"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(DeckFileOperationError);
+
       if (result.failure instanceof DeckFileOperationError) {
         expect(result.failure.operation).toBe("create");
       }
@@ -679,9 +754,11 @@ describe("DeckManager.createDeck", () => {
       },
       (m) => m.createDeck("/workspace/books/book1.md"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(DeckAlreadyExists);
     }
@@ -701,9 +778,11 @@ describe("DeckManager.createDeck", () => {
       },
       (m) => m.createDeck("/workspace/books/book1.md"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(DeckAlreadyExists);
     }
@@ -717,11 +796,14 @@ describe("DeckManager.createDeck", () => {
       },
       (m) => m.createDeck("books/book1.md"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(InvalidDeckPath);
+
       if (result.failure instanceof InvalidDeckPath) {
         expect(result.failure.reason).toBe("absolute_path_required");
       }
@@ -736,11 +818,14 @@ describe("DeckManager.createDeck", () => {
       },
       (m) => m.createDeck("/workspace/books/\0book1.md"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(InvalidDeckPath);
+
       if (result.failure instanceof InvalidDeckPath) {
         expect(result.failure.reason).toBe("nul_byte_not_allowed");
       }
@@ -759,6 +844,7 @@ describe("DeckManager.deleteDeck", () => {
         "/workspace/books/book1.md": "# deck",
       },
     };
+
     const { promise, store } = runSuccess(config, (m) => m.deleteDeck("/workspace/books/book1.md"));
 
     await promise;
@@ -773,9 +859,11 @@ describe("DeckManager.deleteDeck", () => {
       },
       (m) => m.deleteDeck("/workspace/books/missing.md"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(DeckFileNotFound);
     }
@@ -797,9 +885,11 @@ describe("DeckManager.deleteDeck", () => {
       },
       (m) => m.deleteDeck("/workspace/books/book1.md"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(DeckFileNotFound);
     }
@@ -815,11 +905,14 @@ describe("DeckManager.deleteDeck", () => {
       },
       (m) => m.deleteDeck("/workspace/books.md"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(DeckFileOperationError);
+
       if (result.failure instanceof DeckFileOperationError) {
         expect(result.failure.operation).toBe("delete");
       }
@@ -839,6 +932,7 @@ describe("DeckManager.renameDeck", () => {
         "/workspace/books/book1.md": "# old",
       },
     };
+
     const { promise, store } = runSuccess(config, (m) =>
       m.renameDeck("/workspace/books/book1.md", "/workspace/books/book-01.md"),
     );
@@ -864,9 +958,11 @@ describe("DeckManager.renameDeck", () => {
       },
       (m) => m.renameDeck("/workspace/books/book1.md", "/workspace/books/book-01.md"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(DeckAlreadyExists);
     }
@@ -880,9 +976,11 @@ describe("DeckManager.renameDeck", () => {
       },
       (m) => m.renameDeck("/workspace/books/missing.md", "/workspace/books/missing.md"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(DeckFileNotFound);
     }
@@ -898,6 +996,7 @@ describe("DeckManager.renameDeck", () => {
         "/workspace/books/book1.md": "# old",
       },
     };
+
     const { promise, store } = runSuccess(config, (m) =>
       m.renameDeck("/workspace/books/book1.md", "/workspace/archive/book-01.md", {
         createParents: true,
@@ -925,9 +1024,11 @@ describe("DeckManager.renameDeck", () => {
       },
       (m) => m.renameDeck("/workspace/books/book1.md", "/workspace/books/book-01.md"),
     );
+
     const result = await promise;
 
     expect(Result.isFailure(result)).toBe(true);
+
     if (Result.isFailure(result)) {
       expect(result.failure).toBeInstanceOf(DeckAlreadyExists);
     }
@@ -944,8 +1045,10 @@ describe("DeckManager.renameDeck", () => {
         "/workspace/books/book1.md": "# old",
       },
     });
+
     const result = await Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
+
       const manager = yield* DeckManager.pipe(
         Effect.provide(
           DeckManagerLive.pipe(
@@ -966,6 +1069,7 @@ describe("DeckManager.renameDeck", () => {
           ),
         ),
       );
+
       return yield* manager
         .renameDeck("/workspace/books/book1.md", "/workspace/books/book-01.md")
         .pipe(Effect.result);

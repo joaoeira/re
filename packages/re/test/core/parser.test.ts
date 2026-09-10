@@ -10,6 +10,7 @@ What is the capital of France?
 ---
 Paris
 `;
+
       const result = yield* parseFile(content);
 
       assert.strictEqual(result.preamble, "");
@@ -45,6 +46,7 @@ What is 2+2?
 ---
 4
 `;
+
       const result = yield* parseFile(content);
 
       assert.strictEqual(
@@ -71,6 +73,7 @@ Q2
 ---
 A2
 `;
+
       const result = yield* parseFile(content);
 
       assert.strictEqual(result.preamble, "");
@@ -100,6 +103,7 @@ Q2
 ---
 A2
 `;
+
       const result = yield* parseFile(content);
       const card = result.items[0]!.cards[0]!;
       assert.ok(card.lastReview instanceof Date);
@@ -114,6 +118,7 @@ A2
       const content = `This is just some text.
 No flashcards here.
 `;
+
       const result = yield* parseFile(content);
 
       assert.strictEqual(result.preamble, content);
@@ -136,6 +141,7 @@ No flashcards here.
 <!--@ item2 0 0 0 0-->
 Content for both cards
 `;
+
       const result = yield* parseFile(content);
 
       // Consecutive metadata lines → one item with two cards
@@ -164,6 +170,7 @@ Content for both cards
     Effect.gen(function* () {
       const content = `<!--@ abc123 0 0 0 0-->
 Content without trailing newline`;
+
       const result = yield* parseFile(content);
 
       assert.strictEqual(result.items[0]!.content, "Content without trailing newline");
@@ -175,6 +182,7 @@ Content without trailing newline`;
       const content = `<!--@ abc123 5.20 4.30 2 0 2025-01-04T10:30:00Z 2025-01-09T15:18:00.000Z-->
 Content
 `;
+
       const result = yield* parseFile(content);
 
       const card = result.items[0]!.cards[0]!;
@@ -188,6 +196,7 @@ Content
       const content = `<!--@ abc123 0 0-->
 Content
 `;
+
       const error = yield* parseFile(content).pipe(Effect.flip);
       assert.ok(error._tag === "InvalidMetadataFormat");
     }),
@@ -198,6 +207,7 @@ Content
       const content = `<!--@ abc123 invalid 0 0 0-->
 Content
 `;
+
       const error = yield* parseFile(content).pipe(Effect.flip);
       assert.ok(error._tag === "InvalidFieldValue");
     }),
@@ -208,6 +218,7 @@ Content
       const content = `<!--@ abc123 0 0 5 0-->
 Content
 `;
+
       const error = yield* parseFile(content).pipe(Effect.flip);
       assert.ok(error._tag === "InvalidFieldValue");
     }),
@@ -218,6 +229,7 @@ Content
       const content = `<!--@ abc123 0 0 0 0 2025-01-04T10:30:00 2025-01-09T10:30:00.000Z-->
 Content
 `;
+
       const error = yield* parseFile(content).pipe(Effect.flip);
       assert.ok(error._tag === "InvalidFieldValue");
     }),
@@ -228,6 +240,7 @@ Content
       const content = `<!--@ abc123 0 0 2 0 2025-01-04T10:30:00Z 2025-01-06T10:30:00-->
 Content
 `;
+
       const error = yield* parseFile(content).pipe(Effect.flip);
       assert.ok(error._tag === "InvalidFieldValue");
     }),

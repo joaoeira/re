@@ -16,6 +16,7 @@ describe("model schemas", () => {
         "<!--@ reviewed 5.20 4.30 2 1 2025-01-04T08:30:00.000Z 2025-01-09T08:30:00.000Z-->\n" +
         "<!--@ fresh 0 0 0 0-->\n" +
         "Shared content\r\n";
+
       const parsed = yield* parseFile(markdown);
       const validated = yield* Schema.decodeUnknownEffect(ParsedFileSchema)(parsed);
       const encoded = yield* Schema.encodeEffect(ParsedFileSchema)(validated);
@@ -27,6 +28,7 @@ describe("model schemas", () => {
   it.effect("report the location of an invalid card inside an imported file", () =>
     Effect.gen(function* () {
       const card = createMetadata();
+
       const error = yield* Schema.decodeUnknownEffect(ParsedFileSchema)({
         preamble: "",
         items: [{ content: "Question", cards: [card, { ...card, state: 9 }] }],

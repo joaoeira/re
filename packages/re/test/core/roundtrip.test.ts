@@ -11,6 +11,7 @@ What is the capital of France?
 ---
 Paris
 `;
+
       const parsed = yield* parseFile(original);
       const serialized = serializeFile(parsed);
 
@@ -32,6 +33,7 @@ Q1
 ---
 A1
 `;
+
       const parsed = yield* parseFile(original);
       const serialized = serializeFile(parsed);
 
@@ -44,6 +46,7 @@ A1
       const original = `<!--@ abc123 5.20 4.30 2 0 2025-01-04T10:30:00.000Z 2025-01-09T15:18:00.000Z-->
 Content
 `;
+
       const parsed = yield* parseFile(original);
       const serialized = serializeFile(parsed);
 
@@ -57,10 +60,12 @@ Content
       const original = `<!--@ abc123 0 0 2 0 2025-01-04T12:30:00+02:00 2025-01-04T10:30:00.000Z-->
 Content
 `;
+
       // Expected output with UTC
       const expected = `<!--@ abc123 0 0 2 0 2025-01-04T10:30:00.000Z 2025-01-04T10:30:00.000Z-->
 Content
 `;
+
       const parsed = yield* parseFile(original);
       const serialized = serializeFile(parsed);
 
@@ -83,6 +88,7 @@ Q3
 ---
 A3
 `;
+
       const parsed = yield* parseFile(original);
       const serialized = serializeFile(parsed);
 
@@ -104,6 +110,7 @@ A3
     Effect.gen(function* () {
       const original = `<!--@ abc123 0 0 0 0-->
 Content without trailing newline`;
+
       const parsed = yield* parseFile(original);
       const serialized = serializeFile(parsed);
 
@@ -117,6 +124,7 @@ Content without trailing newline`;
 <!--@ item2 0 0 0 0-->
 Content
 `;
+
       const parsed = yield* parseFile(original);
       const serialized = serializeFile(parsed);
 
@@ -133,6 +141,7 @@ Answer here
 ---
 More content
 `;
+
       const parsed = yield* parseFile(original);
       const serialized = serializeFile(parsed);
 
@@ -155,6 +164,7 @@ function add(a, b) {
 
 It adds two numbers.
 `;
+
       const parsed = yield* parseFile(original);
       const serialized = serializeFile(parsed);
 
@@ -173,6 +183,7 @@ Mitochondrion
 
 ![Annotated diagram](../../.re/assets/mitochondrion-annotated.png)
 `;
+
       const parsed = yield* parseFile(original);
       const serialized = serializeFile(parsed);
 
@@ -186,6 +197,7 @@ Mitochondrion
 No flashcards here.
 Just text.
 `;
+
       const parsed = yield* parseFile(original);
       const serialized = serializeFile(parsed);
 
