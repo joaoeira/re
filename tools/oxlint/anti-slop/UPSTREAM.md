@@ -47,13 +47,13 @@ constructors for study UI results, the shared platform-error fixture constructor
 and explicit tag and payload assertions in tests. The public result types and
 values remain unchanged.
 
-Two new Effect rules are available but are not enabled by this update:
+The `anti-slop-effect/no-manual-effect-error-tag` rule is enabled within
+`packages/` with no findings and no source changes required.
 
-- `anti-slop-effect/no-manual-effect-error-tag`
-- `anti-slop-effect/prefer-effect-match`
+The remaining `anti-slop-effect/prefer-effect-match` rule is available but is
+not yet enabled.
 
 Enabling these is a separate policy change. A read-only trial on 2026-09-10
 reported 74 manual tagged-construction findings and 16 manual tag-comparison
 findings. Repository lint passes with zero warnings and zero errors with
-the spacing, tag-comparison, and tagged-construction rules enabled and the
-other two new Effect rules disabled.
+all updated rules except `anti-slop-effect/prefer-effect-match` enabled.
