@@ -22,10 +22,8 @@ const build = Bun.spawnSync(
   },
 );
 if (build.exitCode !== 0) process.exit(build.exitCode);
-copyFileSync(
-  resolve(import.meta.dir, "../dist/libpanel.dylib"),
-  `${contents}/Frameworks/libpanel.dylib`,
-);
+for (const library of ["libpanel.dylib", "gpuix-native.darwin-arm64.node"])
+  copyFileSync(resolve(import.meta.dir, `../dist/${library}`), `${contents}/Frameworks/${library}`);
 writeFileSync(
   `${contents}/Info.plist`,
   `<?xml version="1.0" encoding="UTF-8"?>
