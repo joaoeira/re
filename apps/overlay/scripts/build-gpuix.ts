@@ -18,7 +18,7 @@ const fingerprint = createHash("sha256")
   .digest("hex");
 
 if (process.platform !== "darwin" || process.arch !== "arm64") {
-  throw new Error("re Pocket currently builds on Apple Silicon macOS only.");
+  throw new Error("re Overlay currently builds on Apple Silicon macOS only.");
 }
 
 if (existsSync(output) && existsSync(stamp) && readFileSync(stamp, "utf8") === fingerprint) {

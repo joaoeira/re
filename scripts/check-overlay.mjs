@@ -34,8 +34,8 @@ for (const command of ["typecheck", "build", "test"]) {
 for (const file of [
   "dist/gpuix-native.darwin-arm64.node",
   "dist/libpanel.dylib",
-  "dist/re Pocket.app/Contents/MacOS/re-pocket",
-  "dist/re Pocket.app/Contents/Frameworks/libpanel.dylib",
+  "dist/re Overlay.app/Contents/MacOS/re-overlay",
+  "dist/re Overlay.app/Contents/Frameworks/libpanel.dylib",
 ]) {
   assert.ok((await stat(path.join(app, file))).size > 0, `Missing Overlay output: ${file}`);
 }

@@ -10,7 +10,7 @@ import { disposeWorkspace } from "./workspace";
 
 const renderer = createRenderer();
 renderer.init({
-  title: "re Pocket",
+  title: "re Overlay",
   width: 720,
   height: 465,
   minWidth: 300,
@@ -96,4 +96,4 @@ process.on("SIGINT", () => {
 process.on("SIGTERM", () => {
   void shutdown();
 });
-console.log(`re Pocket ready. Scratch cards: ${cardsPath}`);
+console.log(`re Overlay ready. Scratch cards: ${cardsPath}`);

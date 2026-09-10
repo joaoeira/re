@@ -48,7 +48,7 @@ npm install @effect/platform-node@4.0.0-rc.112
 removed. Core, item types, and scheduling work without installing a Node adapter.
 All five entry points share one package version and one Effect installation in a consumer.
 
-Pocket consumes this workspace library with the same pinned Effect v4 runtime.
+Overlay consumes this workspace library with the same pinned Effect v4 runtime.
 Its commands build the library before using its public exports. Markdown files,
 card identities, and FSRS scheduling behavior are unchanged by the migration.
 

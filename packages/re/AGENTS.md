@@ -2,7 +2,7 @@
 
 This package targets exactly `effect@4.0.0-rc.112`,
 `@effect/platform-node-shared@4.0.0-rc.112`, `@effect/vitest@4.0.0-rc.112`,
-and Vitest `4.1.11`. Pocket also consumes the v4 workspace library. Root Effect
+and Vitest `4.1.11`. Overlay also consumes the v4 workspace library. Root Effect
 examples use v3 APIs; use the following v4 APIs in `packages/re`. Root test-quality
 and explicit-interface requirements still apply.
 
@@ -69,7 +69,7 @@ than a fixed v3 permutation. Prove subtle regressions with temporary mutations.
 
 Run package typechecking regularly and meaningful targeted tests while editing.
 Finish with the full library suite and external archive consumers; do not use
-stale `dist` output as evidence. Pocket uses the compiled workspace exports;
+stale `dist` output as evidence. Overlay uses the compiled workspace exports;
 library changes must also pass the overlay's integration checks.
 
 Pinned upstream references: [Effect](https://github.com/Effect-TS/effect/blob/effect%404.0.0-rc.112/packages/effect/src/Effect.ts),

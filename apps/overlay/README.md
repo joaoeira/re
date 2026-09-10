@@ -1,4 +1,4 @@
-# re Pocket — standalone GPUIX utility
+# re Overlay — standalone GPUIX utility
 
 A compact macOS card utility with separate Create and Review screens opened from
 Raycast. React renders through GPUIX, Bun runs the app, and a small Objective-C
@@ -15,19 +15,19 @@ bun install
 bun run overlay:dev
 # Or build the standalone app:
 bun run overlay:build
-open 'apps/overlay/dist/re Pocket.app'
+open 'apps/overlay/dist/re Overlay.app'
 ```
 
 The bundle contains Bun, GPUIX's native module, and the panel bridge. It is a local
 development build, not a signed/notarized distribution. Quit before rebuilding;
 run one instance at a time.
 
-Pocket consumes `@simbyotic/re` through `workspace:*`, with Effect and the Node
+Overlay consumes `@simbyotic/re` through `workspace:*`, with Effect and the Node
 adapter pinned to `4.0.0-rc.112`. Its dev, build, typecheck, and test scripts build
 the library first, using the same compiled public exports as external consumers.
 Run `bun run watch:library` in another terminal while editing library source.
 `bun run check:app-resolution` checks all five exports under Node and Bun and
-requires one shared Effect installation across Pocket, the library, and the Node
+requires one shared Effect installation across Overlay, the library, and the Node
 adapters. `bun run check:overlay` also builds the native app and runs its UI tests.
 The root override keeps the Node adapter's transitive shared package on that same
 release candidate when installing without an existing lockfile.
@@ -66,7 +66,7 @@ assert on text and card-body geometry, not on colours or spacing.
 Add `apps/overlay/raycast` to Raycast Settings → Extensions → Script Commands.
 The **Create Card** and **Review Cards** commands open their respective screens;
 the menu bar also offers both screens. Both delegate to `launch.sh`, which places an
-atomic launch request in `~/Library/Application Support/re-pocket` before opening
+atomic launch request in `~/Library/Application Support/re-overlay` before opening
 the app, so they also work with a running or hidden instance.
 
 The 720 × 465 window starts above other windows. Drag its top edge to reposition
@@ -83,7 +83,7 @@ using the shared library’s workspace snapshot and builtin review queue.
 **Review Cards** and **Create Card** open the corresponding screen. **Refresh**
 reloads the counts; they also refresh after creating/grading and every minute while
 hidden. **Choose Workspace…** opens a native folder picker and saves the deck root.
-**Quit re Pocket** exits the app. Without a workspace, counts describe the scratch
+**Quit re Overlay** exits the app. Without a workspace, counts describe the scratch
 deck: ungraded cards are new, and due is zero because scratch practice is unscheduled.
 
 ## Cards and decks
@@ -126,7 +126,7 @@ include their paths and error details. If a queued card can no longer be loaded,
 **Retry Card**, **Skip Card**, and **Open Deck** allow recovery without grading it.
 A failed session start offers retry and workspace selection.
 
-A **Pocket scratch deck** is available for isolated card creation. Without a
+A **Overlay scratch deck** is available for isolated card creation. Without a
 configured workspace, Review uses scratch cards; with a workspace configured,
 Review uses workspace cards only. Scratch grades are practice history, not FSRS.
 New scratch cards retain their source notes so editing and deletion cover sibling cloze cards. Legacy scratch
@@ -136,11 +136,11 @@ be edited as a source note. Clipboard image import requires a workspace deck.
 Scratch cards and preferences live in:
 
 ```text
-~/Library/Application Support/re-pocket/cards.json
-~/Library/Application Support/re-pocket/preferences.json
+~/Library/Application Support/re-overlay/cards.json
+~/Library/Application Support/re-overlay/preferences.json
 ```
 
-`RE_POCKET_DATA` overrides the scratch JSON path and places preferences alongside
+`RE_OVERLAY_DATA` overrides the scratch JSON path and places preferences alongside
 it. The Raycast launch request stays in the default support directory regardless.
 Scratch/preferences writes use temporary files plus rename.
 

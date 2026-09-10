@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 if (process.platform !== "darwin" || process.arch !== "arm64") {
-  throw new Error("re Pocket currently requires Apple Silicon macOS.");
+  throw new Error("re Overlay currently requires Apple Silicon macOS.");
 }
 
 const developmentLibrary = resolve(import.meta.dir, "../dist/libpanel.dylib");

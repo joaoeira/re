@@ -26,7 +26,7 @@ export interface Formula extends Media {
 export function mediaScale(media: Media, maxHeight = 250): number {
   return Math.min(1, 500 / media.width, maxHeight / media.height);
 }
-const cacheDirectory = join(tmpdir(), "re-pocket-media");
+const cacheDirectory = join(tmpdir(), "re-overlay-media");
 const adaptor = liteAdaptor();
 RegisterHTMLHandler(adaptor);
 const math = mathjax.document("", {

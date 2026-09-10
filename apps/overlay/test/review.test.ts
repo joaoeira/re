@@ -36,7 +36,7 @@ test("review requires reveal before grading, and held/modified keys cannot advan
 });
 
 test("creating in a removed deck reports an actionable field error", async () => {
-  const root = await mkdtemp(join(tmpdir(), "re-pocket-missing-"));
+  const root = await mkdtemp(join(tmpdir(), "re-overlay-missing-"));
   try {
     expect(
       await createWorkspaceCard({
@@ -57,7 +57,7 @@ test("creating in a removed deck reports an actionable field error", async () =>
 });
 
 test("an invalid review edit keeps the field error and leaves the source deck unchanged", async () => {
-  const root = await mkdtemp(join(tmpdir(), "re-pocket-invalid-edit-"));
+  const root = await mkdtemp(join(tmpdir(), "re-overlay-invalid-edit-"));
   try {
     const deck = join(root, "test.md");
     await writeFile(deck, "");
@@ -87,7 +87,7 @@ test("an invalid review edit keeps the field error and leaves the source deck un
 });
 
 test("menu status separates new, scheduled due, and total cards after grading", async () => {
-  const root = await mkdtemp(join(tmpdir(), "re-pocket-status-"));
+  const root = await mkdtemp(join(tmpdir(), "re-overlay-status-"));
   try {
     const deck = join(root, "test.md");
     await writeFile(deck, "");
@@ -181,7 +181,7 @@ async function mountApp(
 nativeTest(
   "Again finishes a one-card session, and undo restores its schedule and review position",
   async () => {
-    const root = await mkdtemp(join(tmpdir(), "re-pocket-ui-review-"));
+    const root = await mkdtemp(join(tmpdir(), "re-overlay-ui-review-"));
     let mounted: Awaited<ReturnType<typeof mountApp>> | undefined;
     try {
       const deck = join(root, "test.md");
@@ -215,7 +215,7 @@ nativeTest(
 );
 
 nativeTest("review edit saves to the source deck and returns to an unrevealed card", async () => {
-  const root = await mkdtemp(join(tmpdir(), "re-pocket-ui-edit-"));
+  const root = await mkdtemp(join(tmpdir(), "re-overlay-ui-edit-"));
   let mounted: Awaited<ReturnType<typeof mountApp>> | undefined;
   try {
     const deck = join(root, "test.md");
@@ -257,7 +257,7 @@ nativeTest("review edit saves to the source deck and returns to an unrevealed ca
 nativeTest(
   "creation preview navigates cloze cards without saving, then creates them together",
   async () => {
-    const root = await mkdtemp(join(tmpdir(), "re-pocket-ui-preview-"));
+    const root = await mkdtemp(join(tmpdir(), "re-overlay-ui-preview-"));
     let mounted: Awaited<ReturnType<typeof mountApp>> | undefined;
     try {
       const deck = join(root, "test.md");
@@ -292,7 +292,7 @@ nativeTest(
 nativeTest(
   "deleting a cloze note removes its sibling cards, and undo restores the note and queue",
   async () => {
-    const root = await mkdtemp(join(tmpdir(), "re-pocket-ui-delete-"));
+    const root = await mkdtemp(join(tmpdir(), "re-overlay-ui-delete-"));
     let mounted: Awaited<ReturnType<typeof mountApp>> | undefined;
     try {
       const deck = join(root, "test.md");
@@ -326,7 +326,7 @@ nativeTest(
 
 for (const recovery of ["retry", "skip"] as const) {
   nativeTest(`${recovery} recovers from an unavailable card without grading it`, async () => {
-    const root = await mkdtemp(join(tmpdir(), "re-pocket-ui-recovery-"));
+    const root = await mkdtemp(join(tmpdir(), "re-overlay-ui-recovery-"));
     let mounted: Awaited<ReturnType<typeof mountApp>> | undefined;
     try {
       const deck = join(root, "test.md");
@@ -369,7 +369,7 @@ for (const recovery of ["retry", "skip"] as const) {
 nativeTest(
   "invalid creation keeps the draft and identifies the field that needs fixing",
   async () => {
-    const root = await mkdtemp(join(tmpdir(), "re-pocket-ui-validation-"));
+    const root = await mkdtemp(join(tmpdir(), "re-overlay-ui-validation-"));
     let mounted: Awaited<ReturnType<typeof mountApp>> | undefined;
     try {
       const deck = join(root, "test.md");
@@ -399,7 +399,7 @@ nativeTest(
 );
 
 nativeTest("returning from preview restores the field being edited", async () => {
-  const root = await mkdtemp(join(tmpdir(), "re-pocket-ui-focus-"));
+  const root = await mkdtemp(join(tmpdir(), "re-overlay-ui-focus-"));
   let mounted: Awaited<ReturnType<typeof mountApp>> | undefined;
   try {
     const deck = join(root, "test.md");

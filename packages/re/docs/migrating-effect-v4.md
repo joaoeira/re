@@ -2,7 +2,7 @@
 
 The `0.3.0-rc.0` library targets `effect@4.0.0-rc.112` exactly. All five entry
 points expose v4 Effect, Schema, and service types. Mixing v3 and v4 values in
-one consumer graph is unsupported. Pocket in this repository consumes the v4
+one consumer graph is unsupported. Overlay in this repository consumes the v4
 workspace package and shares its exact Effect version and matching Node adapter.
 
 This migration preserves Markdown metadata, numeric spelling, card identities,
@@ -136,7 +136,7 @@ Library tests use `@effect/vitest@4.0.0-rc.112` with Vitest `4.1.11`.
 `it.effect` replaces `it.scoped`, and `it.live` replaces `it.scopedLive`; both
 scope resources automatically. TestClock comes from `effect/testing/TestClock`.
 After `Fiber.interrupt`, inspect the exit with `Fiber.await` and
-`Exit.hasInterrupts`. Pocket's application tests use Bun's test runner with the
+`Exit.hasInterrupts`. Overlay's application tests use Bun's test runner with the
 same v4 workspace package; they do not require the Vitest adapter.
 
 Independent package checks compile strict NodeNext and Bundler consumers and

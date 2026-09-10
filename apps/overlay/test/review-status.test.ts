@@ -24,7 +24,7 @@ test("status failures replace counts while keeping recovery and navigation actio
     "Create Card",
     "Refresh",
     "Choose Workspace…",
-    "Quit re Pocket",
+    "Quit re Overlay",
   ]) {
     expect(model.items).toContainEqual(
       expect.objectContaining({ title, route: expect.any(Number) }),

@@ -2,10 +2,10 @@
 
 Metadata utilities for spaced repetition flashcard files. Parse, serialize, and manipulate markdown files with embedded scheduling metadata.
 
-The application is [Pocket](apps/overlay). The CLI, Raycast, and Desktop applications have been retired and removed from this repository.
+The application is [Overlay](apps/overlay). The CLI, Raycast, and Desktop applications have been retired and removed from this repository.
 
 Repository development uses Bun 1.4.2, pinned in `.bun-version` and `package.json`.
-Pocket consumes the Effect v4 workspace library; its scripts build the library
+Overlay consumes the Effect v4 workspace library; its scripts build the library
 before starting, testing, or packaging the app.
 
 ## Format

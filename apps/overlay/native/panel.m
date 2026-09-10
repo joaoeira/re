@@ -25,11 +25,11 @@ static BOOL pinned = YES;
 static NSStatusItem *statusItem;
 static id statusTarget;
 
-@interface PocketActions : NSObject
+@interface OverlayActions : NSObject
 - (void)route:(NSMenuItem *)sender;
 @end
 
-@implementation PocketActions
+@implementation OverlayActions
 - (void)route:(NSMenuItem *)sender { pendingRoute = (int)sender.tag; }
 
 @end
@@ -72,7 +72,7 @@ void re_panel_pin(bool value) {
 
 int re_panel_init(void) {
   for (NSWindow *window in NSApp.windows) {
-    if ([window.title isEqualToString:@"re Pocket"]) { panel = window; break; }
+    if ([window.title isEqualToString:@"re Overlay"]) { panel = window; break; }
   }
   if (!panel) return -1;
   previousApp = NSWorkspace.sharedWorkspace.frontmostApplication;
@@ -99,13 +99,13 @@ int re_panel_init(void) {
   EventTypeSpec type = { kEventClassKeyboard, kEventHotKeyPressed };
   OSStatus status = InstallEventHandler(GetEventDispatcherTarget(), handleHotKey, 1, &type, NULL, &hotKeyHandler);
   if (status == noErr) {
-    EventHotKeyID identifier = { 'rePK', 1 };
+    EventHotKeyID identifier = { 'reOL', 1 };
     status = RegisterEventHotKey(kVK_ANSI_R, controlKey | optionKey | cmdKey, identifier,
       GetEventDispatcherTarget(), 0, &hotKey);
   }
-  statusTarget = [PocketActions new];
+  statusTarget = [OverlayActions new];
   statusItem = [NSStatusBar.systemStatusBar statusItemWithLength:NSVariableStatusItemLength];
-  NSImage *icon = [NSImage imageWithSystemSymbolName:@"square.3.layers.3d" accessibilityDescription:@"re Pocket"];
+  NSImage *icon = [NSImage imageWithSystemSymbolName:@"square.3.layers.3d" accessibilityDescription:@"re Overlay"];
   icon.template = YES;
   statusItem.button.image = icon;
   statusItem.button.imagePosition = NSImageLeft;

@@ -49,7 +49,7 @@ export function statusMenu(status: Result<ReviewStatus> | null, scratch = false)
     { title: "Refresh", icon: "arrow.clockwise", route: menuRoutes.refresh },
     { title: "Choose Workspace…", icon: "gearshape", route: menuRoutes.preferences },
     { separator: true },
-    { title: "Quit re Pocket", route: menuRoutes.quit },
+    { title: "Quit re Overlay", route: menuRoutes.quit },
   );
   return { title, tooltip, items };
 }
