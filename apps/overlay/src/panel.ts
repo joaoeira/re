@@ -22,7 +22,17 @@ const library = dlopen(libraryPath, {
   re_panel_hide: { args: [], returns: FFIType.void },
   re_panel_pin: { args: [FFIType.bool], returns: FFIType.void },
   re_panel_dispose: { args: [], returns: FFIType.void },
+  re_register_fonts: { args: [FFIType.ptr], returns: FFIType.i32 },
 });
+
+// Registered before any renderer exists so GPUI's first family lookup sees them.
+const developmentFonts = resolve(import.meta.dir, "../fonts");
+const fontsDirectory = existsSync(developmentFonts)
+  ? developmentFonts
+  : resolve(dirname(process.execPath), "../Resources/fonts");
+export const registeredFonts = library.symbols.re_register_fonts(
+  ptr(Buffer.from(`${fontsDirectory}\0`)),
+);
 
 const baselines = new Map<string, number>();
 export function textBaseline(family: string, size: number, lineHeight: number): number {

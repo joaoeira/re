@@ -5,7 +5,7 @@ import { MediaView } from "./card-media-view";
 import { textBaseline } from "./panel";
 import { toErrorMessage } from "./error-message";
 import { onSettled } from "./on-settled";
-import { cardTypography, colors } from "./theme";
+import { cardFontFamily, colors } from "./theme";
 
 type TextStyle = { bold?: boolean; italic?: boolean; code?: boolean; link?: boolean };
 type Run = TextStyle &
@@ -16,13 +16,8 @@ type Run = TextStyle &
   );
 type Word = Run[];
 
-function fontFamily(run: TextStyle): string {
-  if (run.code) return "Menlo";
-  if (run.bold && run.italic) return "Helvetica-BoldOblique";
-  if (run.bold) return "Helvetica-Bold";
-  if (run.italic) return "Helvetica-Oblique";
-  return cardTypography.fontFamily;
-}
+// GPUIX selects weight within a family but exposes no italic style.
+const fontFamily = (run: TextStyle): string => (run.code ? "Menlo" : cardFontFamily);
 
 // Break at source whitespace, never at a markup boundary. In particular, the
 // comma in `$x$,` and the suffix in `pre**fix**` must travel with their word.
@@ -113,7 +108,7 @@ export function InlineParagraph({
   // Taffy does not receive text baselines from GPUI. Align the bottom edges of
   // explicitly padded line boxes instead, using real font and SVG metrics.
   const descent = Math.max(
-    lineHeight - textBaseline(cardTypography.fontFamily, fontSize, lineHeight),
+    lineHeight - textBaseline(cardFontFamily, fontSize, lineHeight),
     ...runs.map((run) => lineHeight - textBaseline(fontFamily(run), fontSize, lineHeight)),
     ...[...formulas.values()].map((result) =>
       typeof result === "string" ? 0 : (result.height - result.baseline) * mediaScale(result, 200),

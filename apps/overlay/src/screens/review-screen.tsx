@@ -84,6 +84,7 @@ export function ReviewScreen({ view, issues, onOpenDeck, onChooseWorkspace }: Re
             testId={clozeRevealed ? "revealed-answer" : "prompt"}
             source={clozeRevealed ? view.reveal : view.prompt}
             deckPath={view.deckPath}
+            scale="prompt"
           />
           {view.revealed && view.cardType === "qa" && (
             <>
@@ -92,6 +93,7 @@ export function ReviewScreen({ view, issues, onOpenDeck, onChooseWorkspace }: Re
                 testId="revealed-answer"
                 source={view.reveal}
                 deckPath={view.deckPath}
+                scale="reveal"
               />
             </>
           )}

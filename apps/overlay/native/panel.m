@@ -1,11 +1,29 @@
 #import <Cocoa/Cocoa.h>
 #import <Carbon/Carbon.h>
+#import <CoreText/CoreText.h>
 
 // Match GPUI's centered line-box baseline using the same CoreText font metrics.
 double re_text_baseline(const char *family, double size, double lineHeight) {
-  NSFont *font = [NSFont fontWithName:[NSString stringWithUTF8String:family] size:size];
+  NSString *name = [NSString stringWithUTF8String:family];
+  NSFont *font = [NSFont fontWithName:name size:size];
+  if (!font) font = [[NSFontManager sharedFontManager] fontWithFamily:name traits:0 weight:5 size:size];
   if (!font) font = [NSFont fontWithName:@"Helvetica" size:size];
   return (lineHeight - font.ascender + font.descender) / 2 + font.ascender;
+}
+
+// Bundled fonts are registered for this process only, so nothing is installed
+// on the user's machine and GPUI resolves them by family name like system fonts.
+int re_register_fonts(const char *directory) {
+  NSString *dir = [NSString stringWithUTF8String:directory];
+  NSArray<NSString *> *names = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:dir error:nil];
+  int registered = 0;
+  for (NSString *name in names) {
+    if (![@[@"ttf", @"otf"] containsObject:name.pathExtension]) continue;
+    NSURL *url = [NSURL fileURLWithPath:[dir stringByAppendingPathComponent:name]];
+    if (CTFontManagerRegisterFontsForURL((__bridge CFURLRef)url, kCTFontManagerScopeProcess, NULL))
+      registered++;
+  }
+  return registered;
 }
 
 // GPUI owns this window and its delegate. Only configure public AppKit properties;

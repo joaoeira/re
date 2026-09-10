@@ -23,9 +23,9 @@ export function PreviewScreen({ cards, index, deckPath }: PreviewScreenProps) {
   const card = cards[index]!;
   return (
     <div style={cardBody}>
-      <CardMarkdown source={card.question} deckPath={deckPath} />
+      <CardMarkdown source={card.question} deckPath={deckPath} scale="prompt" />
       <div style={divider} />
-      <CardMarkdown source={card.answer} deckPath={deckPath} />
+      <CardMarkdown source={card.answer} deckPath={deckPath} scale="reveal" />
     </div>
   );
 }

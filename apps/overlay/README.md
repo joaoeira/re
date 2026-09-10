@@ -18,7 +18,9 @@ bun run overlay:build
 open 'apps/overlay/dist/re Overlay.app'
 ```
 
-The bundle contains Bun, GPUIX's native module, and the panel bridge. It is a local
+The bundle contains Bun, GPUIX's native module, the panel bridge, and the Inter
+font faces from `fonts/` (SIL Open Font License), which the bridge registers for
+the process at launch rather than installing them. It is a local
 development build, not a signed/notarized distribution. Quit before rebuilding;
 run one instance at a time.
 

@@ -22,16 +22,25 @@ export const colors = {
   code: "#ffffff10",
 } as const;
 
+export const fontFamily = "Inter";
+
+const face = (fontSize: number, lineHeight: number, fontWeight = 400): StyleDesc => ({
+  fontFamily,
+  fontSize,
+  lineHeight,
+  fontWeight,
+});
+
 export const type = {
-  caption: { fontSize: 11, lineHeight: 16 },
-  label: { fontSize: 12, lineHeight: 17 },
-  command: { fontSize: 12, lineHeight: 18 },
-  body: { fontSize: 13, lineHeight: 20 },
-  note: { fontSize: 14, lineHeight: 21 },
-  input: { fontSize: 15, lineHeight: 23 },
-  heading: { fontSize: 18, lineHeight: 27 },
-  title: { fontSize: 20, lineHeight: 28, fontWeight: 500 },
-  display: { fontSize: 22, lineHeight: 30, fontWeight: 500 },
+  caption: face(11, 16),
+  label: face(12, 17),
+  command: face(12, 18),
+  body: face(13, 20),
+  note: face(14, 21),
+  input: face(15, 23),
+  heading: face(18, 27),
+  title: face(20, 28, 500),
+  display: face(22, 30, 500),
 } as const satisfies Record<string, StyleDesc>;
 
 export const layout = {
@@ -53,24 +62,37 @@ export const editorTheme = {
 export const menuInputTheme = { ...editorTheme, bg: colors.surface };
 
 // Keep the native Markdown renderer and mixed text/math paragraphs on one scale.
-export const cardTypography = {
-  fontFamily: "Helvetica",
-  fontSize: 14,
-  lineHeight: 22,
-  headingSizes: [19, 16, 15, 14],
-  headingLineHeights: [27, 24, 22, 22],
-};
-export const cardTheme = {
+export type CardScale = "prompt" | "reveal";
+export const cardFontFamily = fontFamily;
+const cardScales = {
+  prompt: {
+    fontSize: 18,
+    lineHeight: 27,
+    headingSizes: [24, 21, 19, 18],
+    headingLineHeights: [32, 29, 27, 27],
+  },
+  reveal: {
+    fontSize: 16,
+    lineHeight: 24,
+    headingSizes: [22, 19, 17, 16],
+    headingLineHeights: [30, 27, 25, 24],
+  },
+} as const;
+export const cardTypography = (scale: CardScale) => ({
+  fontFamily: cardFontFamily,
+  ...cardScales[scale],
+});
+export const cardTheme = (scale: CardScale) => ({
   ...editorTheme,
   bg: "#343434",
-  fontSans: cardTypography.fontFamily,
+  fontSans: cardFontFamily,
   metrics: {
-    mdTextSize: cardTypography.fontSize,
-    mdLineHeight: cardTypography.lineHeight,
-    mdHeadingSizes: cardTypography.headingSizes,
-    mdHeadingLineHeights: cardTypography.headingLineHeights,
+    mdTextSize: cardScales[scale].fontSize,
+    mdLineHeight: cardScales[scale].lineHeight,
+    mdHeadingSizes: [...cardScales[scale].headingSizes],
+    mdHeadingLineHeights: [...cardScales[scale].headingLineHeights],
   },
-};
+});
 
 export const row: StyleDesc = { display: "flex", flexDirection: "row", alignItems: "center" };
 export const column: StyleDesc = { display: "flex", flexDirection: "column" };
