@@ -37,6 +37,30 @@ second Effect installation, remove `node_modules` at the repository root,
 `apps/overlay/node_modules`, and `packages/re/node_modules`, then run
 `bun install --frozen-lockfile` with the pinned Bun version.
 
+## Source layout
+
+`src/app.tsx` owns all state, persistence, and keyboard handling, and renders
+the window by composing props-only components. Nothing below `screens/` or
+`ui/` reads app state directly.
+
+- `src/theme.ts` — every colour and font size the chrome uses. Change the
+  palette or type scale here, not at the call sites.
+- `src/ui/` — stateless primitives: `Key`, `Action`, `Field`/`DraftField`,
+  `Dropdown`, `DeckCombobox`.
+- `src/screens/` — one file per screen (`create`, `preview`, `edit`, `review`),
+  the `Shell` that wraps them with the header, notice line, and footer, and the
+  `DeleteDialog` and `ActionsMenu` overlays. Each exports an explicit props
+  interface; `ReviewView` in `review-screen.tsx` enumerates every review state.
+- `src/screens/catalog.tsx` — fixture props for every window state, numbered to
+  match the design reference. Not imported by the app.
+- `src/card-markdown.tsx`, `card-inline.tsx`, `card-media-view.tsx` — the card
+  body renderer, which keeps its own typography in `cardTypography`.
+
+`bun run screens` renders every catalogued state through the real GPUI pipeline
+to `dist/screens/NN-name.png` (pass id fragments to render a subset). Use it to
+compare a screen against its design artboard after restyling; the tests only
+assert on text and card-body geometry, not on colours or spacing.
+
 ## Raycast and window controls
 
 Add `apps/overlay/raycast` to Raycast Settings → Extensions → Script Commands.

@@ -180,7 +180,7 @@ export function InlineParagraph({
                           : run.link
                             ? colors.link
                             : colors.text,
-                      backgroundColor: run.code ? "#ffffff10" : undefined,
+                      backgroundColor: run.code ? colors.code : undefined,
                       marginBottom: descent - (lineHeight - baseline),
                     }}
                   >

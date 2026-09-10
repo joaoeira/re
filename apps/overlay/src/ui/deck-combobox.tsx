@@ -10,21 +10,17 @@ import {
   useGpuix,
   type PublicInstance,
 } from "@gpuix/react";
-import { colors, column, menuInputTheme, menuItem, menuSurface, menuTrigger } from "./theme";
+import { colors, column, font, menuInputTheme, menuItem, menuSurface, menuTrigger } from "../theme";
 
-export function DeckCombobox({
-  value,
-  options,
-  onChange,
-  open,
-  onOpenChange,
-}: {
-  value: string;
-  options: readonly { value: string; label: string }[];
-  onChange: (value: string) => void;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
+export interface DeckComboboxProps {
+  readonly value: string;
+  readonly options: readonly { readonly value: string; readonly label: string }[];
+  readonly onChange: (value: string) => void;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+}
+
+export function DeckCombobox({ value, options, onChange, open, onOpenChange }: DeckComboboxProps) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const trigger = useRef<PublicInstance | null>(null);
@@ -78,10 +74,10 @@ export function DeckCombobox({
             onOpenChange(true);
           }
         }}
-        style={{ ...menuTrigger, borderColor: focused ? "#ffffff55" : colors.line }}
+        style={{ ...menuTrigger, borderColor: focused ? colors.focus : colors.line }}
       >
-        <text style={{ color: colors.text, fontSize: 13 }}>{label(value)}</text>
-        <text style={{ color: colors.muted, fontSize: 13 }}>⌄</text>
+        <text style={{ color: colors.text, fontSize: font.body }}>{label(value)}</text>
+        <text style={{ color: colors.muted, fontSize: font.body }}>⌄</text>
       </ComboboxTrigger>
       <ComboboxContent
         onMouseDownOutside={() => {
@@ -97,7 +93,7 @@ export function DeckCombobox({
             height: 35,
             paddingLeft: 9,
             paddingRight: 9,
-            fontSize: 13,
+            fontSize: font.body,
             color: colors.text,
             backgroundColor: colors.surface,
             borderBottomWidth: 1,
@@ -112,12 +108,12 @@ export function DeckCombobox({
               value={item}
               style={({ highlighted }) => menuItem(highlighted)}
             >
-              <text style={{ color: colors.text, fontSize: 13 }}>{label(item)}</text>
+              <text style={{ color: colors.text, fontSize: font.body }}>{label(item)}</text>
             </ComboboxItem>
           )}
         </ComboboxList>
         <ComboboxEmpty style={{ padding: 9 }}>
-          <text style={{ color: colors.muted, fontSize: 13 }}>No decks match</text>
+          <text style={{ color: colors.muted, fontSize: font.body }}>No decks match</text>
         </ComboboxEmpty>
       </ComboboxContent>
     </Combobox>

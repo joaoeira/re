@@ -11,6 +11,23 @@ export const colors = {
   highlight: "#ffffff18",
   surface: "#3b3b3b",
   surfaceBorder: "#ffffff22",
+  focus: "#ffffff55",
+  window: "#282828c8",
+  footer: "#00000012",
+  scrim: "#00000088",
+  shadow: "#00000060",
+  quote: "#ffffff44",
+  code: "#ffffff10",
+} as const;
+
+export const font = {
+  caption: 11,
+  label: 12,
+  body: 13,
+  input: 14,
+  title: 18,
+  display: 19,
+  glyph: 24,
 } as const;
 
 export const editorTheme = {

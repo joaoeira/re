@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
-import { useRef } from "react";
+import { basename } from "node:path";
+import { useEffect, useRef, useState } from "react";
+import { createRenderer, type EventPayload } from "@gpuix/react";
 import { appendNextClozeTemplate } from "@simbyotic/re/study";
 import type {
   ReviewCardContent,
@@ -8,240 +10,44 @@ import type {
   ReviewCardDraft,
   ReviewDeckIssue,
 } from "@simbyotic/re/study";
-import { gradeSession, removeSessionCards, type SessionProgress } from "./review-session";
-import {
-  readReviewCard,
-  saveReviewEdit,
-  undoReviewGrade,
-  deleteReviewItem,
-  restoreReviewItem,
-  previewDraft,
-  createWorkspaceCard,
-  insertClipboardImage,
-} from "./workspace";
-import { basename } from "node:path";
-import { useEffect, useState, type ReactNode } from "react";
-import {
-  Select,
-  SelectTrigger,
-  SelectContent,
-  SelectItem,
-  createRenderer,
-  type EventPayload,
-} from "@gpuix/react";
 import type { DeckEntry } from "@simbyotic/re/workspace";
 import { saveCards, type Card } from "./cards";
-import { CardMarkdown } from "./card-markdown";
-import { DeckCombobox } from "./deck-combobox";
 import { toErrorMessage } from "./error-message";
 import { type Screen } from "./launch";
+import { failure, success, type Notice } from "./notice";
 import { onSettled } from "./on-settled";
 import { panel } from "./panel";
-import { statusMenu } from "./review-status";
 import { savePreferences, type Preferences } from "./preferences";
 import { reviewKey, type ReviewGrade } from "./review-controls";
+import { gradeSession, removeSessionCards, type SessionProgress } from "./review-session";
+import { statusMenu } from "./review-status";
+import { ActionsMenu, type MenuItem } from "./screens/actions-menu";
+import { CreateScreen } from "./screens/create-screen";
+import { DeleteDialog } from "./screens/delete-dialog";
+import { EditScreen } from "./screens/edit-screen";
+import { PreviewScreen } from "./screens/preview-screen";
+import { ReviewScreen, type ReviewView } from "./screens/review-screen";
+import { Shell } from "./screens/shell";
 import { cardsPath } from "./storage";
-import { colors, column, editorTheme, menuItem, menuSurface, menuTrigger, row } from "./theme";
+import type { DraftFieldName, DraftFieldState } from "./ui/field";
 import {
+  createWorkspaceCard,
+  deleteReviewItem,
+  gradeInDeck,
+  insertClipboardImage,
   listDecks,
-  prepareScratch,
   loadReview,
   loadReviewStatus,
-  gradeInDeck,
+  prepareScratch,
+  previewDraft,
+  readReviewCard,
+  restoreReviewItem,
+  saveReviewEdit,
+  undoReviewGrade,
   type WorkspaceCard,
 } from "./workspace";
 
 const isWorkspaceCard = (card: Card | WorkspaceCard): card is WorkspaceCard => "reference" in card;
-
-interface Notice {
-  readonly tone: "success" | "error";
-  readonly text: string;
-}
-const failure = (text: string): Notice => ({ tone: "error", text });
-const success = (text: string): Notice => ({ tone: "success", text });
-
-function Key({ children }: { children: ReactNode }) {
-  return (
-    <div
-      style={{
-        ...row,
-        justifyContent: "center",
-        minWidth: 19,
-        height: 20,
-        paddingLeft: 4,
-        paddingRight: 4,
-        borderRadius: 4,
-        borderWidth: 1,
-        borderColor: colors.line,
-        backgroundColor: colors.field,
-      }}
-    >
-      <text style={{ color: colors.muted, fontSize: 11 }}>{children}</text>
-    </div>
-  );
-}
-function Action({
-  label,
-  keys,
-  onClick,
-  primary = false,
-  testId,
-}: {
-  label: string;
-  keys?: string;
-  onClick: () => void;
-  primary?: boolean;
-  testId?: string;
-}) {
-  return (
-    <div
-      testId={testId}
-      onClick={onClick}
-      style={{
-        ...row,
-        gap: 7,
-        padding: 6,
-        borderRadius: 5,
-        cursor: "pointer",
-        hover: { backgroundColor: colors.hover },
-      }}
-    >
-      <text
-        style={{
-          color: primary ? colors.text : colors.muted,
-          fontSize: 12,
-          fontWeight: primary ? 500 : 400,
-        }}
-      >
-        {label}
-      </text>
-      {keys && <Key>{keys}</Key>}
-    </div>
-  );
-}
-
-function Dropdown({
-  value,
-  options,
-  onChange,
-  open,
-  onOpenChange,
-  testId,
-}: {
-  value: string;
-  options: { value: string; label: string }[];
-  onChange: (value: string) => void;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  testId: string;
-}) {
-  const [focused, setFocused] = useState(false);
-  return (
-    <Select
-      value={value}
-      onValueChange={onChange}
-      open={open}
-      onOpenChange={onOpenChange}
-      style={{ flexGrow: 1, alignItems: "stretch" }}
-    >
-      <SelectTrigger
-        testId={testId}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        style={{ ...menuTrigger, borderColor: focused ? "#ffffff55" : colors.line }}
-      >
-        <text style={{ color: colors.text, fontSize: 13 }}>
-          {options.find((option) => option.value === value)?.label ?? "Choose a deck…"}
-        </text>
-        <text style={{ color: colors.muted, fontSize: 13 }}>⌄</text>
-      </SelectTrigger>
-      <SelectContent style={{ ...menuSurface, maxHeight: 235, overflowY: "scroll" }}>
-        {options.map((option) => (
-          <SelectItem
-            key={option.value}
-            value={option.value}
-            textValue={option.label}
-            style={({ highlighted }) => menuItem(highlighted)}
-          >
-            <text style={{ color: colors.text, fontSize: 13 }}>{option.label}</text>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-function Field({ label, children, error }: { label: string; children: ReactNode; error?: string }) {
-  return (
-    <div style={{ ...row, gap: 20 }}>
-      <text style={{ width: 70, textAlign: "right", color: colors.muted, fontSize: 12 }}>
-        {label}
-      </text>
-      <div style={{ ...column, flexGrow: 1, minWidth: 0, gap: 5 }}>
-        {children}
-        {error && <text style={{ color: colors.error, fontSize: 12 }}>{error}</text>}
-      </div>
-    </div>
-  );
-}
-
-function DraftField({
-  label,
-  testId,
-  value,
-  placeholder,
-  rows,
-  autoFocus = false,
-  focused,
-  readOnly,
-  onChange,
-  onFocus,
-  onBlur,
-  error,
-}: {
-  error?: string;
-  label: string;
-  testId: string;
-  value: string;
-  placeholder: string;
-  rows: number;
-  autoFocus?: boolean;
-  focused: boolean;
-  readOnly: boolean;
-  onChange: (value: string) => void;
-  onFocus: () => void;
-  onBlur: () => void;
-}) {
-  return (
-    <Field label={label} error={error}>
-      <textarea
-        readOnly={readOnly}
-        testId={testId}
-        autoFocus={autoFocus || undefined}
-        value={value}
-        onChange={(event) => onChange(event.value ?? "")}
-        onFocus={onFocus}
-        onClick={onFocus}
-        onKeyDown={onFocus}
-        onBlur={onBlur}
-        placeholder={placeholder}
-        minRows={rows}
-        maxRows={rows}
-        theme={editorTheme}
-        style={{
-          flexGrow: 1,
-          color: colors.text,
-          backgroundColor: colors.field,
-          borderRadius: 7,
-          borderWidth: 1,
-          borderColor: error ? colors.error : focused ? "#ffffff55" : colors.line,
-          padding: 12,
-          fontSize: 14,
-        }}
-      />
-    </Field>
-  );
-}
 
 type ScratchUndo =
   | { readonly kind: "scratchGrade"; readonly cardId: string; readonly lastGrade?: ReviewGrade }
@@ -348,7 +154,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
   const currentDeckName = currentDeckPath
     ? (decks.find((deck) => deck.absolutePath === currentDeckPath)?.name ??
       basename(currentDeckPath, ".md"))
-    : "Pocket (scratch deck)";
+    : "Overlay (scratch deck)";
 
   useEffect(() => {
     let cancelled = false;
@@ -438,6 +244,20 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
       return false;
     }
   }
+  // Every persisting operation holds the mutation lock and the saving flag for
+  // its whole duration; an early return or a thrown error must release both.
+  async function mutate(run: () => Promise<void>) {
+    mutation.current = true;
+    setSaving(true);
+    try {
+      await run();
+    } catch (error) {
+      setNotice(failure(toErrorMessage(error)));
+    } finally {
+      mutation.current = false;
+      setSaving(false);
+    }
+  }
   const input = () => ({
     cardType: preferences.cardType,
     deckPath: preferences.deck,
@@ -449,7 +269,6 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
     const result = previewDraft(input());
     if (!result.ok) {
       setFieldErrors({ [result.field]: result.error });
-      setNotice(failure(result.error));
       return null;
     }
     if (
@@ -466,9 +285,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
     if (busy || mutation.current) return;
     const prepared = checkDraft();
     if (!prepared) return;
-    mutation.current = true;
-    setSaving(true);
-    try {
+    await mutate(async () => {
       if (preferences.deck === "scratch") {
         const scratch = prepareScratch(
           preferences.cardType === "qa"
@@ -484,12 +301,13 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
         if (!preferences.root) setQueue([...queue, ...next.map((card) => card.id)]);
       } else {
         const result = await createWorkspaceCard(input());
+        if (result._tag === "FieldError") {
+          setFieldErrors({ [result.field]: result.message });
+          setPreview(undefined);
+          return;
+        }
         if (result._tag !== "Created") {
           setNotice(failure(result.message));
-          if (result._tag === "FieldError") {
-            setFieldErrors({ [result.field]: result.message });
-            setPreview(undefined);
-          }
           return;
         }
         setReviewLoaded(false);
@@ -507,18 +325,11 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
       );
       setStatusRevision((revision) => revision + 1);
       if (preferences.closeAfterSubmit) panel.hide();
-    } catch (error) {
-      setNotice(failure(toErrorMessage(error)));
-    } finally {
-      mutation.current = false;
-      setSaving(false);
-    }
+    });
   }
   async function grade(lastGrade: ReviewGrade) {
     if (!current || !revealed || busy || cardError || mutation.current || confirmingDelete) return;
-    mutation.current = true;
-    setSaving(true);
-    try {
+    await mutate(async () => {
       let undo: ReviewUndoToken | ScratchUndo = {
         kind: "scratchGrade",
         cardId: current.id,
@@ -540,18 +351,11 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
       setRevealed(false);
       setNotice(null);
       setStatusRevision((revision) => revision + 1);
-    } catch (error) {
-      setNotice(failure(toErrorMessage(error)));
-    } finally {
-      mutation.current = false;
-      setSaving(false);
-    }
+    });
   }
   async function undo() {
     if (!lastAction || mutation.current || saving || confirmingDelete) return;
-    mutation.current = true;
-    setSaving(true);
-    try {
+    await mutate(async () => {
       if ("kind" in lastAction.undo) {
         const scratch = lastAction.undo;
         if (scratch.kind === "scratchGrade") {
@@ -586,31 +390,22 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
       setRevealed(false);
       setNotice(null);
       setStatusRevision((value) => value + 1);
-    } catch (error) {
-      setNotice(failure(toErrorMessage(error)));
-    } finally {
-      mutation.current = false;
-      setSaving(false);
-    }
+    });
   }
   function requestDelete() {
     if (!current || busy || cardError || mutation.current) return;
     setActionsOpen(false);
     setConfirmingDelete(true);
   }
+  const noteSiblings = (card: Card | WorkspaceCard) =>
+    card.source ? cards.filter((entry) => entry.source?.noteId === card.source!.noteId) : [card];
   async function deleteCurrent() {
     if (!current || busy || cardError || mutation.current) return;
     const ids = isWorkspaceCard(current)
       ? (loadedCard?.content?.sourceCardIds ?? [])
-      : current.source
-        ? cards
-            .filter((card) => card.source?.noteId === current.source!.noteId)
-            .map((card) => card.id)
-        : [current.id];
+      : noteSiblings(current).map((card) => card.id);
     setConfirmingDelete(false);
-    mutation.current = true;
-    setSaving(true);
-    try {
+    await mutate(async () => {
       let undo: ReviewDeleteUndoToken | ScratchUndo = {
         kind: "scratchDelete",
         entries: cards.flatMap((card, index) => (ids.includes(card.id) ? [{ index, card }] : [])),
@@ -636,12 +431,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
       setRevealed(false);
       setNotice(null);
       setStatusRevision((value) => value + 1);
-    } catch (error) {
-      setNotice(failure(toErrorMessage(error)));
-    } finally {
-      mutation.current = false;
-      setSaving(false);
-    }
+    });
   }
   function openEditor() {
     if (!current || busy || cardError || confirmingDelete) return;
@@ -661,11 +451,14 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
     setFieldErrors({});
     setActionsOpen(false);
   }
+  function discardEdit() {
+    if (saving) return;
+    setEditDraft(undefined);
+    setFieldErrors({});
+  }
   async function saveEdit() {
     if (!current || !editDraft || mutation.current) return;
-    mutation.current = true;
-    setSaving(true);
-    try {
+    await mutate(async () => {
       if (isWorkspaceCard(current)) {
         const result = await saveReviewEdit(current, editDraft);
         if (!result.ok) {
@@ -683,9 +476,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
           setNotice(failure(prepared.error));
           return;
         }
-        const siblings = current.source
-          ? cards.filter((card) => card.source?.noteId === current.source!.noteId)
-          : [current];
+        const siblings = noteSiblings(current);
         if (
           prepared.value.length !== siblings.length ||
           (current.source &&
@@ -723,12 +514,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
       setLoadedCard(undefined);
       setReload((value) => value + 1);
       setNotice(success("Card updated"));
-    } catch (error) {
-      setNotice(failure(toErrorMessage(error)));
-    } finally {
-      mutation.current = false;
-      setSaving(false);
-    }
+    });
   }
   function openDeck() {
     if (!current) return;
@@ -771,19 +557,18 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
     setFieldErrors({});
     setFocus("content");
   }
-  const imageTarget = useRef("question");
+  const imageTarget = useRef<DraftFieldName>("question");
   async function insertImage() {
     if (busy || mutation.current || preview) return;
-    if (!preferences.root || preferences.deck === "scratch") {
+    const root = preferences.root;
+    if (!root || preferences.deck === "scratch") {
       setFieldErrors({ deckPath: "Choose a workspace deck before inserting an image." });
       return;
     }
     const target = preferences.cardType === "cloze" ? "content" : imageTarget.current;
-    mutation.current = true;
-    setSaving(true);
-    try {
+    await mutate(async () => {
       const result = await insertClipboardImage(
-        preferences.root,
+        root,
         preferences.deck,
         target === "question" ? question : target === "answer" ? answer : cloze,
       );
@@ -795,12 +580,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
         setFieldErrors({});
         setNotice(success("Image inserted"));
       } else setNotice(failure(result.message));
-    } catch (error) {
-      setNotice(failure(toErrorMessage(error)));
-    } finally {
-      mutation.current = false;
-      setSaving(false);
-    }
+    });
   }
   function primary() {
     if (busy || confirmingDelete) return;
@@ -815,6 +595,21 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
     setPinned(!pinned);
     setActionsOpen(false);
   }
+  function toggleActions() {
+    if (confirmingDelete) return;
+    setActionsOpen(!actionsOpen);
+    setActionIndex(0);
+  }
+  function back() {
+    if (editDraft) discardEdit();
+    else if (preview) setPreview(undefined);
+    else panel.hide();
+  }
+  function skipCard() {
+    setProgress({ ...progress, queue: queue.slice(1) });
+    setRevealed(false);
+  }
+  const reloadCard = () => setReload((value) => value + 1);
   const clearFieldError = (field: string) =>
     setFieldErrors((errors) => {
       if (!errors[field]) return errors;
@@ -822,15 +617,23 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
       delete next[field];
       return next;
     });
-  const edit =
-    (field: "question" | "answer" | "content", set: (value: string) => void) => (value: string) => {
-      imageTarget.current = field;
-      setFocus(field);
-      set(value);
-      setNotice(null);
-      clearFieldError(field);
-    };
-  const draftField = (name: "question" | "answer" | "content") => ({
+  const draftSetters = { question: setQuestion, answer: setAnswer, content: setCloze } as const;
+  const editDraftField = (field: DraftFieldName, value: string) => {
+    imageTarget.current = field;
+    setFocus(field);
+    draftSetters[field](value);
+    setNotice(null);
+    clearFieldError(field);
+  };
+  const editReviewField = (field: DraftFieldName, value: string) => {
+    if (!editDraft) return;
+    if (editDraft.cardType === "qa") {
+      if (field === "question") setEditDraft({ ...editDraft, question: value });
+      else if (field === "answer") setEditDraft({ ...editDraft, answer: value });
+    } else if (field === "content") setEditDraft({ ...editDraft, content: value });
+    clearFieldError(field);
+  };
+  const draftField = (name: DraftFieldName): DraftFieldState => ({
     focused: focus === name,
     error: fieldErrors[name],
     readOnly: saving,
@@ -851,20 +654,11 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
     setActionsOpen(false);
     setNotice(null);
   };
-  const menu = [
+  const menu: MenuItem[] = [
     ...(editDraft
       ? [
           { label: "Save Changes", key: "⌘ ↵", run: () => void saveEdit() },
-          {
-            label: "Discard Changes",
-            key: "Esc",
-            run: () => {
-              if (!saving) {
-                setEditDraft(undefined);
-                setFieldErrors({});
-              }
-            },
-          },
+          { label: "Discard Changes", key: "Esc", run: discardEdit },
         ]
       : screen === "create"
         ? [
@@ -925,28 +719,15 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
               : []),
             ...(cardError
               ? [
-                  { label: "Retry Card", key: "⌘ R", run: () => setReload((value) => value + 1) },
-                  {
-                    label: "Skip Card",
-                    key: "",
-                    run: () => {
-                      setProgress({ ...progress, queue: queue.slice(1) });
-                      setRevealed(false);
-                    },
-                  },
+                  { label: "Retry Card", key: "⌘ R", run: reloadCard },
+                  { label: "Skip Card", key: "", run: skipCard },
                 ]
               : []),
           ]),
     { label: "Choose Workspace…", key: "", run: () => events.preferences() },
     { label: pinned ? "Stop Keeping on Top" : "Keep on Top", key: "⌘ ⇧ P", run: togglePin },
     ...(screen === "review" && !editDraft
-      ? [
-          {
-            label: "Restart Review",
-            key: "",
-            run: restart,
-          },
-        ]
+      ? [{ label: "Restart Review", key: "", run: restart }]
       : []),
     { label: "Close Window", key: "Esc", run: panel.hide },
     {
@@ -1000,15 +781,9 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
       if (cmd && event.key !== "k" && actionsOpen) setActionsOpen(false);
       if (event.key === "escape") {
         if (actionsOpen) setActionsOpen(false);
-        else if (editDraft && !saving) {
-          setEditDraft(undefined);
-          setFieldErrors({});
-        } else if (preview) setPreview(undefined);
-        else panel.hide();
-      } else if (cmd && event.key === "k") {
-        setActionsOpen(!actionsOpen);
-        setActionIndex(0);
-      } else if (cmd && event.key === "p" && event.modifiers?.shift) togglePin();
+        else back();
+      } else if (cmd && event.key === "k") toggleActions();
+      else if (cmd && event.key === "p" && event.modifiers?.shift) togglePin();
       else if (editDraft && cmd && event.key === "enter") void saveEdit();
       else if (cmd && event.key === "p" && screen === "create" && !editDraft) openPreview();
       else if (cmd && event.key === "i" && screen === "create" && !editDraft) void insertImage();
@@ -1022,7 +797,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
         insertCloze();
       else if (cmd && event.key === "r" && !editDraft) {
         if (screen === "create") void refreshDecks();
-        else if (cardError) setReload((value) => value + 1);
+        else if (cardError) reloadCard();
         else restart();
       } else if (screen === "review" && !editDraft && cmd && event.key === "z") void undo();
       else if (screen === "review" && !editDraft && cmd && event.key === "e") openEditor();
@@ -1074,496 +849,139 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
           : revealed
             ? "Good"
             : "Show Answer";
+  const grading = screen === "review" && !editDraft && revealed && current && !cardError;
+  const reviewView: ReviewView = startError
+    ? { kind: "startError", error: startError }
+    : loadingCard
+      ? { kind: "loadingCard" }
+      : cardError
+        ? { kind: "cardError", error: cardError, deckPath: currentDeckPath }
+        : current
+          ? {
+              kind: "card",
+              cardType: current.cardType === "cloze" ? "cloze" : "qa",
+              prompt: current.question,
+              reveal: current.answer,
+              revealed,
+              deckPath: currentDeckPath,
+            }
+          : busy
+            ? { kind: "loading" }
+            : progress.grades.length || lastAction
+              ? { kind: "complete", grades: progress.grades }
+              : { kind: "empty" };
 
   return (
-    <div
-      style={{
-        ...column,
-        height: "100%",
-        backgroundColor: "#282828c8",
-        position: "relative",
+    <Shell
+      onBack={back}
+      progress={
+        screen === "review" && (current || lastAction)
+          ? `${progress.grades.length} reviewed · ${queue.length} remaining${lastAction ? " · ⌘Z Undo" : ""}`
+          : undefined
+      }
+      notice={notice}
+      footer={{
+        context: screen === "create" ? "Create Card" : current ? currentDeckName : "Review Cards",
+        grading: grading
+          ? {
+              onAgain: () => grade("again"),
+              onHard: () => grade("hard"),
+              onEasy: () => grade("easy"),
+            }
+          : undefined,
+        primary: {
+          label: primaryLabel,
+          keys: editDraft || screen === "create" ? "⌘ ↵" : revealed ? "Space / 3" : "Space",
+          onClick: primary,
+        },
+        onActions: toggleActions,
       }}
-    >
-      <div
-        style={{
-          ...row,
-          height: 44,
-          flexShrink: 0,
-          paddingLeft: 15,
-          paddingRight: 18,
-          justifyContent: "space-between",
-        }}
-      >
-        <div
-          onClick={() => {
-            if (editDraft && !saving) {
-              setEditDraft(undefined);
-              setFieldErrors({});
-            } else if (preview) setPreview(undefined);
-            else panel.hide();
-          }}
-          style={{ cursor: "pointer", padding: 5 }}
-        >
-          <text style={{ color: colors.muted, fontSize: 24 }}>‹</text>
-        </div>
-        {screen === "review" && (current || lastAction) && (
-          <text
-            style={{ color: colors.muted, fontSize: 12 }}
-          >{`${progress.grades.length} reviewed · ${queue.length} remaining${lastAction ? " · ⌘Z Undo" : ""}`}</text>
-        )}
-      </div>
-      {editDraft ? (
-        <div
-          style={{
-            ...column,
-            flexGrow: 1,
-            minHeight: 0,
-            overflowY: "scroll",
-            padding: 30,
-            gap: 16,
-          }}
-        >
-          <text style={{ color: colors.text, fontSize: 18 }}>
-            {`Edit ${editDraft.cardType === "cloze" ? "Cloze Note" : "Card"}`}
-          </text>
-          {editDraft.cardType === "qa" ? (
-            <>
-              <DraftField
-                label="Question"
-                testId="edit-question"
-                value={editDraft.question}
-                placeholder="Question"
-                rows={3}
-                autoFocus
-                {...draftField("question")}
-                onChange={(question) => {
-                  setEditDraft({ ...editDraft, question });
-                  clearFieldError("question");
-                }}
-              />
-              <DraftField
-                label="Answer"
-                testId="edit-answer"
-                value={editDraft.answer}
-                placeholder="Answer"
-                rows={3}
-                {...draftField("answer")}
-                onChange={(answer) => {
-                  setEditDraft({ ...editDraft, answer });
-                  clearFieldError("answer");
-                }}
-              />
-            </>
-          ) : (
-            <DraftField
-              label="Content"
-              testId="edit-content"
-              value={editDraft.content}
-              placeholder="Cloze note"
-              rows={6}
-              autoFocus
-              {...draftField("content")}
-              onChange={(content) => {
-                setEditDraft({ ...editDraft, content });
-                clearFieldError("content");
-              }}
+      overlays={
+        <>
+          {confirmingDelete && current && (
+            <DeleteDialog
+              cardType={current.cardType === "cloze" ? "cloze" : "qa"}
+              cardCount={loadedCard?.content?.sourceCardIds.length ?? noteSiblings(current).length}
+              onCancel={() => setConfirmingDelete(false)}
+              onConfirm={() => void deleteCurrent()}
             />
           )}
-          <Action
-            label="Discard Changes"
-            keys="Esc"
-            onClick={() => {
-              if (!saving) {
-                setEditDraft(undefined);
-                setFieldErrors({});
-              }
-            }}
-          />
-        </div>
-      ) : screen === "create" && preview ? (
-        <div
-          style={{
-            ...column,
-            flexGrow: 1,
-            minHeight: 0,
-            overflowY: "scroll",
-            padding: 30,
-            gap: 16,
-          }}
-        >
-          <text style={{ color: colors.muted, fontSize: 13 }}>
-            {`Card Preview ${previewIndex + 1}/${preview.length}`}
-          </text>
-          <CardMarkdown
-            source={preview[previewIndex]!.question}
-            deckPath={preferences.deck === "scratch" ? undefined : preferences.deck}
-          />
-          <div style={{ height: 1, backgroundColor: colors.line }} />
-          <CardMarkdown
-            source={preview[previewIndex]!.answer}
-            deckPath={preferences.deck === "scratch" ? undefined : preferences.deck}
-          />
-          <div style={row}>
-            <Action label="Edit Card" keys="⌘ P" onClick={openPreview} />
-            {previewIndex > 0 && (
-              <Action
-                label="Previous"
-                keys="⌥ ←"
-                onClick={() => setPreviewIndex(previewIndex - 1)}
-              />
-            )}
-            {previewIndex < preview.length - 1 && (
-              <Action label="Next" keys="⌥ →" onClick={() => setPreviewIndex(previewIndex + 1)} />
-            )}
-          </div>
-        </div>
-      ) : screen === "create" ? (
-        <div
-          key={editorKey}
-          style={{
-            ...column,
-            minHeight: 0,
-            overflowY: "scroll",
-            flexGrow: 1,
-            paddingLeft: 70,
-            paddingRight: 70,
-            paddingTop: 9,
-            gap: 17,
-          }}
-        >
-          <Field label="Deck" error={fieldErrors.deckPath}>
-            <DeckCombobox
-              value={preferences.deck}
-              open={openSelect === "deck"}
-              onOpenChange={(open) => setOpenSelect(open ? "deck" : null)}
-              options={[
-                ...decks.map((deck) => ({ value: deck.absolutePath, label: deck.name })),
-                { value: "scratch", label: "Pocket (scratch deck)" },
-              ]}
-              onChange={(deck) => {
-                if (!saving) {
-                  updatePreferences({ deck });
-                  setFieldErrors({});
-                }
-              }}
-            />
-          </Field>
-          <Field label="Card Type">
-            <Dropdown
-              testId="type-select"
-              value={preferences.cardType}
-              open={openSelect === "type"}
-              onOpenChange={(open) => setOpenSelect(open ? "type" : null)}
-              options={[
-                { value: "qa", label: "Question and Answer" },
-                { value: "cloze", label: "Cloze" },
-              ]}
-              onChange={(type) => {
-                if (!saving) {
-                  updatePreferences({ cardType: type === "cloze" ? "cloze" : "qa" });
-                  setFieldErrors({});
-                }
-              }}
-            />
-          </Field>
-          <div style={{ height: 1, backgroundColor: colors.line }} />
-          {preferences.cardType === "qa" ? (
-            <>
-              <DraftField
-                label="Question"
-                testId="question"
-                autoFocus={imageTarget.current !== "answer"}
-                value={question}
-                onChange={edit("question", setQuestion)}
-                placeholder="What do you want to remember?"
-                rows={2}
-                {...draftField("question")}
-              />
-              <DraftField
-                label="Answer"
-                testId="answer"
-                autoFocus={imageTarget.current === "answer"}
-                value={answer}
-                onChange={edit("answer", setAnswer)}
-                placeholder="The answer"
-                rows={2}
-                {...draftField("answer")}
-              />
-            </>
-          ) : (
-            <DraftField
-              label="Content"
-              testId="cloze-content"
-              autoFocus
-              value={cloze}
-              onChange={edit("content", setCloze)}
-              placeholder="The {{c1::answer}} in context."
-              rows={5}
-              {...draftField("content")}
-            />
-          )}
-        </div>
-      ) : (
-        <div
-          key={current?.id ?? "empty-review"}
-          style={{
-            ...column,
-            flexGrow: 1,
-            minHeight: 0,
-            overflowY: "scroll",
-          }}
-        >
-          <div
-            style={{
-              ...column,
-              flexShrink: 0,
-              flexGrow: current ? 0 : 1,
-              paddingLeft: 38,
-              paddingRight: 38,
-              paddingBottom: 24,
-              paddingTop: 16,
-              gap: 16,
-            }}
-          >
-            {startError ? (
-              <div style={{ ...column, gap: 12 }}>
-                <text style={{ color: colors.error, fontSize: 18 }}>Could not start review</text>
-                <text style={{ color: colors.muted }}>{startError}</text>
-                <Action label="Retry" keys="⌘ R" onClick={restart} />
-                <Action label="Choose Workspace…" onClick={() => events.preferences()} />
-              </div>
-            ) : loadingCard ? (
-              <text style={{ color: colors.muted }}>Loading card…</text>
-            ) : cardError ? (
-              <div style={{ ...column, gap: 12 }}>
-                <text
-                  style={{ color: colors.error }}
-                >{`Could not load this card: ${cardError}`}</text>
-                <text style={{ color: colors.muted }}>{currentDeckPath}</text>
-                <Action
-                  label="Retry Card"
-                  keys="⌘ R"
-                  onClick={() => setReload((value) => value + 1)}
-                />
-                <Action
-                  label="Skip Card"
-                  onClick={() => {
-                    setProgress({ ...progress, queue: queue.slice(1) });
-                    setRevealed(false);
-                  }}
-                />
-                <Action label="Open Deck" keys="⌘ O" onClick={openDeck} />
-              </div>
-            ) : current ? (
-              <>
-                <CardMarkdown
-                  testId={revealed && current.cardType === "cloze" ? "revealed-answer" : "prompt"}
-                  source={
-                    revealed && current.cardType === "cloze" ? current.answer : current.question
-                  }
-                  deckPath={currentDeckPath}
-                />
-                {revealed && current.cardType !== "cloze" && (
-                  <>
-                    <div style={{ height: 1, backgroundColor: colors.line }} />
-                    <CardMarkdown
-                      testId="revealed-answer"
-                      source={current.answer}
-                      deckPath={currentDeckPath}
-                    />
-                  </>
-                )}
-              </>
-            ) : (
-              <div
-                style={{
-                  ...column,
-                  flexGrow: 1,
-                  justifyContent: "center",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
-                <text style={{ color: colors.text, fontSize: 19 }}>
-                  {busy
-                    ? "Loading cards…"
-                    : progress.grades.length || lastAction
-                      ? "Review complete"
-                      : "No cards due"}
-                </text>
-                <text style={{ color: colors.muted, fontSize: 13 }}>
-                  {busy
-                    ? ""
-                    : progress.grades.length || lastAction
-                      ? `Reviewed ${progress.grades.length} ${progress.grades.length === 1 ? "card" : "cards"}. Again: ${progress.grades.filter((g) => g === "again").length} · Hard: ${progress.grades.filter((g) => g === "hard").length} · Good: ${progress.grades.filter((g) => g === "good").length} · Easy: ${progress.grades.filter((g) => g === "easy").length}`
-                      : "There are no reviewable new or due cards."}
-                </text>
-              </div>
-            )}
-            {!current && !busy && !startError && (
-              <Action label="Start New Session" keys="⌘ R" onClick={restart} />
-            )}
-            {issues.length > 0 && (
-              <div style={{ ...column, gap: 8 }}>
-                <text style={{ color: colors.error }}>Some decks or cards were excluded:</text>
-                {issues.map((issue, index) => (
-                  <text key={index} style={{ color: colors.muted, fontSize: 12 }}>
-                    {`${issue.relativePath}: ${issue.message}`}
-                  </text>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      {notice && (
-        <div style={{ paddingLeft: 20, paddingRight: 20, paddingBottom: 8 }}>
-          <text
-            style={{ color: notice.tone === "success" ? colors.muted : colors.error, fontSize: 12 }}
-          >
-            {notice.text}
-          </text>
-        </div>
-      )}
-      <div
-        style={{
-          ...row,
-          justifyContent: "space-between",
-          height: 43,
-          flexShrink: 0,
-          paddingLeft: 16,
-          paddingRight: 12,
-          borderTopWidth: 1,
-          borderColor: colors.line,
-          backgroundColor: "#00000012",
-        }}
-      >
-        <text
-          style={{
-            color: colors.muted,
-            fontSize: 12,
-            flexShrink: 1,
-            minWidth: 0,
-            whiteSpace: "nowrap",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {screen === "create" ? "Create Card" : current ? currentDeckName : "Review Cards"}
-        </text>
-        <div style={{ ...row, gap: 8 }}>
-          {screen === "review" && !editDraft && revealed && current && !cardError && (
-            <>
-              <Action label="Again" keys="1" onClick={() => grade("again")} testId="again" />
-              <Action label="Hard" keys="2" onClick={() => grade("hard")} testId="hard" />
-            </>
-          )}
-          <Action
-            label={primaryLabel}
-            keys={editDraft || screen === "create" ? "⌘ ↵" : revealed ? "Space / 3" : "Space"}
-            primary
-            onClick={primary}
-            testId="primary"
-          />
-          {screen === "review" && !editDraft && revealed && current && !cardError && (
-            <Action label="Easy" keys="4" onClick={() => grade("easy")} testId="easy" />
-          )}
-          <div style={{ width: 1, height: 16, backgroundColor: colors.line }} />
-          <Action
-            label="Actions"
-            keys="⌘ K"
-            onClick={() => {
-              if (confirmingDelete) return;
-              setActionsOpen(!actionsOpen);
-              setActionIndex(0);
-            }}
-            testId="actions"
-          />
-        </div>
-      </div>
-      {confirmingDelete && current && (
-        <div
-          style={{
-            ...column,
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            backgroundColor: "#00000088",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-          onClick={() => {}}
-        >
-          <div
-            style={{ ...menuSurface, ...column, width: 400, maxWidth: "90%", padding: 24, gap: 16 }}
-          >
-            <text style={{ color: colors.text, fontSize: 18 }}>
-              {current.cardType === "cloze" ? "Delete Cloze Note?" : "Delete Card?"}
-            </text>
-            <text style={{ color: colors.muted, fontSize: 14 }}>
-              {current.cardType === "cloze"
-                ? `This removes the note and all ${loadedCard?.content?.sourceCardIds.length ?? (current.source ? cards.filter((card) => card.source?.noteId === current.source!.noteId).length : 1)} cards it creates.`
-                : "This removes the card from its deck."}
-            </text>
-            <text style={{ color: colors.muted, fontSize: 14 }}>
-              You can undo this during the current review session.
-            </text>
-            <div style={{ ...row, justifyContent: "flex-end", gap: 12 }}>
-              <Action
-                label="Cancel"
-                keys="Esc"
-                testId="cancel-delete"
-                onClick={() => setConfirmingDelete(false)}
-              />
-              <Action
-                label="Delete"
-                keys="⌘ ↵"
-                testId="confirm-delete"
-                onClick={() => void deleteCurrent()}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-      {actionsOpen && (
-        <div
-          style={{
-            ...menuSurface,
-            position: "absolute",
-            bottom: 49,
-            right: 12,
-            width: 285,
-            maxHeight: 350,
-            overflowY: "scroll",
-            padding: 6,
-            gap: 2,
-            borderRadius: 10,
-            boxShadow: {
-              offsetX: 0,
-              offsetY: 6,
-              blurRadius: 24,
-              spreadRadius: 0,
-              color: "#00000060",
-            },
-          }}
-        >
-          {menu.map((item, index) => (
-            <div
-              key={item.label}
-              onClick={() => {
+          {actionsOpen && (
+            <ActionsMenu
+              items={menu}
+              activeIndex={actionIndex}
+              onActivate={setActionIndex}
+              onSelect={(item) => {
                 item.run();
                 setActionsOpen(false);
               }}
-              onMouseEnter={() => setActionIndex(index)}
-              style={{ ...menuItem(actionIndex === index), justifyContent: "space-between" }}
-            >
-              <text style={{ color: colors.text, fontSize: 13 }}>{item.label}</text>
-              {item.key && <Key>{item.key}</Key>}
-            </div>
-          ))}
-        </div>
+            />
+          )}
+        </>
+      }
+    >
+      {editDraft ? (
+        <EditScreen
+          draft={editDraft}
+          field={draftField}
+          onChange={editReviewField}
+          onDiscard={discardEdit}
+        />
+      ) : screen === "create" && preview ? (
+        <PreviewScreen
+          cards={preview}
+          index={previewIndex}
+          deckPath={preferences.deck === "scratch" ? undefined : preferences.deck}
+          onEdit={openPreview}
+          onIndexChange={setPreviewIndex}
+        />
+      ) : screen === "create" ? (
+        <CreateScreen
+          editorKey={editorKey}
+          cardType={preferences.cardType}
+          deck={{
+            value: preferences.deck,
+            open: openSelect === "deck",
+            onOpenChange: (open) => setOpenSelect(open ? "deck" : null),
+            options: [
+              ...decks.map((deck) => ({ value: deck.absolutePath, label: deck.name })),
+              { value: "scratch", label: "Overlay (scratch deck)" },
+            ],
+            onChange: (deck) => {
+              if (!saving) {
+                updatePreferences({ deck });
+                setFieldErrors({});
+              }
+            },
+            error: fieldErrors.deckPath,
+          }}
+          type={{
+            open: openSelect === "type",
+            onOpenChange: (open) => setOpenSelect(open ? "type" : null),
+            onChange: (type) => {
+              if (!saving) {
+                updatePreferences({ cardType: type === "cloze" ? "cloze" : "qa" });
+                setFieldErrors({});
+              }
+            },
+          }}
+          draft={{ question, answer, content: cloze }}
+          initialFocus={imageTarget.current}
+          field={draftField}
+          onChange={editDraftField}
+        />
+      ) : (
+        <ReviewScreen
+          key={current?.id ?? "empty-review"}
+          view={reviewView}
+          issues={issues}
+          onRestart={restart}
+          onReloadCard={reloadCard}
+          onSkipCard={skipCard}
+          onOpenDeck={openDeck}
+          onChooseWorkspace={() => events.preferences()}
+        />
       )}
-    </div>
+    </Shell>
   );
 }

@@ -188,7 +188,7 @@ export function CardMarkdown({
           style={{
             ...stack,
             ...(node.type === "blockquote"
-              ? { borderLeftWidth: 2, borderColor: "#ffffff44", paddingLeft: 12 }
+              ? { borderLeftWidth: 2, borderColor: colors.quote, paddingLeft: 12 }
               : {}),
           }}
         >
