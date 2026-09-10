@@ -9,6 +9,19 @@ Callers supply the filesystem and path implementations. Their service keys come 
 Node applications use `@effect/platform-node@4.0.0-rc.112` alongside the exact
 `effect@4.0.0-rc.112` peer:
 
+First pin the adapter's transitive prerelease in your application's `package.json`:
+
+```json
+{
+  "overrides": {
+    "@effect/platform-node-shared": "4.0.0-rc.112"
+  }
+}
+```
+
+The Node adapter declares a range for this dependency. Without the override, a
+fresh install can select a later release candidate that requires a newer Effect.
+
 ```sh
 npm install effect@4.0.0-rc.112 @effect/platform-node@4.0.0-rc.112
 ```

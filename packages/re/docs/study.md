@@ -3,7 +3,8 @@
 `@simbyotic/re/study` supplies application-independent authoring and review services.
 It shares the exact `effect@4.0.0-rc.112` peer with the other entry points. Filesystem
 and path abstractions come from Effect core; Node consumers supply
-`@effect/platform-node@4.0.0-rc.112`. The repository apps retain their frozen v3 library.
+`@effect/platform-node@4.0.0-rc.112`. Pocket uses the v4 workspace library and the
+same pinned Node adapter.
 
 `ReviewStore` has an explicit service contract for starting a new/due session,
 loading a card, saving an edit, grading, undoing a grade, deleting a source note,

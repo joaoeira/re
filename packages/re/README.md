@@ -37,7 +37,8 @@ Each entry point exposes its own ESM JavaScript and TypeScript declarations. The
 ## Workspace services
 
 Workspace and study consumers supply filesystem and path layers. These abstractions
-now live in `effect/FileSystem` and `effect/Path`. For Node applications, add the matching adapter:
+now live in `effect/FileSystem` and `effect/Path`. For Node applications, set the
+[workspace guide's transitive adapter override](docs/workspace.md), then add the matching adapter:
 
 ```bash
 npm install @effect/platform-node@4.0.0-rc.112
@@ -47,8 +48,8 @@ npm install @effect/platform-node@4.0.0-rc.112
 removed. Core, item types, and scheduling work without installing a Node adapter.
 All five entry points share one package version and one Effect installation in a consumer.
 
-Pocket remains on a separately frozen Effect v3 compatibility
-line. Its archive pin does not follow this library's version. Markdown files,
+Pocket consumes this workspace library with the same pinned Effect v4 runtime.
+Its commands build the library before using its public exports. Markdown files,
 card identities, and FSRS scheduling behavior are unchanged by the migration.
 
 ## Development

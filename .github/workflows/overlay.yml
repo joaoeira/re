@@ -1,4 +1,4 @@
-name: App dependency isolation
+name: Overlay integration
 
 on:
   workflow_dispatch:
@@ -6,27 +6,27 @@ on:
     paths:
       - "apps/*/package.json"
       - "apps/overlay/**"
-      - "packages/re/package.json"
-      - "vendor/re-effect3/**"
+      - "packages/**"
       - "scripts/**"
       - "patches/**"
       - "package.json"
       - "tsconfig*.json"
       - "bun.lock"
-      - ".github/workflows/app-isolation.yml"
+      - ".bun-version"
+      - ".github/workflows/overlay.yml"
   push:
     branches: [master]
     paths:
       - "apps/*/package.json"
       - "apps/overlay/**"
-      - "packages/re/package.json"
-      - "vendor/re-effect3/**"
+      - "packages/**"
       - "scripts/**"
       - "patches/**"
       - "package.json"
       - "tsconfig*.json"
       - "bun.lock"
-      - ".github/workflows/app-isolation.yml"
+      - ".bun-version"
+      - ".github/workflows/overlay.yml"
 
 jobs:
   resolution:
@@ -38,10 +38,10 @@ jobs:
           node-version: 24
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.21
+          bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       - run: bun run check:app-resolution
-      - run: bun run test:app-isolation
+      - run: bun run test:app-resolution
       - run: bun run test:release
 
   overlay:
@@ -53,7 +53,7 @@ jobs:
           node-version: 24
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.21
+          bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       - run: bun run check:app-resolution
       - run: bun run check:overlay

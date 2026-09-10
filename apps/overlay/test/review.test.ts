@@ -12,6 +12,7 @@ import {
   loadReview,
   loadReviewStatus,
   gradeInDeck,
+  saveReviewEdit,
   disposeWorkspace,
 } from "../src/workspace";
 
@@ -50,6 +51,36 @@ test("creating in a removed deck reports an actionable field error", async () =>
       field: "deckPath",
       message: "The selected deck no longer exists. Refresh the deck list.",
     });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an invalid review edit keeps the field error and leaves the source deck unchanged", async () => {
+  const root = await mkdtemp(join(tmpdir(), "re-pocket-invalid-edit-"));
+  try {
+    const deck = join(root, "test.md");
+    await writeFile(deck, "");
+    await createWorkspaceCard({
+      deckPath: deck,
+      cardType: "qa",
+      question: "Question",
+      answer: "Answer",
+      content: "",
+    });
+    const before = await readFile(deck, "utf8");
+    const review = await loadReview(root);
+    if (!review.ok) throw new Error(review.error);
+    const card = review.value.cards[0];
+    if (!card) throw new Error("Expected the created card in the review queue");
+    expect(
+      await saveReviewEdit(card, { cardType: "qa", question: "Question", answer: "" }),
+    ).toEqual({
+      ok: false,
+      field: "answer",
+      error: "Enter an answer.",
+    });
+    expect(await readFile(deck, "utf8")).toBe(before);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

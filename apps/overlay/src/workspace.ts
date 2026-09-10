@@ -55,7 +55,7 @@ const runtime = ManagedRuntime.make(
 );
 const pending = new Set<Promise<unknown>>();
 function run<A>(
-  effect: Effect.Effect<A, never, ManagedRuntime.ManagedRuntime.Context<typeof runtime>>,
+  effect: Effect.Effect<A, never, ManagedRuntime.ManagedRuntime.Services<typeof runtime>>,
 ): Promise<A> {
   const operation = runtime.runPromise(effect);
   pending.add(operation);
@@ -156,7 +156,7 @@ export const saveReviewEdit = (
       Effect.catchTag("ReviewEditValidationError", (error) =>
         Effect.succeed<Result<void>>({ ok: false, error: error.message, field: error.field }),
       ),
-      Effect.catchAll((error) => Effect.succeed<Result<void>>({ ok: false, error: error.message })),
+      Effect.catch((error) => Effect.succeed<Result<void>>({ ok: false, error: error.message })),
     ),
   );
 export const undoReviewGrade = (undo: ReviewUndoToken) =>

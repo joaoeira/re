@@ -2,8 +2,8 @@
 
 The `0.3.0-rc.0` library targets `effect@4.0.0-rc.112` exactly. All five entry
 points expose v4 Effect, Schema, and service types. Mixing v3 and v4 values in
-one consumer graph is unsupported. Pocket in
-this repository continues to consume the frozen v3 artifact separately.
+one consumer graph is unsupported. Pocket in this repository consumes the v4
+workspace package and shares its exact Effect version and matching Node adapter.
 
 This migration preserves Markdown metadata, numeric spelling, card identities,
 and FSRS scheduling behavior. Existing decks need no data migration. Seeded
@@ -19,7 +19,8 @@ npm install ./simbyotic-re-0.3.0-rc.0.tgz effect@4.0.0-rc.112
 ```
 
 For workspace/study operations on Node, add
-`@effect/platform-node@4.0.0-rc.112`. Core, item types, and scheduling need no Node
+`@effect/platform-node@4.0.0-rc.112` and pin its transitive shared adapter using the
+[workspace guide's override](workspace.md). Core, item types, and scheduling need no Node
 adapter. Replace `@effect/platform/FileSystem` and `@effect/platform/Path` with
 `effect/FileSystem` and `effect/Path`; remove the old `@effect/platform` package.
 Keep one shared Effect installation across the library and adapter.
@@ -126,11 +127,17 @@ where policies differ, and map remaining failures uniformly when appropriate.
 Store methods already expose their domain error tags; consumers do not need to
 reclassify platform errors after `runPromise`.
 
+For application bridges, `ManagedRuntime.ManagedRuntime.Services<typeof runtime>`
+replaces `ManagedRuntime.ManagedRuntime.Context<typeof runtime>`, and
+`Effect.catch` replaces `Effect.catchAll`. Keep runtime disposal at the app's
+shutdown boundary, after outstanding writes have settled.
+
 Library tests use `@effect/vitest@4.0.0-rc.112` with Vitest `4.1.11`.
 `it.effect` replaces `it.scoped`, and `it.live` replaces `it.scopedLive`; both
 scope resources automatically. TestClock comes from `effect/testing/TestClock`.
 After `Fiber.interrupt`, inspect the exit with `Fiber.await` and
-`Exit.hasInterrupts`. Retained v3 app tests keep their own adapter and APIs.
+`Exit.hasInterrupts`. Pocket's application tests use Bun's test runner with the
+same v4 workspace package; they do not require the Vitest adapter.
 
 Independent package checks compile strict NodeNext and Bundler consumers and
 execute native ESM/CommonJS on Node 22 and 24. They validate all five exports,

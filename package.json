@@ -29,20 +29,28 @@
     "test:release": "node --test scripts/library-release.test.mjs",
     "overlay:dev": "bun --cwd=apps/overlay run dev",
     "overlay:build": "bun --cwd=apps/overlay run build",
-    "check:app-resolution": "node scripts/check-app-resolution.mjs && bun scripts/check-app-resolution.mjs",
-    "test:app-isolation": "node --test scripts/app-isolation.test.mjs",
+    "check:app-resolution": "bun run build:library && node scripts/check-app-resolution.mjs && bun scripts/check-app-resolution.mjs",
+    "test:app-resolution": "bun run build:library && node --test scripts/app-resolution.test.mjs",
     "check:overlay": "node scripts/check-overlay.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.2",
     "@effect/language-service": "0.87.2",
     "@oxlint/plugins": "1.55.0",
-    "@types/bun": "latest",
+    "@types/bun": "1.4.2",
+    "@types/node": "24.13.4",
     "add": "^2.0.6",
     "oxfmt": "^0.33.0",
     "oxlint": "1.55.0",
     "typescript": "^5.9.3"
   },
+  "overrides": {
+    "@effect/platform-node-shared": "4.0.0-rc.112"
+  },
+  "engines": {
+    "bun": ">=1.4.2"
+  },
+  "packageManager": "bun@1.4.2",
   "patchedDependencies": {
     "@gpuix/react@0.7.0": "patches/@gpuix%2Freact@0.7.0.patch"
   }

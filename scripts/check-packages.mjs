@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -32,6 +33,7 @@ const checkConsumer = async ({ archive, consumer, withWorkspace }) => {
   assert.equal(manifest.dependencies.effect, supportedEffectVersion);
   if (!withWorkspace) {
     delete manifest.dependencies["@effect/platform-node"];
+    delete manifest.overrides;
   }
   manifest.dependencies[packageName] = pathToFileURL(archive).href;
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
@@ -95,6 +97,17 @@ const checkConsumer = async ({ archive, consumer, withWorkspace }) => {
       ),
     );
     assert.equal(adapter.version, supportedEffectVersion, "The Node adapter must match Effect");
+    const adapterRequire = createRequire(
+      path.join(consumer, "node_modules/@effect/platform-node/package.json"),
+    );
+    const shared = JSON.parse(
+      await readFile(adapterRequire.resolve("@effect/platform-node-shared/package.json"), "utf8"),
+    );
+    assert.equal(
+      shared.version,
+      supportedEffectVersion,
+      "The shared Node adapter must match Effect",
+    );
   }
   console.log(
     `Verified shared Effect ${installedEffect.version} (consumer range: ${manifest.dependencies.effect}).`,

@@ -16,7 +16,7 @@ const temporary = async (t) => {
   return directory;
 };
 
-test("preparing a library release preserves all frozen app pins and app versions", async (t) => {
+test("preparing a library release preserves the overlay's workspace dependency and app version", async (t) => {
   const directory = await temporary(t);
   for (const file of [
     "package.json",
@@ -31,7 +31,6 @@ test("preparing a library release preserves all frozen app pins and app versions
     await mkdir(path.dirname(target), { recursive: true });
     await cp(path.join(repoRoot, file), target);
   }
-  await cp(path.join(repoRoot, "vendor"), path.join(directory, "vendor"), { recursive: true });
   await cp(path.join(repoRoot, "patches"), path.join(directory, "patches"), { recursive: true });
   // Stable release behavior must remain testable when the working package is a prerelease.
   const original = JSON.parse(

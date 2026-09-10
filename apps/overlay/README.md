@@ -4,9 +4,11 @@ A compact macOS card utility with separate Create and Review screens opened from
 Raycast. React renders through GPUIX, Bun runs the app, and a small Objective-C
 bridge supplies AppKit window behavior.
 
-Requires Apple Silicon macOS, Bun, Rust 1.97.1, and Xcode with its Metal toolchain
+Requires Apple Silicon macOS, Bun 1.4.2, Rust 1.97.1, and Xcode with its Metal toolchain
 (`xcodebuild -downloadComponent MetalToolchain`). The first build compiles a
 patched GPUIX renderer and takes a few minutes; subsequent builds reuse it.
+The repository pins Bun in `.bun-version` and `package.json`; Bun 1.2.21 cannot
+resolve the migrated dependency graph reliably.
 
 ```sh
 bun install
@@ -19,6 +21,21 @@ open 'apps/overlay/dist/re Pocket.app'
 The bundle contains Bun, GPUIX's native module, and the panel bridge. It is a local
 development build, not a signed/notarized distribution. Quit before rebuilding;
 run one instance at a time.
+
+Pocket consumes `@simbyotic/re` through `workspace:*`, with Effect and the Node
+adapter pinned to `4.0.0-rc.112`. Its dev, build, typecheck, and test scripts build
+the library first, using the same compiled public exports as external consumers.
+Run `bun run watch:library` in another terminal while editing library source.
+`bun run check:app-resolution` checks all five exports under Node and Bun and
+requires one shared Effect installation across Pocket, the library, and the Node
+adapters. `bun run check:overlay` also builds the native app and runs its UI tests.
+The root override keeps the Node adapter's transitive shared package on that same
+release candidate when installing without an existing lockfile.
+
+When upgrading an existing checkout, if resolution reports an old library or a
+second Effect installation, remove `node_modules` at the repository root,
+`apps/overlay/node_modules`, and `packages/re/node_modules`, then run
+`bun install --frozen-lockfile` with the pinned Bun version.
 
 ## Raycast and window controls
 
@@ -154,7 +171,7 @@ benchmarked.
 Run the review behavior and persisted scheduling regression checks with:
 
 ```sh
-bun test apps/overlay/test
+bun run --cwd apps/overlay test
 ```
 
 On macOS, build the native prerequisites and run the GPUI card layout checks with
