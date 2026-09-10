@@ -3,7 +3,8 @@ import { CardMarkdown } from "../card-markdown";
 import type { ReviewGrade } from "../review-controls";
 import { colors, column, divider, row, type } from "../theme";
 import { Action } from "../ui/action";
-import { cardBody } from "./preview-screen";
+import { scroller } from "./create-screen";
+import { cardContent } from "./preview-screen";
 
 export type ReviewView =
   | { readonly kind: "startError"; readonly error: string }
@@ -40,8 +41,8 @@ const centered = {
   ...column,
   flexGrow: 1,
   justifyContent: "center",
-  paddingLeft: cardBody.paddingLeft,
-  paddingRight: cardBody.paddingRight,
+  paddingLeft: cardContent.paddingLeft,
+  paddingRight: cardContent.paddingRight,
   paddingBottom: 24,
 } as const;
 
@@ -49,55 +50,59 @@ export function ReviewScreen({ view, issues, onOpenDeck, onChooseWorkspace }: Re
   switch (view.kind) {
     case "startError":
       return (
-        <div style={cardBody}>
-          <div style={{ ...column, gap: 17 }}>
-            <text style={{ ...type.heading, color: colors.error }}>Could not start review</text>
-            <text style={{ ...type.input, color: colors.muted }}>{view.error}</text>
-          </div>
-          <div style={{ ...row, marginLeft: -6, marginTop: -10 }}>
-            <Action label="Choose workspace…" onClick={onChooseWorkspace} />
+        <div style={scroller}>
+          <div style={cardContent}>
+            <div style={{ ...column, gap: 17 }}>
+              <text style={{ ...type.heading, color: colors.error }}>Could not start review</text>
+              <text style={{ ...type.input, color: colors.muted }}>{view.error}</text>
+            </div>
+            <div style={{ ...row, marginLeft: -6, marginTop: -10 }}>
+              <Action label="Choose workspace…" onClick={onChooseWorkspace} />
+            </div>
           </div>
         </div>
       );
     case "cardError":
       return (
-        <div style={cardBody}>
-          <div style={{ ...column, gap: 17 }}>
-            <text style={{ ...type.heading, color: colors.error }}>Could not load this card</text>
-            <div style={{ ...column, gap: 11 }}>
-              <text style={{ ...type.input, color: colors.muted }}>{view.error}</text>
-              {view.deckPath && (
-                <text style={{ ...type.label, color: colors.muted }}>{view.deckPath}</text>
-              )}
+        <div style={scroller}>
+          <div style={cardContent}>
+            <div style={{ ...column, gap: 17 }}>
+              <text style={{ ...type.heading, color: colors.error }}>Could not load this card</text>
+              <div style={{ ...column, gap: 11 }}>
+                <text style={{ ...type.input, color: colors.muted }}>{view.error}</text>
+                {view.deckPath && (
+                  <text style={{ ...type.label, color: colors.muted }}>{view.deckPath}</text>
+                )}
+              </div>
             </div>
-          </div>
-          <div style={{ ...row, marginLeft: -6, marginTop: -10 }}>
-            <Action label="Open deck" keys="⌘ O" onClick={onOpenDeck} />
+            <div style={{ ...row, marginLeft: -6, marginTop: -10 }}>
+              <Action label="Open deck" keys="⌘ O" onClick={onOpenDeck} />
+            </div>
           </div>
         </div>
       );
     case "card": {
       const clozeRevealed = view.revealed && view.cardType === "cloze";
       return (
-        <div style={cardBody}>
-          <CardMarkdown
-            testId={clozeRevealed ? "revealed-answer" : "prompt"}
-            source={clozeRevealed ? view.reveal : view.prompt}
-            deckPath={view.deckPath}
-            scale="prompt"
-          />
-          {view.revealed && view.cardType === "qa" && (
-            <>
-              <div style={divider} />
-              <CardMarkdown
-                testId="revealed-answer"
-                source={view.reveal}
-                deckPath={view.deckPath}
-                scale="reveal"
-              />
-            </>
-          )}
-          {issues.length > 0 && <Issues issues={issues} />}
+        <div style={scroller}>
+          <div style={cardContent}>
+            <CardMarkdown
+              testId={clozeRevealed ? "revealed-answer" : "prompt"}
+              source={clozeRevealed ? view.reveal : view.prompt}
+              deckPath={view.deckPath}
+            />
+            {view.revealed && view.cardType === "qa" && (
+              <>
+                <div style={divider} />
+                <CardMarkdown
+                  testId="revealed-answer"
+                  source={view.reveal}
+                  deckPath={view.deckPath}
+                />
+              </>
+            )}
+            {issues.length > 0 && <Issues issues={issues} />}
+          </div>
         </div>
       );
     }

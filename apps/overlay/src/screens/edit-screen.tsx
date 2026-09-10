@@ -1,6 +1,6 @@
 import type { ReviewCardDraft } from "@simbyotic/re/study";
 import { DraftField, type DraftFieldName, type DraftFieldState } from "../ui/field";
-import { formBody } from "./create-screen";
+import { formContent, lastFieldRows, scroller } from "./create-screen";
 
 export interface EditScreenProps {
   readonly draft: ReviewCardDraft;
@@ -9,42 +9,45 @@ export interface EditScreenProps {
 }
 
 export function EditScreen({ draft, field, onChange }: EditScreenProps) {
+  const rows = lastFieldRows(draft.cardType, field);
   return (
-    <div style={formBody}>
-      {draft.cardType === "qa" ? (
-        <>
+    <div style={scroller}>
+      <div style={formContent}>
+        {draft.cardType === "qa" ? (
+          <>
+            <DraftField
+              label="Question"
+              testId="edit-question"
+              value={draft.question}
+              placeholder="Question"
+              rows={4}
+              autoFocus
+              {...field("question")}
+              onChange={(value) => onChange("question", value)}
+            />
+            <DraftField
+              label="Answer"
+              testId="edit-answer"
+              value={draft.answer}
+              placeholder="Answer"
+              rows={rows}
+              {...field("answer")}
+              onChange={(value) => onChange("answer", value)}
+            />
+          </>
+        ) : (
           <DraftField
-            label="Question"
-            testId="edit-question"
-            value={draft.question}
-            placeholder="Question"
-            rows={4}
+            label="Content"
+            testId="edit-content"
+            value={draft.content}
+            placeholder="Cloze note"
+            rows={rows}
             autoFocus
-            {...field("question")}
-            onChange={(value) => onChange("question", value)}
+            {...field("content")}
+            onChange={(value) => onChange("content", value)}
           />
-          <DraftField
-            label="Answer"
-            testId="edit-answer"
-            value={draft.answer}
-            placeholder="Answer"
-            rows={5}
-            {...field("answer")}
-            onChange={(value) => onChange("answer", value)}
-          />
-        </>
-      ) : (
-        <DraftField
-          label="Content"
-          testId="edit-content"
-          value={draft.content}
-          placeholder="Cloze note"
-          rows={11}
-          autoFocus
-          {...field("content")}
-          onChange={(value) => onChange("content", value)}
-        />
-      )}
+        )}
+      </div>
     </div>
   );
 }

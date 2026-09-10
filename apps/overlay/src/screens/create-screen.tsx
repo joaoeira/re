@@ -4,15 +4,15 @@ import { DeckCombobox, type DeckComboboxProps } from "../ui/deck-combobox";
 import { Dropdown } from "../ui/dropdown";
 import { DraftField, type DraftFieldName, type DraftFieldState } from "../ui/field";
 
-export const formBody = {
+// GPUI counts a scroll container's own padding as scrollable content, so the
+// padding lives on the inner column and the scroller stays bare.
+export const scroller = { ...column, flexGrow: 1, minHeight: 0, overflowY: "scroll" } as const;
+export const formContent = {
   ...column,
-  flexGrow: 1,
-  minHeight: 0,
-  overflowY: "scroll",
   paddingLeft: layout.contentLeft,
   paddingRight: layout.contentRight,
   paddingTop: layout.formTop,
-  paddingBottom: 12,
+  paddingBottom: 22,
   gap: 23,
 } as const;
 
@@ -71,52 +71,66 @@ export function CreateScreen({
   onChange,
   onInsertCloze,
 }: CreateScreenProps) {
+  const rows = lastFieldRows(cardType, field);
   return (
-    <div key={editorKey} style={formBody}>
-      {cardType === "qa" ? (
-        <>
-          <DraftField
-            label="Question"
-            testId="question"
-            autoFocus={initialFocus !== "answer"}
-            value={draft.question}
-            onChange={(value) => onChange("question", value)}
-            placeholder="What do you want to remember?"
-            rows={4}
-            {...field("question")}
-          />
-          <DraftField
-            label="Answer"
-            testId="answer"
-            autoFocus={initialFocus === "answer"}
-            value={draft.answer}
-            onChange={(value) => onChange("answer", value)}
-            placeholder="The answer"
-            rows={5}
-            {...field("answer")}
-          />
-        </>
-      ) : (
-        <>
-          <DraftField
-            label="Content"
-            testId="cloze-content"
-            autoFocus
-            value={draft.content}
-            onChange={(value) => onChange("content", value)}
-            placeholder="The {{c1::answer}} in context."
-            rows={11}
-            {...field("content")}
-          />
-          <div style={{ ...row, marginLeft: -6, marginTop: -7 }}>
-            <Action label="Insert cloze" keys="⌘ ⇧ C" onClick={onInsertCloze} />
-          </div>
-        </>
-      )}
-      {deckError && <DeckError message={deckError} />}
+    <div key={editorKey} style={scroller}>
+      <div style={formContent}>
+        {cardType === "qa" ? (
+          <>
+            <DraftField
+              label="Question"
+              testId="question"
+              autoFocus={initialFocus !== "answer"}
+              value={draft.question}
+              onChange={(value) => onChange("question", value)}
+              placeholder="What do you want to remember?"
+              rows={4}
+              {...field("question")}
+            />
+            <DraftField
+              label="Answer"
+              testId="answer"
+              autoFocus={initialFocus === "answer"}
+              value={draft.answer}
+              onChange={(value) => onChange("answer", value)}
+              placeholder="The answer"
+              rows={rows}
+              {...field("answer")}
+            />
+          </>
+        ) : (
+          <>
+            <DraftField
+              label="Content"
+              testId="cloze-content"
+              autoFocus
+              value={draft.content}
+              onChange={(value) => onChange("content", value)}
+              placeholder="The {{c1::answer}} in context."
+              rows={rows}
+              {...field("content")}
+            />
+            <div style={{ ...row, marginLeft: -6, marginTop: -7 }}>
+              <Action label="Insert cloze" keys="⌘ ⇧ C" onClick={onInsertCloze} />
+            </div>
+          </>
+        )}
+        {deckError && <DeckError message={deckError} />}
+      </div>
     </div>
   );
 }
+
+// Each textarea row is taller than its line height, so the form only fits the
+// window when the last field gives up a row while an error line is showing.
+export const lastFieldRows = (
+  cardType: "qa" | "cloze",
+  field: (name: DraftFieldName) => DraftFieldState,
+) => {
+  const error =
+    cardType === "qa" ? field("question").error || field("answer").error : field("content").error;
+  return (cardType === "qa" ? 5 : 10) - (error ? 1 : 0);
+};
 
 function DeckError({ message }: { readonly message: string }) {
   return <text style={{ ...type.label, color: colors.error }}>{message}</text>;

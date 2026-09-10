@@ -82,7 +82,7 @@ export function loadImage(url: string, deckPath: string): Promise<Media> {
 export function renderFormula(
   tex: string,
   display: boolean,
-  fontSize: number = cardTypography("reveal").fontSize,
+  fontSize = cardTypography.fontSize,
 ): Promise<Formula> {
   return cached(formulaCache, `math:${display}:${fontSize}:${tex}`, async () => {
     // Reset macro/label state for each expression; one card must not affect another.

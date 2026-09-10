@@ -37,12 +37,7 @@ export function Dropdown({
           {triggerLabel ? triggerLabel(value) : label}
         </SelectorLabel>
       </SelectTrigger>
-      <SelectContent
-        side="top"
-        align="start"
-        sideOffset={8}
-        style={{ ...popover, width: 230, maxHeight: 300, overflowY: "scroll" }}
-      >
+      <SelectContent side="top" align="start" sideOffset={8} style={{ ...popover, width: 230 }}>
         {options.map((option) => (
           <SelectItem
             key={option.value}

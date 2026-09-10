@@ -9,25 +9,21 @@ export function MediaView({
   deckPath,
   formula,
   display = false,
-  fontSize,
 }: {
   source: string;
   deckPath: string;
   formula?: boolean;
   display?: boolean;
-  fontSize?: number;
 }) {
   const [result, setResult] = useState<Media | string | null>(null);
   useEffect(() => {
     setResult(null);
-    const operation = formula
-      ? renderFormula(source, display, fontSize)
-      : loadImage(source, deckPath);
+    const operation = formula ? renderFormula(source, display) : loadImage(source, deckPath);
     return onSettled(
       operation.then((media) => media, toErrorMessage),
       setResult,
     );
-  }, [source, deckPath, formula, display, fontSize]);
+  }, [source, deckPath, formula, display]);
   if (typeof result === "string")
     return (
       <text style={{ color: colors.error, ...type.body }}>

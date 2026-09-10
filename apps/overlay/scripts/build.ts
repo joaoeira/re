@@ -1,10 +1,11 @@
-import { mkdirSync, copyFileSync, cpSync, writeFileSync } from "node:fs";
+import { mkdirSync, copyFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const contents = resolve(import.meta.dir, "../dist/re Overlay.app/Contents");
+// Start from an empty bundle so files removed from the build do not linger.
+rmSync(contents, { recursive: true, force: true });
 mkdirSync(`${contents}/MacOS`, { recursive: true });
 mkdirSync(`${contents}/Frameworks`, { recursive: true });
-mkdirSync(`${contents}/Resources`, { recursive: true });
 const build = Bun.spawnSync(
   [
     "bun",
@@ -23,7 +24,6 @@ const build = Bun.spawnSync(
   },
 );
 if (build.exitCode !== 0) process.exit(build.exitCode);
-cpSync(resolve(import.meta.dir, "../fonts"), `${contents}/Resources/fonts`, { recursive: true });
 for (const library of ["libpanel.dylib", "gpuix-native.darwin-arm64.node"])
   copyFileSync(resolve(import.meta.dir, `../dist/${library}`), `${contents}/Frameworks/${library}`);
 writeFileSync(

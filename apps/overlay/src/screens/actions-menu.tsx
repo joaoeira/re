@@ -1,4 +1,4 @@
-import { colors, layout, popover, popoverItem, type } from "../theme";
+import { colors, column, layout, popover, popoverItem, type } from "../theme";
 import { Key } from "../ui/key";
 
 export interface MenuItem {
@@ -19,6 +19,7 @@ export function ActionsMenu({ items, activeIndex, onActivate, onSelect }: Action
     <div
       style={{
         ...popover,
+        padding: 0,
         position: "absolute",
         left: layout.rail + 6,
         bottom: 8,
@@ -27,17 +28,19 @@ export function ActionsMenu({ items, activeIndex, onActivate, onSelect }: Action
         overflowY: "scroll",
       }}
     >
-      {items.map((item, index) => (
-        <div
-          key={item.label}
-          onClick={() => onSelect(item)}
-          onMouseEnter={() => onActivate(index)}
-          style={popoverItem(activeIndex === index)}
-        >
-          <text style={{ ...type.label, color: colors.text }}>{item.label}</text>
-          {item.key && <Key>{item.key}</Key>}
-        </div>
-      ))}
+      <div style={{ ...column, padding: 5 }}>
+        {items.map((item, index) => (
+          <div
+            key={item.label}
+            onClick={() => onSelect(item)}
+            onMouseEnter={() => onActivate(index)}
+            style={popoverItem(activeIndex === index)}
+          >
+            <text style={{ ...type.label, color: colors.text }}>{item.label}</text>
+            {item.key && <Key>{item.key}</Key>}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

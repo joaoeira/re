@@ -1,11 +1,9 @@
 import { CardMarkdown } from "../card-markdown";
 import { column, divider, layout } from "../theme";
+import { scroller } from "./create-screen";
 
-export const cardBody = {
+export const cardContent = {
   ...column,
-  flexGrow: 1,
-  minHeight: 0,
-  overflowY: "scroll",
   paddingLeft: layout.contentLeft,
   paddingRight: layout.contentRight,
   paddingTop: layout.cardTop,
@@ -22,10 +20,12 @@ export interface PreviewScreenProps {
 export function PreviewScreen({ cards, index, deckPath }: PreviewScreenProps) {
   const card = cards[index]!;
   return (
-    <div style={cardBody}>
-      <CardMarkdown source={card.question} deckPath={deckPath} scale="prompt" />
-      <div style={divider} />
-      <CardMarkdown source={card.answer} deckPath={deckPath} scale="reveal" />
+    <div style={scroller}>
+      <div style={cardContent}>
+        <CardMarkdown source={card.question} deckPath={deckPath} />
+        <div style={divider} />
+        <CardMarkdown source={card.answer} deckPath={deckPath} />
+      </div>
     </div>
   );
 }

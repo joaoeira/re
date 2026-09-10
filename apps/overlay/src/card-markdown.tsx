@@ -8,7 +8,7 @@ import type { Nodes, Root, Definition, Paragraph } from "mdast";
 import { MediaView } from "./card-media-view";
 import { InlineParagraph } from "./card-inline";
 import { cardsPath } from "./storage";
-import { cardTheme, cardTypography, colors, column, type CardScale } from "./theme";
+import { cardTheme, cardTypography, colors, column } from "./theme";
 
 const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
 const stack: StyleDesc = { ...column, gap: 12, flexShrink: 0 };
@@ -56,15 +56,11 @@ export function CardMarkdown({
   source,
   deckPath = cardsPath,
   testId,
-  scale = "reveal",
 }: {
   source: string;
   deckPath?: string;
   testId?: string;
-  scale?: CardScale;
 }) {
-  const typography = cardTypography(scale);
-  const theme = cardTheme(scale);
   const tree = useMemo(() => parser.parse(source) as Root, [source]);
   const definitions = new Map<string, Definition>();
   for (const node of tree.children)
@@ -89,9 +85,9 @@ export function CardMarkdown({
               {line.indent > 0 && (
                 <text
                   style={{
-                    fontFamily: typography.fontFamily,
-                    fontSize: typography.fontSize,
-                    lineHeight: typography.lineHeight,
+                    fontFamily: cardTypography.fontFamily,
+                    fontSize: cardTypography.fontSize,
+                    lineHeight: cardTypography.lineHeight,
                     flexShrink: 0,
                     whiteSpace: "nowrap",
                   }}
@@ -103,7 +99,6 @@ export function CardMarkdown({
                 <CardMarkdown
                   source={`${line.content}\n\n${definitionSource}`}
                   deckPath={deckPath}
-                  scale={scale}
                 />
               </div>
             </div>
@@ -111,20 +106,16 @@ export function CardMarkdown({
         </div>
       );
     if (!special(node))
-      return <markdown key={key} source={`${raw(node)}\n\n${definitionSource}`} theme={theme} />;
+      return (
+        <markdown key={key} source={`${raw(node)}\n\n${definitionSource}`} theme={cardTheme} />
+      );
     if (
       node.type === "math" ||
       (node.type === "code" && (node.lang === "math" || node.lang === "latex"))
     )
       return (
         <div key={key} style={{ ...stack, alignItems: "center" }}>
-          <MediaView
-            source={node.value}
-            formula
-            display
-            deckPath={deckPath}
-            fontSize={typography.fontSize}
-          />
+          <MediaView source={node.value} formula display deckPath={deckPath} />
         </div>
       );
     if (node.type === "paragraph" || node.type === "heading" || node.type === "tableCell") {
@@ -135,9 +126,13 @@ export function CardMarkdown({
           nodes={node.children}
           definitions={definitions}
           deckPath={deckPath}
-          fontSize={heading === undefined ? typography.fontSize : typography.headingSizes[heading]!}
+          fontSize={
+            heading === undefined ? cardTypography.fontSize : cardTypography.headingSizes[heading]!
+          }
           lineHeight={
-            heading === undefined ? typography.lineHeight : typography.headingLineHeights[heading]!
+            heading === undefined
+              ? cardTypography.lineHeight
+              : cardTypography.headingLineHeights[heading]!
           }
           bold={heading !== undefined}
         />
@@ -154,9 +149,9 @@ export function CardMarkdown({
               <text
                 style={{
                   color: colors.text,
-                  fontFamily: typography.fontFamily,
-                  fontSize: typography.fontSize,
-                  lineHeight: typography.lineHeight,
+                  fontFamily: cardTypography.fontFamily,
+                  fontSize: cardTypography.fontSize,
+                  lineHeight: cardTypography.lineHeight,
                 }}
               >
                 {node.ordered ? `${(node.start ?? 1) + i}.` : "•"}
@@ -201,7 +196,7 @@ export function CardMarkdown({
         </div>
       );
     return (
-      <text key={key} style={{ color: colors.text, fontSize: typography.fontSize }}>
+      <text key={key} style={{ color: colors.text, fontSize: cardTypography.fontSize }}>
         {"value" in node ? node.value : raw(node)}
       </text>
     );

@@ -51,9 +51,9 @@ export function Shell({
       <Rail onBack={onBack} onUndo={onUndo} onActions={onActions} />
       <div style={{ ...column, flexGrow: 1, minWidth: 0 }}>
         {children}
-        {notice && <NoticeLine notice={notice} />}
         <Footer {...footer} />
       </div>
+      {notice && <NoticeLine notice={notice} />}
       {overlays}
     </div>
   );
@@ -117,10 +117,10 @@ function NoticeLine({ notice }: { readonly notice: Notice }) {
   return (
     <div
       style={{
-        paddingLeft: layout.contentLeft,
-        paddingRight: layout.contentRight,
-        paddingBottom: 5,
-        flexShrink: 0,
+        position: "absolute",
+        left: layout.rail + layout.contentLeft,
+        right: layout.contentRight,
+        bottom: layout.footer + 5,
       }}
     >
       <text
