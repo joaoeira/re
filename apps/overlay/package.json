@@ -11,7 +11,8 @@
     "build": "bun run build:library && bun run native:build && bun scripts/build.ts",
     "test": "bun run build:library && bun test test",
     "test:rendering": "bun run build:library && bun run native:build && bun test test/card-markdown.test.tsx",
-    "screens": "bun run build:library && bun scripts/screens.tsx"
+    "screens": "bun run build:library && bun scripts/screens.tsx",
+    "test:positioning": "bun run native:build && bun test test/floating.test.tsx"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0-rc.112",

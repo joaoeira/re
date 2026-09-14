@@ -1,0 +1,46 @@
+--- a/packages/native/src/custom_elements/input.rs
++++ b/packages/native/src/custom_elements/input.rs
+@@ -414,6 +414,7 @@
+         let mut editor = div()
+             .id(element_id)
+             .flex()
++            .min_h_0()
+             .min_w_0()
+             .w_full()
+             .track_focus(&focus_handle)
+@@ -1652,6 +1653,9 @@
+                     });
+                 })
+             })
++            .flex()
++            .flex_col()
++            .min_h_0()
+             .w_full()
+             .min_w_0()
+             .child(EditorTextElement {
+@@ -1694,6 +1698,7 @@
+     ) -> (LayoutId, ()) {
+         let mut style = Style::default();
+         style.size.width = relative(1.0).into();
++        style.min_size.height = px(0.0).into();
+         let input = self.input.clone();
+         let text_style = window.text_style();
+         let min_rows = self.min_rows;
+@@ -1709,7 +1714,16 @@
+             });
+             let height =
+                 content_height.clamp(min_rows as f32 * line_height, max_rows as f32 * line_height);
+-            size(width, px(height))
++            // A row cap controls natural growth; an allocated height controls
++            // the actual viewport (and therefore cursor following and scrolling).
++            let height = match known.height {
++                Some(height) => height,
++                None => match available.height {
++                    gpui::AvailableSpace::Definite(limit) => px(height).min(limit),
++                    _ => px(height),
++                },
++            };
++            size(width, height)
+         });
+         (layout, ())
+     }

@@ -43,6 +43,12 @@ second Effect installation, remove `node_modules` at the repository root,
 the window by composing props-only components. Nothing below `screens/` or
 `ui/` reads app state directly.
 
+The [floating component contract](src/floating/README.md) describes the API,
+native implementation and deliberate limits. Run
+`bun run --cwd apps/overlay test:positioning` after changing the Rust code; this
+builds the native extension before running its behavior tests. The regular test
+command expects that native build to be present and current for these tests.
+
 - `src/theme.ts` — every colour and font size the chrome uses. Change the
   palette or type scale here, not at the call sites.
 - `src/ui/` — stateless primitives: `Key`, `Action`, `Field`/`DraftField`,
