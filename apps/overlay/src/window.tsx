@@ -64,7 +64,7 @@ const routeTimer = setInterval(() => {
   }
   if (route === "refresh") flushSync(() => events.refresh());
   if (route === "preferences") flushSync(() => events.preferences());
-  const screen = route === "create" || route === "review" ? route : takeLaunchRequest();
+  const screen = route === "create" || route === "review" || route === "chat" ? route : takeLaunchRequest();
   if (!screen) return;
   flushSync(() => events.route(screen));
   panel.show();

@@ -1,6 +1,6 @@
 # re Overlay — standalone GPUIX utility
 
-A compact macOS card utility with separate Create and Review screens opened from
+A compact macOS utility with separate Create, Review, and Chat screens opened from
 Raycast. React renders through GPUIX, Bun runs the app, and a small Objective-C
 bridge supplies AppKit window behavior.
 
@@ -39,9 +39,16 @@ second Effect installation, remove `node_modules` at the repository root,
 
 ## Source layout
 
-`src/app.tsx` owns all state, persistence, and keyboard handling, and renders
+`src/app.tsx` owns navigation, card state, and keyboard handling, and renders
 the window by composing props-only components. Nothing below `screens/` or
 `ui/` reads app state directly.
+
+The [Chat code guide](src/chat/README.md) maps the feature and explains its lifecycle
+and recovery constraints. Chat lives in `src/chat/`: `opencode.ts` connects the service and `opencode-connection.ts` adapts its APIs, `store.ts` owns the
+conversation and connection lifecycle, and `use-chat.ts` connects its state stream
+to React. The store uses the app's existing Effect runtime. Its event subscription
+is scoped to that runtime and interrupted on shutdown; hiding or changing screens
+does not cancel a response. `ChatScreen` receives plain props and callbacks.
 
 The [floating component contract](src/floating/README.md) describes the API,
 native implementation and deliberate limits. Run
@@ -53,9 +60,9 @@ command expects that native build to be present and current for these tests.
   palette or type scale here, not at the call sites.
 - `src/ui/` — stateless primitives: `Key`, `Action`, `Field`/`DraftField`,
   `Dropdown`, `DeckCombobox`.
-- `src/screens/` — one file per screen (`create`, `preview`, `edit`, `review`),
+- `src/screens/` — entry points for each screen (`create`, `preview`, `edit`, `review`, `chat`),
   the `Shell` that wraps them with the header, notice line, and footer, and the
-  `DeleteDialog` and `ActionsMenu` overlays. Each exports an explicit props
+  `DeleteDialog` and `ActionsMenu` overlays. Chat’s private view sections live in `screens/chat/`. Each exports an explicit props
   interface; `ReviewView` in `review-screen.tsx` enumerates every review state.
 - `src/screens/catalog.tsx` — fixture props for every window state, numbered to
   match the design reference. Not imported by the app.
@@ -70,8 +77,8 @@ assert on text and card-body geometry, not on colours or spacing.
 ## Raycast and window controls
 
 Add `apps/overlay/raycast` to Raycast Settings → Extensions → Script Commands.
-The **Create Card** and **Review Cards** commands open their respective screens;
-the menu bar also offers both screens. Both delegate to `launch.sh`, which places an
+The **Create Card**, **Review Cards**, and **Chat** commands open their respective screens;
+the menu bar also offers all three screens. They delegate to `launch.sh`, which places an
 atomic launch request in `~/Library/Application Support/re-overlay` before opening
 the app, so they also work with a running or hidden instance.
 
@@ -93,6 +100,31 @@ reloads the counts; they also refresh after creating/grading and every minute wh
 hidden. **Choose Workspace…** opens a native folder picker and saves the deck root.
 **Quit re Overlay** exits the app. Without a workspace, counts describe the scratch
 deck: ungraded cards are new, and due is zero because scratch practice is unscheduled.
+
+## Chat proof of concept
+
+Install OpenCode v2 and configure its providers in OpenCode as usual. Chat uses the
+official `@opencode/client` service discovery to reuse the local service, starting
+it when necessary. It uses the existing OpenCode provider configuration and logins;
+Overlay neither copies credentials nor stops the shared service when it quits.
+
+The app chooses `~/Library/Application Support/re-overlay/chat` as the chat working
+directory. There is no folder picker. OpenCode persists these sessions in its own
+existing database; Chat history lists only Overlay's chat agent in this directory.
+An app-owned configuration and context plugin give this agent a conversational
+prompt and remove tools. This POC has no card tools, question forms, permission
+dialogs, attachments, or right-hand panel.
+
+Enter sends, Shift Enter inserts a line break, and Command Enter also sends.
+Command N starts a new chat; Command period stops the response. The composer,
+model picker, and history controls lock while work is in progress. Reconnect
+(also Command R) restores the saved conversation and its actual running state.
+An uncertain send retains its text and message ID so a retry does not create a
+second message. Unsent drafts stay in memory and do not survive quitting.
+
+`bun test test/chat.test.ts test/chat-screen.test.tsx` covers turn locking,
+uncertain sends, reconnect, interruption, subscription cleanup, and native text
+entry. `bun scripts/screens.tsx chat` renders the Chat design fixtures.
 
 ## Cards and decks
 
@@ -159,7 +191,7 @@ Markdown stays in GPUIX's native renderer; paragraphs containing math or images
 use native text and image elements. Images preserve their aspect ratio and fit
 the window, with larger content available by scrolling. Broken images or formulas
 show an error in place. Rendered media is cached under the system temporary folder.
-A rich editor and AI are outside this POC.
+A rich card editor and AI card generation are outside this POC.
 
 Both rendering paths share the same body and heading typography. Inline formula
 SVGs retain their MathJax baseline and align with native text using macOS font

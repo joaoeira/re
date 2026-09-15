@@ -1,5 +1,17 @@
 #import <Cocoa/Cocoa.h>
 #import <Carbon/Carbon.h>
+#import <CoreText/CoreText.h>
+
+bool re_register_font(const char *path) {
+  NSURL *url = [NSURL fileURLWithPath:[NSString stringWithUTF8String:path]];
+  CFErrorRef error = NULL;
+  bool registered = CTFontManagerRegisterFontsForURL((__bridge CFURLRef)url, kCTFontManagerScopeProcess, &error);
+  if (error) {
+    registered = registered || CFErrorGetCode(error) == kCTFontManagerErrorAlreadyRegistered;
+    CFRelease(error);
+  }
+  return registered;
+}
 
 // Match GPUI's centered line-box baseline using the same CoreText font metrics.
 double re_text_baseline(const char *family, double size, double lineHeight) {
@@ -21,6 +33,7 @@ static EventHandlerRef hotKeyHandler;
 #define RE_PANEL_ROUTE_CREATE 3
 #define RE_PANEL_ROUTE_REFRESH 4
 #define RE_PANEL_ROUTE_PREFERENCES 5
+#define RE_PANEL_ROUTE_CHAT 6
 static int pendingRoute = 0;
 static id quitMonitor;
 static BOOL pinned = YES;

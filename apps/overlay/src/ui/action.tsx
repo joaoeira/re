@@ -8,13 +8,22 @@ export interface ActionProps {
   readonly primary?: boolean;
   readonly tone?: "danger";
   readonly testId?: string;
+  readonly disabled?: boolean;
 }
 
-export function Action({ label, keys, onClick, primary = false, tone, testId }: ActionProps) {
+export function Action({
+  label,
+  keys,
+  onClick,
+  primary = false,
+  tone,
+  testId,
+  disabled = false,
+}: ActionProps) {
   return (
     <div
       testId={testId}
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
       style={{
         ...row,
         gap: 6,
@@ -23,8 +32,9 @@ export function Action({ label, keys, onClick, primary = false, tone, testId }: 
         paddingLeft: 6,
         paddingRight: 6,
         borderRadius: 5,
-        cursor: "pointer",
-        hover: { backgroundColor: colors.hover },
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.45 : 1,
+        hover: disabled ? undefined : { backgroundColor: colors.hover },
       }}
     >
       <text

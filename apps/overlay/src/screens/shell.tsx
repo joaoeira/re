@@ -11,6 +11,7 @@ export interface Command {
   readonly tone?: "danger";
   readonly onClick: () => void;
   readonly testId?: string;
+  readonly disabled?: boolean;
 }
 
 export interface FooterProps {

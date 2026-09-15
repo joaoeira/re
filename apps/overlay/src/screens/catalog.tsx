@@ -8,6 +8,7 @@ import { EditScreen } from "./edit-screen";
 import { PreviewScreen, type PreviewScreenProps } from "./preview-screen";
 import { ReviewScreen, type ReviewScreenProps, type ReviewView } from "./review-screen";
 import { Shell, type Command } from "./shell";
+import { chatScreenStates } from "./chat-catalog";
 
 // Every user-visible state of the window, numbered to match the design
 // reference. The gallery script renders each one to a PNG for side-by-side
@@ -169,6 +170,7 @@ const createWindow = (
   });
 
 export const screenStates: readonly ScreenState[] = [
+  ...chatScreenStates,
   {
     id: "01-create-qa",
     title: "Create — Question and Answer",

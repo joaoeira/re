@@ -16,8 +16,9 @@ type Run = TextStyle &
   );
 type Word = Run[];
 
-function fontFamily(run: TextStyle): string {
+function fontFamily(run: TextStyle, base: string): string {
   if (run.code) return "Menlo";
+  if (base !== "Helvetica") return run.italic ? `${base}-Italic` : base;
   if (run.bold && run.italic) return "Helvetica-BoldOblique";
   if (run.bold) return "Helvetica-Bold";
   if (run.italic) return "Helvetica-Oblique";
@@ -82,6 +83,7 @@ export function InlineParagraph({
   fontSize,
   lineHeight,
   bold = false,
+  baseFontFamily = cardTypography.fontFamily,
 }: {
   nodes: Nodes[];
   definitions: Map<string, Definition>;
@@ -89,6 +91,7 @@ export function InlineParagraph({
   fontSize: number;
   lineHeight: number;
   bold?: boolean;
+  baseFontFamily?: string;
 }) {
   const lines = useMemo(() => inlineLines(nodes, definitions, bold), [nodes, definitions, bold]);
   const runs = lines.flat(2);
@@ -113,8 +116,10 @@ export function InlineParagraph({
   // Taffy does not receive text baselines from GPUI. Align the bottom edges of
   // explicitly padded line boxes instead, using real font and SVG metrics.
   const descent = Math.max(
-    lineHeight - textBaseline(cardTypography.fontFamily, fontSize, lineHeight),
-    ...runs.map((run) => lineHeight - textBaseline(fontFamily(run), fontSize, lineHeight)),
+    lineHeight - textBaseline(baseFontFamily, fontSize, lineHeight),
+    ...runs.map(
+      (run) => lineHeight - textBaseline(fontFamily(run, baseFontFamily), fontSize, lineHeight),
+    ),
     ...[...formulas.values()].map((result) =>
       typeof result === "string" ? 0 : (result.height - result.baseline) * mediaScale(result, 200),
     ),
@@ -144,7 +149,7 @@ export function InlineParagraph({
               }}
             >
               {word.map((run, runIndex) => {
-                const family = fontFamily(run);
+                const family = fontFamily(run, baseFontFamily);
                 const baseline = textBaseline(family, fontSize, lineHeight);
                 if (run.type === "image")
                   return <MediaView key={runIndex} source={run.value} deckPath={deckPath} />;

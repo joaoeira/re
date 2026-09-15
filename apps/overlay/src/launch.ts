@@ -1,7 +1,7 @@
 import { readFileSync, renameSync, unlinkSync } from "node:fs";
 import { launchInboxPath } from "./storage";
 
-export type Screen = "create" | "review";
+export type Screen = "create" | "review" | "chat";
 
 // Raycast atomically places an intent here before opening the app. Claim by
 // rename so consuming this request cannot delete a newer one arriving meanwhile.
@@ -16,7 +16,7 @@ export function takeLaunchRequest(): Screen | null {
   }
   try {
     const screen = readFileSync(claimed, "utf8").trim();
-    return screen === "create" || screen === "review" ? screen : null;
+    return screen === "create" || screen === "review" || screen === "chat" ? screen : null;
   } finally {
     unlinkSync(claimed);
   }

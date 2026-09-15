@@ -28,6 +28,9 @@ import { EditScreen } from "./screens/edit-screen";
 import { PreviewScreen } from "./screens/preview-screen";
 import { ReviewScreen, type ReviewView } from "./screens/review-screen";
 import { Shell, type Command } from "./screens/shell";
+import { ChatScreen } from "./screens/chat-screen";
+import { useChat } from "./chat/use-chat";
+import { chatLocked } from "./chat/model";
 import { cardsPath } from "./storage";
 import type { DraftFieldName, DraftFieldState } from "./ui/field";
 import {
@@ -77,6 +80,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
   const loadFailure = initial.error ? failure(initial.error) : null;
   const [statusRevision, setStatusRevision] = useState(0);
   const [screen, setScreen] = useState<Screen>(initial.screen);
+  const chat = useChat(screen === "chat");
   const [preferences, setPreferences] = useState(initial.preferences);
   const [decks, setDecks] = useState<readonly DeckEntry[]>([]);
   const [question, setQuestion] = useState("");
@@ -583,6 +587,10 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
     });
   }
   function primary() {
+    if (screen === "chat") {
+      void chat.actions.send();
+      return;
+    }
     if (busy || confirmingDelete) return;
     if (editDraft) void saveEdit();
     else if (screen === "create") create();
@@ -684,46 +692,55 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
               run: () => updatePreferences({ closeAfterSubmit: !preferences.closeAfterSubmit }),
             },
           ]
-        : [
-            ...(lastAction
-              ? [
-                  {
-                    label: lastAction.kind === "grade" ? "Undo last review" : "Undo delete",
-                    key: "⌘ Z",
-                    run: () => void undo(),
-                  },
-                ]
-              : []),
-            ...(current && !cardError
-              ? [
-                  {
-                    label: current.cardType === "cloze" ? "Edit cloze note" : "Edit card",
-                    key: "⌘ E",
-                    run: openEditor,
-                  },
-                  {
-                    label: current.cardType === "cloze" ? "Delete cloze note" : "Delete card",
-                    key: "⌘ ⌫",
-                    run: requestDelete,
-                  },
-                ]
-              : []),
-            ...(current
-              ? [
-                  {
-                    label: currentDeckPath ? "Open deck" : "Open scratch data",
-                    key: "⌘ O",
-                    run: openDeck,
-                  },
-                ]
-              : []),
-            ...(cardError
-              ? [
-                  { label: "Retry card", key: "⌘ R", run: reloadCard },
-                  { label: "Skip card", key: "", run: skipCard },
-                ]
-              : []),
-          ]),
+        : screen === "chat"
+          ? []
+          : [
+              ...(lastAction
+                ? [
+                    {
+                      label: lastAction.kind === "grade" ? "Undo last review" : "Undo delete",
+                      key: "⌘ Z",
+                      run: () => void undo(),
+                    },
+                  ]
+                : []),
+              ...(current && !cardError
+                ? [
+                    {
+                      label: current.cardType === "cloze" ? "Edit cloze note" : "Edit card",
+                      key: "⌘ E",
+                      run: openEditor,
+                    },
+                    {
+                      label: current.cardType === "cloze" ? "Delete cloze note" : "Delete card",
+                      key: "⌘ ⌫",
+                      run: requestDelete,
+                    },
+                  ]
+                : []),
+              ...(current
+                ? [
+                    {
+                      label: currentDeckPath ? "Open deck" : "Open scratch data",
+                      key: "⌘ O",
+                      run: openDeck,
+                    },
+                  ]
+                : []),
+              ...(cardError
+                ? [
+                    { label: "Retry card", key: "⌘ R", run: reloadCard },
+                    { label: "Skip card", key: "", run: skipCard },
+                  ]
+                : []),
+            ]),
+    ...(["create", "review", "chat"] as const)
+      .filter((route) => route !== screen)
+      .map((route) => ({
+        label: route === "create" ? "Create Card" : route === "review" ? "Review Cards" : "Chat",
+        key: "",
+        run: () => events.route(route),
+      })),
     { label: "Choose workspace…", key: "", run: () => events.preferences() },
     { label: pinned ? "Stop keeping on top" : "Keep on top", key: "⌘ ⇧ P", run: togglePin },
     ...(screen === "review" && !editDraft
@@ -766,6 +783,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
       setEditDraft(undefined);
       setFieldErrors({});
       setScreen(next);
+      setPreview(undefined);
       setActionsOpen(false);
       setOpenSelect(null);
       setNotice(loadFailure);
@@ -777,7 +795,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
         else if (cmd && event.key === "enter") void deleteCurrent();
         return;
       }
-      if (openSelect) return;
+      if (openSelect || (screen === "chat" && chat.picker)) return;
       if (cmd && event.key !== "k" && actionsOpen) setActionsOpen(false);
       if (event.key === "escape") {
         if (actionsOpen) setActionsOpen(false);
@@ -796,7 +814,8 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
       )
         insertCloze();
       else if (cmd && event.key === "r" && !editDraft) {
-        if (screen === "create") void refreshDecks();
+        if (screen === "chat") void chat.actions.reconnect();
+        else if (screen === "create") void refreshDecks();
         else if (cardError) reloadCard();
         else restart();
       } else if (screen === "review" && !editDraft && cmd && event.key === "z") void undo();
@@ -816,7 +835,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
           setActionsOpen(false);
         }
       } else if (
-        (screen === "create" || editDraft) &&
+        (screen === "create" || screen === "chat" || editDraft) &&
         event.key === "tab" &&
         !cmd &&
         !event.modifiers?.ctrl &&
@@ -824,7 +843,10 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
       ) {
         if (event.modifiers?.shift) renderer.focusPrevious();
         else renderer.focusNext();
-      } else if (screen === "create" && cmd && event.key === "enter") primary();
+      } else if (screen === "chat" && cmd && event.key === "enter") void chat.actions.send();
+      else if (screen === "chat" && cmd && event.key === "n") void chat.actions.newChat();
+      else if (screen === "chat" && cmd && event.key === ".") void chat.actions.stop();
+      else if (screen === "create" && cmd && event.key === "enter") primary();
       else if (screen === "review" && !editDraft) {
         const action = reviewKey(event, revealed);
         if (action === "reveal") primary();
@@ -865,84 +887,108 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
               : { kind: "empty" };
 
   const savingCommand: Command = { label: "Saving…", onClick: () => {} };
-  const commands: Command[] = editDraft
-    ? [
-        { label: "Discard", keys: "Esc", onClick: discardEdit },
-        saving
-          ? savingCommand
-          : {
-              label: "Save changes",
-              keys: "⌘ ↵",
-              primary: true,
-              onClick: primary,
-              testId: "primary",
-            },
-      ]
-    : screen === "create"
-      ? [
-          ...(preview && previewIndex > 0
-            ? [{ label: "Previous", keys: "⌥ ←", onClick: () => setPreviewIndex(previewIndex - 1) }]
-            : []),
-          ...(preview && previewIndex < preview.length - 1
-            ? [{ label: "Next", keys: "⌥ →", onClick: () => setPreviewIndex(previewIndex + 1) }]
-            : []),
-          ...(preview ? [{ label: "Edit", keys: "⌘ P", onClick: openPreview }] : []),
-          saving
-            ? savingCommand
-            : {
-                label: "Create card",
-                keys: "⌘ ↵",
-                primary: true,
-                onClick: primary,
-                testId: "primary",
-              },
-        ]
-      : reviewView.kind === "startError"
-        ? [{ label: "Retry", keys: "⌘ R", primary: true, onClick: restart }]
-        : reviewView.kind === "loading" || reviewView.kind === "loadingCard"
-          ? []
-          : saving
-            ? [savingCommand]
-            : reviewView.kind === "cardError"
+  function editFooterCommands(): Command[] {
+    return [
+      { label: "Discard", keys: "Esc", onClick: discardEdit },
+      saving
+        ? savingCommand
+        : {
+            label: "Save changes",
+            keys: "⌘ ↵",
+            primary: true,
+            onClick: primary,
+            testId: "primary",
+          },
+    ];
+  }
+  function createFooterCommands(): Command[] {
+    return [
+      ...(preview && previewIndex > 0
+        ? [{ label: "Previous", keys: "⌥ ←", onClick: () => setPreviewIndex(previewIndex - 1) }]
+        : []),
+      ...(preview && previewIndex < preview.length - 1
+        ? [{ label: "Next", keys: "⌥ →", onClick: () => setPreviewIndex(previewIndex + 1) }]
+        : []),
+      ...(preview ? [{ label: "Edit", keys: "⌘ P", onClick: openPreview }] : []),
+      saving
+        ? savingCommand
+        : {
+            label: "Create card",
+            keys: "⌘ ↵",
+            primary: true,
+            onClick: primary,
+            testId: "primary",
+          },
+    ];
+  }
+  function chatFooterCommands(): Command[] {
+    return chat.state.running || !chat.state.draft.trim()
+      ? []
+      : [
+          {
+            label: "Send",
+            keys: "⌘ ↵",
+            primary: true,
+            onClick: () => void chat.actions.send(),
+            disabled: chatLocked(chat.state) || !chat.state.model,
+            testId: "chat-send",
+          },
+        ];
+  }
+  function reviewFooterCommands(): Command[] {
+    return reviewView.kind === "startError"
+      ? [{ label: "Retry", keys: "⌘ R", primary: true, onClick: restart }]
+      : reviewView.kind === "loading" || reviewView.kind === "loadingCard"
+        ? []
+        : saving
+          ? [savingCommand]
+          : reviewView.kind === "cardError"
+            ? [
+                { label: "Skip card", onClick: skipCard },
+                { label: "Retry card", keys: "⌘ R", primary: true, onClick: reloadCard },
+              ]
+            : reviewView.kind === "card" && reviewView.revealed
               ? [
-                  { label: "Skip card", onClick: skipCard },
-                  { label: "Retry card", keys: "⌘ R", primary: true, onClick: reloadCard },
+                  { label: "Again", keys: "1", onClick: () => grade("again"), testId: "again" },
+                  { label: "Hard", keys: "2", onClick: () => grade("hard"), testId: "hard" },
+                  {
+                    label: "Good",
+                    keys: "Space / 3",
+                    primary: true,
+                    onClick: primary,
+                    testId: "primary",
+                  },
+                  { label: "Easy", keys: "4", onClick: () => grade("easy"), testId: "easy" },
                 ]
-              : reviewView.kind === "card" && reviewView.revealed
+              : reviewView.kind === "card"
                 ? [
-                    { label: "Again", keys: "1", onClick: () => grade("again"), testId: "again" },
-                    { label: "Hard", keys: "2", onClick: () => grade("hard"), testId: "hard" },
                     {
-                      label: "Good",
-                      keys: "Space / 3",
+                      label: "Show answer",
+                      keys: "Space",
                       primary: true,
                       onClick: primary,
                       testId: "primary",
                     },
-                    { label: "Easy", keys: "4", onClick: () => grade("easy"), testId: "easy" },
                   ]
-                : reviewView.kind === "card"
-                  ? [
-                      {
-                        label: "Show answer",
-                        keys: "Space",
-                        primary: true,
-                        onClick: primary,
-                        testId: "primary",
-                      },
-                    ]
-                  : [{ label: "New session", keys: "⌘ R", primary: true, onClick: restart }];
-  const context = editDraft
-    ? `${currentDeckName} · Editing ${editDraft.cardType === "cloze" ? "cloze note" : "card"}`
-    : preview
-      ? `Preview · ${previewIndex + 1} of ${preview.length}`
-      : screen === "create"
-        ? undefined
-        : reviewView.kind === "startError" || reviewView.kind === "loading"
-          ? "Review"
-          : current
-            ? `${currentDeckName} · ${queue.length} left`
-            : `Review · ${queue.length} left`;
+                : [{ label: "New session", keys: "⌘ R", primary: true, onClick: restart }];
+  }
+  const commands = editDraft
+    ? editFooterCommands()
+    : {
+        create: createFooterCommands,
+        review: reviewFooterCommands,
+        chat: chatFooterCommands,
+      }[screen]();
+  function footerContext(): string | undefined {
+    if (screen === "chat") return "Chat";
+    if (editDraft)
+      return `${currentDeckName} · Editing ${editDraft.cardType === "cloze" ? "cloze note" : "card"}`;
+    if (preview) return `Preview · ${previewIndex + 1} of ${preview.length}`;
+    if (screen === "create") return undefined;
+    if (reviewView.kind === "startError" || reviewView.kind === "loading") return "Review";
+    return current ? `${currentDeckName} · ${queue.length} left` : `Review · ${queue.length} left`;
+  }
+  const context = footerContext();
   const selectors =
     screen === "create" && !preview && !editDraft ? (
       <CreateSelectors
@@ -977,7 +1023,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
       onBack={back}
       onUndo={screen === "review" && !editDraft && lastAction ? () => void undo() : undefined}
       onActions={toggleActions}
-      notice={notice}
+      notice={screen === "chat" ? null : notice}
       footer={{ context, selectors, commands }}
       overlays={
         <>
@@ -1003,7 +1049,22 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
         </>
       }
     >
-      {editDraft ? (
+      {screen === "chat" ? (
+        <ChatScreen
+          state={chat.state}
+          picker={chat.picker}
+          onPicker={chat.setPicker}
+          onDraft={(text) => void chat.actions.setDraft(text)}
+          onSend={() => {
+            if (!actionsOpen && !chat.picker) void chat.actions.send();
+          }}
+          onNewChat={() => void chat.actions.newChat()}
+          onSession={(id) => void chat.actions.selectSession(id)}
+          onModel={(key) => void chat.actions.selectModel(key)}
+          onReconnect={() => void chat.actions.reconnect()}
+          onStop={() => void chat.actions.stop()}
+        />
+      ) : editDraft ? (
         <EditScreen draft={editDraft} field={draftField} onChange={editReviewField} />
       ) : screen === "create" && preview ? (
         <PreviewScreen

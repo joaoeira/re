@@ -12,6 +12,7 @@ const libraryPath = existsSync(developmentLibrary)
   ? developmentLibrary
   : resolve(dirname(process.execPath), "../Frameworks/libpanel.dylib");
 const library = dlopen(libraryPath, {
+  re_register_font: { args: [FFIType.ptr], returns: FFIType.bool },
   re_text_baseline: { args: [FFIType.ptr, FFIType.f64, FFIType.f64], returns: FFIType.f64 },
   re_panel_set_status: { args: [FFIType.ptr], returns: FFIType.void },
   re_panel_choose_workspace: { args: [], returns: FFIType.ptr },
@@ -23,6 +24,18 @@ const library = dlopen(libraryPath, {
   re_panel_pin: { args: [FFIType.bool], returns: FFIType.void },
   re_panel_dispose: { args: [], returns: FFIType.void },
 });
+
+// Register bundled faces only in this process; no system font installation.
+const developmentFonts = resolve(import.meta.dir, "../assets/fonts");
+const fonts = existsSync(developmentFonts)
+  ? developmentFonts
+  : resolve(dirname(process.execPath), "../Resources/fonts");
+for (const file of ["Inter.ttf", "Inter-Italic.ttf"]) {
+  const path = Buffer.from(`${resolve(fonts, file)}\0`);
+  if (!library.symbols.re_register_font(ptr(path))) {
+    throw new Error(`Could not load bundled font: ${file}`);
+  }
+}
 
 const baselines = new Map<string, number>();
 export function textBaseline(family: string, size: number, lineHeight: number): number {

@@ -56,10 +56,12 @@ export function CardMarkdown({
   source,
   deckPath = cardsPath,
   testId,
+  fontFamily = cardTypography.fontFamily,
 }: {
   source: string;
   deckPath?: string;
   testId?: string;
+  fontFamily?: string;
 }) {
   const tree = useMemo(() => parser.parse(source) as Root, [source]);
   const definitions = new Map<string, Definition>();
@@ -85,7 +87,7 @@ export function CardMarkdown({
               {line.indent > 0 && (
                 <text
                   style={{
-                    fontFamily: cardTypography.fontFamily,
+                    fontFamily,
                     fontSize: cardTypography.fontSize,
                     lineHeight: cardTypography.lineHeight,
                     flexShrink: 0,
@@ -99,6 +101,7 @@ export function CardMarkdown({
                 <CardMarkdown
                   source={`${line.content}\n\n${definitionSource}`}
                   deckPath={deckPath}
+                  fontFamily={fontFamily}
                 />
               </div>
             </div>
@@ -107,7 +110,11 @@ export function CardMarkdown({
       );
     if (!special(node))
       return (
-        <markdown key={key} source={`${raw(node)}\n\n${definitionSource}`} theme={cardTheme} />
+        <markdown
+          key={key}
+          source={`${raw(node)}\n\n${definitionSource}`}
+          theme={{ ...cardTheme, fontSans: fontFamily }}
+        />
       );
     if (
       node.type === "math" ||
@@ -126,6 +133,7 @@ export function CardMarkdown({
           nodes={node.children}
           definitions={definitions}
           deckPath={deckPath}
+          baseFontFamily={fontFamily}
           fontSize={
             heading === undefined ? cardTypography.fontSize : cardTypography.headingSizes[heading]!
           }
@@ -149,7 +157,7 @@ export function CardMarkdown({
               <text
                 style={{
                   color: colors.text,
-                  fontFamily: cardTypography.fontFamily,
+                  fontFamily,
                   fontSize: cardTypography.fontSize,
                   lineHeight: cardTypography.lineHeight,
                 }}

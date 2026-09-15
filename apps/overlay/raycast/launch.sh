@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-screen="${1:?usage: launch.sh create|review}"
+screen="${1:?usage: launch.sh create|review|chat}"
 overlay_app="$(cd -- "$(dirname -- "$0")/.." && pwd)/dist/re Overlay.app"
 if [[ ! -d "$overlay_app" ]]; then
   echo 'Build re Overlay first with bun run overlay:build.' >&2

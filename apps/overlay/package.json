@@ -6,7 +6,7 @@
   "scripts": {
     "build:library": "bun run --cwd ../.. build:library",
     "dev": "bun run build:library && bun run native:build && bun src/index.ts",
-    "native:build": "bun scripts/build-gpuix.ts && mkdir -p dist && clang -shared -fobjc-arc -framework Cocoa -framework Carbon native/panel.m -o dist/libpanel.dylib",
+    "native:build": "bun scripts/build-gpuix.ts && mkdir -p dist && clang -shared -fobjc-arc -framework Cocoa -framework Carbon -framework CoreText native/panel.m -o dist/libpanel.dylib",
     "typecheck": "bun run build:library && tsc --noEmit",
     "build": "bun run build:library && bun run native:build && bun scripts/build.ts",
     "test": "bun run build:library && bun test test",
@@ -17,6 +17,7 @@
   "dependencies": {
     "@effect/platform-node": "4.0.0-rc.112",
     "@gpuix/react": "0.7.0",
+    "@opencode/client": "2.0.3",
     "@simbyotic/re": "workspace:*",
     "effect": "4.0.0-rc.112",
     "image-size": "^2.0.2",

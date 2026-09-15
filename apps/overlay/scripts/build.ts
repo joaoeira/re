@@ -1,4 +1,4 @@
-import { mkdirSync, copyFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, copyFileSync, cpSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const contents = resolve(import.meta.dir, "../dist/re Overlay.app/Contents");
@@ -6,6 +6,9 @@ const contents = resolve(import.meta.dir, "../dist/re Overlay.app/Contents");
 rmSync(contents, { recursive: true, force: true });
 mkdirSync(`${contents}/MacOS`, { recursive: true });
 mkdirSync(`${contents}/Frameworks`, { recursive: true });
+cpSync(resolve(import.meta.dir, "../assets/fonts"), `${contents}/Resources/fonts`, {
+  recursive: true,
+});
 const build = Bun.spawnSync(
   [
     "bun",

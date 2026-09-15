@@ -1,7 +1,7 @@
 import type { Result, ReviewStatus } from "./workspace";
 
 // Mirrors the route constants in native/panel.m.
-export const menuRoutes = { quit: 1, review: 2, create: 3, refresh: 4, preferences: 5 } as const;
+export const menuRoutes = { quit: 1, review: 2, create: 3, refresh: 4, preferences: 5, chat: 6 } as const;
 export type MenuRoute = keyof typeof menuRoutes;
 type MenuItem =
   | { readonly separator: true }
@@ -45,6 +45,7 @@ export function statusMenu(status: Result<ReviewStatus> | null, scratch = false)
     { separator: true },
     { title: "Review Cards", icon: "eye", route: menuRoutes.review },
     { title: "Create Card", icon: "plus", route: menuRoutes.create },
+    { title: "Chat", icon: "bubble.left", route: menuRoutes.chat },
     { separator: true },
     { title: "Refresh", icon: "arrow.clockwise", route: menuRoutes.refresh },
     { title: "Choose Workspace…", icon: "gearshape", route: menuRoutes.preferences },

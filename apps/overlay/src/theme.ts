@@ -56,6 +56,17 @@ export const editorTheme = {
   caret: colors.text,
   accent: "#a8a8a8",
 };
+
+// Workbench explorations → Chat boards. Shared app chrome keeps its existing scale.
+export const chatTheme = {
+  fontFamily: "Inter",
+  secondary: "#b8b8b8",
+  idleBorder: "#484848",
+  disabledField: "#292929",
+  recoveryButton: "#383838",
+  body: { fontFamily: "Inter", fontWeight: 400, fontSize: 14, lineHeight: 22 } satisfies StyleDesc,
+  label: { fontFamily: "Inter", fontWeight: 400, fontSize: 12, lineHeight: 18 } satisfies StyleDesc,
+};
 export const menuInputTheme = { ...editorTheme, bg: colors.surface };
 
 // Keep the native Markdown renderer and mixed text/math paragraphs on one scale.

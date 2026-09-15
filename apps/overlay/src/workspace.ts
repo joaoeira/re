@@ -25,6 +25,9 @@ import {
   prepareBuiltinReviewQueue,
 } from "@simbyotic/re/workspace";
 import { Effect, Layer, ManagedRuntime } from "effect";
+import { ChatStoreLive } from "./chat/store";
+import { OpenCodeChatLive } from "./chat/opencode";
+import { makeChatBridge } from "./chat/bridge";
 import { gradeValues, type ReviewGrade } from "./review-controls";
 import type { Card } from "./cards";
 
@@ -47,6 +50,7 @@ const runtime = ManagedRuntime.make(
   Layer.mergeAll(
     services,
     ClipboardImageReaderLive,
+    ChatStoreLive.pipe(Layer.provide(OpenCodeChatLive), Layer.provide(platform)),
     makeReviewStoreLive((_context, markdown) => Effect.succeed(markdown)).pipe(
       Layer.provide(services),
     ),
@@ -54,6 +58,10 @@ const runtime = ManagedRuntime.make(
   ),
 );
 const pending = new Set<Promise<unknown>>();
+
+const chatBridge = makeChatBridge(runtime);
+export const observeChat = chatBridge.observe;
+export const chatActions = chatBridge.actions;
 function run<A>(
   effect: Effect.Effect<A, never, ManagedRuntime.ManagedRuntime.Services<typeof runtime>>,
 ): Promise<A> {
@@ -226,6 +234,7 @@ export const gradeInDeck = (card: WorkspaceCard, grade: ReviewGrade) =>
   );
 
 export const disposeWorkspace = async () => {
+  await chatBridge.close();
   await Promise.allSettled(pending);
   await runtime.dispose();
 };
