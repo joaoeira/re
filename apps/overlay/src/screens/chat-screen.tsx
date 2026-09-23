@@ -1,13 +1,16 @@
-import type { ChatState } from "../chat/model";
+import { chatLocked, type ChatState } from "../chat/model";
 import { chatTheme, column } from "../theme";
+import type { Command } from "./shell";
 import { ChatHeader } from "./chat/chat-header";
 import { ChatTranscript } from "./chat/chat-transcript";
 import { ChatComposer } from "./chat/chat-composer";
 
+export type ChatPicker = "model" | "history";
+
 export interface ChatScreenProps {
   readonly state: ChatState;
-  readonly picker: "model" | "history" | null;
-  readonly onPicker: (picker: "model" | "history" | null) => void;
+  readonly picker: ChatPicker | null;
+  readonly onPicker: (picker: ChatPicker | null) => void;
   readonly onDraft: (text: string) => void;
   readonly onSend: () => void;
   readonly onNewChat: () => void;
@@ -15,6 +18,20 @@ export interface ChatScreenProps {
   readonly onModel: (key: string) => void;
   readonly onReconnect: () => void;
   readonly onStop: () => void;
+}
+
+export function chatFooterCommands(state: ChatState, onSend: () => void): Command[] {
+  if (state.running || !state.draft.trim()) return [];
+  return [
+    {
+      label: "Send",
+      keys: "⌘ ↵",
+      primary: true,
+      onClick: onSend,
+      disabled: chatLocked(state) || !state.model,
+      testId: "chat-send",
+    },
+  ];
 }
 
 /** Props-only composition; state transitions and OpenCode calls belong to ChatStore. */

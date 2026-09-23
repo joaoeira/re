@@ -28,9 +28,8 @@ import { EditScreen } from "./screens/edit-screen";
 import { PreviewScreen } from "./screens/preview-screen";
 import { ReviewScreen, type ReviewView } from "./screens/review-screen";
 import { Shell, type Command } from "./screens/shell";
-import { ChatScreen } from "./screens/chat-screen";
+import { ChatScreen, chatFooterCommands } from "./screens/chat-screen";
 import { useChat } from "./chat/use-chat";
-import { chatLocked } from "./chat/model";
 import { cardsPath } from "./storage";
 import type { DraftFieldName, DraftFieldState } from "./ui/field";
 import {
@@ -587,10 +586,6 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
     });
   }
   function primary() {
-    if (screen === "chat") {
-      void chat.actions.send();
-      return;
-    }
     if (busy || confirmingDelete) return;
     if (editDraft) void saveEdit();
     else if (screen === "create") create();
@@ -921,20 +916,6 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
           },
     ];
   }
-  function chatFooterCommands(): Command[] {
-    return chat.state.running || !chat.state.draft.trim()
-      ? []
-      : [
-          {
-            label: "Send",
-            keys: "⌘ ↵",
-            primary: true,
-            onClick: () => void chat.actions.send(),
-            disabled: chatLocked(chat.state) || !chat.state.model,
-            testId: "chat-send",
-          },
-        ];
-  }
   function reviewFooterCommands(): Command[] {
     return reviewView.kind === "startError"
       ? [{ label: "Retry", keys: "⌘ R", primary: true, onClick: restart }]
@@ -977,7 +958,7 @@ export function App({ renderer, events, onQuit, initial }: AppProps) {
     : {
         create: createFooterCommands,
         review: reviewFooterCommands,
-        chat: chatFooterCommands,
+        chat: () => chatFooterCommands(chat.state, () => void chat.actions.send()),
       }[screen]();
   function footerContext(): string | undefined {
     if (screen === "chat") return "Chat";

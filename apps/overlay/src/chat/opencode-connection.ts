@@ -1,18 +1,18 @@
-import { Effect, Stream } from "effect";
+import { Effect } from "effect";
+import type { HttpClient } from "effect/unstable/http";
 import {
   AbsolutePath,
   Model,
   Session,
   SessionMessage,
   type OpenCodeClient,
-  type OpenCodeEvent,
 } from "@opencode/client/effect";
 import type { SessionListInput } from "@opencode/client/effect/api";
-import { ChatError, type ChatConnection } from "./backend";
-import type { ChatEvent, ChatMessage, ChatSession } from "./model";
+import type { ChatConnection } from "./backend";
+import type { ChatMessage, ChatSession } from "./model";
 import { chatAgent, chatDirectory, chatPermissions } from "./opencode-directory";
-import { openCodeRequest } from "./opencode-request";
-import { toErrorMessage } from "../error-message";
+import { openCodeEvents } from "./opencode-events";
+import { openCodeRequest, openCodeWait } from "./opencode-request";
 
 const modelKey = (model: Model.Ref) => `${model.providerID}/${model.id}`;
 const sessionView = (info: Session.Info): ChatSession => ({
@@ -36,64 +36,19 @@ function messageView(message: SessionMessage.Info): ChatMessage[] {
       id: message.id,
       role: "assistant",
       error: message.error?.message,
-      parts: message.content.flatMap((part, ordinal) =>
-        part.type === "text" ? [{ ordinal, text: part.text, complete: true }] : [],
-      ),
+      // Live events number text parts separately from reasoning and tool parts.
+      parts: message.content
+        .filter((part) => part.type === "text")
+        .map((part, ordinal) => ({ ordinal, text: part.text, complete: true })),
     },
   ];
 }
 
-function eventView(event: OpenCodeEvent): ChatEvent[] {
-  switch (event.type) {
-    case "server.connected":
-      return [{ type: "connected" }];
-    case "session.execution.started":
-      return [{ type: "started", sessionID: event.data.sessionID }];
-    case "session.execution.succeeded":
-    case "session.execution.interrupted":
-      return [{ type: "finished", sessionID: event.data.sessionID }];
-    case "session.execution.failed":
-      return [
-        { type: "finished", sessionID: event.data.sessionID, error: event.data.error.message },
-      ];
-    case "session.text.delta":
-      return [
-        {
-          type: "text",
-          sessionID: event.data.sessionID,
-          messageID: event.data.assistantMessageID,
-          ordinal: event.data.ordinal,
-          text: event.data.delta,
-          complete: false,
-        },
-      ];
-    case "session.text.ended":
-      return [
-        {
-          type: "text",
-          sessionID: event.data.sessionID,
-          messageID: event.data.assistantMessageID,
-          ordinal: event.data.ordinal,
-          text: event.data.text,
-          complete: true,
-        },
-      ];
-    case "session.retry.scheduled":
-      return [{ type: "activity", sessionID: event.data.sessionID, text: "OpenCode is retrying…" }];
-    case "session.compaction.started":
-      return [
-        {
-          type: "activity",
-          sessionID: event.data.sessionID,
-          text: "Making room in the conversation…",
-        },
-      ];
-    default:
-      return [];
-  }
-}
-
-export function makeOpenCodeConnection(client: OpenCodeClient): ChatConnection {
+export function makeOpenCodeConnection(
+  client: OpenCodeClient,
+  http: HttpClient.HttpClient,
+  baseUrl: string,
+): ChatConnection {
   const directory = AbsolutePath.make(chatDirectory);
   const location = { directory };
   const history = openCodeRequest(
@@ -125,53 +80,8 @@ export function makeOpenCodeConnection(client: OpenCodeClient): ChatConnection {
         return { models, defaultModel: preferred.data ? modelKey(preferred.data) : models[0]?.key };
       }),
     ),
-    events: client.event.subscribe().pipe(
-      Stream.flatMap((event) => Stream.fromIterable(eventView(event))),
-      Stream.catchTags({
-        Retry: () =>
-          Stream.fail(
-            new ChatError({
-              kind: "connection",
-              message:
-                "OpenCode requested a new event connection. Reconnect to recover the latest messages.",
-            }),
-          ),
-        SseError: (error) =>
-          Stream.fail(
-            new ChatError({
-              kind: "response",
-              message: `OpenCode event stream failed: ${error.message}`,
-            }),
-          ),
-        ClientError: (error) =>
-          Stream.fail(
-            new ChatError({
-              kind: "connection",
-              message: `OpenCode event stream stopped: ${toErrorMessage(error.cause)}. Reconnect to recover the latest messages.`,
-            }),
-          ),
-        HttpClientError: () =>
-          Stream.fail(
-            new ChatError({
-              kind: "connection",
-              message: "Connection lost. Reconnect to recover the latest messages.",
-            }),
-          ),
-        SchemaError: () =>
-          Stream.fail(
-            new ChatError({
-              kind: "response",
-              message:
-                "OpenCode sent an unreadable event. Check server and client compatibility, then reconnect.",
-            }),
-          ),
-        InvalidRequestError: (error) =>
-          Stream.fail(new ChatError({ kind: "rejected", message: error.message })),
-        UnauthorizedError: (error) =>
-          Stream.fail(new ChatError({ kind: "rejected", message: error.message })),
-      }),
-    ),
-    waitUntilIdle: (id) => openCodeRequest(client.session.wait({ sessionID: Session.ID.make(id) })),
+    events: openCodeEvents(http, baseUrl),
+    waitUntilIdle: (id) => openCodeWait(client.session.wait({ sessionID: Session.ID.make(id) })),
     snapshot: (id) =>
       openCodeRequest(
         Effect.gen(function* () {
@@ -234,11 +144,9 @@ export function makeOpenCodeConnection(client: OpenCodeClient): ChatConnection {
           const sessionID = Session.ID.make(id);
           // Admission can precede execution. Stop must also withdraw that pending input.
           const inbox = yield* client.session.inbox.list({ sessionID });
+          // Cancelling an item that was already promoted is a no-op; interrupt handles it.
           for (const item of inbox)
-            yield* client.session.inbox.cancel({ sessionID, inboxID: item.id }).pipe(
-              // Promotion may win the race; interrupt handles the now-running input.
-              Effect.catchTag("ConflictError", () => Effect.void),
-            );
+            yield* client.session.inbox.cancel({ sessionID, inboxID: item.id });
           yield* client.session.interrupt({ sessionID });
           yield* client.session.wait({ sessionID });
         }),

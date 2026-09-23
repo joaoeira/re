@@ -1,4 +1,4 @@
-import { Effect, type ManagedRuntime, Schedule, Stream } from "effect";
+import { Effect, type ManagedRuntime, Stream } from "effect";
 import { ChatStore } from "./store";
 import type { ChatState } from "./model";
 
@@ -63,8 +63,11 @@ export function makeChatBridge(runtime: ChatRuntime): ChatBridge {
         Stream.unwrap(ChatStore.pipe(Effect.map((chat) => chat.changes))).pipe(
           // Each value is a complete snapshot: render the newest one at most once per frame.
           Stream.buffer({ capacity: 1, strategy: "sliding" }),
-          Stream.schedule(Schedule.spaced("16 millis")),
-          Stream.runForEach((state) => Effect.sync(() => onChange(state))),
+          // Render first, then wait out the frame; waiting before the render would show every
+          // update a frame late, including the lock that makes the composer read-only.
+          Stream.runForEach((state) =>
+            Effect.sync(() => onChange(state)).pipe(Effect.andThen(Effect.sleep("16 millis"))),
+          ),
         ),
       );
       const cancel = () => {

@@ -1,23 +1,42 @@
 import { expect, test } from "bun:test";
 import { Effect, Stream } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
 import { OpenCode } from "@opencode/client/effect";
 import { makeOpenCodeConnection } from "../src/chat/opencode-connection";
 import { receiveText } from "../src/chat/model";
 
 // Exercise the installed SDK's HTTP decoding as well as the app adapter. No live
 // daemon, credentials, provider request, or partial OpenCodeClient cast is involved.
-async function connection(respond: (path: string) => Response) {
+async function connection(respond: (path: string) => Response | "unreachable") {
   const http = HttpClient.make((request, url) =>
-    Effect.sync(() => HttpClientResponse.fromWeb(request, respond(url.pathname))),
+    Effect.suspend(() => {
+      const response = respond(url.pathname);
+      return response === "unreachable"
+        ? Effect.fail(
+            new HttpClientError.HttpClientError({
+              reason: new HttpClientError.TransportError({ request }),
+            }),
+          )
+        : Effect.succeed(HttpClientResponse.fromWeb(request, response));
+    }),
   );
+  const baseUrl = "http://opencode.test";
   const sdk = await Effect.runPromise(
-    OpenCode.make({ baseUrl: "http://opencode.test" }).pipe(
-      Effect.provideService(HttpClient.HttpClient, http),
-    ),
+    OpenCode.make({ baseUrl }).pipe(Effect.provideService(HttpClient.HttpClient, http)),
   );
-  return makeOpenCodeConnection(sdk);
+  return makeOpenCodeConnection(sdk, http, baseUrl);
 }
+
+const feed = (...events: readonly { readonly type: string; readonly data?: unknown }[]) =>
+  new Response(
+    events
+      .map(
+        (event, index) =>
+          `data: ${JSON.stringify({ id: `evt_${index}`, created: index, ...event })}\n\n`,
+      )
+      .join(""),
+    { headers: { "content-type": "text/event-stream" } },
+  );
 
 const session = {
   id: "ses_test",
@@ -63,7 +82,7 @@ test("SDK snapshots and live events address the same text part after reasoning",
           data: {
             sessionID: session.id,
             assistantMessageID: "msg_answer",
-            ordinal: 1,
+            ordinal: 0,
             delta: "Answer",
           },
         })}\n\n`,
@@ -94,6 +113,35 @@ test("an unreadable SDK response is distinguished from a rejected request", asyn
   const client = await connection(() => Response.json({ unexpected: true }));
   const error = await Effect.runPromise(client.snapshot(session.id).pipe(Effect.flip));
   expect(error.kind).toBe("response");
+});
+
+// The store only drops a conversation on a definite answer, so an unreachable server
+// must not be mistaken for one. The SDK hides transport failures inside ClientError.
+test("an unreachable server leaves the request uncertain rather than unreadable", async () => {
+  const client = await connection(() => "unreachable");
+  const error = await Effect.runPromise(client.snapshot(session.id).pipe(Effect.flip));
+  expect(error.kind).toBe("connection");
+});
+
+// OpenCode adds event types in patch releases; the feed carries every session's events.
+test("an event type Chat does not know is skipped instead of ending the feed", async () => {
+  const client = await connection(() =>
+    feed(
+      { type: "session.metadata.updated", data: { sessionID: session.id, metadata: {} } },
+      { type: "session.execution.started", data: { sessionID: session.id } },
+    ),
+  );
+  const events = await Effect.runPromise(client.events.pipe(Stream.runCollect));
+  expect(events).toEqual([{ type: "started", sessionID: session.id }]);
+});
+
+test("a known event whose fields changed fails the feed with an explicit reason", async () => {
+  const client = await connection(() =>
+    feed({ type: "session.text.delta", data: { sessionID: session.id, content: "Renamed" } }),
+  );
+  const error = await Effect.runPromise(client.events.pipe(Stream.runCollect, Effect.flip));
+  expect(error).toMatchObject({ kind: "response" });
+  expect(error.message).toContain("session.text.delta");
 });
 
 test("SDK execution failures retain the provider error for the chat", async () => {

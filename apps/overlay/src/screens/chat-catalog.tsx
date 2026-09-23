@@ -1,5 +1,5 @@
 import { initialChatState, type ChatState } from "../chat/model";
-import { ChatScreen } from "./chat-screen";
+import { ChatScreen, chatFooterCommands } from "./chat-screen";
 import { Shell } from "./shell";
 import type { ScreenState } from "./catalog";
 
@@ -52,21 +52,7 @@ const fixture = (id: string, title: string, state: ChatState): ScreenState => ({
       onBack={noop}
       onActions={noop}
       notice={null}
-      footer={{
-        context: "Chat",
-        commands:
-          state.running || !state.draft
-            ? []
-            : [
-                {
-                  label: "Send",
-                  keys: "⌘ ↵",
-                  primary: true,
-                  onClick: noop,
-                  disabled: !state.running && !state.draft,
-                },
-              ],
-      }}
+      footer={{ context: "Chat", commands: chatFooterCommands(state, noop) }}
     >
       <ChatScreen
         state={state}

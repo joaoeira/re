@@ -1,21 +1,69 @@
 import { useState } from "react";
-import { chatLocked } from "../../chat/model";
+import { chatLocked, type ChatState } from "../../chat/model";
 import { chatTheme, colors, column, editorTheme, row } from "../../theme";
 import type { ChatScreenProps } from "../chat-screen";
 
 type ChatComposerProps = Pick<ChatScreenProps, "state" | "onDraft" | "onSend" | "onReconnect">;
 
+function statusHeading(state: ChatState): string | undefined {
+  switch (state.connection) {
+    case "initial":
+    case "connecting":
+      return "Connecting to OpenCode…";
+    case "disconnected":
+      return "Connection lost";
+    case "ready":
+      if (state.outcome === "interrupted")
+        return "Stopped. You can send another message when you’re ready.";
+      if (state.outcome === "failed" && state.error) return "Response failed";
+      return undefined;
+  }
+}
+
+function Status({ state, onReconnect }: Pick<ChatComposerProps, "state" | "onReconnect">) {
+  const heading = statusHeading(state);
+  if (!heading && !state.error) return null;
+  return (
+    <div style={{ ...column, gap: 8, paddingTop: 12, paddingBottom: 12 }}>
+      {heading && (
+        <text testId="chat-status" style={{ ...chatTheme.label, color: colors.text }}>
+          {heading}
+        </text>
+      )}
+      {state.error && (
+        <text testId="chat-error" style={{ ...chatTheme.body, color: chatTheme.secondary }}>
+          {state.error}
+        </text>
+      )}
+      {state.connection === "disconnected" && (
+        <div style={row}>
+          <div
+            testId="chat-reconnect"
+            onClick={onReconnect}
+            style={{
+              borderWidth: 1,
+              borderColor: colors.focus,
+              borderRadius: 4,
+              backgroundColor: chatTheme.recoveryButton,
+              paddingTop: 5,
+              paddingBottom: 5,
+              paddingLeft: 10,
+              paddingRight: 10,
+              cursor: "pointer",
+            }}
+          >
+            <text style={{ ...chatTheme.label, color: colors.text }}>Reconnect</text>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ChatComposer({ state, onDraft, onSend, onReconnect }: ChatComposerProps) {
   const [focused, setFocused] = useState(false);
   const locked = chatLocked(state);
-  const status =
-    state.connection === "initial" || state.connection === "connecting"
-      ? "Connecting to OpenCode…"
-      : state.connection === "disconnected"
-        ? "Connection lost"
-        : state.outcome === "interrupted"
-          ? "Stopped. You can send another message when you’re ready."
-          : undefined;
+  const field = locked ? chatTheme.disabledField : colors.field;
 
   return (
     <div
@@ -28,43 +76,7 @@ export function ChatComposer({ state, onDraft, onSend, onReconnect }: ChatCompos
         flexShrink: 0,
       }}
     >
-      {(status || state.error) && (
-        <div style={{ ...column, gap: 8, paddingTop: 12, paddingBottom: 12 }}>
-          <text
-            testId="chat-status"
-            style={{
-              ...chatTheme.label,
-              color: colors.text,
-            }}
-          >
-            {status ?? "Response failed"}
-          </text>
-          {state.error && (
-            <text style={{ ...chatTheme.body, color: chatTheme.secondary }}>{state.error}</text>
-          )}
-          {state.connection === "disconnected" && (
-            <div style={row}>
-              <div
-                testId="chat-reconnect"
-                onClick={onReconnect}
-                style={{
-                  borderWidth: 1,
-                  borderColor: colors.focus,
-                  borderRadius: 4,
-                  backgroundColor: chatTheme.recoveryButton,
-                  paddingTop: 5,
-                  paddingBottom: 5,
-                  paddingLeft: 10,
-                  paddingRight: 10,
-                  cursor: "pointer",
-                }}
-              >
-                <text style={{ ...chatTheme.label, color: colors.text }}>Reconnect</text>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      <Status state={state} onReconnect={onReconnect} />
       <textarea
         testId="chat-composer"
         value={state.draft}
@@ -77,16 +89,12 @@ export function ChatComposer({ state, onDraft, onSend, onReconnect }: ChatCompos
         onBlur={() => setFocused(false)}
         onChange={(event) => onDraft(event.value ?? "")}
         onSubmit={locked ? undefined : onSend}
-        theme={{
-          ...editorTheme,
-          fontSans: chatTheme.fontFamily,
-          bg: locked ? chatTheme.disabledField : colors.field,
-        }}
+        theme={{ ...editorTheme, fontSans: chatTheme.fontFamily, bg: field }}
         style={{
           ...chatTheme.body,
           height: 74,
           color: colors.text,
-          backgroundColor: locked ? chatTheme.disabledField : colors.field,
+          backgroundColor: field,
           borderWidth: 1,
           borderColor: !locked && focused ? colors.focus : chatTheme.idleBorder,
           borderRadius: 5,

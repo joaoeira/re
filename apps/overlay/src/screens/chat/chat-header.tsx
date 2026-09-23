@@ -9,28 +9,39 @@ type ChatHeaderProps = Pick<
   "state" | "picker" | "onPicker" | "onNewChat" | "onSession" | "onModel"
 >;
 
+const newChat = "new";
+
 function Picker({
   label,
   value,
   options,
   open,
+  disabled,
   onOpen,
   onChange,
-  side,
   testId,
 }: {
   readonly label: string;
   readonly value: string;
   readonly options: readonly { readonly value: string; readonly label: string }[];
   readonly open: boolean;
+  readonly disabled: boolean;
   readonly onOpen: (open: boolean) => void;
   readonly onChange: (value: string) => void;
-  readonly side: "top" | "bottom";
   readonly testId: string;
 }) {
   return (
-    <Select value={value} onValueChange={onChange} open={open} onOpenChange={onOpen}>
-      <SelectTrigger testId={testId} style={{ cursor: "pointer", minWidth: 0, flexShrink: 1 }}>
+    <Select
+      value={value}
+      onValueChange={onChange}
+      open={open}
+      onOpenChange={onOpen}
+      disabled={disabled}
+    >
+      <SelectTrigger
+        testId={testId}
+        style={{ cursor: disabled ? "default" : "pointer", minWidth: 0, flexShrink: 1 }}
+      >
         <div style={{ ...row, gap: 8 }}>
           <text
             style={{
@@ -47,7 +58,7 @@ function Picker({
         </div>
       </SelectTrigger>
       <SelectContent
-        side={side}
+        side="bottom"
         align="start"
         sideOffset={8}
         style={{ ...popover, width: 320, maxHeight: 260, overflowY: "scroll" }}
@@ -104,25 +115,18 @@ export function ChatHeader({
     >
       <Picker
         label={state.session?.title ?? "New chat"}
-        value={state.session?.id ?? ""}
+        value={state.session?.id ?? newChat}
         options={[
-          { value: "new", label: "New chat" },
+          { value: newChat, label: "New chat" },
           ...state.sessions.map((session) => ({ value: session.id, label: session.title })),
         ]}
-        open={!locked && picker === "history"}
-        onOpen={(open) => {
-          if (!locked) onPicker(open ? "history" : null);
-        }}
-        onChange={(id) => (id === "new" ? onNewChat() : onSession(id))}
-        side="bottom"
+        open={picker === "history"}
+        disabled={locked}
+        onOpen={(open) => onPicker(open ? "history" : null)}
+        onChange={(id) => (id === newChat ? onNewChat() : onSession(id))}
         testId="chat-history"
       />
-      {locked ? (
-        <div style={{ ...row, gap: 8, opacity: 0.45 }}>
-          <text style={{ ...chatTheme.label, color: colors.muted }}>{modelLabel}</text>
-          <Icon name="chevron" />
-        </div>
-      ) : (
+      <div style={{ ...row, minWidth: 0, flexShrink: 1, opacity: locked ? 0.45 : 1 }}>
         <Picker
           label={modelLabel}
           value={state.model ?? ""}
@@ -131,12 +135,12 @@ export function ChatHeader({
             label: `${model.name} · ${model.provider}`,
           }))}
           open={picker === "model"}
+          disabled={locked}
           onOpen={(open) => onPicker(open ? "model" : null)}
           onChange={onModel}
-          side="bottom"
           testId="chat-model"
         />
-      )}
+      </div>
     </div>
   );
 }

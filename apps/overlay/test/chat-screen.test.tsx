@@ -9,17 +9,21 @@ process.env.NAPI_RS_NATIVE_LIBRARY_PATH = resolve(
 );
 const { createTestRoot } = await import("@gpuix/react/testing");
 
-function composer() {
+const ready: ChatState = { ...initialChatState, connection: "ready" };
+
+function mount() {
   const view = createTestRoot({ width: 720, height: 465 });
   let draft = "";
   const sent: string[] = [];
+  let stops = 0;
   const noop = () => {};
+  const bounds = (testId: string) =>
+    view.renderer.getElementBounds(view.renderer.findByTestId(testId)!.id)!;
   return {
     sent,
     draft: () => draft,
-    type: (keys: string) => view.renderer.simulateKeystrokes(keys),
-    close: () => view.unmount(),
-    render: (state: ChatState) => {
+    stops: () => stops,
+    render: (state: ChatState) =>
       view.render(
         <ChatScreen
           state={state}
@@ -33,72 +37,56 @@ function composer() {
           onSession={noop}
           onModel={noop}
           onReconnect={noop}
-          onStop={noop}
+          onStop={() => {
+            stops++;
+          }}
         />,
-      );
+      ),
+    type: (keys: string) => {
       view.renderer.focusElement(view.renderer.findByTestId("chat-composer")!.id);
+      view.renderer.simulateKeystrokes(keys);
     },
+    click: (testId: string) => {
+      const [x, y, width, height] = bounds(testId);
+      view.renderer.nativeSimulateClick(x! + width! / 2, y! + height! / 2);
+    },
+    close: () => view.unmount(),
   };
 }
 
 test("Shift Enter inserts a newline and Enter submits the composed text", () => {
-  const editor = composer();
+  const screen = mount();
   try {
-    editor.render({ ...initialChatState, connection: "ready" });
-    editor.type("h i shift-enter t h e r e enter");
-    expect(editor.sent).toEqual(["hi\nthere"]);
+    screen.render(ready);
+    screen.type("h i shift-enter t h e r e enter");
+    expect(screen.sent).toEqual(["hi\nthere"]);
   } finally {
-    editor.close();
+    screen.close();
   }
 });
 
 test("the native composer rejects typing and submission while a response is running", () => {
-  const editor = composer();
+  const screen = mount();
   try {
-    editor.render({ ...initialChatState, connection: "ready", running: true });
-    editor.type("x enter");
-    expect(editor.draft()).toBe("");
-    expect(editor.sent).toHaveLength(0);
+    screen.render({ ...ready, running: true });
+    screen.type("x enter");
+    expect(screen.draft()).toBe("");
+    expect(screen.sent).toHaveLength(0);
   } finally {
-    editor.close();
+    screen.close();
   }
 });
 
 test("the inline Stop control cancels once and becomes inactive while stopping", () => {
-  const view = createTestRoot({ width: 720, height: 465 });
-  const noop = () => {};
-  let stops = 0;
-  const render = (stopping: boolean) =>
-    view.render(
-      <ChatScreen
-        state={{ ...initialChatState, connection: "ready", running: true, stopping }}
-        picker={null}
-        onPicker={noop}
-        onDraft={noop}
-        onSend={noop}
-        onNewChat={noop}
-        onSession={noop}
-        onModel={noop}
-        onReconnect={noop}
-        onStop={() => {
-          stops++;
-        }}
-      />,
-    );
-  const clickStop = () => {
-    const [x, y, width, height] = view.renderer.getElementBounds(
-      view.renderer.findByTestId("chat-stop")!.id,
-    )!;
-    view.renderer.nativeSimulateClick(x! + width! / 2, y! + height! / 2);
-  };
+  const screen = mount();
   try {
-    render(false);
-    clickStop();
-    expect(stops).toBe(1);
-    render(true);
-    clickStop();
-    expect(stops).toBe(1);
+    screen.render({ ...ready, running: true });
+    screen.click("chat-stop");
+    expect(screen.stops()).toBe(1);
+    screen.render({ ...ready, running: true, stopping: true });
+    screen.click("chat-stop");
+    expect(screen.stops()).toBe(1);
   } finally {
-    view.unmount();
+    screen.close();
   }
 });

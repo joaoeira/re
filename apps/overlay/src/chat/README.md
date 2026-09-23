@@ -43,6 +43,10 @@ Stop has a separate guard because it must remain available during a response.
 A second semaphore serializes start/reconnect requests. Reconnect marks the UI as
 connecting and interrupts the old worker before taking the command permit; putting
 it behind that permit again would make a hung event handler block recovery.
+Waiting for idle after an execution finishes runs in a child fiber of the worker,
+outside the command permit, so a following execution's events and Stop keep flowing;
+only the final restore takes the permit. That wait has no deadline, because a response
+can legitimately run for minutes; other requests time out after 30 seconds.
 
 ## Behaviors to preserve
 
@@ -57,14 +61,41 @@ it behind that permit again would make a hung event handler block recovery.
   Shutdown interrupts Chat's scoped work and cancels outstanding bridge requests
   before the card persistence drain. It does not stop the shared OpenCode daemon.
 - An unreadable selection during reconnect is cleared while preserving the draft;
-  a deleted session must not trap every reconnect. A definite request rejection
-  keeps the connection usable and preserves the draft. Uncertain results require
-  reconciliation before another send.
+  a deleted session must not trap every reconnect. Only a definite answer drops a
+  session: a timeout or unreachable server keeps the selection and its pending send
+  and leaves Chat disconnected. A definite request rejection keeps the connection
+  usable and preserves the draft. Uncertain results require reconciliation before
+  another send.
+- Reconciliation clears the draft only while it still holds the accepted text; a
+  newer draft is the user's.
+- A rejected session creation is forgotten, so the retry uses the current model and
+  text. An uncertain one keeps its ID until reconnect shows whether history has it,
+  so the retry cannot create a second session.
+- Any failure of the event worker or a completion, including a defect in the
+  adapter, ends in the disconnected state rather than leaving a response running.
 - A failed event refresh surfaces an error without killing the event subscription.
   The UI's disconnected state means reconciliation is required; the event stream
   can still be alive. A later successful completion restores readiness.
 - Only complete UI snapshots may be coalesced. Do not move the bridge's sliding
-  buffer onto the raw server-event stream, where dropped deltas would lose text.
+  buffer onto the raw server-event stream, where dropped deltas would lose text. The
+  bridge renders the newest snapshot first and then waits out the frame, so the UI
+  never shows state a frame old.
+
+## OpenCode version and process
+
+The SDK only works with the server release it was built for: routes move between
+patch releases, and one unknown event type ends the shared event stream. `package.json`
+pins `@opencode/client` exactly, and `connect` refuses a running service of any other
+version with an explicit message instead of failing later. Upgrading means bumping
+that pin to the installed CLI's version, then rechecking the ordinal convention and
+the event and error mappings in the adapter.
+
+`connect` reuses the user's registered service whatever its version, and starts
+`opencode serve --service` only when none is registered. It never stops or replaces
+that service. The SDK wraps transport, decoding and SSE retry failures in
+`ClientError` at runtime even though its types list them separately, so the adapter
+classifies them by cause. A transport failure must stay `connection` (uncertain):
+the store drops a session only on a definite answer.
 
 ## Storage and current scope
 
@@ -91,7 +122,9 @@ native build, and all Overlay tests. From `apps/overlay`, run
 checks and `bun scripts/screens.tsx chat` to render the design fixtures. Native
 checks require a current native build.
 
-`chat.test.ts` drives a fake `ChatBackend` through public store/bridge behavior;
+`chat.test.ts` drives an in-memory OpenCode through public store/bridge behavior. Its
+faults are one-shot; `applied` means the server did the work before the response was
+lost, and `hold` keeps a call open.
 `chat-screen.test.tsx` exercises the real native input and Stop control. Preserve
 those behavioral tests during refactors instead of adding assertions about file
 boundaries or private helper calls. Compare rendered fixtures after UI changes;
@@ -99,9 +132,10 @@ a passing typecheck cannot establish fidelity to Paper.
 
 `opencode-connection.test.ts` exercises the installed SDK against controlled HTTP
 and SSE responses, including mixed reasoning/text content and typed rejections.
-It pins the app's interpretation of ordinals as indices in the complete content
-array. This is a compatibility fixture, not independent verification of every
-server release; check that convention when upgrading OpenCode. Store tests use a
+It pins the app's interpretation of text ordinals as indices among a message's text
+parts: OpenCode numbers text, reasoning and tool parts separately. This is a
+compatibility fixture, not independent verification of every server release; check
+that convention when upgrading OpenCode. Store tests use a
 controlled clock for UI scheduling and a live clock for their wait deadlines.
 
 The transcript builds one ordered list of messages and an optional activity row
